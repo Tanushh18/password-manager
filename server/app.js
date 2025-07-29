@@ -4,13 +4,20 @@ const dotenv = require("dotenv");
 const cors = require("cors");
 const cookieParser = require('cookie-parser');  
 
+
 const allowedOrigins = [
   'http://localhost:3000',
   'https://password-website.onrender.com'
 ];
 
 app.use(cors({
-  origin: allowedOrigins,
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 app.use(cookieParser());   
