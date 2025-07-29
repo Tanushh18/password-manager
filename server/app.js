@@ -4,7 +4,15 @@ const dotenv = require("dotenv");
 const cors = require("cors");
 const cookieParser = require('cookie-parser');  
 
-app.use(cors({credentials: true, origin: 'http://localhost:3000'}));
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://password-website.onrender.com'
+];
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true
+}));
 app.use(cookieParser());   
 
 // SETTING UP DOTENV
