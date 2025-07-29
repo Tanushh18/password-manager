@@ -156,7 +156,7 @@ function Passwords() {
                 placeholder="E.g. Facebook"
                 value={platform}
                 onChange={(e) => setPlatform(e.target.value)}
-                required
+                
               />
             </div>
 
@@ -167,7 +167,7 @@ function Passwords() {
                 placeholder="E.g. rohitsaini@gmail.com"
                 value={platEmail}
                 onChange={(e) => setPlatEmail(e.target.value)}
-                required
+                
               />
             </div>
 
@@ -178,7 +178,7 @@ function Passwords() {
                 placeholder="Password"
                 value={platPass}
                 onChange={(e) => setPlatPass(e.target.value)}
-                required
+                
               />
             </div>
 
