@@ -74,10 +74,12 @@ router.post("/login", async (req, res) =>
 
         if (isMatch)
         {
-            res.cookie("jwtoken", token, {
-                expires: new Date(Date.now() + 2592000000),
-                httpOnly: true
-            });
+           res.cookie("jwtoken", token, {
+    expires: new Date(Date.now() + 2592000000), // ~30 days
+    httpOnly: true,                            // ✅ prevent JS access
+    secure: true,                              // ✅ required for HTTPS
+    sameSite: "None"                           // ✅ required for cross-origin
+});
 
             return res.status(200).json({ message: "User login successfully." })
         }
