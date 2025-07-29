@@ -7,6 +7,7 @@ const authenticate = async (req, res, next) =>
 {
     try
     {
+        console.log("Received cookies:", req.cookies);
         const token = req.cookies.jwtoken;
         if (!token) {
             return res.status(401).json({ error: "Access denied. No token provided." });
