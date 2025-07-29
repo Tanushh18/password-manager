@@ -163,7 +163,7 @@ function Passwords() {
             <div className="form__inputs">
               <label> Email </label>
               <input
-                type="email"
+                type="text"
                 placeholder="E.g. rohitsaini@gmail.com"
                 value={platEmail}
                 onChange={(e) => setPlatEmail(e.target.value)}
