@@ -9,6 +9,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { saveNewPassword, checkAuthenticated } from "../../axios/instance";
 import { useSelector, useDispatch } from "react-redux";
 import { setAuth, setPasswords } from "../../redux/actions";
+import * as XLSX from "xlsx";
 
 function Passwords() {
   const [platform, setPlatform] = useState("");
@@ -82,6 +83,44 @@ function Passwords() {
     }
   };
 
+  const handleExcelUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+      for (const row of jsonData) {
+        const data = {
+          platform: row.platform,
+          userPass: row.password,
+          platEmail: row.email,
+          userEmail: email,
+        };
+
+        try {
+          await saveNewPassword(data);
+        } catch (err) {
+          console.error("Error saving row:", row, err);
+        }
+      }
+
+      verifyUser();
+      toast.success("Bulk passwords uploaded", {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    };
+
+    reader.readAsArrayBuffer(file);
+  };
+
   useEffect(() => {
     !isAuthenticated && history.replace("/signin");
   }, [isAuthenticated, history]);
@@ -97,6 +136,15 @@ function Passwords() {
         <button className="modalButton" onClick={() => setOpen(true)}>
           Add New Password
         </button>
+        <label className="modalButton">
+          Upload Excel
+          <input
+            type="file"
+            accept=".xlsx, .xls"
+            style={{ display: "none" }}
+            onChange={handleExcelUpload}
+          />
+        </label>
 
         <Modal open={open} onClose={() => setOpen(false)}>
           <h2>Add a new password</h2>

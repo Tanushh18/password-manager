@@ -1,31 +1,28 @@
 const crypto = require("crypto");
 
-const encrypt = (userPass) =>
-{
-    // DECLARING AND IV (basically an identifier for decryption)
-    const iv = new Buffer.from(crypto.randomBytes(16));
-    var ivstring = iv.toString('hex').slice(0, 16);
+const encrypt = (userPass) => {
+    const iv = crypto.randomBytes(16); // IV should be 16 bytes
+    const key = crypto.createHash('sha256').update(process.env.CRYPTO_SECRET_KEY).digest();
 
-    // CREATING A CIPHER (actual encryption)
-    const cipher = crypto.createCipheriv("aes-256-cbc", Buffer.from(process.env.CRYPTO_SECRET_KEY), ivstring);
-
-    cipher.update(userPass, 'utf8', 'base64');
-    const bufferEncryptedPassword = cipher.final('base64');
+    const cipher = crypto.createCipheriv("aes-256-cbc", key, iv);
+    let encrypted = cipher.update(userPass, 'utf8', 'base64');
+    encrypted += cipher.final('base64');
 
     return {
-        iv: ivstring,
-        encryptedPassword: bufferEncryptedPassword
-    }     
-}
+        iv: iv.toString('hex'), // return hex so we can convert back later
+        encryptedPassword: encrypted
+    };
+};
 
-const decrypt = (encrypted, ivstring) =>
-{
-    const decipher = crypto.createDecipheriv("aes-256-cbc", Buffer.from(process.env.CRYPTO_SECRET_KEY), ivstring);
+const decrypt = (encrypted, ivHex) => {
+    const iv = Buffer.from(ivHex, 'hex');
+    const key = crypto.createHash('sha256').update(process.env.CRYPTO_SECRET_KEY).digest();
 
-    decipher.update(encrypted, "base64", "utf8");
-    const decryptedPassword = decipher.final("utf8");
+    const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv);
+    let decrypted = decipher.update(encrypted, 'base64', 'utf8');
+    decrypted += decipher.final('utf8');
 
-    return decryptedPassword;
-}
+    return decrypted;
+};
 
 module.exports = { encrypt, decrypt };
