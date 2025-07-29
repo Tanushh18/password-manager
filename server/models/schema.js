@@ -6,27 +6,27 @@ const { encrypt, decrypt } = require('./EncDecManager');
 const schema = new mongoose.Schema({
     name: {
         type: String,
-        required: true
+        
     },
 
     email: {
         type: String,
-        required: true
+        
     },
     password: {
         type: String,
-        required: true
+        
     },
 
     cpassword: {
         type: String,
-        required: true
+        
     },
     tokens: [
         {
             token: {
                 type: String,
-                required: true
+                
             }
         }
     ],
@@ -34,15 +34,15 @@ const schema = new mongoose.Schema({
         {
             password: {
                 type: String,
-                required: true
+                
             },
             platform: {
                 type: String,
-                required: true
+               
             },
             platEmail: {
                 type: String,
-                required: true
+                
             },
             iv: {
                 type: String,
