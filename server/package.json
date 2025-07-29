@@ -4,8 +4,9 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "dev:start": "nodemon app.js"
-  },
+  "start": "node app.js",
+  "dev:start": "nodemon app.js"
+},
   "author": "Rohit Saini",
   "license": "ISC",
   "dependencies": {
