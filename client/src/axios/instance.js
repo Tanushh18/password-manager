@@ -1,7 +1,7 @@
 import axios from "axios";
 const isDev = true;
 
-const url = isDev ? "http://localhost:8000" : "";
+const url = "https://password-manager-server-xxdr.onrender.com";
 
 const instance = axios.create({
     baseURL: url,
