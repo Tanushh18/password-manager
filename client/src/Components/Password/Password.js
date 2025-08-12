@@ -16,8 +16,11 @@ function Password({ id, name, password, email, iv })
 
     const dispatch = useDispatch();
 
-    const deletePassword = async () =>
+    const deletePassword = async (event) =>
     {
+        if (event) {
+            event.stopPropagation();
+        }
         try
         {
             const res = await deleteAPassword({ id });
@@ -70,6 +73,7 @@ function Password({ id, name, password, email, iv })
                 {
                     setDecPassword(res.data);
                     setShow(!show);
+                    // Removed toast from here to avoid showing message in every password box
                 }
             }
             else
@@ -85,31 +89,105 @@ function Password({ id, name, password, email, iv })
     }
 
     return (
-        <div className="password">
-            <ToastContainer />
-            <div className="media">
+        <div
+            className="password"
+            style={{
+                position: "relative",
+                width: "100%",
+                fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+            }}
+        >
+            {/* Hide media section (icon/name) */}
+            <div className="media" style={{ display: "none" }}></div>
 
-                <i className={`fab fa-${ name.toLowerCase() }`}></i>
-                <h3 className="password__name"> {name} </h3>
+            {/* Hide email display */}
+            <div className="email" style={{ display: "none" }}></div>
 
-                {<FontAwesomeIcon className="delete__btn1" onClick={deletePassword} icon={faTrash} />}
-
+            {/* Password box */}
+            <div
+                className="user-password"
+                style={{
+                    display: "flex",
+                    alignItems: "center",
+                    background: "rgba(255, 255, 255, 0.7)",
+                    borderRadius: "16px",
+                    border: "9px solid rgba(72, 187, 120, 0.3)",
+                    overflow: "hidden",
+                    transition: "all 0.3s ease",
+                    cursor: "pointer",
+                    overflowX: "auto",
+                    whiteSpace: "nowrap"
+                }}
+                onClick={decryptPassword}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = "rgba(72, 187, 120, 0.5)";
+                    e.currentTarget.style.background = "rgba(255, 255, 255, 0.9)";
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "rgba(72, 187, 120, 0.3)";
+                    e.currentTarget.style.background = "rgba(255, 255, 255, 0.7)";
+                }}
+            >
+                <input
+                    type={show ? "text" : "password"}
+                    value={decPassword || "••••••••"}
+                    readOnly={true}
+                    onClick={decryptPassword}
+                    onFocus={(e) => e.target.select()}
+                    style={{
+                        flex: 1,
+                        // padding: "0.7rem 2rem ",
+                        outline: "none",
+                        background: "transparent",
+                        fontSize: "0.9rem",
+                        fontFamily: "'Monaco', 'Menlo', 'Ubuntu Mono', monospace",
+                        transition: "all 0.3s ease",
+                        color: show ? "#2d3748" : "#a0aec0",
+                        fontWeight: show ? 600 : "normal",
+                        letterSpacing: show ? "normal" : "2px",
+                        display: "block",
+                        maxWidth: "100%",
+                        boxSizing: "border-box",
+                        cursor: "text",
+                        width: "100%",
+                        minWidth: "0"
+                    }}
+                />
             </div>
 
-            <div className="email">
-                <p> {email} </p>
-            </div>
-
-            <div className="user-password">
-
-                <input type={show ? "text" : "password"} value={decPassword} disabled={true} />
-
-                <FontAwesomeIcon icon={faEyeSlash} onClick={decryptPassword} />
-
-            </div>
-
-            {<FontAwesomeIcon className="delete__btn2" onClick={deletePassword} icon={faTrash} />}
-
+            {/* Delete button */}
+            <FontAwesomeIcon
+                className="delete__btn1"
+                onClick={deletePassword}
+                icon={faTrash}
+                style={{
+                    position: "absolute",
+                    top: "-8px",
+                    right: "-8px",
+                    background: "linear-gradient(45deg, #ef4444, #dc2626)",
+                    border: "none",
+                    borderRadius: "50%",
+                    width: "32px",
+                    height: "32px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    transition: "all 0.3s ease",
+                    boxShadow: "0 2px 8px rgba(239, 68, 68, 0.3)",
+                    zIndex: 5,
+                    color: "white",
+                    fontSize: "0.8rem"
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "scale(1.1)";
+                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(239, 68, 68, 0.4)";
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "scale(1)";
+                    e.currentTarget.style.boxShadow = "0 2px 8px rgba(239, 68, 68, 0.3)";
+                }}
+            />
         </div>
     )
 }
