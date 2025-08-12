@@ -15,6 +15,9 @@ function Passwords() {
   const [platform, setPlatform] = useState("");
   const [platEmail, setPlatEmail] = useState("");
   const [platPass, setPlatPass] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [newPass, setNewPass] = useState("");
 
   const [open, setOpen] = useState(false);
 
@@ -40,7 +43,8 @@ function Passwords() {
     }
   };
 
-  const addNewPassword = async () => {
+  const addNewPassword = async (e) => {
+    e.preventDefault();
     try {
       const data = {
         platform: platform,
@@ -80,6 +84,25 @@ function Passwords() {
       }
     } catch (error) {
       console.log(error);
+    }
+  };
+
+  const handleEditPassword = async (id, platform, platEmail) => {
+    try {
+      const data = {
+        platform,
+        userPass: newPass,
+        platEmail,
+        userEmail: email,
+      };
+      const res = await saveNewPassword(data);
+      if (res.status === 200) {
+        toast.success("Password updated");
+        setEditingId(null);
+        verifyUser();
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -182,27 +205,49 @@ function Passwords() {
               />
             </div>
 
-            <button onClick={addNewPassword}> Add </button>
+            <button onClick={addNewPassword}>Add</button>
           </form>
         </Modal>
       </div>
+
+      <input
+        type="text"
+        placeholder="Search by platform..."
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        className="searchInput"
+      />
 
       <hr />
 
       <div className="passwords__list">
         {passwords?.length !== 0 ? (
-          passwords?.map((data) => {
-            return (
-              <Password
-                key={data._id}
-                id={data._id}
-                name={data.platform}
-                password={data.password}
-                email={data.platEmail}
-                iv={data.iv}
-              />
-            );
-          })
+          passwords
+            ?.filter((data) =>
+              data.platform.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+            .map((data) => (
+              <div key={data._id} className="passwordItem">
+                <span>{data.platform}</span>
+                <span>{data.platEmail}</span>
+                {editingId === data._id ? (
+                  <>
+                    <input
+                      type="password"
+                      value={newPass}
+                      onChange={(e) => setNewPass(e.target.value)}
+                    />
+                    <button onClick={() => handleEditPassword(data._id, data.platform, data.platEmail)}>Save</button>
+                    <button onClick={() => setEditingId(null)}>Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <span>{data.password}</span>
+                    <button onClick={() => { setEditingId(data._id); setNewPass(data.password); }}>Edit</button>
+                  </>
+                )}
+              </div>
+            ))
         ) : (
           <div className="nopass">
             <p> You have not added any passwords yet. </p>
