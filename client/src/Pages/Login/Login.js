@@ -442,17 +442,16 @@ function Login() {
               }}
             >
               <label style={{ ...styles.label, marginBottom: 0 }}>Password</label>
-              
-                href="#"
-                style={{
-                  fontSize: "0.78rem",
-                  color: "#a78bfa",
-                  textDecoration: "none",
-                  opacity: 0.85,
-                }}
-              >
-                Forgot?
-              </a>
+              <a href="#"
+  style={{
+    fontSize: "0.78rem",
+    color: "#a78bfa",
+    textDecoration: "none",
+    opacity: 0.85,
+  }}
+>
+  Forgot?
+</a>
             </div>
             <input
               type="password"
@@ -576,7 +575,7 @@ function Login() {
 
           {/* Attribution */}
           
-            href="https://www.freepik.com/vectors/star"
+            <a href="https://www.freepik.com/vectors/star"
             target="_blank"
             rel="noreferrer"
             style={{
