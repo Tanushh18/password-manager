@@ -157,6 +157,7 @@ const styles = {
     fontFamily: "'DM Sans', sans-serif",
     transition: "all 0.25s ease",
     outline: "none",
+    boxSizing: "border-box",
   },
   loginBtn: {
     width: "100%",
@@ -172,12 +173,12 @@ const styles = {
     transition: "all 0.25s ease",
     boxShadow: "0 4px 20px rgba(139,92,246,0.4)",
     marginBottom: "1.4rem",
-    animation: "pulse 2.5s infinite",
   },
   signupText: {
     textAlign: "center",
     fontSize: "0.85rem",
     color: "rgba(255,255,255,0.35)",
+    margin: 0,
   },
   signupLink: {
     color: "#a78bfa",
@@ -187,7 +188,8 @@ const styles = {
   rightPanel: {
     flex: 1,
     position: "relative",
-    background: "linear-gradient(135deg, rgba(109,40,217,0.25) 0%, rgba(79,70,229,0.2) 50%, rgba(236,72,153,0.15) 100%)",
+    background:
+      "linear-gradient(135deg, rgba(109,40,217,0.25) 0%, rgba(79,70,229,0.2) 50%, rgba(236,72,153,0.15) 100%)",
     borderLeft: "1px solid rgba(255,255,255,0.06)",
     display: "flex",
     flexDirection: "column",
@@ -242,12 +244,18 @@ function Login() {
   const particlesRef = useRef(null);
   const [focusedField, setFocusedField] = useState(null);
 
-  const [userData, setUserData] = useState({ email: "", password: "" });
+  const [userData, setUserData] = useState({
+    email: "",
+    password: "",
+  });
   const dispatch = useDispatch();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setUserData((prevData) => ({ ...prevData, [name]: value }));
+    setUserData((prevData) => ({
+      ...prevData,
+      [name]: value,
+    }));
   };
 
   const handleLogin = async () => {
@@ -276,7 +284,7 @@ function Login() {
     isAuthenticated && history.replace("/");
   }, [isAuthenticated, history]);
 
-  // Inject keyframes
+  // Inject keyframe animations once into <head>
   useEffect(() => {
     const id = "login-keyframes";
     if (!document.getElementById(id)) {
@@ -284,13 +292,34 @@ function Login() {
       style.id = id;
       style.textContent = `
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:wght@700&display=swap');
-        @keyframes aurora1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(60px,-40px) scale(1.15)} }
-        @keyframes aurora2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-50px,50px) scale(1.2)} }
-        @keyframes aurora3 { 0%,100%{transform:translate(0,0) scale(1)} 60%{transform:translate(40px,30px) scale(1.1)} }
-        @keyframes float { 0%,100%{transform:translateY(0) rotate(0deg);opacity:.7} 50%{transform:translateY(-18px) rotate(180deg);opacity:.3} }
-        @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes shimmer { 0%{background-position:200% center} 100%{background-position:-200% center} }
-        @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(139,92,246,.35)} 70%{box-shadow:0 0 0 10px rgba(139,92,246,0)} }
+        @keyframes aurora1 {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          50%       { transform: translate(60px, -40px) scale(1.15); }
+        }
+        @keyframes aurora2 {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          50%       { transform: translate(-50px, 50px) scale(1.2); }
+        }
+        @keyframes aurora3 {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          60%       { transform: translate(40px, 30px) scale(1.1); }
+        }
+        @keyframes float {
+          0%, 100% { transform: translateY(0) rotate(0deg); opacity: 0.7; }
+          50%       { transform: translateY(-18px) rotate(180deg); opacity: 0.3; }
+        }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes shimmer {
+          0%   { background-position: 200% center; }
+          100% { background-position: -200% center; }
+        }
+        @keyframes pulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,0.35); }
+          70%       { box-shadow: 0 0 0 10px rgba(139,92,246,0); }
+        }
       `;
       document.head.appendChild(style);
     }
@@ -307,11 +336,15 @@ function Login() {
         const p = document.createElement("div");
         const size = Math.random() * 4 + 2;
         p.style.cssText = `
-          position:absolute;width:${size}px;height:${size}px;border-radius:50%;
-          background:${colors[Math.floor(Math.random() * colors.length)]};
-          left:${Math.random() * 100}%;top:${Math.random() * 100}%;
-          animation:float ${5 + Math.random() * 8}s ease-in-out ${Math.random() * 5}s infinite;
-          pointer-events:none;
+          position: absolute;
+          width: ${size}px;
+          height: ${size}px;
+          border-radius: 50%;
+          background: ${colors[Math.floor(Math.random() * colors.length)]};
+          left: ${Math.random() * 100}%;
+          top: ${Math.random() * 100}%;
+          animation: float ${5 + Math.random() * 8}s ease-in-out ${Math.random() * 5}s infinite;
+          pointer-events: none;
         `;
         particlesRef.current.appendChild(p);
       }
@@ -343,22 +376,32 @@ function Login() {
         pauseOnHover
       />
 
-      {/* Aurora blobs */}
+      {/* Aurora background blobs */}
       <div style={styles.auroraBlob1} />
       <div style={styles.auroraBlob2} />
       <div style={styles.auroraBlob3} />
+
+      {/* Dot grid overlay */}
       <div style={styles.grid} />
 
-      {/* Floating particles */}
+      {/* Floating particles container */}
       <div
         ref={particlesRef}
-        style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          overflow: "hidden",
+        }}
       />
 
-      {/* Card */}
+      {/* Main card */}
       <div style={styles.card}>
-        {/* Left: form */}
+
+        {/* ── LEFT PANEL: Form ── */}
         <div style={styles.leftPanel}>
+
+          {/* Header */}
           <div style={{ marginBottom: "2.5rem" }}>
             <div style={styles.badge}>
               <span style={styles.dot} />
@@ -371,6 +414,7 @@ function Login() {
             <p style={styles.subtext}>Your passwords, secured forever.</p>
           </div>
 
+          {/* Email field */}
           <div style={styles.fieldGroup}>
             <label style={styles.label}>Email Address</label>
             <input
@@ -387,10 +431,26 @@ function Login() {
             />
           </div>
 
+          {/* Password field */}
           <div style={{ ...styles.fieldGroup, marginBottom: "1.8rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "0.5rem",
+              }}
+            >
               <label style={{ ...styles.label, marginBottom: 0 }}>Password</label>
-              <a href="#" style={{ fontSize: "0.78rem", color: "#a78bfa", textDecoration: "none", opacity: 0.85 }}>
+              
+                href="#"
+                style={{
+                  fontSize: "0.78rem",
+                  color: "#a78bfa",
+                  textDecoration: "none",
+                  opacity: 0.85,
+                }}
+              >
                 Forgot?
               </a>
             </div>
@@ -407,23 +467,25 @@ function Login() {
             />
           </div>
 
+          {/* Login button */}
           <button
             onClick={handleLogin}
             style={styles.loginBtn}
             onMouseEnter={(e) => {
-              e.target.style.transform = "translateY(-2px)";
-              e.target.style.boxShadow = "0 8px 30px rgba(139,92,246,0.55)";
-              e.target.style.background = "linear-gradient(135deg, #7c3aed, #4f46e5)";
+              e.currentTarget.style.transform = "translateY(-2px)";
+              e.currentTarget.style.boxShadow = "0 8px 30px rgba(139,92,246,0.55)";
+              e.currentTarget.style.background = "linear-gradient(135deg, #7c3aed, #4f46e5)";
             }}
             onMouseLeave={(e) => {
-              e.target.style.transform = "none";
-              e.target.style.boxShadow = "0 4px 20px rgba(139,92,246,0.4)";
-              e.target.style.background = "linear-gradient(135deg, #8b5cf6, #6366f1)";
+              e.currentTarget.style.transform = "none";
+              e.currentTarget.style.boxShadow = "0 4px 20px rgba(139,92,246,0.4)";
+              e.currentTarget.style.background = "linear-gradient(135deg, #8b5cf6, #6366f1)";
             }}
           >
             Sign In →
           </button>
 
+          {/* Signup link */}
           <p style={styles.signupText}>
             Don't have an account?{" "}
             <Link to="/signup" style={styles.signupLink}>
@@ -431,25 +493,77 @@ function Login() {
             </Link>
           </p>
         </div>
+        {/* ── END LEFT PANEL ── */}
 
-        {/* Right: branding */}
+        {/* ── RIGHT PANEL: Branding ── */}
         <div style={styles.rightPanel}>
-          <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
-            <div style={{ position: "absolute", width: "200px", height: "200px", borderRadius: "50%", border: "1px solid rgba(139,92,246,0.2)", top: "20px", right: "-60px", animation: "aurora1 8s ease-in-out infinite" }} />
-            <div style={{ position: "absolute", width: "140px", height: "140px", borderRadius: "50%", border: "1px solid rgba(236,72,153,0.15)", bottom: "40px", left: "-30px", animation: "aurora2 10s ease-in-out infinite" }} />
+
+          {/* Decorative orbit rings */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              overflow: "hidden",
+              pointerEvents: "none",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                width: "200px",
+                height: "200px",
+                borderRadius: "50%",
+                border: "1px solid rgba(139,92,246,0.2)",
+                top: "20px",
+                right: "-60px",
+                animation: "aurora1 8s ease-in-out infinite",
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                width: "140px",
+                height: "140px",
+                borderRadius: "50%",
+                border: "1px solid rgba(236,72,153,0.15)",
+                bottom: "40px",
+                left: "-30px",
+                animation: "aurora2 10s ease-in-out infinite",
+              }}
+            />
           </div>
 
+          {/* Centered content */}
           <div style={{ textAlign: "center", position: "relative", zIndex: 1 }}>
             <div style={styles.iconBox}>🔐</div>
-            <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: "1.6rem", color: "#fff", fontWeight: 700, marginBottom: "0.8rem", lineHeight: 1.3 }}>
+            <h3
+              style={{
+                fontFamily: "'Playfair Display', serif",
+                fontSize: "1.6rem",
+                color: "#fff",
+                fontWeight: 700,
+                marginBottom: "0.8rem",
+                lineHeight: 1.3,
+              }}
+            >
               Your vault,<br />always safe
             </h3>
-            <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.4)", lineHeight: 1.75, maxWidth: "220px", margin: "0 auto" }}>
+            <p
+              style={{
+                fontSize: "0.85rem",
+                color: "rgba(255,255,255,0.4)",
+                lineHeight: 1.75,
+                maxWidth: "220px",
+                margin: "0 auto",
+              }}
+            >
               Military-grade encryption protects every password you store with us.
             </p>
+
+            {/* Feature cards */}
             <div style={{ marginTop: "2rem" }}>
-              <div style={{ ...styles.featureCard }}>
-                <div style={{ ...styles.featureIcon }}>🛡️</div>
+              <div style={styles.featureCard}>
+                <div style={styles.featureIcon}>🛡️</div>
                 <span style={styles.featureText}>AES-256 encryption</span>
               </div>
               <div style={{ ...styles.featureCard, marginBottom: 0 }}>
@@ -458,17 +572,30 @@ function Login() {
               </div>
             </div>
           </div>
+          {/* ── END centered content ── */}
 
+          {/* Attribution */}
           
             href="https://www.freepik.com/vectors/star"
             target="_blank"
             rel="noreferrer"
-            style={{ position: "absolute", bottom: "1rem", fontSize: "0.65rem", color: "rgba(255,255,255,0.2)", textDecoration: "none" }}
+            style={{
+              position: "absolute",
+              bottom: "1rem",
+              fontSize: "0.65rem",
+              color: "rgba(255,255,255,0.2)",
+              textDecoration: "none",
+            }}
           >
             Star vector by vectorpouch – freepik.com
           </a>
+
         </div>
+        {/* ── END RIGHT PANEL ── */}
+
       </div>
+      {/* ── END CARD ── */}
+
     </div>
   );
 }
