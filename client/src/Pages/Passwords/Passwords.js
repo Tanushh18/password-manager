@@ -17,7 +17,11 @@ function Passwords() {
   const [platPass, setPlatPass] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [editingId, setEditingId] = useState(null);
+  const [editingPlatform, setEditingPlatform] = useState("");
   const [newPass, setNewPass] = useState("");
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showModalPass, setShowModalPass] = useState(false);
+  const [visiblePasswords, setVisiblePasswords] = useState({});
   const [open, setOpen] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
   const particlesRef = useRef(null);
@@ -67,6 +71,7 @@ function Passwords() {
         setPlatform("");
         setPlatEmail("");
         setPlatPass("");
+        setShowModalPass(false);
       }
     } catch (error) {
       console.log(error);
@@ -85,11 +90,17 @@ function Passwords() {
       if (res.status === 200) {
         toast.success("Password updated");
         setEditingId(null);
+        setEditingPlatform("");
+        setShowNewPass(false);
         verifyUser();
       }
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const togglePasswordVisibility = (id) => {
+    setVisiblePasswords((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const handleExcelUpload = async (event) => {
@@ -128,7 +139,6 @@ function Passwords() {
     !isAuthenticated && history.replace("/signin");
   }, [isAuthenticated, history]);
 
-  // Inject keyframes + Google Fonts once
   useEffect(() => {
     const id = "passwords-keyframes";
     if (!document.getElementById(id)) {
@@ -172,11 +182,18 @@ function Passwords() {
           from { opacity: 0; transform: scale(0.95) translateY(20px); }
           to   { opacity: 1; transform: scale(1) translateY(0); }
         }
+        input::placeholder { color: rgba(255,255,255,0.35) !important; }
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover,
+        input:-webkit-autofill:focus {
+          -webkit-text-fill-color: #fff !important;
+          -webkit-box-shadow: 0 0 0px 1000px rgba(18,14,36,0.97) inset !important;
+          transition: background-color 5000s ease-in-out 0s;
+        }
       `;
       document.head.appendChild(style);
     }
 
-    // Floating particles
     if (particlesRef.current && particlesRef.current.children.length === 0) {
       const colors = [
         "rgba(167,139,250,0.55)",
@@ -202,21 +219,22 @@ function Passwords() {
     }
   }, []);
 
-  const inputStyle = (name) => ({
+  const inputStyle = (fieldName) => ({
     width: "100%",
     padding: "0.85rem 1.1rem",
-    background: "rgba(255,255,255,0.05)",
-    border: `1px solid ${focusedField === name ? "rgba(167,139,250,0.8)" : "rgba(255,255,255,0.12)"}`,
+    background: "rgba(255,255,255,0.08)",
+    border: `1px solid ${focusedField === fieldName ? "rgba(167,139,250,0.8)" : "rgba(255,255,255,0.18)"}`,
     borderRadius: "12px",
-    color: "#fff",
+    color: "#ffffff",
     fontSize: "0.95rem",
     fontFamily: "'DM Sans', sans-serif",
     outline: "none",
     transition: "all 0.25s ease",
     boxSizing: "border-box",
-    boxShadow: focusedField === name
+    boxShadow: focusedField === fieldName
       ? "0 0 0 3px rgba(139,92,246,0.18), 0 0 20px rgba(139,92,246,0.1)"
       : "none",
+    caretColor: "#a78bfa",
   });
 
   const platformInitial = (name) => {
@@ -239,6 +257,33 @@ function Passwords() {
     return gradients[code];
   };
 
+  const EyeIcon = ({ open }) => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {open ? (
+        <>
+          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+          <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+          <line x1="1" y1="1" x2="23" y2="23" />
+        </>
+      ) : (
+        <>
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+          <circle cx="12" cy="12" r="3" />
+        </>
+      )}
+    </svg>
+  );
+
+  const labelStyle = {
+    display: "block",
+    fontSize: "0.72rem",
+    fontWeight: 600,
+    color: "rgba(255,255,255,0.45)",
+    letterSpacing: "0.1em",
+    textTransform: "uppercase",
+    marginBottom: "0.5rem",
+  };
+
   return (
     <div
       style={{
@@ -252,22 +297,17 @@ function Passwords() {
     >
       <ToastContainer />
 
-      {/* ── Aurora blobs ── */}
-      <div
-        style={{
-          position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, overflow: "hidden",
-        }}
-      >
+      {/* Aurora blobs */}
+      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, overflow: "hidden" }}>
         <div style={{ position: "absolute", width: "600px", height: "600px", borderRadius: "50%", background: "radial-gradient(circle, rgba(109,40,217,0.4) 0%, transparent 70%)", top: "-150px", left: "-120px", filter: "blur(60px)", animation: "aurora1 10s ease-in-out infinite" }} />
         <div style={{ position: "absolute", width: "500px", height: "500px", borderRadius: "50%", background: "radial-gradient(circle, rgba(79,70,229,0.35) 0%, transparent 70%)", bottom: "-100px", right: "-100px", filter: "blur(65px)", animation: "aurora2 12s ease-in-out infinite" }} />
         <div style={{ position: "absolute", width: "380px", height: "380px", borderRadius: "50%", background: "radial-gradient(circle, rgba(236,72,153,0.25) 0%, transparent 70%)", top: "40%", left: "55%", filter: "blur(55px)", animation: "aurora3 14s ease-in-out infinite" }} />
         <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
       </div>
 
-      {/* ── Particles ── */}
+      {/* Particles */}
       <div ref={particlesRef} style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, overflow: "hidden" }} />
 
-      {/* ── Page content ── */}
       <div style={{ maxWidth: "1200px", margin: "0 auto", position: "relative", zIndex: 1 }}>
 
         {/* Header */}
@@ -310,43 +350,47 @@ function Passwords() {
 
         {/* Search */}
         <div style={{ maxWidth: "600px", margin: "0 auto 2.5rem", animation: "fadeUp 0.7s ease 0.15s both" }}>
-          <input
-            type="text"
-            placeholder="Search by platform..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "0.95rem 1.3rem",
-              fontSize: "0.97rem",
-              border: `1px solid ${focusedField === "search" ? "rgba(167,139,250,0.8)" : "rgba(255,255,255,0.1)"}`,
-              borderRadius: "14px",
-              background: "rgba(255,255,255,0.05)",
-              backdropFilter: "blur(10px)",
-              color: "#fff",
-              outline: "none",
-              transition: "all 0.25s ease",
-              boxSizing: "border-box",
-              fontFamily: "'DM Sans', sans-serif",
-              boxShadow: focusedField === "search" ? "0 0 0 3px rgba(139,92,246,0.18)" : "none",
-            }}
-            onFocus={() => setFocusedField("search")}
-            onBlur={() => setFocusedField(null)}
-          />
+          <div style={{ position: "relative" }}>
+            <span style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.3)", fontSize: "1rem", pointerEvents: "none" }}>🔍</span>
+            <input
+              type="text"
+              placeholder="Search by platform..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "0.95rem 1.3rem 0.95rem 2.8rem",
+                fontSize: "0.97rem",
+                border: `1px solid ${focusedField === "search" ? "rgba(167,139,250,0.8)" : "rgba(255,255,255,0.12)"}`,
+                borderRadius: "14px",
+                background: "rgba(255,255,255,0.06)",
+                backdropFilter: "blur(10px)",
+                color: "#fff",
+                outline: "none",
+                transition: "all 0.25s ease",
+                boxSizing: "border-box",
+                fontFamily: "'DM Sans', sans-serif",
+                boxShadow: focusedField === "search" ? "0 0 0 3px rgba(139,92,246,0.18)" : "none",
+                caretColor: "#a78bfa",
+              }}
+              onFocus={() => setFocusedField("search")}
+              onBlur={() => setFocusedField(null)}
+            />
+          </div>
         </div>
 
-        {/* ── Modal ── */}
+        {/* ── Add Password Modal ── */}
         <Modal
           open={open}
-          onClose={() => setOpen(false)}
+          onClose={() => { setOpen(false); setShowModalPass(false); }}
           styles={{
-            overlay: { background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" },
+            overlay: { background: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)" },
             modal: {
-              background: "rgba(18,14,36,0.97)",
+              background: "rgba(18,14,36,0.98)",
               backdropFilter: "blur(30px)",
               borderRadius: "24px",
-              border: "1px solid rgba(139,92,246,0.25)",
-              boxShadow: "0 30px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)",
+              border: "1px solid rgba(139,92,246,0.3)",
+              boxShadow: "0 30px 80px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.07)",
               padding: "0",
               maxWidth: "480px",
               width: "90%",
@@ -355,17 +399,15 @@ function Passwords() {
           }}
         >
           <div style={{ padding: "2.5rem" }}>
-            {/* Modal header */}
             <div style={{ marginBottom: "2rem", textAlign: "center" }}>
-              <div style={{ width: "52px", height: "52px", background: "linear-gradient(135deg, rgba(139,92,246,0.3), rgba(99,102,241,0.3))", borderRadius: "16px", border: "1px solid rgba(139,92,246,0.4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem", margin: "0 auto 1rem" }}>🔑</div>
-              <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "1.7rem", fontWeight: 700, color: "#fff", margin: 0 }}>Add New Password</h2>
-              <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.35)", margin: "0.4rem 0 0" }}>Stored with end-to-end encryption</p>
+              <div style={{ width: "56px", height: "56px", background: "linear-gradient(135deg, rgba(139,92,246,0.35), rgba(99,102,241,0.35))", borderRadius: "18px", border: "1px solid rgba(139,92,246,0.45)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.6rem", margin: "0 auto 1rem" }}>🔑</div>
+              <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "1.75rem", fontWeight: 700, color: "#fff", margin: "0 0 0.3rem" }}>Add New Password</h2>
+              <p style={{ fontSize: "0.84rem", color: "rgba(255,255,255,0.35)", margin: 0 }}>Stored with end-to-end encryption</p>
             </div>
 
-            <form style={{ display: "flex", flexDirection: "column", gap: "1.2rem" }}>
-              {/* Platform */}
+            <form style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
               <div>
-                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 500, color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.5rem" }}>Platform</label>
+                <label style={labelStyle}>Platform</label>
                 <input
                   type="text"
                   placeholder="e.g. Facebook"
@@ -377,9 +419,8 @@ function Passwords() {
                 />
               </div>
 
-              {/* Email */}
               <div>
-                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 500, color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.5rem" }}>Email</label>
+                <label style={labelStyle}>Email / Username</label>
                 <input
                   type="text"
                   placeholder="e.g. you@example.com"
@@ -391,23 +432,32 @@ function Passwords() {
                 />
               </div>
 
-              {/* Password */}
               <div>
-                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 500, color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.5rem" }}>Password</label>
-                <input
-                  type="password"
-                  placeholder="••••••••••"
-                  value={platPass}
-                  onChange={(e) => setPlatPass(e.target.value)}
-                  style={inputStyle("m-pass")}
-                  onFocus={() => setFocusedField("m-pass")}
-                  onBlur={() => setFocusedField(null)}
-                />
+                <label style={labelStyle}>Password</label>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showModalPass ? "text" : "password"}
+                    placeholder="Enter password"
+                    value={platPass}
+                    onChange={(e) => setPlatPass(e.target.value)}
+                    style={{ ...inputStyle("m-pass"), paddingRight: "3rem" }}
+                    onFocus={() => setFocusedField("m-pass")}
+                    onBlur={() => setFocusedField(null)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowModalPass((v) => !v)}
+                    style={{ position: "absolute", right: "0.9rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: showModalPass ? "#a78bfa" : "rgba(255,255,255,0.35)", padding: "4px", display: "flex", alignItems: "center", transition: "color 0.2s" }}
+                    title={showModalPass ? "Hide password" : "Show password"}
+                  >
+                    <EyeIcon open={showModalPass} />
+                  </button>
+                </div>
               </div>
 
               <button
                 onClick={addNewPassword}
-                style={{ background: "linear-gradient(135deg, #8b5cf6, #6366f1)", color: "#fff", border: "none", borderRadius: "14px", padding: "1rem", fontSize: "1rem", fontWeight: 600, cursor: "pointer", transition: "all 0.25s ease", boxShadow: "0 4px 20px rgba(139,92,246,0.4)", marginTop: "0.5rem", letterSpacing: "0.01em" }}
+                style={{ background: "linear-gradient(135deg, #8b5cf6, #6366f1)", color: "#fff", border: "none", borderRadius: "14px", padding: "1rem", fontSize: "1rem", fontWeight: 600, cursor: "pointer", transition: "all 0.25s ease", boxShadow: "0 4px 20px rgba(139,92,246,0.4)", marginTop: "0.4rem", letterSpacing: "0.01em" }}
                 onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 28px rgba(139,92,246,0.55)"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 4px 20px rgba(139,92,246,0.4)"; }}
               >
@@ -437,45 +487,67 @@ function Passwords() {
                   <div
                     key={data._id}
                     style={{
-                      background: "rgba(15,12,30,0.75)",
+                      background: "rgba(15,12,30,0.85)",
                       backdropFilter: "blur(20px)",
                       WebkitBackdropFilter: "blur(20px)",
                       borderRadius: "20px",
                       padding: "1.5rem",
-                      border: "1px solid rgba(139,92,246,0.35)",
-                      boxShadow: "0 8px 32px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05)",
+                      border: "1px solid rgba(139,92,246,0.45)",
+                      boxShadow: "0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(139,92,246,0.1), inset 0 1px 0 rgba(255,255,255,0.06)",
                       animation: "cardIn 0.3s ease both",
                     }}
                   >
-                    <p style={{ fontSize: "0.75rem", fontWeight: 500, color: "rgba(255,255,255,0.4)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.8rem", margin: "0 0 0.8rem" }}>Editing — {data.platform}</p>
-                    <div style={{ marginBottom: "1rem" }}>
-                      <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 500, color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.5rem" }}>New Password</label>
-                      <input
-                        type="password"
-                        value={newPass}
-                        onChange={(e) => setNewPass(e.target.value)}
-                        placeholder="••••••••••"
-                        style={inputStyle("edit-pass")}
-                        onFocus={() => setFocusedField("edit-pass")}
-                        onBlur={() => setFocusedField(null)}
-                      />
+                    {/* Edit card header */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.25rem" }}>
+                      <div style={{ width: "38px", height: "38px", borderRadius: "10px", background: getGradient(data.platform), display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+                        {platformInitial(data.platform)}
+                      </div>
+                      <div>
+                        <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "rgba(167,139,250,0.7)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Editing Password</p>
+                        <p style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "#fff", textTransform: "capitalize" }}>{editingPlatform || data.platform}</p>
+                      </div>
                     </div>
+
+                    <div style={{ marginBottom: "1.1rem" }}>
+                      <label style={labelStyle}>New Password</label>
+                      <div style={{ position: "relative" }}>
+                        <input
+                          type={showNewPass ? "text" : "password"}
+                          value={newPass}
+                          onChange={(e) => setNewPass(e.target.value)}
+                          placeholder="Enter new password"
+                          style={{ ...inputStyle("edit-pass"), paddingRight: "3rem" }}
+                          onFocus={() => setFocusedField("edit-pass")}
+                          onBlur={() => setFocusedField(null)}
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPass((v) => !v)}
+                          style={{ position: "absolute", right: "0.9rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: showNewPass ? "#a78bfa" : "rgba(255,255,255,0.35)", padding: "4px", display: "flex", alignItems: "center", transition: "color 0.2s" }}
+                          title={showNewPass ? "Hide" : "Show"}
+                        >
+                          <EyeIcon open={showNewPass} />
+                        </button>
+                      </div>
+                    </div>
+
                     <div style={{ display: "flex", gap: "0.6rem" }}>
                       <button
                         onClick={() => handleEditPassword(data._id, data.platform, data.platEmail)}
                         style={{ flex: 1, background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", border: "none", borderRadius: "10px", padding: "0.75rem", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", transition: "all 0.25s ease" }}
-                        onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 4px 16px rgba(16,185,129,0.4)"; }}
+                        onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 4px 16px rgba(16,185,129,0.45)"; }}
                         onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}
                       >
-                        Save
+                        ✓ Save
                       </button>
                       <button
-                        onClick={() => setEditingId(null)}
-                        style={{ flex: 1, background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "0.75rem", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", transition: "all 0.25s ease" }}
+                        onClick={() => { setEditingId(null); setEditingPlatform(""); setShowNewPass(false); }}
+                        style={{ flex: 1, background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", padding: "0.75rem", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", transition: "all 0.25s ease" }}
                         onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.15)"; e.currentTarget.style.color = "#f87171"; e.currentTarget.style.borderColor = "rgba(239,68,68,0.3)"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "rgba(255,255,255,0.6)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "rgba(255,255,255,0.6)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
                       >
-                        Cancel
+                        ✕ Cancel
                       </button>
                     </div>
                   </div>
@@ -488,7 +560,7 @@ function Passwords() {
                       backdropFilter: "blur(20px)",
                       WebkitBackdropFilter: "blur(20px)",
                       borderRadius: "20px",
-                      padding: "1.5rem",
+                      padding: "0",
                       border: "1px solid rgba(255,255,255,0.07)",
                       boxShadow: "0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
                       transition: "all 0.3s ease",
@@ -507,49 +579,82 @@ function Passwords() {
                       e.currentTarget.style.boxShadow = "0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)";
                     }}
                   >
-                    {/* Decorative top bar */}
-                    <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: getGradient(data.platform), borderRadius: "20px 20px 0 0" }} />
+                    {/* Gradient top bar */}
+                    <div style={{ height: "3px", background: getGradient(data.platform), borderRadius: "20px 20px 0 0" }} />
 
-                    {/* Card header */}
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                        <div style={{ width: "40px", height: "40px", borderRadius: "12px", background: getGradient(data.platform), display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.1rem", fontWeight: 700, color: "#fff", flexShrink: 0, fontFamily: "'DM Sans', sans-serif" }}>
-                          {platformInitial(data.platform)}
+                    <div style={{ padding: "1.4rem 1.5rem 1.5rem" }}>
+                      {/* Card header */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                          <div style={{ width: "42px", height: "42px", borderRadius: "12px", background: getGradient(data.platform), display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.1rem", fontWeight: 700, color: "#fff", flexShrink: 0, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
+                            {platformInitial(data.platform)}
+                          </div>
+                          <div>
+                            <h3 style={{ fontSize: "1.05rem", fontWeight: 600, color: "#fff", margin: 0, textTransform: "capitalize" }}>
+                              {data.platform}
+                            </h3>
+                            <p style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.35)", margin: "2px 0 0", fontFamily: "monospace" }}>
+                              {data.platEmail !== "NA" ? data.platEmail : "—"}
+                            </p>
+                          </div>
                         </div>
-                        <h3 style={{ fontSize: "1.1rem", fontWeight: 600, color: "#fff", margin: 0, textTransform: "capitalize" }}>
-                          {data.platform}
-                        </h3>
+                        <button
+                          onClick={() => { setEditingId(data._id); setEditingPlatform(data.platform); setNewPass(data.password); }}
+                          style={{ background: "rgba(139,92,246,0.12)", color: "#c4b5fd", border: "1px solid rgba(139,92,246,0.25)", borderRadius: "8px", padding: "0.4rem 0.9rem", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", transition: "all 0.2s ease", letterSpacing: "0.02em", whiteSpace: "nowrap" }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.28)"; e.currentTarget.style.transform = "scale(1.04)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.12)"; e.currentTarget.style.transform = "none"; }}
+                        >
+                          ✎ Edit
+                        </button>
                       </div>
-                      <button
-                        onClick={() => { setEditingId(data._id); setNewPass(data.password); }}
-                        style={{ background: "rgba(139,92,246,0.15)", color: "#c4b5fd", border: "1px solid rgba(139,92,246,0.3)", borderRadius: "8px", padding: "0.4rem 0.85rem", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", transition: "all 0.2s ease", letterSpacing: "0.02em" }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.28)"; e.currentTarget.style.transform = "scale(1.04)"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.15)"; e.currentTarget.style.transform = "none"; }}
-                      >
-                        Edit
-                      </button>
-                    </div>
 
-                    {/* Email row */}
-                    <div style={{ marginBottom: "0.85rem" }}>
-                      <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 500, color: "rgba(255,255,255,0.35)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "0.3rem" }}>Email</label>
-                      <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "10px", padding: "0.65rem 0.9rem" }}>
-                        <span style={{ fontSize: "0.88rem", color: "rgba(255,255,255,0.65)", fontFamily: "monospace" }}>{data.platEmail}</span>
-                      </div>
-                    </div>
+                      {/* Divider */}
+                      <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", marginBottom: "1.1rem" }} />
 
-                    {/* Password row */}
-                    <div>
-                      <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 500, color: "rgba(255,255,255,0.35)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "0.3rem" }}>Password</label>
-                      <div style={{ background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.18)", borderRadius: "10px", padding: "0.65rem 0.9rem" }}>
-                        <Password
-                          key={data._id}
-                          id={data._id}
-                          name={data.platform}
-                          password={data.password}
-                          email={data.platEmail}
-                          iv={data.iv}
-                        />
+                      {/* Password row */}
+                      <div>
+                        <label style={{ ...labelStyle, marginBottom: "0.4rem" }}>Password</label>
+                        <div style={{ background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.18)", borderRadius: "12px", padding: "0.7rem 1rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+                          <div style={{ flex: 1, overflow: "hidden" }}>
+                            {visiblePasswords[data._id] ? (
+                              <Password
+                                key={data._id}
+                                id={data._id}
+                                name={data.platform}
+                                password={data.password}
+                                email={data.platEmail}
+                                iv={data.iv}
+                              />
+                            ) : (
+                              <span style={{ fontSize: "1.1rem", color: "rgba(255,255,255,0.5)", letterSpacing: "0.2em" }}>••••••••••</span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => togglePasswordVisibility(data._id)}
+                            style={{
+                              background: visiblePasswords[data._id] ? "rgba(167,139,250,0.2)" : "rgba(255,255,255,0.07)",
+                              color: visiblePasswords[data._id] ? "#a78bfa" : "rgba(255,255,255,0.4)",
+                              border: `1px solid ${visiblePasswords[data._id] ? "rgba(167,139,250,0.4)" : "rgba(255,255,255,0.1)"}`,
+                              borderRadius: "8px",
+                              padding: "0.35rem 0.5rem",
+                              cursor: "pointer",
+                              transition: "all 0.2s ease",
+                              display: "flex",
+                              alignItems: "center",
+                              flexShrink: 0,
+                            }}
+                            title={visiblePasswords[data._id] ? "Hide password" : "Show password"}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(167,139,250,0.2)"; e.currentTarget.style.color = "#a78bfa"; }}
+                            onMouseLeave={(e) => {
+                              if (!visiblePasswords[data._id]) {
+                                e.currentTarget.style.background = "rgba(255,255,255,0.07)";
+                                e.currentTarget.style.color = "rgba(255,255,255,0.4)";
+                              }
+                            }}
+                          >
+                            <EyeIcon open={visiblePasswords[data._id]} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
