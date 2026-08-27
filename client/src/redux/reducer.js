@@ -1,4 +1,7 @@
 const initialState = {
+    // authChecked stays false until the very first /authenticate call answers,
+    // so guarded pages don't bounce the user away while we are still asking.
+    authChecked: false,
     isAuthenticated: false,
     name: "",
     email: "",
@@ -12,7 +15,8 @@ const rootReducer = (state = initialState, action) =>
         case "SET_AUTH":
             return {
                 ...state,
-                isAuthenticated: action.payload
+                isAuthenticated: action.payload,
+                authChecked: true
             }
 
         case "SET_NAME":

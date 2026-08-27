@@ -1,87 +1,135 @@
-import React, { useRef, useState } from 'react';
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBars, faArrowLeft } from "@fortawesome/free-solid-svg-icons";
-import { Link } from "react-router-dom";
-import "./Navbar.css";
+import React, { useEffect, useState } from "react";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { HeartLine, Menu, Close, Arrow } from "../Icons/Icons";
+import "./Navbar.css";
 
+function Navbar() {
+  const isAuthenticated = useSelector((state) => state.isAuthenticated);
+  const name = useSelector((state) => state.name);
+  const [scrolled, setScrolled] = useState(false);
+  const [open, setOpen] = useState(false);
+  const location = useLocation();
 
-function Navbar()
-{
-    const isAuthenticated = useSelector(state => state.isAuthenticated);
-    const menu = useRef();
-    const [isOpen, setIsOpen] = useState(false);
+  /* Sticky nav condenses once the page moves */
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 12);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
-    const handleMenu = () =>
-    {
-        setIsOpen(!isOpen);
-        if (isOpen)
-        {
-            menu.current.style.transform = "translateX(0px)";
-        }
-        else
-        {
-            menu.current.style.transform = "translateX(-100%)";
-        }
-    }
+  /* Close the drawer on navigation + lock body scroll while it is open */
+  useEffect(() => setOpen(false), [location.pathname]);
 
-    return (
-        <nav className="navbar">
+  useEffect(() => {
+    document.body.style.overflow = open ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [open]);
 
-            <div className="navbar__left">
-                <h2> <Link to="/"> Password Manager </Link> </h2>
-            </div>
+  const links = isAuthenticated
+    ? [
+        { to: "/", label: "Home" },
+        { to: "/logout", label: "Sign out" },
+      ]
+    : [
+        { to: "/", label: "Home" },
+        { to: "/signin", label: "Sign in" },
+      ];
 
-            <div className="navbar__right">
-                <div className="right__menu">
-                    <ul>
-                        <li><Link to="/">Home</Link></li>
-                        {
-                            isAuthenticated ?
-                                (<>
-                                    <li><Link to="/passwords">Passwords</Link></li>
-                                    <li><Link to="/logout">Logout</Link></li>
-                                </>)
-                                :
-                                (<>
-                                    <li><Link to="/signin">SignIn</Link></li>
-                                    <li><Link to="/signup">SignUp</Link></li>
-                                </>)
+  const cta = isAuthenticated
+    ? { to: "/passwords", label: "My vault" }
+    : { to: "/signup", label: "Create your vault" };
 
-                        }
-                    </ul>
-                </div>
-                <FontAwesomeIcon icon={faBars} className="menu__icon" onClick={handleMenu} />
-            </div>
+  return (
+    <>
+      <header className={`nav ${scrolled ? "is-scrolled" : ""}`}>
+        <div className="nav__inner">
+          <Link to="/" className="nav__brand" aria-label="Aurelia home">
+            <span className="nav__mark">
+              <HeartLine size={19} strokeWidth={1.35} />
+            </span>
+            <span className="nav__wordmark">
+              <span className="nav__name">Aurelia</span>
+              <span className="nav__tag">password keepsake</span>
+            </span>
+          </Link>
 
-            <div className="phone__nav" ref={menu}>
-                <div className="back">
-                    <FontAwesomeIcon icon={faArrowLeft} className="back__button" onClick={handleMenu} />
-                </div>
-                <ul>
-                    <li className="nav-item"><Link to="/" onClick={handleMenu}>Home</Link></li>
-                    {
-                        isAuthenticated ?
-                            (
-                                <>
-                                    <li className="nav-item" onClick={handleMenu}><Link to="/passwords">Passwords</Link></li>
-                                    <li className="nav-item" onClick={handleMenu}><Link to="/logout">Logout</Link></li>
-                                </>
-                            )
-                            :
-                            (
-                                <>
-                                    <li className="nav-item" onClick={handleMenu}><Link to="/signin">SignIn</Link></li>
-                                    <li className="nav-item" onClick={handleMenu}><Link to="/signup">SignUp</Link></li>
-                                </>
-                            )
-                    }
+          <nav className="nav__links" aria-label="Primary">
+            {links.map((link) => (
+              <NavLink key={link.to} exact to={link.to} className="nav__link" activeClassName="is-active">
+                {link.label}
+              </NavLink>
+            ))}
+          </nav>
 
+          <div className="nav__actions">
+            {isAuthenticated && name && (
+              <span className="nav__greeting">
+                Hello, <em>{name.split(" ")[0]}</em>
+              </span>
+            )}
+            <Link to={cta.to} className="btn btn--primary btn--sm nav__cta">
+              <span className="btn__sheen" />
+              {cta.label}
+              <Arrow size={14} />
+            </Link>
+            <button
+              className="nav__burger"
+              onClick={() => setOpen(true)}
+              aria-label="Open menu"
+              aria-expanded={open}
+            >
+              <Menu size={20} />
+            </button>
+          </div>
+        </div>
+      </header>
 
-                </ul>
-            </div>
+      {/* ── Mobile drawer ── */}
+      <div className={`drawer ${open ? "is-open" : ""}`} role="dialog" aria-hidden={!open}>
+        <div className="drawer__top">
+          <span className="drawer__brand">
+            <HeartLine size={18} />
+            Aurelia
+          </span>
+          <button className="drawer__close" onClick={() => setOpen(false)} aria-label="Close menu">
+            <Close size={18} />
+          </button>
+        </div>
+
+        <nav className="drawer__links">
+          {links.map((link, i) => (
+            <NavLink
+              key={link.to}
+              exact
+              to={link.to}
+              className="drawer__link"
+              activeClassName="is-active"
+              style={{ transitionDelay: `${0.06 + i * 0.06}s` }}
+            >
+              {link.label}
+            </NavLink>
+          ))}
+          <NavLink
+            to={cta.to}
+            className="drawer__link drawer__link--cta"
+            style={{ transitionDelay: `${0.06 + links.length * 0.06}s` }}
+          >
+            {cta.label}
+            <Arrow size={15} />
+          </NavLink>
         </nav>
-    )
+
+        <p className="drawer__note">
+          <span className="script">Kept close, kept safe.</span>
+        </p>
+      </div>
+      <div className={`drawer__scrim ${open ? "is-open" : ""}`} onClick={() => setOpen(false)} />
+    </>
+  );
 }
 
 export default Navbar;

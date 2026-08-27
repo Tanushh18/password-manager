@@ -1,10 +1,10 @@
-*, *::before, *::after{
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+/* App shell — tokens and global styling live in styles/theme.css */
+
+.App {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
-:root {
-    --primary-bg: #171332;
-    --secondary-bg: #4ae3b5;
-}
+.App > *:not(.nav) { flex: 1 0 auto; }

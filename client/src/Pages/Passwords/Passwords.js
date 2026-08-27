@@ -1,694 +1,548 @@
-import React, { useEffect, useState, useRef } from "react";
-import { useHistory } from "react-router";
-import Password from "../../Components/Password/Password";
-import "./Passwords.css";
-import "react-responsive-modal/styles.css";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useHistory } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
 import { Modal } from "react-responsive-modal";
+import "react-responsive-modal/styles.css";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { saveNewPassword, checkAuthenticated } from "../../axios/instance";
-import { useSelector, useDispatch } from "react-redux";
-import { setAuth, setPasswords } from "../../redux/actions";
 import * as XLSX from "xlsx";
 
+import Password from "../../Components/Password/Password";
+import Ambience from "../../Components/Ambience/Ambience";
+import ServiceStatus from "../../Components/ServiceStatus/ServiceStatus";
+import Reveal from "../../Components/Reveal/Reveal";
+import {
+  checkAuthenticated,
+  saveNewPassword,
+  updateAPassword,
+} from "../../axios/instance";
+import { setAuth, setPasswords } from "../../redux/actions";
+import {
+  HeartLine,
+  KeyLine,
+  Plus,
+  Search,
+  Upload,
+  Eye,
+  EyeOff,
+  Pencil,
+  Check,
+  Close,
+  Sparkle,
+  Arrow,
+} from "../../Components/Icons/Icons";
+import "./Passwords.css";
+
+/* Five soft, tasteful avatar washes drawn from the palette */
+const WASHES = [
+  "linear-gradient(140deg, #c9828b, #7a3e48)",
+  "linear-gradient(140deg, #dda3aa, #b86e79)",
+  "linear-gradient(140deg, #b86e79, #63313a)",
+  "linear-gradient(140deg, #e3b7bb, #c9828b)",
+  "linear-gradient(140deg, #8faf9a, #6f9280)",
+];
+
+const ALPHABET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%^&*-_";
+
+const suggestPassword = (length = 16) => {
+  const bytes = new Uint32Array(length);
+  if (window.crypto?.getRandomValues) {
+    window.crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < length; i += 1) bytes[i] = Math.floor(Math.random() * 4294967296);
+  }
+  return Array.from(bytes, (b) => ALPHABET[b % ALPHABET.length]).join("");
+};
+
+const clean = (val) =>
+  !val ? "" : val.toString().replace(/\u00A0/g, "").replace(/\s+/g, " ").trim();
+
 function Passwords() {
-  const [platform, setPlatform] = useState("");
-  const [platEmail, setPlatEmail] = useState("");
-  const [platPass, setPlatPass] = useState("");
+  const history = useHistory();
+  const dispatch = useDispatch();
+  const { isAuthenticated, authChecked, name, email, passwords } = useSelector((state) => state);
+
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [form, setForm] = useState({ platform: "", platEmail: "", platPass: "" });
+  const [showModalPass, setShowModalPass] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [editingPlatform, setEditingPlatform] = useState("");
   const [newPass, setNewPass] = useState("");
   const [showNewPass, setShowNewPass] = useState(false);
-  const [showModalPass, setShowModalPass] = useState(false);
-  const [visiblePasswords, setVisiblePasswords] = useState({});
-  const [open, setOpen] = useState(false);
-  const [focusedField, setFocusedField] = useState(null);
-  const particlesRef = useRef(null);
+  const fileRef = useRef(null);
 
-  const history = useHistory();
+  const list = useMemo(() => passwords || [], [passwords]);
 
-  const { isAuthenticated, name, email, passwords } = useSelector(
-    (state) => state
-  );
-  const dispatch = useDispatch();
+  useEffect(() => {
+    // Only send someone away once we actually know they are signed out
+    if (authChecked && !isAuthenticated) history.replace("/signin");
+  }, [authChecked, isAuthenticated, history]);
 
-  const clean = (val) => {
-    if (!val) return "";
-    return val.toString().replace(/\u00A0/g, "").replace(/\s+/g, " ").trim();
-  };
-
-  const verifyUser = async () => {
+  const refresh = useCallback(async () => {
     try {
       const res = await checkAuthenticated();
-      if (res.status === 400) {
-        dispatch(setAuth(false));
-      } else {
-        const { passwords } = res.data;
-        dispatch(setPasswords(passwords));
-      }
-    } catch (error) {
-      console.log(error);
-    }
-  };
-
-  const addNewPassword = async (e) => {
-    e.preventDefault();
-    try {
-      const data = {
-        platform: clean(platform) || "NA",
-        userPass: clean(platPass) || "NA",
-        platEmail: clean(platEmail) || "NA",
-        userEmail: clean(email),
-      };
-      const res = await saveNewPassword(data);
-      if (res.status === 400) {
-        toast.error(res.data.error, { position: "top-right" });
-      } else if (res.status === 200) {
-        setOpen(false);
-        verifyUser();
-        toast.success(res.data.message, { position: "top-right" });
-        setPlatform("");
-        setPlatEmail("");
-        setPlatPass("");
-        setShowModalPass(false);
-      }
-    } catch (error) {
-      console.log(error);
-    }
-  };
-
-  const handleEditPassword = async (id, platform, platEmail) => {
-    try {
-      const data = {
-        platform: clean(platform) || "NA",
-        userPass: clean(newPass) || "NA",
-        platEmail: clean(platEmail) || "NA",
-        userEmail: clean(email),
-      };
-      const res = await saveNewPassword(data);
       if (res.status === 200) {
-        toast.success("Password updated");
-        setEditingId(null);
-        setEditingPlatform("");
-        setShowNewPass(false);
-        verifyUser();
+        dispatch(setPasswords(res.data?.passwords || []));
+      } else {
+        dispatch(setAuth(false));
       }
     } catch (err) {
-      console.error(err);
+      if (err?.response?.status === 400 || err?.response?.status === 401) {
+        dispatch(setAuth(false));
+      }
+    }
+  }, [dispatch]);
+
+  /* ── Add ── */
+  const addNewPassword = async (e) => {
+    if (e) e.preventDefault();
+    if (saving) return;
+
+    if (!clean(form.platform) || !clean(form.platPass)) {
+      toast.error("A platform and a password, at least.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const res = await saveNewPassword({
+        platform: clean(form.platform),
+        userPass: clean(form.platPass),
+        platEmail: clean(form.platEmail) || "NA",
+        userEmail: clean(email),
+      });
+
+      if (res.status === 200) {
+        toast.success("Tucked safely away.");
+        setForm({ platform: "", platEmail: "", platPass: "" });
+        setShowModalPass(false);
+        setOpen(false);
+        refresh();
+      } else {
+        toast.error(res.data?.error || "We couldn't save that one.");
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "We couldn't save that one.");
+    } finally {
+      setSaving(false);
     }
   };
 
-  const togglePasswordVisibility = (id) => {
-    setVisiblePasswords((prev) => ({ ...prev, [id]: !prev[id] }));
+  /* ── Edit ── */
+  const startEdit = (entry) => {
+    setEditingId(entry._id);
+    setNewPass("");
+    setShowNewPass(false);
   };
 
-  const handleExcelUpload = async (event) => {
-    const file = event.target.files[0];
+  const cancelEdit = () => {
+    setEditingId(null);
+    setNewPass("");
+    setShowNewPass(false);
+  };
+
+  const saveEdit = async (entry) => {
+    if (!clean(newPass)) {
+      toast.error("Type the new password first.");
+      return;
+    }
+    try {
+      setSaving(true);
+      const res = await updateAPassword({
+        id: entry._id,
+        userPass: clean(newPass),
+        platform: clean(entry.platform),
+        platEmail: clean(entry.platEmail),
+      });
+
+      if (res.status === 200) {
+        toast.success("Updated, and sealed again.");
+        cancelEdit();
+        refresh();
+      } else {
+        toast.error(res.data?.error || "We couldn't update that one.");
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "We couldn't update that one.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* ── Bulk upload ── */
+  const handleExcelUpload = (event) => {
+    const file = event.target.files?.[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = async (e) => {
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type: "array" });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
-      for (const row of jsonData) {
-        const payload = {
-          platform: clean(row.platform || row.Platform) || "NA",
-          userPass: clean(row.userPass || row.password || row.Password) || "NA",
-          platEmail: clean(row.platEmail || row.email || row.Email) || "NA",
-          userEmail: clean(email),
-        };
-        try {
-          await saveNewPassword(payload);
-        } catch (err) {
-          console.error("Error saving row:", row, err);
+      try {
+        setUploading(true);
+        const workbook = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet);
+
+        let saved = 0;
+        for (const row of rows) {
+          const payload = {
+            platform: clean(row.platform || row.Platform) || "NA",
+            userPass: clean(row.userPass || row.password || row.Password) || "NA",
+            platEmail: clean(row.platEmail || row.email || row.Email) || "NA",
+            userEmail: clean(email),
+          };
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            await saveNewPassword(payload);
+            saved += 1;
+          } catch (err) {
+            console.error("Could not save row", row, err);
+          }
         }
+
+        await refresh();
+        toast.success(`${saved} of ${rows.length} rows tucked away.`);
+      } catch (err) {
+        toast.error("We couldn't read that spreadsheet.");
+      } finally {
+        setUploading(false);
+        if (fileRef.current) fileRef.current.value = "";
       }
-      verifyUser();
-      toast.success("Bulk passwords uploaded", {
-        position: "top-right",
-        autoClose: 5000,
-      });
     };
     reader.readAsArrayBuffer(file);
   };
 
-  useEffect(() => {
-    !isAuthenticated && history.replace("/signin");
-  }, [isAuthenticated, history]);
-
-  useEffect(() => {
-    const id = "passwords-keyframes";
-    if (!document.getElementById(id)) {
-      const style = document.createElement("style");
-      style.id = id;
-      style.textContent = `
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:wght@700&display=swap');
-        @keyframes aurora1 {
-          0%,100% { transform: translate(0,0) scale(1); }
-          50%      { transform: translate(70px,-50px) scale(1.15); }
-        }
-        @keyframes aurora2 {
-          0%,100% { transform: translate(0,0) scale(1); }
-          50%      { transform: translate(-60px,60px) scale(1.2); }
-        }
-        @keyframes aurora3 {
-          0%,100% { transform: translate(0,0) scale(1); }
-          60%      { transform: translate(50px,30px) scale(1.1); }
-        }
-        @keyframes float {
-          0%,100% { transform: translateY(0) rotate(0deg); opacity: 0.6; }
-          50%      { transform: translateY(-20px) rotate(180deg); opacity: 0.2; }
-        }
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(24px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes shimmer {
-          0%   { background-position: 200% center; }
-          100% { background-position: -200% center; }
-        }
-        @keyframes cardIn {
-          from { opacity: 0; transform: translateY(16px) scale(0.97); }
-          to   { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        @keyframes pulse {
-          0%,100% { box-shadow: 0 0 0 0 rgba(139,92,246,0.35); }
-          70%      { box-shadow: 0 0 0 10px rgba(139,92,246,0); }
-        }
-        @keyframes modalIn {
-          from { opacity: 0; transform: scale(0.95) translateY(20px); }
-          to   { opacity: 1; transform: scale(1) translateY(0); }
-        }
-        input::placeholder { color: rgba(255,255,255,0.35) !important; }
-        input:-webkit-autofill,
-        input:-webkit-autofill:hover,
-        input:-webkit-autofill:focus {
-          -webkit-text-fill-color: #fff !important;
-          -webkit-box-shadow: 0 0 0px 1000px rgba(18,14,36,0.97) inset !important;
-          transition: background-color 5000s ease-in-out 0s;
-        }
-      `;
-      document.head.appendChild(style);
-    }
-
-    if (particlesRef.current && particlesRef.current.children.length === 0) {
-      const colors = [
-        "rgba(167,139,250,0.55)",
-        "rgba(129,140,248,0.45)",
-        "rgba(236,72,153,0.35)",
-        "rgba(255,255,255,0.2)",
-      ];
-      for (let i = 0; i < 22; i++) {
-        const p = document.createElement("div");
-        const size = Math.random() * 4 + 2;
-        p.style.cssText = `
-          position:absolute;
-          width:${size}px; height:${size}px;
-          border-radius:50%;
-          background:${colors[Math.floor(Math.random() * colors.length)]};
-          left:${Math.random() * 100}%;
-          top:${Math.random() * 100}%;
-          animation: float ${6 + Math.random() * 8}s ease-in-out ${Math.random() * 6}s infinite;
-          pointer-events:none;
-        `;
-        particlesRef.current.appendChild(p);
-      }
-    }
-  }, []);
-
-  const inputStyle = (fieldName) => ({
-    width: "100%",
-    padding: "0.85rem 1.1rem",
-    background: "rgba(255,255,255,0.08)",
-    border: `1px solid ${focusedField === fieldName ? "rgba(167,139,250,0.8)" : "rgba(255,255,255,0.18)"}`,
-    borderRadius: "12px",
-    color: "#ffffff",
-    fontSize: "0.95rem",
-    fontFamily: "'DM Sans', sans-serif",
-    outline: "none",
-    transition: "all 0.25s ease",
-    boxSizing: "border-box",
-    boxShadow: focusedField === fieldName
-      ? "0 0 0 3px rgba(139,92,246,0.18), 0 0 20px rgba(139,92,246,0.1)"
-      : "none",
-    caretColor: "#a78bfa",
+  const filtered = list.filter((entry) => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return true;
+    return (
+      (entry.platform || "").toLowerCase().includes(term) ||
+      (entry.platEmail || "").toLowerCase().includes(term)
+    );
   });
 
-  const platformInitial = (name) => {
-    if (!name || name === "NA") return "?";
-    return name.charAt(0).toUpperCase();
+  const initial = (platform) =>
+    !platform || platform === "NA" ? "•" : platform.trim().charAt(0).toUpperCase();
+
+  const washFor = (platform) => {
+    const key = (platform || "?").charCodeAt(0) || 0;
+    return WASHES[key % WASHES.length];
   };
 
-  const gradients = [
-    "linear-gradient(135deg, #8b5cf6, #6366f1)",
-    "linear-gradient(135deg, #ec4899, #8b5cf6)",
-    "linear-gradient(135deg, #06b6d4, #6366f1)",
-    "linear-gradient(135deg, #f59e0b, #ef4444)",
-    "linear-gradient(135deg, #10b981, #06b6d4)",
-    "linear-gradient(135deg, #f97316, #ec4899)",
-  ];
+  const firstName = (name || "").split(" ")[0];
 
-  const getGradient = (str) => {
-    if (!str) return gradients[0];
-    const code = str.charCodeAt(0) % gradients.length;
-    return gradients[code];
-  };
-
-  const EyeIcon = ({ open }) => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {open ? (
-        <>
-          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-          <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-          <line x1="1" y1="1" x2="23" y2="23" />
-        </>
-      ) : (
-        <>
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-          <circle cx="12" cy="12" r="3" />
-        </>
-      )}
-    </svg>
-  );
-
-  const labelStyle = {
-    display: "block",
-    fontSize: "0.72rem",
-    fontWeight: 600,
-    color: "rgba(255,255,255,0.45)",
-    letterSpacing: "0.1em",
-    textTransform: "uppercase",
-    marginBottom: "0.5rem",
-  };
+  if (!authChecked && !isAuthenticated) {
+    return (
+      <div className="vault page vault--waiting">
+        <Ambience petals={false} />
+        <div className="unlocking anim-fade-up">
+          <span className="unlocking__seal anim-beat">
+            <KeyLine size={26} />
+          </span>
+          <p className="unlocking__title">Unlocking your vault…</p>
+          <p className="unlocking__body">One moment while we check it is you.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#0d0b1a",
-        padding: "2rem",
-        fontFamily: "'DM Sans', sans-serif",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      <ToastContainer />
+    <div className="vault page">
+      <Ambience petals={false} />
+      <ToastContainer position="top-right" autoClose={3500} newestOnTop closeOnClick pauseOnHover draggable />
 
-      {/* Aurora blobs */}
-      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, overflow: "hidden" }}>
-        <div style={{ position: "absolute", width: "600px", height: "600px", borderRadius: "50%", background: "radial-gradient(circle, rgba(109,40,217,0.4) 0%, transparent 70%)", top: "-150px", left: "-120px", filter: "blur(60px)", animation: "aurora1 10s ease-in-out infinite" }} />
-        <div style={{ position: "absolute", width: "500px", height: "500px", borderRadius: "50%", background: "radial-gradient(circle, rgba(79,70,229,0.35) 0%, transparent 70%)", bottom: "-100px", right: "-100px", filter: "blur(65px)", animation: "aurora2 12s ease-in-out infinite" }} />
-        <div style={{ position: "absolute", width: "380px", height: "380px", borderRadius: "50%", background: "radial-gradient(circle, rgba(236,72,153,0.25) 0%, transparent 70%)", top: "40%", left: "55%", filter: "blur(55px)", animation: "aurora3 14s ease-in-out infinite" }} />
-        <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
-      </div>
+      <div className="shell">
+        {/* ── Header ── */}
+        <header className="vault__head anim-fade-up">
+          <span className="pill vault__pill">
+            <HeartLine size={13} />
+            Your vault
+          </span>
 
-      {/* Particles */}
-      <div ref={particlesRef} style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, overflow: "hidden" }} />
-
-      <div style={{ maxWidth: "1200px", margin: "0 auto", position: "relative", zIndex: 1 }}>
-
-        {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: "3rem", animation: "fadeUp 0.7s ease both" }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", borderRadius: "50px", padding: "6px 16px", marginBottom: "1.2rem" }}>
-            <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#a78bfa", boxShadow: "0 0 8px #a78bfa", animation: "pulse 2s infinite", display: "block" }} />
-            <span style={{ fontSize: "12px", color: "#c4b5fd", letterSpacing: "0.06em", fontWeight: 500 }}>VAULT</span>
-          </div>
-          <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(2rem, 5vw, 3rem)", color: "#fff", fontWeight: 700, margin: "0 0 0.5rem", lineHeight: 1.15 }}>
-            Welcome back,{" "}
-            <span style={{ background: "linear-gradient(135deg, #a78bfa, #818cf8, #e879f9)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", backgroundSize: "200% auto", animation: "shimmer 3s linear infinite" }}>
-              {name}
-            </span>
+          <h1 className="vault__title">
+            Kept for you, <em className="serif-em">{firstName || "love"}</em>
           </h1>
-          <p style={{ fontSize: "1rem", color: "rgba(255,255,255,0.4)", fontWeight: 300, margin: 0 }}>
-            {passwords?.length || 0} password{passwords?.length !== 1 ? "s" : ""} stored securely
+
+          <p className="vault__count">
+            {list.length === 0
+              ? "Nothing inside yet — let's change that."
+              : `${list.length} secret${list.length === 1 ? "" : "s"} resting safely`}
           </p>
-        </div>
 
-        {/* Action row */}
-        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", justifyContent: "center", marginBottom: "2.5rem", animation: "fadeUp 0.7s ease 0.1s both" }}>
-          <button
-            onClick={() => setOpen(true)}
-            style={{ background: "linear-gradient(135deg, #8b5cf6, #6366f1)", color: "#fff", border: "none", borderRadius: "14px", padding: "0.85rem 1.8rem", fontSize: "0.95rem", fontWeight: 600, cursor: "pointer", transition: "all 0.25s ease", boxShadow: "0 4px 20px rgba(139,92,246,0.4)", display: "flex", alignItems: "center", gap: "0.5rem", letterSpacing: "0.01em" }}
-            onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 28px rgba(139,92,246,0.55)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 4px 20px rgba(139,92,246,0.4)"; }}
-          >
-            + Add Password
-          </button>
+          <div className="vault__status">
+            <ServiceStatus />
+          </div>
+        </header>
 
-          <label
-            style={{ background: "rgba(255,255,255,0.07)", color: "#c4b5fd", border: "1px solid rgba(139,92,246,0.3)", borderRadius: "14px", padding: "0.85rem 1.8rem", fontSize: "0.95rem", fontWeight: 600, cursor: "pointer", transition: "all 0.25s ease", display: "flex", alignItems: "center", gap: "0.5rem", letterSpacing: "0.01em" }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.15)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.transform = "none"; }}
-          >
-            ↑ Upload Excel
-            <input type="file" accept=".xlsx, .xls" style={{ display: "none" }} onChange={handleExcelUpload} />
-          </label>
-        </div>
-
-        {/* Search */}
-        <div style={{ maxWidth: "600px", margin: "0 auto 2.5rem", animation: "fadeUp 0.7s ease 0.15s both" }}>
-          <div style={{ position: "relative" }}>
-            <span style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.3)", fontSize: "1rem", pointerEvents: "none" }}>🔍</span>
+        {/* ── Toolbar ── */}
+        <div className="vault__tools anim-fade-up d-2">
+          <div className="vault__search field__wrap">
+            <span className="vault__search-icon">
+              <Search size={17} />
+            </span>
             <input
-              type="text"
-              placeholder="Search by platform..."
+              className="input vault__search-input"
+              type="search"
+              placeholder="Search by platform or email…"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "0.95rem 1.3rem 0.95rem 2.8rem",
-                fontSize: "0.97rem",
-                border: `1px solid ${focusedField === "search" ? "rgba(167,139,250,0.8)" : "rgba(255,255,255,0.12)"}`,
-                borderRadius: "14px",
-                background: "rgba(255,255,255,0.06)",
-                backdropFilter: "blur(10px)",
-                color: "#fff",
-                outline: "none",
-                transition: "all 0.25s ease",
-                boxSizing: "border-box",
-                fontFamily: "'DM Sans', sans-serif",
-                boxShadow: focusedField === "search" ? "0 0 0 3px rgba(139,92,246,0.18)" : "none",
-                caretColor: "#a78bfa",
-              }}
-              onFocus={() => setFocusedField("search")}
-              onBlur={() => setFocusedField(null)}
+              aria-label="Search your vault"
             />
+          </div>
+
+          <div className="vault__actions">
+            <button className="btn btn--primary" onClick={() => setOpen(true)}>
+              <span className="btn__sheen" />
+              <Plus size={15} />
+              Add a password
+            </button>
+
+            <label className={`btn btn--ghost ${uploading ? "is-busy" : ""}`}>
+              {uploading ? <span className="spinner spinner--rose" /> : <Upload size={15} />}
+              {uploading ? "Reading…" : "Import sheet"}
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".xlsx, .xls, .csv"
+                hidden
+                onChange={handleExcelUpload}
+                disabled={uploading}
+              />
+            </label>
           </div>
         </div>
 
-        {/* ── Add Password Modal ── */}
-        <Modal
-          open={open}
-          onClose={() => { setOpen(false); setShowModalPass(false); }}
-          styles={{
-            overlay: { background: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)" },
-            modal: {
-              background: "rgba(18,14,36,0.98)",
-              backdropFilter: "blur(30px)",
-              borderRadius: "24px",
-              border: "1px solid rgba(139,92,246,0.3)",
-              boxShadow: "0 30px 80px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.07)",
-              padding: "0",
-              maxWidth: "480px",
-              width: "90%",
-              animation: "modalIn 0.3s ease both",
-            },
-          }}
-        >
-          <div style={{ padding: "2.5rem" }}>
-            <div style={{ marginBottom: "2rem", textAlign: "center" }}>
-              <div style={{ width: "56px", height: "56px", background: "linear-gradient(135deg, rgba(139,92,246,0.35), rgba(99,102,241,0.35))", borderRadius: "18px", border: "1px solid rgba(139,92,246,0.45)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.6rem", margin: "0 auto 1rem" }}>🔑</div>
-              <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "1.75rem", fontWeight: 700, color: "#fff", margin: "0 0 0.3rem" }}>Add New Password</h2>
-              <p style={{ fontSize: "0.84rem", color: "rgba(255,255,255,0.35)", margin: 0 }}>Stored with end-to-end encryption</p>
-            </div>
+        <p className="vault__hint anim-fade-up d-3">
+          Spreadsheets are read from the columns <code>platform</code>, <code>email</code> and{" "}
+          <code>password</code>.
+        </p>
 
-            <form style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-              <div>
-                <label style={labelStyle}>Platform</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Facebook"
-                  value={platform}
-                  onChange={(e) => setPlatform(e.target.value)}
-                  style={inputStyle("m-platform")}
-                  onFocus={() => setFocusedField("m-platform")}
-                  onBlur={() => setFocusedField(null)}
-                />
-              </div>
-
-              <div>
-                <label style={labelStyle}>Email / Username</label>
-                <input
-                  type="text"
-                  placeholder="e.g. you@example.com"
-                  value={platEmail}
-                  onChange={(e) => setPlatEmail(e.target.value)}
-                  style={inputStyle("m-email")}
-                  onFocus={() => setFocusedField("m-email")}
-                  onBlur={() => setFocusedField(null)}
-                />
-              </div>
-
-              <div>
-                <label style={labelStyle}>Password</label>
-                <div style={{ position: "relative" }}>
-                  <input
-                    type={showModalPass ? "text" : "password"}
-                    placeholder="Enter password"
-                    value={platPass}
-                    onChange={(e) => setPlatPass(e.target.value)}
-                    style={{ ...inputStyle("m-pass"), paddingRight: "3rem" }}
-                    onFocus={() => setFocusedField("m-pass")}
-                    onBlur={() => setFocusedField(null)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowModalPass((v) => !v)}
-                    style={{ position: "absolute", right: "0.9rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: showModalPass ? "#a78bfa" : "rgba(255,255,255,0.35)", padding: "4px", display: "flex", alignItems: "center", transition: "color 0.2s" }}
-                    title={showModalPass ? "Hide password" : "Show password"}
-                  >
-                    <EyeIcon open={showModalPass} />
-                  </button>
-                </div>
-              </div>
-
-              <button
-                onClick={addNewPassword}
-                style={{ background: "linear-gradient(135deg, #8b5cf6, #6366f1)", color: "#fff", border: "none", borderRadius: "14px", padding: "1rem", fontSize: "1rem", fontWeight: 600, cursor: "pointer", transition: "all 0.25s ease", boxShadow: "0 4px 20px rgba(139,92,246,0.4)", marginTop: "0.4rem", letterSpacing: "0.01em" }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 28px rgba(139,92,246,0.55)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 4px 20px rgba(139,92,246,0.4)"; }}
+        {/* ── Grid ── */}
+        {list.length === 0 ? (
+          <Reveal className="empty card" variant="reveal--scale">
+            <span className="card__ribbon" />
+            <span className="empty__icon">
+              <KeyLine size={28} />
+            </span>
+            <h2 className="empty__title">Nothing kept here yet</h2>
+            <p className="empty__body">
+              Add the first thing worth remembering. It is encrypted the moment you save it, and
+              only ever opened by you.
+            </p>
+            <button className="btn btn--primary btn--lg" onClick={() => setOpen(true)}>
+              <span className="btn__sheen" />
+              Add your first password
+              <Arrow size={16} />
+            </button>
+          </Reveal>
+        ) : filtered.length === 0 ? (
+          <Reveal className="empty empty--slim card">
+            <span className="empty__icon">
+              <Search size={24} />
+            </span>
+            <h2 className="empty__title">Nothing matches “{searchTerm}”</h2>
+            <p className="empty__body">Try a shorter word, or clear the search to see everything.</p>
+            <button className="btn btn--ghost" onClick={() => setSearchTerm("")}>
+              Clear search
+            </button>
+          </Reveal>
+        ) : (
+          <div className="vault__grid">
+            {filtered.map((entry, i) => (
+              <Reveal
+                as="article"
+                className={`vault-card card card--hover ${editingId === entry._id ? "is-editing" : ""}`}
+                key={entry._id}
+                delay={Math.min(i, 8) * 0.05}
               >
-                Save Password →
-              </button>
-            </form>
-          </div>
-        </Modal>
+                <span className="card__ribbon" />
 
-        {/* ── Password Cards ── */}
-        {passwords?.length !== 0 ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-              gap: "1.25rem",
-              animation: "fadeUp 0.7s ease 0.2s both",
-            }}
-          >
-            {passwords
-              ?.filter((data) =>
-                data.platform.toLowerCase().includes(searchTerm.toLowerCase())
-              )
-              .map((data, index) =>
-                editingId === data._id ? (
-                  // ── Edit card ──
-                  <div
-                    key={data._id}
-                    style={{
-                      background: "rgba(15,12,30,0.85)",
-                      backdropFilter: "blur(20px)",
-                      WebkitBackdropFilter: "blur(20px)",
-                      borderRadius: "20px",
-                      padding: "1.5rem",
-                      border: "1px solid rgba(139,92,246,0.45)",
-                      boxShadow: "0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(139,92,246,0.1), inset 0 1px 0 rgba(255,255,255,0.06)",
-                      animation: "cardIn 0.3s ease both",
-                    }}
-                  >
-                    {/* Edit card header */}
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.25rem" }}>
-                      <div style={{ width: "38px", height: "38px", borderRadius: "10px", background: getGradient(data.platform), display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", fontWeight: 700, color: "#fff", flexShrink: 0 }}>
-                        {platformInitial(data.platform)}
-                      </div>
-                      <div>
-                        <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "rgba(167,139,250,0.7)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Editing Password</p>
-                        <p style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "#fff", textTransform: "capitalize" }}>{editingPlatform || data.platform}</p>
-                      </div>
-                    </div>
+                <div className="vault-card__head">
+                  <span className="vault-card__avatar" style={{ background: washFor(entry.platform) }}>
+                    {initial(entry.platform)}
+                  </span>
+                  <div className="vault-card__id">
+                    <h3 className="vault-card__name">{entry.platform}</h3>
+                    <p className="vault-card__email">
+                      {entry.platEmail && entry.platEmail !== "NA" ? entry.platEmail : "—"}
+                    </p>
+                  </div>
 
-                    <div style={{ marginBottom: "1.1rem" }}>
-                      <label style={labelStyle}>New Password</label>
-                      <div style={{ position: "relative" }}>
-                        <input
-                          type={showNewPass ? "text" : "password"}
-                          value={newPass}
-                          onChange={(e) => setNewPass(e.target.value)}
-                          placeholder="Enter new password"
-                          style={{ ...inputStyle("edit-pass"), paddingRight: "3rem" }}
-                          onFocus={() => setFocusedField("edit-pass")}
-                          onBlur={() => setFocusedField(null)}
-                          autoFocus
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowNewPass((v) => !v)}
-                          style={{ position: "absolute", right: "0.9rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: showNewPass ? "#a78bfa" : "rgba(255,255,255,0.35)", padding: "4px", display: "flex", alignItems: "center", transition: "color 0.2s" }}
-                          title={showNewPass ? "Hide" : "Show"}
-                        >
-                          <EyeIcon open={showNewPass} />
-                        </button>
-                      </div>
-                    </div>
+                  {editingId === entry._id ? (
+                    <button className="icon-btn" onClick={cancelEdit} aria-label="Cancel editing">
+                      <Close size={15} />
+                    </button>
+                  ) : (
+                    <button
+                      className="icon-btn vault-card__edit"
+                      onClick={() => startEdit(entry)}
+                      aria-label={`Change the password for ${entry.platform}`}
+                    >
+                      <Pencil size={15} />
+                    </button>
+                  )}
+                </div>
 
-                    <div style={{ display: "flex", gap: "0.6rem" }}>
+                <hr className="rule vault-card__rule" />
+
+                {editingId === entry._id ? (
+                  <div className="vault-card__edit-body">
+                    <label className="field__label" htmlFor={`np-${entry._id}`}>
+                      New password
+                    </label>
+                    <div className="field__wrap">
+                      <input
+                        id={`np-${entry._id}`}
+                        className="input input--icon"
+                        type={showNewPass ? "text" : "password"}
+                        value={newPass}
+                        placeholder="Type the new one"
+                        onChange={(e) => setNewPass(e.target.value)}
+                        autoFocus
+                      />
                       <button
-                        onClick={() => handleEditPassword(data._id, data.platform, data.platEmail)}
-                        style={{ flex: 1, background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", border: "none", borderRadius: "10px", padding: "0.75rem", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", transition: "all 0.25s ease" }}
-                        onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 4px 16px rgba(16,185,129,0.45)"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}
+                        type="button"
+                        className={`field__affix ${showNewPass ? "is-on" : ""}`}
+                        onClick={() => setShowNewPass((v) => !v)}
+                        aria-label={showNewPass ? "Hide" : "Show"}
+                        tabIndex={-1}
                       >
-                        ✓ Save
+                        {showNewPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+
+                    <div className="vault-card__edit-actions">
+                      <button
+                        className="btn btn--sage btn--sm"
+                        onClick={() => saveEdit(entry)}
+                        disabled={saving}
+                      >
+                        {saving ? <span className="spinner" /> : <Check size={15} />}
+                        Save
+                      </button>
+                      <button className="btn btn--ghost btn--sm" onClick={cancelEdit}>
+                        Cancel
                       </button>
                       <button
-                        onClick={() => { setEditingId(null); setEditingPlatform(""); setShowNewPass(false); }}
-                        style={{ flex: 1, background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", padding: "0.75rem", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", transition: "all 0.25s ease" }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.15)"; e.currentTarget.style.color = "#f87171"; e.currentTarget.style.borderColor = "rgba(239,68,68,0.3)"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "rgba(255,255,255,0.6)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
+                        type="button"
+                        className="btn btn--quiet btn--sm vault-card__suggest"
+                        onClick={() => {
+                          setNewPass(suggestPassword());
+                          setShowNewPass(true);
+                        }}
                       >
-                        ✕ Cancel
+                        <Sparkle size={14} />
+                        Suggest
                       </button>
                     </div>
                   </div>
                 ) : (
-                  // ── Display card ──
-                  <div
-                    key={data._id}
-                    style={{
-                      background: "rgba(15,12,30,0.7)",
-                      backdropFilter: "blur(20px)",
-                      WebkitBackdropFilter: "blur(20px)",
-                      borderRadius: "20px",
-                      padding: "0",
-                      border: "1px solid rgba(255,255,255,0.07)",
-                      boxShadow: "0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
-                      transition: "all 0.3s ease",
-                      animation: `cardIn 0.4s ease ${index * 0.05}s both`,
-                      position: "relative",
-                      overflow: "hidden",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = "translateY(-4px)";
-                      e.currentTarget.style.border = "1px solid rgba(139,92,246,0.3)";
-                      e.currentTarget.style.boxShadow = "0 16px 48px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "none";
-                      e.currentTarget.style.border = "1px solid rgba(255,255,255,0.07)";
-                      e.currentTarget.style.boxShadow = "0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)";
-                    }}
-                  >
-                    {/* Gradient top bar */}
-                    <div style={{ height: "3px", background: getGradient(data.platform), borderRadius: "20px 20px 0 0" }} />
-
-                    <div style={{ padding: "1.4rem 1.5rem 1.5rem" }}>
-                      {/* Card header */}
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                          <div style={{ width: "42px", height: "42px", borderRadius: "12px", background: getGradient(data.platform), display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.1rem", fontWeight: 700, color: "#fff", flexShrink: 0, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
-                            {platformInitial(data.platform)}
-                          </div>
-                          <div>
-                            <h3 style={{ fontSize: "1.05rem", fontWeight: 600, color: "#fff", margin: 0, textTransform: "capitalize" }}>
-                              {data.platform}
-                            </h3>
-                            <p style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.35)", margin: "2px 0 0", fontFamily: "monospace" }}>
-                              {data.platEmail !== "NA" ? data.platEmail : "—"}
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => { setEditingId(data._id); setEditingPlatform(data.platform); setNewPass(data.password); }}
-                          style={{ background: "rgba(139,92,246,0.12)", color: "#c4b5fd", border: "1px solid rgba(139,92,246,0.25)", borderRadius: "8px", padding: "0.4rem 0.9rem", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", transition: "all 0.2s ease", letterSpacing: "0.02em", whiteSpace: "nowrap" }}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.28)"; e.currentTarget.style.transform = "scale(1.04)"; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.12)"; e.currentTarget.style.transform = "none"; }}
-                        >
-                          ✎ Edit
-                        </button>
-                      </div>
-
-                      {/* Divider */}
-                      <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", marginBottom: "1.1rem" }} />
-
-                      {/* Password row */}
-                      <div>
-                        <label style={{ ...labelStyle, marginBottom: "0.4rem" }}>Password</label>
-                        <div style={{ background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.18)", borderRadius: "12px", padding: "0.7rem 1rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
-                          <div style={{ flex: 1, overflow: "hidden" }}>
-                            {visiblePasswords[data._id] ? (
-                              <Password
-                                key={data._id}
-                                id={data._id}
-                                name={data.platform}
-                                password={data.password}
-                                email={data.platEmail}
-                                iv={data.iv}
-                              />
-                            ) : (
-                              <span style={{ fontSize: "1.1rem", color: "rgba(255,255,255,0.5)", letterSpacing: "0.2em" }}>••••••••••</span>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => togglePasswordVisibility(data._id)}
-                            style={{
-                              background: visiblePasswords[data._id] ? "rgba(167,139,250,0.2)" : "rgba(255,255,255,0.07)",
-                              color: visiblePasswords[data._id] ? "#a78bfa" : "rgba(255,255,255,0.4)",
-                              border: `1px solid ${visiblePasswords[data._id] ? "rgba(167,139,250,0.4)" : "rgba(255,255,255,0.1)"}`,
-                              borderRadius: "8px",
-                              padding: "0.35rem 0.5rem",
-                              cursor: "pointer",
-                              transition: "all 0.2s ease",
-                              display: "flex",
-                              alignItems: "center",
-                              flexShrink: 0,
-                            }}
-                            title={visiblePasswords[data._id] ? "Hide password" : "Show password"}
-                            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(167,139,250,0.2)"; e.currentTarget.style.color = "#a78bfa"; }}
-                            onMouseLeave={(e) => {
-                              if (!visiblePasswords[data._id]) {
-                                e.currentTarget.style.background = "rgba(255,255,255,0.07)";
-                                e.currentTarget.style.color = "rgba(255,255,255,0.4)";
-                              }
-                            }}
-                          >
-                            <EyeIcon open={visiblePasswords[data._id]} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                  <div className="vault-card__body">
+                    <span className="field__label">Password</span>
+                    <Password id={entry._id} password={entry.password} iv={entry.iv} />
                   </div>
-                )
-              )}
-          </div>
-        ) : (
-          // ── Empty state ──
-          <div style={{ textAlign: "center", maxWidth: "480px", margin: "4rem auto 0", animation: "fadeUp 0.7s ease both" }}>
-            <div
-              style={{
-                background: "rgba(15,12,30,0.7)",
-                backdropFilter: "blur(20px)",
-                borderRadius: "24px",
-                padding: "3.5rem 2rem",
-                border: "1px solid rgba(255,255,255,0.07)",
-                boxShadow: "0 20px 60px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05)",
-              }}
-            >
-              <div style={{ width: "72px", height: "72px", margin: "0 auto 1.5rem", background: "linear-gradient(135deg, rgba(139,92,246,0.3), rgba(99,102,241,0.3))", borderRadius: "20px", border: "1px solid rgba(139,92,246,0.4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2rem" }}>🔐</div>
-              <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: "1.5rem", color: "#fff", fontWeight: 700, margin: "0 0 0.6rem" }}>No passwords yet</h3>
-              <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.4)", margin: "0 0 2rem", lineHeight: 1.65 }}>Add your first password and it will be encrypted and stored safely here.</p>
-              <button
-                onClick={() => setOpen(true)}
-                style={{ background: "linear-gradient(135deg, #8b5cf6, #6366f1)", color: "#fff", border: "none", borderRadius: "14px", padding: "0.9rem 2rem", fontSize: "1rem", fontWeight: 600, cursor: "pointer", transition: "all 0.25s ease", boxShadow: "0 4px 20px rgba(139,92,246,0.4)" }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 28px rgba(139,92,246,0.55)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 4px 20px rgba(139,92,246,0.4)"; }}
-              >
-                + Add Your First Password
-              </button>
-            </div>
+                )}
+              </Reveal>
+            ))}
           </div>
         )}
       </div>
+
+      {/* ── Add modal ── */}
+      <Modal
+        open={open}
+        onClose={() => {
+          setOpen(false);
+          setShowModalPass(false);
+        }}
+        center
+        classNames={{ modal: "sheet" }}
+      >
+        <form className="sheet__body" onSubmit={addNewPassword}>
+          <span className="card__ribbon" />
+          <div className="sheet__head">
+            <span className="sheet__seal">
+              <KeyLine size={22} />
+            </span>
+            <h2 className="sheet__title">Something new to keep</h2>
+            <p className="sheet__sub">Sealed with AES-256 before it ever reaches the vault.</p>
+          </div>
+
+          <div className="field">
+            <label className="field__label" htmlFor="np-platform">Platform</label>
+            <input
+              id="np-platform"
+              className="input"
+              type="text"
+              placeholder="Instagram, work email, the wifi…"
+              value={form.platform}
+              onChange={(e) => setForm((p) => ({ ...p, platform: e.target.value }))}
+              autoFocus
+            />
+          </div>
+
+          <div className="field">
+            <label className="field__label" htmlFor="np-email">Email or username</label>
+            <input
+              id="np-email"
+              className="input"
+              type="text"
+              placeholder="you@example.com"
+              value={form.platEmail}
+              onChange={(e) => setForm((p) => ({ ...p, platEmail: e.target.value }))}
+            />
+          </div>
+
+          <div className="field">
+            <div className="field__row">
+              <label className="field__label" htmlFor="np-pass">Password</label>
+              <button
+                type="button"
+                className="sheet__suggest"
+                onClick={() => {
+                  setForm((p) => ({ ...p, platPass: suggestPassword() }));
+                  setShowModalPass(true);
+                }}
+              >
+                <Sparkle size={13} /> suggest one
+              </button>
+            </div>
+            <div className="field__wrap">
+              <input
+                id="np-pass"
+                className="input input--icon"
+                type={showModalPass ? "text" : "password"}
+                placeholder="The secret itself"
+                value={form.platPass}
+                onChange={(e) => setForm((p) => ({ ...p, platPass: e.target.value }))}
+              />
+              <button
+                type="button"
+                className={`field__affix ${showModalPass ? "is-on" : ""}`}
+                onClick={() => setShowModalPass((v) => !v)}
+                aria-label={showModalPass ? "Hide password" : "Show password"}
+                tabIndex={-1}
+              >
+                {showModalPass ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+
+          <button type="submit" className="btn btn--primary btn--block" disabled={saving}>
+            <span className="btn__sheen" />
+            {saving ? (
+              <>
+                <span className="spinner" /> Sealing…
+              </>
+            ) : (
+              <>
+                Keep it safe <Arrow size={16} />
+              </>
+            )}
+          </button>
+        </form>
+      </Modal>
     </div>
   );
 }

@@ -137,6 +137,47 @@ router.post("/addnewpassword", authenticate, async (req, res) =>
     return res.status(400).json({ error: "An unknown error occured." })
 })
 
+router.post("/updatepassword", authenticate, async (req, res) =>
+{
+    const { id, userPass, platform, platEmail } = req.body;
+
+    if (!id || !userPass)
+    {
+        return res.status(400).json({ error: "Please fill the form properly" });
+    }
+
+    try
+    {
+        const rootUser = req.rootUser;
+        const { iv, encryptedPassword } = encrypt(userPass);
+
+        const changes = {
+            "passwords.$.password": encryptedPassword,
+            "passwords.$.iv": iv
+        };
+
+        if (platform) changes["passwords.$.platform"] = platform;
+        if (platEmail) changes["passwords.$.platEmail"] = platEmail;
+
+        const result = await User.updateOne(
+            { _id: rootUser._id, "passwords._id": id },
+            { $set: changes }
+        );
+
+        if (!result || result.n === 0)
+        {
+            return res.status(400).json({ error: "Could not find that password." })
+        }
+
+        return res.status(200).json({ message: "Successfully updated your password." })
+    }
+    catch (error)
+    {
+        console.log(error);
+        return res.status(400).json({ error: "Could not update the password." })
+    }
+})
+
 router.post("/deletepassword", authenticate, async (req, res) =>
 {
     const { id } = req.body;
