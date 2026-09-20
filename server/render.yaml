@@ -1,0 +1,28 @@
+# Render Blueprint for the password-manager API server.
+# In Render: New + > Blueprint > pick this repo, and set "Blueprint file path"
+# to server/render.yaml. Repeat for each extra server instance you want.
+services:
+  - type: web
+    name: password-manager-server
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Values below are asked for on first deploy (never stored in git).
+      # Use the SAME values on every server that shares one database,
+      # otherwise logins and stored passwords won't work across servers.
+      - key: MONGO_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: CRYPTO_SECRET_KEY
+        sync: false
+      # Comma separated client URLs allowed by CORS, e.g. https://my-client.onrender.com
+      - key: CLIENT_ORIGINS
+        sync: false
