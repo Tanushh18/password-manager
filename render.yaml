@@ -1,6 +1,5 @@
 # Render Blueprint for the password-manager API server.
-# In Render: New + > Blueprint > pick this repo, and set "Blueprint file path"
-# to server/render.yaml. Repeat for each extra server instance you want.
+# In Render: New + > Blueprint > pick this repo (file is picked up from the repo root).
 services:
   - type: web
     name: password-manager-server
