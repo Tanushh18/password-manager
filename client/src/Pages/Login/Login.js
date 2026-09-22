@@ -7,15 +7,15 @@ import { loginUser } from "../../axios/instance";
 import { setAuth } from "../../redux/actions";
 import Ambience from "../../Components/Ambience/Ambience";
 import ServiceStatus from "../../Components/ServiceStatus/ServiceStatus";
-import { HeartLine, LockLine, Eye, EyeOff, Check, Arrow, Sparkle } from "../../Components/Icons/Icons";
+import { ShieldLine, LockLine, Eye, EyeOff, Check, Arrow, Sparkle } from "../../Components/Icons/Icons";
 import "../../styles/auth.css";
 
 const STAGES = {
-  idle: { label: "Secure sign in", tone: "rose" },
-  waking: { label: "Waking the vault…", tone: "rose" },
-  connecting: { label: "Opening a private line…", tone: "rose" },
-  verifying: { label: "Checking it's really you…", tone: "rose" },
-  success: { label: "Welcome home", tone: "sage" },
+  idle: { label: "Secure sign in", tone: "accent" },
+  waking: { label: "Waking the vault…", tone: "accent" },
+  connecting: { label: "Opening an encrypted connection…", tone: "accent" },
+  verifying: { label: "Verifying your credentials…", tone: "accent" },
+  success: { label: "Signed in", tone: "positive" },
   error: { label: "That didn't work", tone: "danger" },
 };
 
@@ -106,21 +106,21 @@ function Login() {
 
     try {
       setStage("waking");
-      setMessage("Waking the vault — free hosting likes a lie-in.");
+      setMessage("Waking the vault — free hosting takes a moment to start.");
       await delay(800);
 
       setStage("connecting");
-      setMessage("Opening a private, encrypted line…");
+      setMessage("Opening an encrypted connection…");
       await delay(500);
 
       setStage("verifying");
-      setMessage("Checking that it's really you…");
+      setMessage("Verifying your credentials…");
 
       const res = await loginUser(userData);
 
       if (res.status === 200) {
         setStage("success");
-        setMessage("Welcome back. Taking you inside…");
+        setMessage("Signed in. Opening your vault…");
         await delay(1100);
         dispatch(setAuth(true));
         history.push("/");
@@ -144,7 +144,7 @@ function Login() {
 
   return (
     <div className="auth page">
-      <Ambience petals />
+      <Ambience />
       <ToastContainer position="top-right" autoClose={4500} newestOnTop closeOnClick pauseOnHover draggable />
 
       <div className="auth__card card anim-fade-up">
@@ -164,7 +164,7 @@ function Login() {
           <h1 className="auth__title">
             Welcome <em className="serif-em">back.</em>
           </h1>
-          <p className="auth__sub">Your secrets have been waiting, exactly where you left them.</p>
+          <p className="auth__sub">Sign in to unlock your vault. Everything is exactly where you left it.</p>
 
           {message && (
             <div
@@ -244,7 +244,6 @@ function Login() {
             disabled={loading}
             onClick={handleLogin}
           >
-            <span className="btn__sheen" />
             {loading ? (
               <>
                 <span className="spinner" />
@@ -278,37 +277,36 @@ function Login() {
           </div>
         </form>
 
-        {/* ── Romantic side ── */}
+        {/* ── Assurance panel ── */}
         <aside className="auth__aside" aria-hidden="true">
           <span className="auth__aside-glow" />
           <span className="auth__aside-ring" />
 
-          <div className="auth__seal anim-beat">
+          <div className="auth__seal">
             {stage === "success" ? <Check size={26} /> : <LockLine size={26} />}
           </div>
 
           <h2 className="auth__aside-title">
-            Held close,
+            Encrypted,
             <br />
-            <em>and never shared.</em>
+            <em>never shared.</em>
           </h2>
           <p className="auth__aside-body">
-            Each password is sealed with AES-256 before it rests. Only you can open what you have kept.
+            Every password is encrypted with AES-256 before it is stored. Only you can unlock it.
           </p>
 
           <div className="auth__aside-list">
             <span className="auth__aside-item">
-              <HeartLine size={15} /> Written down with care
+              <ShieldLine size={15} /> Private by default
             </span>
             <span className="auth__aside-item">
-              <LockLine size={15} /> Sealed the moment you save
+              <LockLine size={15} /> Encrypted the moment you save
             </span>
             <span className="auth__aside-item">
-              <Sparkle size={15} /> Yours on every device
+              <Sparkle size={15} /> Available on every device
             </span>
           </div>
 
-          <p className="auth__aside-sign script">kept close, kept safe</p>
         </aside>
       </div>
     </div>

@@ -28,7 +28,7 @@ function Password({ id, password, iv }) {
       setValue(res.data);
       return res.data;
     }
-    throw new Error("Could not unseal this password.");
+    throw new Error("Could not decrypt this password.");
   };
 
   const toggleReveal = async () => {
@@ -41,7 +41,7 @@ function Password({ id, password, iv }) {
       await fetchValue();
       setRevealed(true);
     } catch (err) {
-      toast.error("We couldn't unseal that password.");
+      toast.error("Could not decrypt that password.");
     } finally {
       setBusy(false);
     }
@@ -70,7 +70,7 @@ function Password({ id, password, iv }) {
       clearTimeout(copyTimer.current);
       copyTimer.current = setTimeout(() => setCopied(false), 1800);
     } catch (err) {
-      toast.error("We couldn't copy that one.");
+      toast.error("Could not copy that password.");
     } finally {
       setBusy(false);
     }
@@ -82,12 +82,12 @@ function Password({ id, password, iv }) {
       const res = await deleteAPassword({ id });
       if (res.status === 200) {
         dispatch(delPass(id));
-        toast.success("Removed from your vault.");
+        toast.success("Credential removed.");
       } else {
-        toast.error(res.data?.error || "We couldn't remove that one.");
+        toast.error(res.data?.error || "Could not remove that credential.");
       }
     } catch (err) {
-      toast.error(err?.response?.data?.error || "We couldn't remove that one.");
+      toast.error(err?.response?.data?.error || "Could not remove that credential.");
     } finally {
       setBusy(false);
       setConfirming(false);
@@ -98,7 +98,7 @@ function Password({ id, password, iv }) {
     <div className={`secret ${revealed ? "is-open" : ""}`}>
       <div className="secret__value" onClick={toggleReveal} title={revealed ? "Hide" : "Reveal"}>
         {busy && !revealed ? (
-          <span className="spinner spinner--rose" />
+          <span className="spinner spinner--accent" />
         ) : (
           <span className={`secret__text ${revealed ? "is-revealed" : ""}`}>
             {revealed ? value : MASK}

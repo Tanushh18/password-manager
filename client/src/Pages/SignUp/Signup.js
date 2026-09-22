@@ -6,7 +6,7 @@ import { useSelector } from "react-redux";
 import { signupUser } from "../../axios/instance";
 import Ambience from "../../Components/Ambience/Ambience";
 import ServiceStatus from "../../Components/ServiceStatus/ServiceStatus";
-import { HeartLine, LockLine, Eye, EyeOff, Check, Arrow, Sparkle, Leaf } from "../../Components/Icons/Icons";
+import { ShieldLine, LockLine, Eye, EyeOff, Check, Arrow, Sparkle } from "../../Components/Icons/Icons";
 import "../../styles/auth.css";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -43,12 +43,12 @@ function Signup() {
   const validate = (field, value, all) => {
     const data = { ...userData, ...all, [field]: value };
     const next = {};
-    if (field === "name") next.name = value && value.trim().length < 2 ? "A name of two letters or more" : "";
-    if (field === "email") next.email = value && !EMAIL_RE.test(value) ? "That email doesn't look quite right" : "";
-    if (field === "password") next.password = value && value.length < 6 ? "At least 6 characters, please" : "";
+    if (field === "name") next.name = value && value.trim().length < 2 ? "Use at least two characters" : "";
+    if (field === "email") next.email = value && !EMAIL_RE.test(value) ? "Enter a valid email address" : "";
+    if (field === "password") next.password = value && value.length < 6 ? "Use at least 6 characters" : "";
     if (field === "password" || field === "cpassword") {
       next.cpassword =
-        data.cpassword && data.password !== data.cpassword ? "These two don't match yet" : "";
+        data.cpassword && data.password !== data.cpassword ? "Passwords do not match" : "";
     }
     setErrors((p) => ({ ...p, ...next }));
   };
@@ -90,12 +90,12 @@ function Signup() {
 
     const { name, email, password, cpassword } = userData;
     const found = {};
-    if (!name.trim()) found.name = "We'd love to know your name";
-    if (!email) found.email = "We need your email";
+    if (!name.trim()) found.name = "Enter your name";
+    if (!email) found.email = "Enter your email address";
     if (!password) found.password = "Choose a password";
-    if (!cpassword) found.cpassword = "Type it once more";
-    if (password && cpassword && password !== cpassword) found.cpassword = "These two don't match yet";
-    if (email && !EMAIL_RE.test(email)) found.email = "That email doesn't look quite right";
+    if (!cpassword) found.cpassword = "Confirm your password";
+    if (password && cpassword && password !== cpassword) found.cpassword = "Passwords do not match";
+    if (email && !EMAIL_RE.test(email)) found.email = "Enter a valid email address";
 
     if (Object.keys(found).length) {
       setErrors((p) => ({ ...p, ...found }));
@@ -112,7 +112,7 @@ function Signup() {
 
       if (res.status === 201) {
         setStage("success");
-        setMessage("Your vault is ready. Taking you to the door…");
+        setMessage("Vault created. Taking you to sign in…");
         toast.success(res.data?.message || "Vault created successfully.");
         setUserData({ name: "", email: "", password: "", cpassword: "" });
         setTimeout(() => history.push("/signin"), 1300);
@@ -131,16 +131,16 @@ function Signup() {
 
   const stageCfg =
     stage === "success"
-      ? { label: "Vault created", tone: "sage" }
+      ? { label: "Vault created", tone: "positive" }
       : stage === "error"
       ? { label: "Almost there", tone: "danger" }
       : stage === "saving"
-      ? { label: "Preparing your vault…", tone: "rose" }
-      : { label: "Begin your vault", tone: "rose" };
+      ? { label: "Preparing your vault…", tone: "accent" }
+      : { label: "Create your vault", tone: "accent" };
 
   return (
     <div className="auth page">
-      <Ambience petals />
+      <Ambience />
       <ToastContainer position="top-right" autoClose={4500} newestOnTop closeOnClick pauseOnHover draggable />
 
       <div className="auth__card card anim-fade-up">
@@ -157,10 +157,10 @@ function Signup() {
           </span>
 
           <h1 className="auth__title">
-            Somewhere <em className="serif-em">just for you.</em>
+            Create your <em className="serif-em">vault.</em>
           </h1>
           <p className="auth__sub">
-            One account, one password to remember — and everything else looked after.
+            One account and one master password — every other credential is handled for you.
           </p>
 
           {message && (
@@ -225,7 +225,7 @@ function Signup() {
                 className={`input input--icon ${errors.password ? "is-error" : strength >= 3 ? "is-valid" : ""}`}
                 type={showPass ? "text" : "password"}
                 name="password"
-                placeholder="Something only you would think of"
+                placeholder="At least 6 characters"
                 value={userData.password}
                 onChange={handleChange}
                 autoComplete="new-password"
@@ -270,7 +270,7 @@ function Signup() {
                 }`}
                 type={showPass ? "text" : "password"}
                 name="cpassword"
-                placeholder="Once more, to be sure"
+                placeholder="Re-enter your password"
                 value={userData.cpassword}
                 onChange={handleChange}
                 autoComplete="new-password"
@@ -293,7 +293,6 @@ function Signup() {
             disabled={loading}
             onClick={handleRegister}
           >
-            <span className="btn__sheen" />
             {loading ? (
               <>
                 <span className="spinner" /> Preparing your vault…
@@ -322,17 +321,17 @@ function Signup() {
           <span className="auth__aside-glow" />
           <span className="auth__aside-ring" />
 
-          <div className="auth__seal anim-beat">
-            <HeartLine size={26} />
+          <div className="auth__seal">
+            <ShieldLine size={26} />
           </div>
 
           <h2 className="auth__aside-title">
-            A quiet room
+            One account,
             <br />
-            <em>for what matters.</em>
+            <em>every credential.</em>
           </h2>
           <p className="auth__aside-body">
-            Nothing to install, nothing to pay for. Just a soft, safe place for the things you would hate to lose.
+            Nothing to install and nothing to pay for — a secure home for the credentials you cannot afford to lose.
           </p>
 
           <div className="auth__aside-list">
@@ -340,14 +339,13 @@ function Signup() {
               <LockLine size={15} /> AES-256 before it is stored
             </span>
             <span className="auth__aside-item">
-              <Leaf size={15} /> No trackers, no noise
+              <ShieldLine size={15} /> No trackers, no adverts
             </span>
             <span className="auth__aside-item">
               <Sparkle size={15} /> Free, and always will be
             </span>
           </div>
 
-          <p className="auth__aside-sign script">welcome, love</p>
         </aside>
       </div>
     </div>

@@ -10,29 +10,29 @@
   width: min(430px, 92vw);
   padding: clamp(2.4rem, 5vw, 3.2rem) clamp(1.6rem, 4vw, 2.4rem);
   text-align: center;
-  background: linear-gradient(165deg, #ffffff 0%, #fffaf9 60%, #fdf0f1 100%);
+  background: linear-gradient(165deg, #ffffff 0%, #fbfcfe 60%, #f1f5f9 100%);
 }
 
 .farewell__seal {
-  width: 66px;
-  height: 66px;
-  margin: 0 auto 1.5rem;
-  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 1.4rem;
+  border-radius: var(--r-lg);
   display: grid;
   place-items: center;
   color: #fff;
-  background: linear-gradient(140deg, var(--rose), var(--burgundy));
-  box-shadow: 0 14px 30px rgba(201, 130, 139, 0.38);
+  background: var(--accent);
+  box-shadow: var(--shadow-accent-lg);
   transition: background var(--t-slow) var(--ease);
 }
 
 .farewell__seal.is-done {
-  background: linear-gradient(140deg, var(--sage), var(--sage-deep));
-  box-shadow: 0 14px 30px rgba(143, 175, 154, 0.38);
+  background: var(--positive);
+  box-shadow: 0 10px 24px rgba(5, 150, 105, 0.3);
   animation: scale-in 0.4s var(--ease);
 }
 
-.farewell__title { font-size: clamp(1.7rem, 4vw, 2.2rem); font-weight: 500; margin-bottom: 0.6rem; }
+.farewell__title { font-size: clamp(1.4rem, 3vw, 1.75rem); font-weight: 700; letter-spacing: -0.03em; margin-bottom: 0.6rem; }
 
 .farewell__body { font-size: 0.92rem; color: var(--text-muted); line-height: 1.75; max-width: 30ch; margin: 0 auto; }
 
@@ -42,11 +42,9 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--rose);
+  background: var(--accent);
   animation: bounce-dot 1.3s ease-in-out infinite;
 }
 
 .farewell__dots span:nth-child(2) { animation-delay: 0.18s; }
 .farewell__dots span:nth-child(3) { animation-delay: 0.36s; }
-
-.farewell__sign { margin-top: 1.4rem; font-size: 1.2rem; }

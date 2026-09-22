@@ -4,7 +4,7 @@ import { useDispatch } from "react-redux";
 import { logoutUser } from "../../axios/instance";
 import { setAuth } from "../../redux/actions";
 import Ambience from "../../Components/Ambience/Ambience";
-import { HeartLine, LockLine } from "../../Components/Icons/Icons";
+import { ShieldLine, LockLine } from "../../Components/Icons/Icons";
 import "./Logout.css";
 
 function Logout() {
@@ -37,18 +37,18 @@ function Logout() {
 
   return (
     <div className="farewell page">
-      <Ambience botanical={false} />
+      <Ambience />
 
       <div className="farewell__card card anim-scale-in">
         <span className="card__ribbon" />
-        <span className={`farewell__seal ${done ? "is-done" : "anim-beat"}`}>
-          {done ? <LockLine size={26} /> : <HeartLine size={26} />}
+        <span className={`farewell__seal ${done ? "is-done" : ""}`}>
+          {done ? <LockLine size={26} /> : <ShieldLine size={26} />}
         </span>
 
         <h1 className="farewell__title">
           {done ? (
             <>
-              Locked up <em className="serif-em">safely.</em>
+              Signed out <em className="serif-em">securely.</em>
             </>
           ) : (
             <>
@@ -59,8 +59,8 @@ function Logout() {
 
         <p className="farewell__body">
           {done
-            ? "Everything is sealed again. Come back whenever you like."
-            : "Tidying up and signing you out."}
+            ? "Your vault is locked and your session has ended."
+            : "Clearing your session and locking the vault."}
         </p>
 
         <div className="farewell__dots" aria-hidden="true">
@@ -69,7 +69,6 @@ function Logout() {
           <span />
         </div>
 
-        <p className="farewell__sign script">until next time</p>
       </div>
     </div>
   );

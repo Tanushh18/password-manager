@@ -18,7 +18,7 @@ import {
 } from "../../axios/instance";
 import { setAuth, setPasswords } from "../../redux/actions";
 import {
-  HeartLine,
+  ShieldLine,
   KeyLine,
   Plus,
   Search,
@@ -33,13 +33,13 @@ import {
 } from "../../Components/Icons/Icons";
 import "./Passwords.css";
 
-/* Five soft, tasteful avatar washes drawn from the palette */
+/* Five restrained avatar washes, one per entry, drawn from the palette */
 const WASHES = [
-  "linear-gradient(140deg, #c9828b, #7a3e48)",
-  "linear-gradient(140deg, #dda3aa, #b86e79)",
-  "linear-gradient(140deg, #b86e79, #63313a)",
-  "linear-gradient(140deg, #e3b7bb, #c9828b)",
-  "linear-gradient(140deg, #8faf9a, #6f9280)",
+  "linear-gradient(140deg, #3b82f6, #1d4ed8)",
+  "linear-gradient(140deg, #64748b, #1e293b)",
+  "linear-gradient(140deg, #0ea5e9, #0369a1)",
+  "linear-gradient(140deg, #6366f1, #4338ca)",
+  "linear-gradient(140deg, #10b981, #047857)",
 ];
 
 const ALPHABET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%^&*-_";
@@ -115,7 +115,7 @@ function Passwords() {
       });
 
       if (res.status === 200) {
-        toast.success("Tucked safely away.");
+        toast.success("Credential saved and encrypted.");
         setForm({ platform: "", platEmail: "", platPass: "" });
         setShowModalPass(false);
         setOpen(false);
@@ -158,7 +158,7 @@ function Passwords() {
       });
 
       if (res.status === 200) {
-        toast.success("Updated, and sealed again.");
+        toast.success("Password updated and re-encrypted.");
         cancelEdit();
         refresh();
       } else {
@@ -202,7 +202,7 @@ function Passwords() {
         }
 
         await refresh();
-        toast.success(`${saved} of ${rows.length} rows tucked away.`);
+        toast.success(`${saved} of ${rows.length} rows imported.`);
       } catch (err) {
         toast.error("We couldn't read that spreadsheet.");
       } finally {
@@ -235,13 +235,13 @@ function Passwords() {
   if (!authChecked && !isAuthenticated) {
     return (
       <div className="vault page vault--waiting">
-        <Ambience petals={false} />
+        <Ambience grid={false} />
         <div className="unlocking anim-fade-up">
-          <span className="unlocking__seal anim-beat">
+          <span className="unlocking__seal">
             <KeyLine size={26} />
           </span>
           <p className="unlocking__title">Unlocking your vault…</p>
-          <p className="unlocking__body">One moment while we check it is you.</p>
+          <p className="unlocking__body">Verifying your session.</p>
         </div>
       </div>
     );
@@ -249,25 +249,25 @@ function Passwords() {
 
   return (
     <div className="vault page">
-      <Ambience petals={false} />
+      <Ambience grid={false} />
       <ToastContainer position="top-right" autoClose={3500} newestOnTop closeOnClick pauseOnHover draggable />
 
       <div className="shell">
         {/* ── Header ── */}
         <header className="vault__head anim-fade-up">
           <span className="pill vault__pill">
-            <HeartLine size={13} />
+            <ShieldLine size={13} />
             Your vault
           </span>
 
           <h1 className="vault__title">
-            Kept for you, <em className="serif-em">{firstName || "love"}</em>
+            {firstName ? <>{firstName}&rsquo;s <em className="serif-em">vault</em></> : <>Your <em className="serif-em">vault</em></>}
           </h1>
 
           <p className="vault__count">
             {list.length === 0
-              ? "Nothing inside yet — let's change that."
-              : `${list.length} secret${list.length === 1 ? "" : "s"} resting safely`}
+              ? "No credentials stored yet."
+              : `${list.length} credential${list.length === 1 ? "" : "s"} stored and encrypted`}
           </p>
 
           <div className="vault__status">
@@ -293,13 +293,12 @@ function Passwords() {
 
           <div className="vault__actions">
             <button className="btn btn--primary" onClick={() => setOpen(true)}>
-              <span className="btn__sheen" />
               <Plus size={15} />
-              Add a password
+              Add password
             </button>
 
             <label className={`btn btn--ghost ${uploading ? "is-busy" : ""}`}>
-              {uploading ? <span className="spinner spinner--rose" /> : <Upload size={15} />}
+              {uploading ? <span className="spinner spinner--accent" /> : <Upload size={15} />}
               {uploading ? "Reading…" : "Import sheet"}
               <input
                 ref={fileRef}
@@ -325,13 +324,12 @@ function Passwords() {
             <span className="empty__icon">
               <KeyLine size={28} />
             </span>
-            <h2 className="empty__title">Nothing kept here yet</h2>
+            <h2 className="empty__title">Your vault is empty</h2>
             <p className="empty__body">
-              Add the first thing worth remembering. It is encrypted the moment you save it, and
-              only ever opened by you.
+              Add your first credential. It is encrypted the moment you save it, and decrypted
+              only when you ask for it.
             </p>
             <button className="btn btn--primary btn--lg" onClick={() => setOpen(true)}>
-              <span className="btn__sheen" />
               Add your first password
               <Arrow size={16} />
             </button>
@@ -342,7 +340,7 @@ function Passwords() {
               <Search size={24} />
             </span>
             <h2 className="empty__title">Nothing matches “{searchTerm}”</h2>
-            <p className="empty__body">Try a shorter word, or clear the search to see everything.</p>
+            <p className="empty__body">Try a shorter term, or clear the search to see everything.</p>
             <button className="btn btn--ghost" onClick={() => setSearchTerm("")}>
               Clear search
             </button>
@@ -356,8 +354,6 @@ function Passwords() {
                 key={entry._id}
                 delay={Math.min(i, 8) * 0.05}
               >
-                <span className="card__ribbon" />
-
                 <div className="vault-card__head">
                   <span className="vault-card__avatar" style={{ background: washFor(entry.platform) }}>
                     {initial(entry.platform)}
@@ -397,7 +393,7 @@ function Passwords() {
                         className="input input--icon"
                         type={showNewPass ? "text" : "password"}
                         value={newPass}
-                        placeholder="Type the new one"
+                        placeholder="Enter the new password"
                         onChange={(e) => setNewPass(e.target.value)}
                         autoFocus
                       />
@@ -414,7 +410,7 @@ function Passwords() {
 
                     <div className="vault-card__edit-actions">
                       <button
-                        className="btn btn--sage btn--sm"
+                        className="btn btn--positive btn--sm"
                         onClick={() => saveEdit(entry)}
                         disabled={saving}
                       >
@@ -465,8 +461,8 @@ function Passwords() {
             <span className="sheet__seal">
               <KeyLine size={22} />
             </span>
-            <h2 className="sheet__title">Something new to keep</h2>
-            <p className="sheet__sub">Sealed with AES-256 before it ever reaches the vault.</p>
+            <h2 className="sheet__title">Add a credential</h2>
+            <p className="sheet__sub">Encrypted with AES-256 before it reaches the vault.</p>
           </div>
 
           <div className="field">
@@ -475,7 +471,7 @@ function Passwords() {
               id="np-platform"
               className="input"
               type="text"
-              placeholder="Instagram, work email, the wifi…"
+              placeholder="GitHub, work email, home wifi…"
               value={form.platform}
               onChange={(e) => setForm((p) => ({ ...p, platform: e.target.value }))}
               autoFocus
@@ -505,7 +501,7 @@ function Passwords() {
                   setShowModalPass(true);
                 }}
               >
-                <Sparkle size={13} /> suggest one
+                <Sparkle size={13} /> Generate
               </button>
             </div>
             <div className="field__wrap">
@@ -513,7 +509,7 @@ function Passwords() {
                 id="np-pass"
                 className="input input--icon"
                 type={showModalPass ? "text" : "password"}
-                placeholder="The secret itself"
+                placeholder="Enter or generate a password"
                 value={form.platPass}
                 onChange={(e) => setForm((p) => ({ ...p, platPass: e.target.value }))}
               />
@@ -530,14 +526,13 @@ function Passwords() {
           </div>
 
           <button type="submit" className="btn btn--primary btn--block" disabled={saving}>
-            <span className="btn__sheen" />
             {saving ? (
               <>
-                <span className="spinner" /> Sealing…
+                <span className="spinner" /> Saving…
               </>
             ) : (
               <>
-                Keep it safe <Arrow size={16} />
+                Save credential <Arrow size={16} />
               </>
             )}
           </button>

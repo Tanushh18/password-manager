@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { HeartLine, Download, Close } from "../Icons/Icons";
+import { ShieldLine, Download, Close } from "../Icons/Icons";
 import "./InstallPrompt.css";
 
 const DISMISS_KEY = "aurelia:install-dismissed";
@@ -23,7 +23,7 @@ const dismissedRecently = () => {
 };
 
 /**
- * "Keep Aurelia on your phone" — the install invitation.
+ * "Install Aurelia" — the add-to-home-screen prompt.
  * Chrome/Edge/Android get the real prompt through beforeinstallprompt;
  * iOS Safari gets the Share → Add to Home Screen instructions instead.
  */
@@ -90,7 +90,7 @@ export default function InstallPrompt() {
   return (
     <div className="install" role="dialog" aria-label="Install Aurelia">
       <span className="install__mark">
-        <HeartLine size={18} />
+        <ShieldLine size={18} />
       </span>
 
       <div className="install__copy">
@@ -108,7 +108,6 @@ export default function InstallPrompt() {
 
       {!iosHint && (
         <button className="btn btn--primary btn--sm install__cta" onClick={install}>
-          <span className="btn__sheen" />
           <Download size={14} />
           Install
         </button>

@@ -6,39 +6,37 @@ import ServiceStatus from "../../Components/ServiceStatus/ServiceStatus";
 import { useParallax } from "../../hooks/useReveal";
 import Reveal from "../../Components/Reveal/Reveal";
 import {
-  HeartLine,
-  LockLine,
   ShieldLine,
+  LockLine,
   KeyLine,
   Sparkle,
-  Leaf,
   Arrow,
   Flourish,
 } from "../../Components/Icons/Icons";
 import "./Home.css";
 
-const PROMISES = [
+const PRINCIPLES = [
   {
-    icon: <LockLine size={26} />,
-    title: "Sealed with AES-256",
-    body: "Every secret is encrypted before it ever reaches the vault, with a key that never leaves the server.",
+    icon: <LockLine size={24} />,
+    title: "AES-256 encryption",
+    body: "Every credential is encrypted before it reaches the database, with a key that never leaves the server.",
   },
   {
-    icon: <ShieldLine size={26} />,
+    icon: <ShieldLine size={24} />,
     title: "Yours alone",
-    body: "No trackers, no adverts, no selling. Just a quiet room where the things you keep stay kept.",
+    body: "No trackers, no adverts, no third-party sharing. Your vault is readable by you and nobody else.",
   },
   {
-    icon: <Leaf size={26} />,
-    title: "Calm by design",
-    body: "Soft type, generous space and gentle motion — a password manager that feels like a keepsake.",
+    icon: <KeyLine size={24} />,
+    title: "On every device",
+    body: "Install it as an app, import an existing spreadsheet, and reach your vault from anywhere you work.",
   },
 ];
 
 const STEPS = [
-  { n: "01", title: "Create your vault", body: "One account, one password to remember. That is all it asks of you." },
-  { n: "02", title: "Tuck things away", body: "Add a platform, an email, a password — or bring them all at once from a spreadsheet." },
-  { n: "03", title: "Come back anytime", body: "Reveal a password with a tap, from any device you carry." },
+  { n: "01", title: "Create an account", body: "One account and one master password — the only credential you need to remember." },
+  { n: "02", title: "Add your credentials", body: "Save a platform, an email and a password, or import an entire spreadsheet in one go." },
+  { n: "03", title: "Access them anywhere", body: "Reveal or copy any password in a tap, from any device you are signed in on." },
 ];
 
 function Home() {
@@ -65,40 +63,40 @@ function Home() {
         <div className="hero__inner shell">
           <div className={`hero__copy ${mounted ? "anim-fade-up" : ""}`}>
             <span className="hero__eyebrow pill">
-              <HeartLine size={13} />
-              {isAuthenticated ? "Welcome home" : "A place for what you hold dear"}
+              <ShieldLine size={13} />
+              {isAuthenticated ? "Vault unlocked" : "Encrypted password manager"}
             </span>
 
             {isAuthenticated ? (
               <h1 className="display hero__title">
-                Hello again,
+                Welcome back,
                 <br />
-                <em>{firstName || "love"}.</em>
+                <em>{firstName || "there"}.</em>
               </h1>
             ) : (
               <h1 className="display hero__title">
-                All you hold dear,
+                Every password,
                 <br />
-                <em>kept safely close.</em>
+                <em>encrypted end to end.</em>
               </h1>
             )}
 
             <p className="lede hero__lede">
               {isAuthenticated ? (
                 <>
-                  Your vault is unlocked and waiting. {count > 0 ? (
+                  Your vault is unlocked. {count > 0 ? (
                     <>
-                      There {count === 1 ? "is" : "are"} <strong>{count}</strong> secret
-                      {count === 1 ? "" : "s"} resting safely inside.
+                      <strong>{count}</strong> credential{count === 1 ? " is" : "s are"} stored and
+                      encrypted.
                     </>
                   ) : (
-                    <>It is quiet in there — add the first thing worth keeping.</>
+                    <>It is empty for now — add your first credential to get started.</>
                   )}
                 </>
               ) : (
                 <>
-                  Aurelia is a gentle home for your passwords. Encrypted the moment you write
-                  them down, and never shared with anyone — not even with us.
+                  Aurelia stores your credentials behind AES-256 encryption. Encrypted the moment
+                  you save them, decrypted only when you ask — never shared, never sold.
                 </>
               )}
             </p>
@@ -107,7 +105,6 @@ function Home() {
               {isAuthenticated ? (
                 <>
                   <Link to="/passwords" className="btn btn--primary btn--lg">
-                    <span className="btn__sheen" />
                     Open my vault
                     <Arrow size={16} />
                   </Link>
@@ -118,7 +115,6 @@ function Home() {
               ) : (
                 <>
                   <Link to="/signup" className="btn btn--primary btn--lg">
-                    <span className="btn__sheen" />
                     Create your vault
                     <Arrow size={16} />
                   </Link>
@@ -132,76 +128,76 @@ function Home() {
             <div className="hero__meta">
               <ServiceStatus />
               <span className="hero__meta-note">
-                <Sparkle size={13} /> free, forever
+                <Sparkle size={13} /> Free · no tracking
               </span>
             </div>
           </div>
 
-          {/* ── Romantic visual ── */}
+          {/* ── Vault preview ── */}
           <div className="hero__visual" ref={visualRef} aria-hidden="true">
-            <div className="keepsake">
-              <span className="keepsake__halo" />
-              <span className="keepsake__ring keepsake__ring--outer" />
-              <span className="keepsake__ring keepsake__ring--inner" />
+            <div className="vault-preview">
+              <span className="vault-preview__halo" />
 
-              <div className="keepsake__card card">
+              <div className="vault-preview__card card">
                 <span className="card__ribbon" />
-                <div className="keepsake__seal anim-beat">
-                  <HeartLine size={26} strokeWidth={1.2} />
-                </div>
-                <p className="keepsake__label eyebrow">Aurelia vault</p>
-                <p className="keepsake__line script">
-                  {isAuthenticated ? `${firstName || "you"}'s little secrets` : "kept close, kept safe"}
-                </p>
 
-                <div className="keepsake__rows">
-                  {["•••••••••••", "••••••••", "•••••••••••••"].map((mask, i) => (
-                    <div className="keepsake__row" key={i} style={{ animationDelay: `${0.5 + i * 0.18}s` }}>
-                      <span className="keepsake__chip">
+                <div className="vault-preview__head">
+                  <span className="vault-preview__seal">
+                    <LockLine size={18} strokeWidth={1.4} />
+                  </span>
+                  <span className="vault-preview__heading">
+                    <span className="vault-preview__label eyebrow">Aurelia vault</span>
+                    <span className="vault-preview__line">
+                      {isAuthenticated ? `${count} credential${count === 1 ? "" : "s"} secured` : "AES-256 · encrypted at rest"}
+                    </span>
+                  </span>
+                </div>
+
+                <div className="vault-preview__rows">
+                  {[
+                    { label: "github.com", mask: "•••••••••••" },
+                    { label: "mail.google.com", mask: "••••••••" },
+                    { label: "aws.amazon.com", mask: "•••••••••••••" },
+                  ].map((row, i) => (
+                    <div className="vault-preview__row" key={row.label} style={{ animationDelay: `${0.3 + i * 0.12}s` }}>
+                      <span className="vault-preview__chip">
                         <KeyLine size={13} />
                       </span>
-                      <span className="keepsake__mask">{mask}</span>
-                      <span className="keepsake__lock">
+                      <span className="vault-preview__entry">
+                        <span className="vault-preview__site">{row.label}</span>
+                        <span className="vault-preview__mask">{row.mask}</span>
+                      </span>
+                      <span className="vault-preview__lock">
                         <LockLine size={13} />
                       </span>
                     </div>
                   ))}
                 </div>
 
-                <div className="keepsake__foot">
+                <div className="vault-preview__foot">
                   <span className="dot dot--live" />
                   encrypted just now
                 </div>
               </div>
-
-              <span className="keepsake__orbit keepsake__orbit--a">
-                <HeartLine size={16} />
-              </span>
-              <span className="keepsake__orbit keepsake__orbit--b">
-                <Sparkle size={14} />
-              </span>
-              <span className="keepsake__orbit keepsake__orbit--c">
-                <Leaf size={16} />
-              </span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ══════════ PROMISES ══════════ */}
+      {/* ══════════ PRINCIPLES ══════════ */}
       <section className="section shell">
         <Reveal as="header" className="section__head">
           <span className="eyebrow">Why Aurelia</span>
           <h2 className="section__title">
-            Small promises, <em className="serif-em">kept quietly</em>
+            Security you can <em className="serif-em">actually verify</em>
           </h2>
           <p className="lede section__lede">
-            The things worth protecting deserve somewhere beautiful to live.
+            No dark patterns and no surprises — just the guarantees a password manager owes you.
           </p>
         </Reveal>
 
         <div className="promises">
-          {PROMISES.map((p, i) => (
+          {PRINCIPLES.map((p, i) => (
             <Reveal as="article" className="promise card card--hover" key={p.title} delay={i * 0.09}>
               <span className="promise__icon">{p.icon}</span>
               <h3 className="promise__title">{p.title}</h3>
@@ -216,7 +212,7 @@ function Home() {
         <Reveal as="header" className="section__head">
           <span className="eyebrow">How it works</span>
           <h2 className="section__title">
-            Three small steps, <em className="serif-em">then peace of mind</em>
+            Set up in <em className="serif-em">three steps</em>
           </h2>
         </Reveal>
 
@@ -239,27 +235,24 @@ function Home() {
             <Flourish width={150} />
           </div>
           <p className="closing__quote">
-            “Some things are worth keeping.
-            <br />
-            <em>We just make sure they stay kept.</em>”
+            Strong, unique passwords everywhere —<br />
+            <em>without memorising a single one.</em>
           </p>
           <div className="closing__cta">
             <Link to={isAuthenticated ? "/passwords" : "/signup"} className="btn btn--primary btn--lg">
-              <span className="btn__sheen" />
-              {isAuthenticated ? "Open my vault" : "Begin your vault"}
+              {isAuthenticated ? "Open my vault" : "Create your vault"}
               <Arrow size={16} />
             </Link>
           </div>
-          <p className="closing__sign script">with care, always</p>
         </Reveal>
       </section>
 
       <footer className="foot">
         <span className="foot__mark">
-          <HeartLine size={15} />
+          <ShieldLine size={15} />
           Aurelia
         </span>
-        <span className="foot__note">Encrypted with AES-256 · Built with love</span>
+        <span className="foot__note">Encrypted with AES-256 · No tracking, no adverts</span>
       </footer>
     </div>
   );

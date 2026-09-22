@@ -1,6 +1,6 @@
 import React from "react";
 
-/* Elegant line-art icon set — thin strokes, rounded caps, inherits currentColor */
+/* Line-art icon set — even strokes, rounded caps, inherits currentColor */
 
 const base = (size, extra = {}) => ({
   width: size,
@@ -9,13 +9,6 @@ const base = (size, extra = {}) => ({
   flexShrink: 0,
   ...extra,
 });
-
-export const HeartLine = ({ size = 24, strokeWidth = 1.3, style }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth}
-    strokeLinecap="round" strokeLinejoin="round" style={base(size, style)} aria-hidden="true">
-    <path d="M12 20.5s-7.4-4.6-9.2-9A5 5 0 0 1 12 6.6a5 5 0 0 1 9.2 4.9c-1.8 4.4-9.2 9-9.2 9z" />
-  </svg>
-);
 
 export const Sparkle = ({ size = 16, strokeWidth = 1.2, style }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth}
@@ -159,10 +152,10 @@ export const Leaf = ({ size = 18, strokeWidth = 1.2, style }) => (
 
 /* Signature botanical flourish used as page ornament */
 export const Flourish = ({ width = 120, style }) => (
-  <svg viewBox="0 0 200 30" fill="none" stroke="currentColor" strokeWidth="1"
-    strokeLinecap="round" style={{ width, height: "auto", display: "block", ...style }} aria-hidden="true">
-    <path d="M4 15c28-11 52 11 78 0s50-11 78 0" opacity="0.7" />
-    <path d="M100 9c2.6 0 4.6 2 4.6 4.4S102.6 18 100 20c-2.6-2-4.6-4.2-4.6-6.6S97.4 9 100 9z" />
-    <path d="M52 15c-4-5-9-5-13 0 4 5 9 5 13 0zM148 15c4-5 9-5 13 0-4 5-9 5-13 0z" opacity="0.75" />
+  <svg viewBox="0 0 120 8" fill="none" stroke="currentColor" strokeWidth="1"
+    strokeLinecap="round" style={{ width, height: 8, display: "block", ...style }} aria-hidden="true">
+    <path d="M2 4h44" />
+    <circle cx="60" cy="4" r="2.4" />
+    <path d="M74 4h44" />
   </svg>
 );

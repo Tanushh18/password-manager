@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { HeartLine, Menu, Close, Arrow } from "../Icons/Icons";
+import { ShieldLine, Menu, Close, Arrow } from "../Icons/Icons";
 import "./Navbar.css";
 
 function Navbar() {
@@ -49,11 +49,11 @@ function Navbar() {
         <div className="nav__inner">
           <Link to="/" className="nav__brand" aria-label="Aurelia home">
             <span className="nav__mark">
-              <HeartLine size={19} strokeWidth={1.35} />
+              <ShieldLine size={19} strokeWidth={1.35} />
             </span>
             <span className="nav__wordmark">
               <span className="nav__name">Aurelia</span>
-              <span className="nav__tag">password keepsake</span>
+              <span className="nav__tag">password manager</span>
             </span>
           </Link>
 
@@ -72,7 +72,6 @@ function Navbar() {
               </span>
             )}
             <Link to={cta.to} className="btn btn--primary btn--sm nav__cta">
-              <span className="btn__sheen" />
               {cta.label}
               <Arrow size={14} />
             </Link>
@@ -92,7 +91,7 @@ function Navbar() {
       <div className={`drawer ${open ? "is-open" : ""}`} role="dialog" aria-hidden={!open}>
         <div className="drawer__top">
           <span className="drawer__brand">
-            <HeartLine size={18} />
+            <ShieldLine size={18} />
             Aurelia
           </span>
           <button className="drawer__close" onClick={() => setOpen(false)} aria-label="Close menu">
@@ -123,9 +122,7 @@ function Navbar() {
           </NavLink>
         </nav>
 
-        <p className="drawer__note">
-          <span className="script">Kept close, kept safe.</span>
-        </p>
+        <p className="drawer__note script">AES-256 encrypted · no tracking</p>
       </div>
       <div className={`drawer__scrim ${open ? "is-open" : ""}`} onClick={() => setOpen(false)} />
     </>
