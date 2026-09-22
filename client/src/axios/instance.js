@@ -3,7 +3,6 @@ import axios from "axios";
 // API servers, in order of preference. If one is down the client falls over
 // to the next. Override with REACT_APP_API_URLS (comma separated) at build time.
 const DEFAULT_SERVERS = [
-    "https://password-manager-server-xxdr.onrender.com",
     "https://password-manager-server-8gvj.onrender.com"
 ];
 
