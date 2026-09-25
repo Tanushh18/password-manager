@@ -3,30 +3,33 @@
     "name": "Aurelia",
     "slug": "aurelia-vault",
     "scheme": "aurelia",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#07061A",
-    "description": "Aurelia — a glowing, private vault for every password. Same account and server as the Aurelia website.",
+    "description": "Aurelia \u2014 a glowing, private vault for every password. Same account and server as the Aurelia website.",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.aurelia.vault"
     },
     "android": {
       "package": "com.aurelia.vault",
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#6D28D9"
       },
       "permissions": [
         "android.permission.USE_BIOMETRIC",
-        "android.permission.USE_FINGERPRINT"
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.CAMERA"
       ],
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.SYSTEM_ALERT_WINDOW"
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "web": {
@@ -50,6 +53,16 @@
         {
           "faceIDPermission": "Allow $(PRODUCT_NAME) to unlock your vault with Face ID."
         }
+      ],
+      "react-native-quick-crypto",
+      "expo-sharing",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to scan 2FA QR codes.",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
       ]
     ],
     "experiments": {
@@ -60,6 +73,9 @@
         "https://password-manager-server-xxdr.onrender.com",
         "https://password-manager-server-8gvj.onrender.com"
       ]
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     }
   }
 }

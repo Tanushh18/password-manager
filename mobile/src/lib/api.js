@@ -96,14 +96,28 @@ export async function request(path, options = {}) {
 
 export const api = {
   health: () => request("/health", { auth: false, timeout: 15000 }),
-  login: (email, password) => request("/login", { method: "POST", body: { email, password, client: "mobile" }, auth: false }),
+  login: (body) => request("/login", { method: "POST", body: { ...body, client: "mobile" }, auth: false }),
   register: (data) => request("/register", { method: "POST", body: data, auth: false }),
   me: () => request("/authenticate"),
   logout: () => request("/logout"),
-  add: (entry) => request("/addnewpassword", { method: "POST", body: entry }),
-  update: (entry) => request("/updatepassword", { method: "POST", body: entry }),
-  remove: (id) => request("/deletepassword", { method: "POST", body: { id } }),
-  decrypt: (entry) =>
+
+  // End-to-end vault
+  setupVault: (data) => request("/vault/setup", { method: "POST", body: data }),
+  createItem: (data) => request("/vault/items", { method: "POST", body: { data } }),
+  createItems: (items) => request("/vault/items/bulk", { method: "POST", body: { items }, timeout: 60000 }),
+  updateItem: (id, data) => request(`/vault/items/${id}`, { method: "PUT", body: { data } }),
+  deleteItem: (id) => request(`/vault/items/${id}`, { method: "DELETE" }),
+  migrate: (items) => request("/vault/migrate", { method: "POST", body: { items }, timeout: 60000 }),
+  decryptLegacy: (entry) =>
     request("/decrypt", { method: "POST", body: { id: entry._id, iv: entry.iv, encryptedPassword: entry.password } }),
-  insights: () => request("/insights"),
+
+  // Account
+  updateProfile: (name) => request("/account/profile", { method: "POST", body: { name } }),
+  changePassword: (data) => request("/account/password", { method: "POST", body: { ...data, client: "mobile" }, timeout: 60000 }),
+  logoutAll: () => request("/account/logout-all", { method: "POST" }),
+  deleteAccount: (data) => request("/account/delete", { method: "POST", body: data }),
+  twoFactorSetup: (password) => request("/2fa/setup", { method: "POST", body: { password } }),
+  twoFactorEnable: (code) => request("/2fa/enable", { method: "POST", body: { code } }),
+  twoFactorDisable: (data) => request("/2fa/disable", { method: "POST", body: data }),
+  twoFactorRecoveryCodes: (data) => request("/2fa/recovery-codes", { method: "POST", body: data }),
 };

@@ -46,12 +46,21 @@ const P = {
   globe: [<Circle key="a" cx="12" cy="12" r="9" />, <Path key="b" d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />],
   alert: [<Path key="a" d="M12 3 2.5 20h19L12 3zM12 10v4M12 17.2v.1" />],
   clock: [<Circle key="a" cx="12" cy="12" r="9" />, <Path key="b" d="M12 7v5l3 2" />],
+  star: [<Path key="a" d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.5z" />],
+  starFill: [<Path key="a" d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.5z" fill="currentColor" />],
+  folder: [<Path key="a" d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-10z" />],
+  note: [<Path key="a" d="M6 3.5h9l4 4V20a.5.5 0 0 1-.5.5h-12A.5.5 0 0 1 6 20V3.5zM14.5 3.5V8H19M9 12h6M9 15.5h6" />],
+  scan: [<Path key="a" d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16M4 12h16" />],
+  download: [<Path key="a" d="M12 4v11M7 10l5 5 5-5M5 20h14" />],
+  upload: [<Path key="a" d="M12 20V9M7 14l5-5 5 5M5 4h14" />],
+  grid: [<Path key="a" d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />],
+  timer: [<Circle key="a" cx="12" cy="13" r="7.5" />, <Path key="b" d="M12 9v4l2.5 1.5M10 2.5h4" />],
   repeat: [<Path key="a" d="M17 2l3 3-3 3M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 0 1-4 4H4" />],
 };
 
 export default function Icon({ name, size = 20, color = "#fff", strokeWidth = 1.8 }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" color={color} stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
       {P[name] || P.key}
     </Svg>
   );

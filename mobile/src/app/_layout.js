@@ -4,6 +4,8 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import * as SystemUI from "expo-system-ui";
+import * as ScreenCapture from "expo-screen-capture";
+import { Platform } from "react-native";
 import { useFonts } from "expo-font";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Sora_600SemiBold, Sora_700Bold, Sora_800ExtraBold } from "@expo-google-fonts/sora";
@@ -28,6 +30,15 @@ function RootStack({ fontsReady }) {
     if (booted) SplashScreen.hideAsync().catch(() => {});
   }, [booted]);
 
+  // No screenshots / screen recording, and a blank preview in recent apps (FLAG_SECURE).
+  useEffect(() => {
+    if (Platform.OS === "web") return undefined;
+    ScreenCapture.preventScreenCaptureAsync("aurelia").catch(() => {});
+    return () => {
+      ScreenCapture.allowScreenCaptureAsync("aurelia").catch(() => {});
+    };
+  }, []);
+
   if (!booted) return <View style={{ flex: 1, backgroundColor: theme.bg }} />;
 
   return (
@@ -49,6 +60,8 @@ function RootStack({ fontsReady }) {
         <Stack.Protected guard={status === "ready"}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="editor" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+          <Stack.Screen name="scan" options={{ presentation: "fullScreenModal", animation: "fade" }} />
+          <Stack.Screen name="account" options={{ animation: "slide_from_right" }} />
         </Stack.Protected>
       </Stack>
     </>

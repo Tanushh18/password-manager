@@ -11,7 +11,7 @@ import { useTheme } from "../../lib/theme";
 import { useVault } from "../../lib/vault";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const STAGES = ["Waking the vault…", "Opening a private line…", "Checking it's really you…"];
+const STAGES = ["Waking the vault…", "Checking it's really you…", "Deriving your key on this phone…", "Decrypting your vault…"];
 
 /** Shake animation for a failed attempt. */
 function useShake() {
@@ -32,6 +32,8 @@ export default function Login() {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [stage, setStage] = useState(0);
+  const [code, setCode] = useState("");
+  const [needCode, setNeedCode] = useState(false);
   const [x, shake] = useShake();
 
   useEffect(() => {
@@ -44,17 +46,23 @@ export default function Login() {
   const submit = async () => {
     const found = {};
     if (!EMAIL_RE.test(email.trim())) found.email = "That email doesn't look right";
-    if (!password) found.password = "Enter your password";
+    if (!password) found.password = "Enter your master password";
+    if (needCode && !code.trim()) found.code = "Enter the 6-digit code or a recovery code";
     setErrors(found);
     if (Object.keys(found).length) return shake();
 
     try {
       setLoading(true);
-      await login(email, password);
+      const res = await login(email, password, needCode ? code.trim() : undefined);
+      if (res?.twoFactorRequired) {
+        setNeedCode(true);
+        if (res.error) setErrors({ code: res.error });
+        return;
+      }
       toast("Welcome back ✨");
     } catch (e) {
       shake();
-      toast(e.status === 400 ? "That email and password don't match." : e.message, "error");
+      toast(e.message, "error");
     } finally {
       setLoading(false);
     }
@@ -73,7 +81,9 @@ export default function Login() {
                 Welcome <GradientText>back.</GradientText>
               </Text>
               <Text style={[styles.sub, { color: theme.textMuted, fontFamily: theme.font.body }]}>
-                Unlock your vault — everything is exactly where you left it.
+                {needCode
+                  ? "Two-factor login is on. Enter the code from your authenticator app."
+                  : "Your master password unlocks the vault on this phone. It never leaves it."}
               </Text>
             </FadeIn>
 
@@ -108,11 +118,29 @@ export default function Login() {
                     autoCapitalize="none"
                     autoComplete="password"
                     error={errors.password}
-                    editable={!loading}
+                    editable={!loading && !needCode}
                     returnKeyType="go"
                     onSubmitEditing={submit}
                   />
-                  <GradientButton title="Unlock my vault" icon="arrow" loading={loading} onPress={submit} style={{ marginTop: 6 }} />
+                  {needCode ? (
+                    <Field
+                      label="Authenticator code"
+                      icon="shieldCheck"
+                      value={code}
+                      onChangeText={(t) => {
+                        setCode(t);
+                        if (errors.code) setErrors((p) => ({ ...p, code: null }));
+                      }}
+                      placeholder="123 456 or a recovery code"
+                      autoCapitalize="none"
+                      autoFocus
+                      error={errors.code}
+                      editable={!loading}
+                      returnKeyType="go"
+                      onSubmitEditing={submit}
+                    />
+                  ) : null}
+                  <GradientButton title={needCode ? "Verify and unlock" : "Unlock my vault"} icon="arrow" loading={loading} onPress={submit} style={{ marginTop: 6 }} />
                   {loading ? (
                     <Text style={[styles.stage, { color: theme.accentSoft, fontFamily: theme.font.bodyMedium }]}>{STAGES[stage]}</Text>
                   ) : null}

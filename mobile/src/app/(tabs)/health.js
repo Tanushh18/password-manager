@@ -5,29 +5,42 @@ import { router } from "expo-router";
 import Aurora from "../../components/Aurora";
 import Icon from "../../components/Icon";
 import HealthRing from "../../components/HealthRing";
-import { Avatar } from "../../components/PasswordCard";
-import { Badge, Bounce, Card, FadeIn, GradientText } from "../../components/ui";
+import ItemAvatar from "../../components/ItemAvatar";
+import { useToast } from "../../components/Toast";
+import { Badge, Bounce, Card, FadeIn, GhostButton, GradientText } from "../../components/ui";
 import { useTheme, alpha } from "../../lib/theme";
 import { useVault } from "../../lib/vault";
 import { strengthColor } from "../../lib/strength";
 
 export default function Health() {
   const { theme } = useTheme();
-  const { insights, passwords, syncing, refresh } = useVault();
+  const { health, items: vaultItems, syncing, refresh, runBreachCheck, breachChecked, breachProgress, prefs } = useVault();
+  const toast = useToast();
+  const insights = health;
 
   const byId = useMemo(() => {
     const m = {};
-    passwords.forEach((p) => (m[p._id] = p));
+    vaultItems.forEach((p) => (m[p.id] = p));
     return m;
-  }, [passwords]);
+  }, [vaultItems]);
 
-  const items = insights?.items || [];
+  const items = Object.entries(health.info).map(([id, i]) => ({ ...i, id, platform: byId[id]?.name || "Untitled", length: byId[id]?.password?.length || 0 }));
   const sections = [
+    { key: "breached", title: "Found in data breaches", icon: "alert", color: theme.danger, list: items.filter((i) => i.breached), hint: "Change these first — they're on attackers' lists." },
     { key: "reused", title: "Reused passwords", icon: "repeat", color: theme.warn, list: items.filter((i) => i.reused), hint: "Give each account its own password." },
     { key: "weak", title: "Weak passwords", icon: "alert", color: theme.danger, list: items.filter((i) => i.score <= 1), hint: "Short or predictable — easy to guess." },
     { key: "old", title: "Not changed in 6+ months", icon: "clock", color: theme.accent3, list: items.filter((i) => i.old), hint: "Rotate important logins now and then." },
   ];
-  const clean = insights && sections.every((s) => s.list.length === 0);
+  const clean = items.length > 0 && sections.every((s) => s.list.length === 0);
+
+  const check = async () => {
+    try {
+      const n = await runBreachCheck();
+      toast(n ? `${n} password${n === 1 ? " was" : "s were"} found in breaches` : "None of your passwords appear in known breaches", n ? "error" : "success");
+    } catch (e) {
+      toast(e.message, "error");
+    }
+  };
 
   return (
     <View style={{ flex: 1 }}>
@@ -42,19 +55,29 @@ export default function Health() {
               Vault <GradientText>health</GradientText>
             </Text>
             <Text style={{ color: theme.textMuted, fontFamily: theme.font.body, marginBottom: 18 }}>
-              Scored live on the server — plain text never leaves it.
+              Scored on this phone — your passwords never leave it.
             </Text>
           </FadeIn>
 
           <FadeIn delay={80}>
             <Card glow style={{ alignItems: "center", paddingVertical: 26 }}>
-              <HealthRing score={insights?.score ?? 0} loading={!insights} size={190} stroke={16} />
+              <HealthRing score={insights.score} size={190} stroke={16} />
               <View style={styles.grid}>
                 <Tile n={insights?.total} label="Total" color={theme.accentSoft} />
                 <Tile n={insights?.strong} label="Strong" color={theme.ok} />
                 <Tile n={insights?.weak} label="Weak" color={theme.danger} />
                 <Tile n={insights?.reused} label="Reused" color={theme.warn} />
               </View>
+              <GhostButton
+                small
+                icon="shieldCheck"
+                title={breachProgress ? `Checking ${breachProgress.done}/${breachProgress.total}…` : breachChecked ? `Breaches found: ${health.breached} · check again` : "Check for data breaches"}
+                onPress={breachProgress ? undefined : check}
+                style={{ marginTop: 16, alignSelf: "stretch" }}
+              />
+              <Text style={{ color: theme.textFaint, fontFamily: theme.font.body, fontSize: 11, marginTop: 8, textAlign: "center" }}>
+                Uses Have I Been Pwned with k-anonymity: only 5 characters of a hash are sent.
+              </Text>
             </Card>
           </FadeIn>
 
@@ -94,13 +117,13 @@ export default function Health() {
                         onPress={() => router.push({ pathname: "/editor", params: { id: i.id } })}
                         style={[styles.row, idx > 0 && { borderTopWidth: 1, borderTopColor: theme.line }]}
                       >
-                        <Avatar name={i.platform} size={38} />
+                        <ItemAvatar name={i.platform} url={entry?.url} icons={prefs.icons} size={38} />
                         <View style={{ flex: 1 }}>
                           <Text numberOfLines={1} style={{ color: theme.heading, fontFamily: theme.font.bodySemi, fontSize: 15 }}>
                             {i.platform}
                           </Text>
                           <Text numberOfLines={1} style={{ color: theme.textFaint, fontFamily: theme.font.body, fontSize: 12 }}>
-                            {entry?.platEmail && entry.platEmail !== "NA" ? entry.platEmail : `${i.length} characters`}
+                            {i.breached ? `Seen ${i.breached.toLocaleString()} times in breaches` : entry?.username || `${i.length} characters`}
                           </Text>
                         </View>
                         <Badge text={i.label} color={strengthColor(theme, i.score)} />

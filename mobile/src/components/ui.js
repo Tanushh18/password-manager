@@ -94,11 +94,11 @@ export function GradientButton({ title, onPress, loading, disabled, icon, colors
   );
 }
 
-export function GhostButton({ title, onPress, icon, color, style, small }) {
+export function GhostButton({ title, onPress, icon, color, style, small, disabled }) {
   const { theme } = useTheme();
   const c = color || theme.text;
   return (
-    <Bounce onPress={onPress} style={[styles.ghost, small && styles.btnSmall, { borderColor: theme.lineStrong, backgroundColor: alpha(theme.accent, 0.08) }, style]}>
+    <Bounce onPress={onPress} disabled={disabled} style={[styles.ghost, small && styles.btnSmall, { borderColor: theme.lineStrong, backgroundColor: alpha(theme.accent, 0.08), opacity: disabled ? 0.5 : 1 }, style]}>
       {icon ? <Icon name={icon} size={small ? 16 : 18} color={c} /> : null}
       <Text style={{ color: c, fontFamily: theme.font.bodySemi, fontSize: small ? 14 : 15 }}>{title}</Text>
     </Bounce>
