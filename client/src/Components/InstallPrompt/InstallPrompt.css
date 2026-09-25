@@ -10,7 +10,7 @@
   gap: 0.9rem;
   padding: 0.85rem 0.9rem 0.85rem 1.1rem;
   border-radius: var(--r-lg);
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(var(--glass-rgb), 0.92);
   backdrop-filter: blur(18px) saturate(1.2);
   -webkit-backdrop-filter: blur(18px) saturate(1.2);
   border: 1px solid var(--line);
@@ -31,8 +31,8 @@
   place-items: center;
   flex-shrink: 0;
   color: #fff;
-  background: linear-gradient(140deg, var(--rose), var(--burgundy));
-  box-shadow: 0 6px 16px rgba(201, 130, 139, 0.34);
+  background: linear-gradient(140deg, var(--accent), var(--heading-2));
+  box-shadow: 0 6px 16px rgba(var(--accent-rgb), 0.34);
 }
 
 .install__copy { flex: 1; min-width: 0; }
@@ -41,12 +41,12 @@
   font-family: var(--font-serif);
   font-size: 1.08rem;
   font-weight: 600;
-  color: var(--burgundy-deep);
+  color: var(--heading);
   line-height: 1.25;
 }
 
 .install__body { font-size: 0.79rem; color: var(--text-muted); line-height: 1.45; }
-.install__body strong { color: var(--burgundy); font-weight: 600; }
+.install__body strong { color: var(--heading-2); font-weight: 600; }
 
 .install__cta { flex-shrink: 0; }
 
@@ -64,7 +64,7 @@
   transition: all var(--t) var(--ease);
 }
 
-.install__close:hover { color: var(--burgundy); border-color: var(--line); background: #fff; }
+.install__close:hover { color: var(--heading-2); border-color: var(--line); background: var(--surface-solid); }
 
 @media (max-width: 520px) {
   .install { gap: 0.7rem; padding: 0.75rem 0.7rem 0.75rem 0.9rem; }

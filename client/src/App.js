@@ -18,6 +18,19 @@ function App() {
   const isAuthenticated = useSelector((state) => state.isAuthenticated);
   const dispatch = useDispatch();
 
+  // Spotlight that follows the pointer across any hoverable card
+  useEffect(() => {
+    const onMove = (e) => {
+      const card = e.target.closest && e.target.closest(".card--hover");
+      if (!card) return;
+      const rect = card.getBoundingClientRect();
+      card.style.setProperty("--px", `${e.clientX - rect.left}px`);
+      card.style.setProperty("--py", `${e.clientY - rect.top}px`);
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    return () => window.removeEventListener("pointermove", onMove);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 

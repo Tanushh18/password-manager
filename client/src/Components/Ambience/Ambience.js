@@ -1,29 +1,27 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 
 /**
- * Ambience — the soft, living background behind every page.
- * Blurred rose glows, drifting petals, faint botanical line art and a
- * whisper of grain. Purely decorative: it never receives pointer events.
+ * Ambience — the living aurora behind every page.
+ * Drifting colour glows, a sweeping aurora ribbon, a twinkling star field
+ * and a soft light that follows the pointer. Purely decorative.
  */
 
-const PETAL_COUNT = 14;
+const STAR_COUNT = 70;
 
-function Petals() {
-  const petals = useMemo(
+function Stars() {
+  const stars = useMemo(
     () =>
-      Array.from({ length: PETAL_COUNT }, (_, i) => {
-        const size = 6 + Math.random() * 12;
+      Array.from({ length: STAR_COUNT }, (_, i) => {
+        const size = Math.random() < 0.15 ? 3 : Math.random() < 0.5 ? 2 : 1;
         return {
           key: i,
           style: {
             width: `${size}px`,
-            height: `${size * 0.82}px`,
+            height: `${size}px`,
             left: `${Math.random() * 100}%`,
-            "--petal-drift": `${(Math.random() - 0.5) * 220}px`,
-            "--petal-opacity": (0.2 + Math.random() * 0.4).toFixed(2),
-            animation: `petal-fall ${22 + Math.random() * 26}s linear ${
-              -Math.random() * 40
-            }s infinite`,
+            top: `${Math.random() * 100}%`,
+            "--twinkle": `${3 + Math.random() * 5}s`,
+            "--twinkle-delay": `${-Math.random() * 8}s`,
           },
         };
       }),
@@ -31,51 +29,47 @@ function Petals() {
   );
 
   return (
-    <div className="ambience__petals">
-      {petals.map((p) => (
-        <span key={p.key} className="petal" style={p.style} />
+    <div className="ambience__stars">
+      {stars.map((s) => (
+        <span key={s.key} className="star" style={s.style} />
       ))}
     </div>
   );
 }
 
-function Botanical({ className }) {
-  return (
-    <svg
-      className={`ambience__botanical ${className}`}
-      viewBox="0 0 220 220"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="0.9"
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <path d="M20 205C40 140 70 96 128 62" />
-      <path d="M62 148c-16-4-26-16-27-32 17 1 29 11 33 27" />
-      <path d="M84 116c-10-13-10-28-1-41 13 9 17 24 10 39" />
-      <path d="M104 92c3-16 15-27 31-29-2 17-13 28-29 32" />
-      <path d="M128 62c14-6 29-2 39 11-15 8-30 6-41-6" />
-      <circle cx="150" cy="44" r="9" />
-      <circle cx="171" cy="66" r="5.5" />
-      <path d="M139 30c4-6 12-8 18-4M164 28c6 1 10 6 10 12" />
-    </svg>
-  );
-}
+export default function Ambience({ petals = true, stars = petals }) {
+  const ref = useRef(null);
 
-export default function Ambience({ petals = true, botanical = true }) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+    if (window.matchMedia("(pointer: coarse)").matches) return undefined;
+
+    let frame = null;
+    const onMove = (e) => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        el.style.setProperty("--mx", `${e.clientX}px`);
+        el.style.setProperty("--my", `${e.clientY}px`);
+        frame = null;
+      });
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, []);
+
   return (
-    <div className="ambience" aria-hidden="true">
+    <div className="ambience" aria-hidden="true" ref={ref}>
+      <span className="ambience__aurora" />
       <span className="ambience__glow ambience__glow--one" />
       <span className="ambience__glow ambience__glow--two" />
       <span className="ambience__glow ambience__glow--three" />
-      {botanical && (
-        <>
-          <Botanical className="ambience__botanical--tl" />
-          <Botanical className="ambience__botanical--br" />
-        </>
-      )}
-      {petals && <Petals />}
+      {stars && <Stars />}
       <span className="ambience__grain" />
+      <span className="ambience__spot" />
     </div>
   );
 }

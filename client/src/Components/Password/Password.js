@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { toast } from "react-toastify";
 import { decryptThePass, deleteAPassword } from "../../axios/instance";
@@ -7,6 +7,7 @@ import { Eye, EyeOff, Copy, Check, Trash, Close } from "../Icons/Icons";
 import "./Password.css";
 
 const MASK = "•••••••••••";
+const AUTO_HIDE_MS = 20000;
 
 /**
  * A single stored secret: reveal, copy and remove.
@@ -21,9 +22,24 @@ function Password({ id, password, iv }) {
   const copyTimer = useRef(null);
   const dispatch = useDispatch();
 
+  // A revealed password hides itself again after a short while.
+  useEffect(() => {
+    if (!revealed) return undefined;
+    const t = setTimeout(() => setRevealed(false), AUTO_HIDE_MS);
+    return () => clearTimeout(t);
+  }, [revealed]);
+
+  // Forget the plain text when the entry changes (e.g. after an edit).
+  useEffect(() => {
+    setValue("");
+    setRevealed(false);
+  }, [password, iv]);
+
+  useEffect(() => () => clearTimeout(copyTimer.current), []);
+
   const fetchValue = async () => {
     if (value) return value;
-    const res = await decryptThePass({ iv, encryptedPassword: password });
+    const res = await decryptThePass({ id });
     if (res.status === 200) {
       setValue(res.data);
       return res.data;
@@ -98,9 +114,9 @@ function Password({ id, password, iv }) {
     <div className={`secret ${revealed ? "is-open" : ""}`}>
       <div className="secret__value" onClick={toggleReveal} title={revealed ? "Hide" : "Reveal"}>
         {busy && !revealed ? (
-          <span className="spinner spinner--rose" />
+          <span className="spinner spinner--accent" />
         ) : (
-          <span className={`secret__text ${revealed ? "is-revealed" : ""}`}>
+          <span className={`secret__text ${revealed ? "is-revealed" : ""}`} key={revealed ? "on" : "off"}>
             {revealed ? value : MASK}
           </span>
         )}

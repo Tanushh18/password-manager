@@ -11,14 +11,17 @@ import Password from "../../Components/Password/Password";
 import Ambience from "../../Components/Ambience/Ambience";
 import ServiceStatus from "../../Components/ServiceStatus/ServiceStatus";
 import Reveal from "../../Components/Reveal/Reveal";
+import VaultHealth from "../../Components/VaultHealth/VaultHealth";
 import {
   checkAuthenticated,
+  getInsights,
   saveNewPassword,
   updateAPassword,
 } from "../../axios/instance";
+import { estimate, generatePassword } from "../../utils/strength";
 import { setAuth, setPasswords } from "../../redux/actions";
 import {
-  HeartLine,
+  ShieldLine,
   KeyLine,
   Plus,
   Search,
@@ -33,25 +36,29 @@ import {
 } from "../../Components/Icons/Icons";
 import "./Passwords.css";
 
-/* Five soft, tasteful avatar washes drawn from the palette */
+/* Aurora avatar washes */
 const WASHES = [
-  "linear-gradient(140deg, #c9828b, #7a3e48)",
-  "linear-gradient(140deg, #dda3aa, #b86e79)",
-  "linear-gradient(140deg, #b86e79, #63313a)",
-  "linear-gradient(140deg, #e3b7bb, #c9828b)",
-  "linear-gradient(140deg, #8faf9a, #6f9280)",
+  "linear-gradient(140deg, #8b5cf6, #ec4899)",
+  "linear-gradient(140deg, #22d3ee, #8b5cf6)",
+  "linear-gradient(140deg, #f472b6, #f59e0b)",
+  "linear-gradient(140deg, #34d399, #0891b2)",
+  "linear-gradient(140deg, #6366f1, #22d3ee)",
+  "linear-gradient(140deg, #a855f7, #6366f1)",
 ];
 
-const ALPHABET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%^&*-_";
+const STRENGTH_TONES = ["danger", "danger", "warn", "ok", "ok"];
 
-const suggestPassword = (length = 16) => {
-  const bytes = new Uint32Array(length);
-  if (window.crypto?.getRandomValues) {
-    window.crypto.getRandomValues(bytes);
-  } else {
-    for (let i = 0; i < length; i += 1) bytes[i] = Math.floor(Math.random() * 4294967296);
-  }
-  return Array.from(bytes, (b) => ALPHABET[b % ALPHABET.length]).join("");
+const suggestPassword = (length = 18) => generatePassword({ length });
+
+const timeAgo = (date) => {
+  if (!date) return "";
+  const s = Math.max(1, (Date.now() - new Date(date).getTime()) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 2592000) return `${Math.floor(s / 86400)}d ago`;
+  if (s < 31536000) return `${Math.floor(s / 2592000)}mo ago`;
+  return `${Math.floor(s / 31536000)}y ago`;
 };
 
 const clean = (val) =>
@@ -71,9 +78,45 @@ function Passwords() {
   const [editingId, setEditingId] = useState(null);
   const [newPass, setNewPass] = useState("");
   const [showNewPass, setShowNewPass] = useState(false);
+  const [insights, setInsights] = useState(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const [sort, setSort] = useState("recent");
+  const [genLength, setGenLength] = useState(18);
   const fileRef = useRef(null);
 
   const list = useMemo(() => passwords || [], [passwords]);
+  const formStrength = useMemo(() => estimate(form.platPass), [form.platPass]);
+  const editStrength = useMemo(() => estimate(newPass), [newPass]);
+
+  /* Live vault health: re-scored whenever the vault changes */
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    let cancelled = false;
+    setInsightsLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await getInsights();
+        if (!cancelled && res.status === 200) setInsights(res.data);
+      } catch (err) {
+        // Older servers have no /insights; the panel simply stays in "scanning".
+      } finally {
+        if (!cancelled) setInsightsLoading(false);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [list, isAuthenticated]);
+
+  const insightFor = useMemo(() => {
+    const map = {};
+    (insights?.items || []).forEach((item) => {
+      map[item.id] = item;
+    });
+    return map;
+  }, [insights]);
 
   useEffect(() => {
     // Only send someone away once we actually know they are signed out
@@ -213,14 +256,32 @@ function Passwords() {
     reader.readAsArrayBuffer(file);
   };
 
-  const filtered = list.filter((entry) => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return true;
-    return (
-      (entry.platform || "").toLowerCase().includes(term) ||
-      (entry.platEmail || "").toLowerCase().includes(term)
-    );
-  });
+  const filtered = list
+    .filter((entry) => {
+      const term = searchTerm.trim().toLowerCase();
+      if (!term) return true;
+      return (
+        (entry.platform || "").toLowerCase().includes(term) ||
+        (entry.platEmail || "").toLowerCase().includes(term)
+      );
+    })
+    .filter((entry) => {
+      if (filter === "all") return true;
+      const info = insightFor[entry._id];
+      if (!info) return false;
+      if (filter === "weak") return info.score <= 1;
+      if (filter === "reused") return info.reused;
+      if (filter === "old") return info.old;
+      if (filter === "strong") return info.score >= 3 && !info.reused;
+      return true;
+    })
+    .sort((a, b) => {
+      if (sort === "az") return (a.platform || "").localeCompare(b.platform || "");
+      if (sort === "weakest") return (insightFor[a._id]?.score ?? 5) - (insightFor[b._id]?.score ?? 5);
+      const ta = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const tb = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      return tb - ta;
+    });
 
   const initial = (platform) =>
     !platform || platform === "NA" ? "•" : platform.trim().charAt(0).toUpperCase();
@@ -256,7 +317,7 @@ function Passwords() {
         {/* ── Header ── */}
         <header className="vault__head anim-fade-up">
           <span className="pill vault__pill">
-            <HeartLine size={13} />
+            <ShieldLine size={13} />
             Your vault
           </span>
 
@@ -275,6 +336,10 @@ function Passwords() {
           </div>
         </header>
 
+        <div className="anim-fade-up d-1">
+          <VaultHealth insights={insights} loading={insightsLoading} filter={filter} onFilter={setFilter} />
+        </div>
+
         {/* ── Toolbar ── */}
         <div className="vault__tools anim-fade-up d-2">
           <div className="vault__search field__wrap">
@@ -292,6 +357,16 @@ function Passwords() {
           </div>
 
           <div className="vault__actions">
+            <select
+              className="input vault__sort"
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
+              aria-label="Sort passwords"
+            >
+              <option value="recent">Recently updated</option>
+              <option value="az">A → Z</option>
+              <option value="weakest">Weakest first</option>
+            </select>
             <button className="btn btn--primary" onClick={() => setOpen(true)}>
               <span className="btn__sheen" />
               <Plus size={15} />
@@ -299,7 +374,7 @@ function Passwords() {
             </button>
 
             <label className={`btn btn--ghost ${uploading ? "is-busy" : ""}`}>
-              {uploading ? <span className="spinner spinner--rose" /> : <Upload size={15} />}
+              {uploading ? <span className="spinner spinner--accent" /> : <Upload size={15} />}
               {uploading ? "Reading…" : "Import sheet"}
               <input
                 ref={fileRef}
@@ -341,10 +416,22 @@ function Passwords() {
             <span className="empty__icon">
               <Search size={24} />
             </span>
-            <h2 className="empty__title">Nothing matches “{searchTerm}”</h2>
-            <p className="empty__body">Try a shorter word, or clear the search to see everything.</p>
-            <button className="btn btn--ghost" onClick={() => setSearchTerm("")}>
-              Clear search
+            <h2 className="empty__title">
+              {searchTerm ? <>Nothing matches “{searchTerm}”</> : "Nothing in this filter"}
+            </h2>
+            <p className="empty__body">
+              {filter !== "all" && !searchTerm
+                ? "Good news — no passwords need attention here."
+                : "Try a shorter word, or clear the filters to see everything."}
+            </p>
+            <button
+              className="btn btn--ghost"
+              onClick={() => {
+                setSearchTerm("");
+                setFilter("all");
+              }}
+            >
+              Show everything
             </button>
           </Reveal>
         ) : (
@@ -384,6 +471,29 @@ function Passwords() {
                   )}
                 </div>
 
+                <div className="vault-card__badges">
+                  {insightFor[entry._id] ? (
+                    <>
+                      <span className={`badge badge--${STRENGTH_TONES[insightFor[entry._id].score]}`}>
+                        <span className="badge__bars" data-score={insightFor[entry._id].score}>
+                          <i />
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                        {insightFor[entry._id].label}
+                      </span>
+                      {insightFor[entry._id].reused && <span className="badge badge--warn">Reused</span>}
+                      {insightFor[entry._id].old && <span className="badge badge--cool">Old</span>}
+                    </>
+                  ) : (
+                    <span className="badge badge--muted">Scanning…</span>
+                  )}
+                  {(entry.updatedAt || entry.createdAt) && (
+                    <span className="vault-card__time">{timeAgo(entry.updatedAt || entry.createdAt)}</span>
+                  )}
+                </div>
+
                 <hr className="rule vault-card__rule" />
 
                 {editingId === entry._id ? (
@@ -411,10 +521,11 @@ function Passwords() {
                         {showNewPass ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
                     </div>
+                    {newPass && <StrengthMeter strength={editStrength} />}
 
                     <div className="vault-card__edit-actions">
                       <button
-                        className="btn btn--sage btn--sm"
+                        className="btn btn--ok btn--sm"
                         onClick={() => saveEdit(entry)}
                         disabled={saving}
                       >
@@ -501,7 +612,7 @@ function Passwords() {
                 type="button"
                 className="sheet__suggest"
                 onClick={() => {
-                  setForm((p) => ({ ...p, platPass: suggestPassword() }));
+                  setForm((p) => ({ ...p, platPass: suggestPassword(genLength) }));
                   setShowModalPass(true);
                 }}
               >
@@ -527,6 +638,27 @@ function Passwords() {
                 {showModalPass ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
+            {form.platPass && <StrengthMeter strength={formStrength} />}
+
+            <div className="gen">
+              <label className="gen__label" htmlFor="np-len">
+                Generator length <strong>{genLength}</strong>
+              </label>
+              <input
+                id="np-len"
+                className="gen__range"
+                type="range"
+                min="8"
+                max="40"
+                value={genLength}
+                onChange={(e) => {
+                  const len = Number(e.target.value);
+                  setGenLength(len);
+                  setForm((p) => ({ ...p, platPass: suggestPassword(len) }));
+                  setShowModalPass(true);
+                }}
+              />
+            </div>
           </div>
 
           <button type="submit" className="btn btn--primary btn--block" disabled={saving}>
@@ -543,6 +675,22 @@ function Passwords() {
           </button>
         </form>
       </Modal>
+    </div>
+  );
+}
+
+function StrengthMeter({ strength }) {
+  return (
+    <div className={`strength strength--${STRENGTH_TONES[strength.score]}`} aria-live="polite">
+      <div className="meter">
+        {[1, 2, 3, 4].map((n) => (
+          <span key={n} className={`meter__bar ${strength.score >= n ? `on-${strength.score}` : ""}`} />
+        ))}
+      </div>
+      <span className="strength__label">
+        {strength.label}
+        {strength.bits ? ` · ~${strength.bits} bits` : ""}
+      </span>
     </div>
   );
 }

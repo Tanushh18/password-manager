@@ -8,7 +8,7 @@
    network and are never stored.
    ══════════════════════════════════════════════════════════ */
 
-const VERSION = "aurelia-v1";
+const VERSION = "aurelia-v2";
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
 

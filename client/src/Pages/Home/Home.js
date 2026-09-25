@@ -6,12 +6,10 @@ import ServiceStatus from "../../Components/ServiceStatus/ServiceStatus";
 import { useParallax } from "../../hooks/useReveal";
 import Reveal from "../../Components/Reveal/Reveal";
 import {
-  HeartLine,
   LockLine,
   ShieldLine,
   KeyLine,
   Sparkle,
-  Leaf,
   Arrow,
   Flourish,
 } from "../../Components/Icons/Icons";
@@ -21,25 +19,53 @@ const PROMISES = [
   {
     icon: <LockLine size={26} />,
     title: "Sealed with AES-256",
-    body: "Every secret is encrypted before it ever reaches the vault, with a key that never leaves the server.",
+    body: "Every secret is encrypted before it touches the database, and only your signed-in session can unseal it.",
   },
   {
     icon: <ShieldLine size={26} />,
-    title: "Yours alone",
-    body: "No trackers, no adverts, no selling. Just a quiet room where the things you keep stay kept.",
+    title: "Live vault health",
+    body: "A real-time score spots weak, reused and stale passwords — and tells you exactly which ones to fix.",
   },
   {
-    icon: <Leaf size={26} />,
-    title: "Calm by design",
-    body: "Soft type, generous space and gentle motion — a password manager that feels like a keepsake.",
+    icon: <Sparkle size={26} />,
+    title: "Generator built in",
+    body: "One tap creates a strong, unique password with a live strength meter, right where you need it.",
+  },
+  {
+    icon: <KeyLine size={26} />,
+    title: "Web + Android",
+    body: "The same vault on the web and in the Android app, with fingerprint unlock on your phone.",
   },
 ];
 
 const STEPS = [
-  { n: "01", title: "Create your vault", body: "One account, one password to remember. That is all it asks of you." },
-  { n: "02", title: "Tuck things away", body: "Add a platform, an email, a password — or bring them all at once from a spreadsheet." },
-  { n: "03", title: "Come back anytime", body: "Reveal a password with a tap, from any device you carry." },
+  { n: "01", title: "Create your vault", body: "One account, one master password. That is all you have to remember." },
+  { n: "02", title: "Fill it up", body: "Add a password in seconds — or import a whole spreadsheet at once." },
+  { n: "03", title: "Watch your score climb", body: "Fix what the health check flags and see your vault glow green." },
 ];
+
+const GLYPHS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*";
+
+/** Ciphertext that keeps re-rolling, so the hero card feels alive. */
+function Scramble({ length = 12, every = 90 }) {
+  const [text, setText] = useState(() => "•".repeat(length));
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+    const id = setInterval(() => {
+      setText((prev) =>
+        prev
+          .split("")
+          .map((c) => (Math.random() < 0.35 ? GLYPHS[Math.floor(Math.random() * GLYPHS.length)] : c))
+          .join("")
+      );
+    }, every);
+    return () => clearInterval(id);
+  }, [every]);
+  return <span className="keepsake__mask keepsake__mask--live">{text}</span>;
+}
+
+const ANDROID_URL =
+  process.env.REACT_APP_ANDROID_URL || "https://github.com/tanushh18/password-manager/releases/latest";
 
 function Home() {
   const { name, isAuthenticated, passwords } = useSelector((state) => state);
@@ -65,21 +91,21 @@ function Home() {
         <div className="hero__inner shell">
           <div className={`hero__copy ${mounted ? "anim-fade-up" : ""}`}>
             <span className="hero__eyebrow pill">
-              <HeartLine size={13} />
-              {isAuthenticated ? "Welcome home" : "A place for what you hold dear"}
+              <Sparkle size={13} />
+              {isAuthenticated ? "Vault unlocked" : "Encrypted · Live · Free"}
             </span>
 
             {isAuthenticated ? (
               <h1 className="display hero__title">
-                Hello again,
+                Welcome back,
                 <br />
-                <em>{firstName || "love"}.</em>
+                <em>{firstName || "friend"}.</em>
               </h1>
             ) : (
               <h1 className="display hero__title">
-                All you hold dear,
+                Every password,
                 <br />
-                <em>kept safely close.</em>
+                <em>glowing and safe.</em>
               </h1>
             )}
 
@@ -92,13 +118,13 @@ function Home() {
                       {count === 1 ? "" : "s"} resting safely inside.
                     </>
                   ) : (
-                    <>It is quiet in there — add the first thing worth keeping.</>
+                    <>It is empty in there — add your first password and watch your health score light up.</>
                   )}
                 </>
               ) : (
                 <>
-                  Aurelia is a gentle home for your passwords. Encrypted the moment you write
-                  them down, and never shared with anyone — not even with us.
+                  Aurelia is a beautiful, private vault for your passwords. AES-256 encryption,
+                  a live health score, a built-in generator — on the web and on Android.
                 </>
               )}
             </p>
@@ -147,11 +173,11 @@ function Home() {
               <div className="keepsake__card card">
                 <span className="card__ribbon" />
                 <div className="keepsake__seal anim-beat">
-                  <HeartLine size={26} strokeWidth={1.2} />
+                  <ShieldLine size={26} strokeWidth={1.4} />
                 </div>
                 <p className="keepsake__label eyebrow">Aurelia vault</p>
                 <p className="keepsake__line script">
-                  {isAuthenticated ? `${firstName || "you"}'s little secrets` : "kept close, kept safe"}
+                  {isAuthenticated ? `${firstName || "your"}'s vault` : "encrypting live"}
                 </p>
 
                 <div className="keepsake__rows">
@@ -160,7 +186,7 @@ function Home() {
                       <span className="keepsake__chip">
                         <KeyLine size={13} />
                       </span>
-                      <span className="keepsake__mask">{mask}</span>
+                      <Scramble length={mask.length} every={110 + i * 40} />
                       <span className="keepsake__lock">
                         <LockLine size={13} />
                       </span>
@@ -175,13 +201,13 @@ function Home() {
               </div>
 
               <span className="keepsake__orbit keepsake__orbit--a">
-                <HeartLine size={16} />
+                <LockLine size={16} />
               </span>
               <span className="keepsake__orbit keepsake__orbit--b">
                 <Sparkle size={14} />
               </span>
               <span className="keepsake__orbit keepsake__orbit--c">
-                <Leaf size={16} />
+                <KeyLine size={16} />
               </span>
             </div>
           </div>
@@ -193,10 +219,10 @@ function Home() {
         <Reveal as="header" className="section__head">
           <span className="eyebrow">Why Aurelia</span>
           <h2 className="section__title">
-            Small promises, <em className="serif-em">kept quietly</em>
+            Security that <em className="serif-em">feels alive</em>
           </h2>
           <p className="lede section__lede">
-            The things worth protecting deserve somewhere beautiful to live.
+            Strong encryption, live insights and a design you will actually enjoy opening.
           </p>
         </Reveal>
 
@@ -216,7 +242,7 @@ function Home() {
         <Reveal as="header" className="section__head">
           <span className="eyebrow">How it works</span>
           <h2 className="section__title">
-            Three small steps, <em className="serif-em">then peace of mind</em>
+            Three steps to a <em className="serif-em">glowing vault</em>
           </h2>
         </Reveal>
 
@@ -239,9 +265,9 @@ function Home() {
             <Flourish width={150} />
           </div>
           <p className="closing__quote">
-            “Some things are worth keeping.
+            Your whole digital life,
             <br />
-            <em>We just make sure they stay kept.</em>”
+            <em>one tap away — on every screen.</em>
           </p>
           <div className="closing__cta">
             <Link to={isAuthenticated ? "/passwords" : "/signup"} className="btn btn--primary btn--lg">
@@ -250,16 +276,54 @@ function Home() {
               <Arrow size={16} />
             </Link>
           </div>
-          <p className="closing__sign script">with care, always</p>
+          <p className="closing__sign script">sealed with AES-256</p>
+        </Reveal>
+      </section>
+
+      {/* ══════════ ANDROID ══════════ */}
+      <section className="section shell">
+        <Reveal className="android card card--hover" variant="reveal--scale">
+          <span className="card__ribbon" />
+          <div className="android__copy">
+            <span className="eyebrow">New · Android app</span>
+            <h2 className="section__title">
+              Your vault, <em className="serif-em">in your pocket</em>
+            </h2>
+            <p className="lede">
+              Same account, same server, same encryption. Fingerprint unlock, one-tap copy and the live
+              health score — built for your phone.
+            </p>
+            <a className="btn btn--primary btn--lg" href={ANDROID_URL} target="_blank" rel="noopener noreferrer">
+              <span className="btn__sheen" />
+              Get the Android app
+              <Arrow size={16} />
+            </a>
+          </div>
+          <div className="android__phone" aria-hidden="true">
+            <div className="android__screen">
+              <span className="android__notch" />
+              <div className="android__ring">
+                <strong>92</strong>
+                <span>Excellent</span>
+              </div>
+              {["Gmail", "GitHub", "Bank"].map((n, i) => (
+                <div className="android__row" key={n} style={{ animationDelay: `${0.2 + i * 0.15}s` }}>
+                  <span className="android__avatar">{n[0]}</span>
+                  <span className="android__name">{n}</span>
+                  <span className="android__dot" />
+                </div>
+              ))}
+            </div>
+          </div>
         </Reveal>
       </section>
 
       <footer className="foot">
         <span className="foot__mark">
-          <HeartLine size={15} />
+          <ShieldLine size={15} />
           Aurelia
         </span>
-        <span className="foot__note">Encrypted with AES-256 · Built with love</span>
+        <span className="foot__note">Encrypted with AES-256 · Web &amp; Android</span>
       </footer>
     </div>
   );

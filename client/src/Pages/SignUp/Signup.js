@@ -131,12 +131,12 @@ function Signup() {
 
   const stageCfg =
     stage === "success"
-      ? { label: "Vault created", tone: "sage" }
+      ? { label: "Vault created", tone: "ok" }
       : stage === "error"
       ? { label: "Almost there", tone: "danger" }
       : stage === "saving"
-      ? { label: "Preparing your vault…", tone: "rose" }
-      : { label: "Begin your vault", tone: "rose" };
+      ? { label: "Preparing your vault…", tone: "accent" }
+      : { label: "Begin your vault", tone: "accent" };
 
   return (
     <div className="auth page">

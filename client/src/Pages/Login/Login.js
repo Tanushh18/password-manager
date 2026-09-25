@@ -11,11 +11,11 @@ import { HeartLine, LockLine, Eye, EyeOff, Check, Arrow, Sparkle } from "../../C
 import "../../styles/auth.css";
 
 const STAGES = {
-  idle: { label: "Secure sign in", tone: "rose" },
-  waking: { label: "Waking the vault…", tone: "rose" },
-  connecting: { label: "Opening a private line…", tone: "rose" },
-  verifying: { label: "Checking it's really you…", tone: "rose" },
-  success: { label: "Welcome home", tone: "sage" },
+  idle: { label: "Secure sign in", tone: "accent" },
+  waking: { label: "Waking the vault…", tone: "accent" },
+  connecting: { label: "Opening a private line…", tone: "accent" },
+  verifying: { label: "Checking it's really you…", tone: "accent" },
+  success: { label: "Welcome home", tone: "ok" },
   error: { label: "That didn't work", tone: "danger" },
 };
 

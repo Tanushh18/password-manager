@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { HeartLine, Menu, Close, Arrow } from "../Icons/Icons";
+import { ShieldLine, Menu, Close, Arrow } from "../Icons/Icons";
+import ThemeToggle from "../ThemeToggle/ThemeToggle";
 import "./Navbar.css";
 
 function Navbar() {
@@ -49,11 +50,11 @@ function Navbar() {
         <div className="nav__inner">
           <Link to="/" className="nav__brand" aria-label="Aurelia home">
             <span className="nav__mark">
-              <HeartLine size={19} strokeWidth={1.35} />
+              <ShieldLine size={19} strokeWidth={1.8} />
             </span>
             <span className="nav__wordmark">
               <span className="nav__name">Aurelia</span>
-              <span className="nav__tag">password keepsake</span>
+              <span className="nav__tag">aurora vault</span>
             </span>
           </Link>
 
@@ -66,6 +67,7 @@ function Navbar() {
           </nav>
 
           <div className="nav__actions">
+            <ThemeToggle />
             {isAuthenticated && name && (
               <span className="nav__greeting">
                 Hello, <em>{name.split(" ")[0]}</em>
@@ -92,7 +94,7 @@ function Navbar() {
       <div className={`drawer ${open ? "is-open" : ""}`} role="dialog" aria-hidden={!open}>
         <div className="drawer__top">
           <span className="drawer__brand">
-            <HeartLine size={18} />
+            <ShieldLine size={18} />
             Aurelia
           </span>
           <button className="drawer__close" onClick={() => setOpen(false)} aria-label="Close menu">
@@ -124,7 +126,7 @@ function Navbar() {
         </nav>
 
         <p className="drawer__note">
-          <span className="script">Kept close, kept safe.</span>
+          <span className="script">Your secrets, lit by the aurora.</span>
         </p>
       </div>
       <div className={`drawer__scrim ${open ? "is-open" : ""}`} onClick={() => setOpen(false)} />

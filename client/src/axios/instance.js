@@ -84,6 +84,7 @@ export const saveNewPassword = (data) => instance.post("/addnewpassword", data);
 export const updateAPassword = (data) => instance.post("/updatepassword", data);
 export const deleteAPassword = (id) => instance.post("/deletepassword", id);
 export const decryptThePass = (data) => instance.post("/decrypt", data);
+export const getInsights = () => instance.get("/insights");
 
 // Health probe used by the live status indicators (and by the cron job server side).
 export const checkHealth = () => instance.get("/health", { withCredentials: false });
