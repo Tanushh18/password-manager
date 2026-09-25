@@ -1,26 +1,39 @@
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
 const User = require("../models/schema");
-const { decrypt } = require("../models/EncDecManager");
+
+/**
+ * Reads the session token from either
+ *   - the httpOnly `jwtoken` cookie (web client), or
+ *   - an `Authorization: Bearer <token>` header (Android / iOS app).
+ */
+const readToken = (req) =>
+{
+    const header = req.headers.authorization || "";
+    if (header.toLowerCase().startsWith("bearer "))
+    {
+        const bearer = header.slice(7).trim();
+        if (bearer) return bearer;
+    }
+    return (req.cookies && req.cookies.jwtoken) || null;
+};
 
 const authenticate = async (req, res, next) =>
 {
     try
     {
-        console.log("Received cookies:", req.cookies);
-        const token = req.cookies.jwtoken;
-        if (!token) {
+        const token = readToken(req);
+        if (!token)
+        {
             return res.status(401).json({ error: "Access denied. No token provided." });
         }
-        console.log("Token:", token);
-        console.log("Secret used for verification:", process.env.SECRET_KEY);
-        const verify = jwt.verify(token, process.env.SECRET_KEY);
 
-        var rootUser = await User.findOne({ _id: verify._id, "tokens.token": token });
+        const verify = jwt.verify(token, process.env.SECRET_KEY);
+        const rootUser = await User.findOne({ _id: verify._id, "tokens.token": token });
 
         if (!rootUser)
         {
-            throw new Error("User now found");
+            return res.status(401).json({ error: "Unauthorised user." });
         }
 
         req.token = token;
@@ -31,11 +44,11 @@ const authenticate = async (req, res, next) =>
     }
     catch (error)
     {
-        res.status(400).json({error: "Unauthorised user."})
-        console.log(">>>>>>>>>>>>>>>>>>>",error);
+        // Never log the token or the signing secret.
+        return res.status(401).json({ error: "Unauthorised user." });
     }
-    
 };
 
+authenticate.readToken = readToken;
 
 module.exports = authenticate;

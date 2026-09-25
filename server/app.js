@@ -27,6 +27,22 @@ if (process.env.CLIENT_ORIGINS)
     });
 }
 
+// Render / most PaaS sit behind a proxy: needed for per-IP rate limiting.
+app.set("trust proxy", 1);
+app.disable("x-powered-by");
+
+// Basic security headers (no extra dependency)
+app.use((req, res, next) =>
+{
+  res.set({
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": "max-age=15552000; includeSubDomains"
+  });
+  next();
+});
+
 app.use(cors({
   origin: function (origin, callback)
   {
@@ -42,7 +58,8 @@ app.use(cors({
       callback(null, false);
     }
   },
-  credentials: true
+  credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Client"]
 }));
 app.use(cookieParser());
 
@@ -52,7 +69,7 @@ const STARTED_AT = new Date();
 // CONNECTING WITH DATABASE
 require("./db/connection");
 
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 /* ─────────────────────────────────────────────
    HEALTH CHECKS
@@ -129,6 +146,10 @@ app.use((err, req, res, next) =>
 {
   console.error("Unhandled request error:", err.message);
   if (res.headersSent) return next(err);
+  if (err.type === "entity.parse.failed" || err.type === "entity.too.large")
+  {
+    return res.status(err.status || 400).json({ error: "Invalid request body." });
+  }
   res.status(500).json({ error: "There was an internal error. Sorry for the inconvenience." });
 });
 
