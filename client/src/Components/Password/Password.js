@@ -39,7 +39,8 @@ function Password({ id, password, iv }) {
 
   const fetchValue = async () => {
     if (value) return value;
-    const res = await decryptThePass({ id });
+    // id for the current server; iv + ciphertext keep older deployments working
+    const res = await decryptThePass({ id, iv, encryptedPassword: password });
     if (res.status === 200) {
       setValue(res.data);
       return res.data;

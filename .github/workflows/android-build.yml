@@ -1,0 +1,46 @@
+# Builds the Aurelia Android app on Expo's cloud (EAS Build).
+#
+# One-time setup:
+#   1. Create an access token at https://expo.dev/settings/access-tokens
+#   2. Add it to this repo as the secret EXPO_TOKEN
+#      (Settings → Secrets and variables → Actions → New repository secret)
+#   3. Run this workflow from the Actions tab ("Run workflow").
+#
+# "preview" produces an installable .apk, "production" a Play Store .aab.
+name: Android build (EAS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "EAS build profile"
+        type: choice
+        options: [preview, production]
+        default: preview
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: npm ci
+
+      # Links the app to an EAS project on the token's account (creates it the first time).
+      - run: eas init --non-interactive --force
+
+      - run: eas build --platform android --profile ${{ inputs.profile }} --non-interactive --no-wait

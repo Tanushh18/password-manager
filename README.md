@@ -1,32 +1,36 @@
-# Aurelia — Password Keepsake
+# Aurelia — Aurora Password Vault
 
-A password manager built on the MERN stack, dressed as a warm, quiet keepsake rather than a utility.
-Sign in, tuck your passwords away, and come back to them from any device. Every secret is encrypted
-with AES-256 before it reaches the database.
+A password manager on the MERN stack with a website **and a native Android app** that share one API
+and one database. Every secret is encrypted with AES-256 before it reaches the database.
 
 ## What is inside
 
-* **A warm, romantic interface** — a dusty rose and ivory palette, a refined serif paired with a clean
-  sans, soft rounded cards, generous whitespace and slow, premium motion.
-* **Installable on your phone** — Aurelia is a PWA: add it to your home screen and it opens full
-  screen, with its own icon and an offline page.
+* **Aurora interface** — midnight glass, animated northern-light gradients, a twinkling star field,
+  a light that follows your pointer, gradient text, and a dark / light theme toggle.
+* **Live vault health** — a real-time score (0–100) with weak, reused and stale password counts,
+  strength badges on every entry, and filters to fix them fast. Scored server side, so plaintext
+  never leaves the API.
+* **Built-in generator** — adjustable length, live strength meter (bits of entropy).
+* **Android app** (`mobile/`) — Expo app with biometric unlock, one-tap copy with clipboard
+  auto-clear, generator, passphrases and the same health score. See [`mobile/README.md`](mobile/README.md).
+* **Installable PWA** — add the website to your home screen; it has its own icon and an offline page.
 * **Live service status** — every page shows the real state of the API, read from `/health`.
 * **A health endpoint for cron jobs** — so free-tier hosting never goes to sleep.
 
 ### Design system
 
-| Role | Colour |
-| --- | --- |
-| Primary dusty rose | `#C9828B` |
-| Warm ivory background | `#FFF9F5` |
-| Soft blush | `#F4DDE0` |
-| Deep burgundy accent | `#7A3E48` |
-| Warm charcoal text | `#332C2D` |
-| White cards | `#FFFFFF` |
-| Muted sage (success) | `#8FAF9A` |
+| Role | Dark | Light |
+| --- | --- | --- |
+| Background | `#07061A` | `#F6F4FF` |
+| Primary violet | `#8B5CF6` | `#7C3AED` |
+| Magenta | `#EC4899` | `#DB2777` |
+| Cyan | `#22D3EE` | `#0891B2` |
+| Success mint | `#34D399` | `#10B981` |
+| Warning amber | `#FBBF24` | `#D97706` |
+| Danger rose | `#F43F5E` | `#E11D48` |
 
-Tokens live in `client/src/styles/theme.css`. Typography is Cormorant Garamond (headings),
-Inter (body) and Dancing Script (handwritten accents).
+Web tokens live in `client/src/styles/theme.css`, app tokens in `mobile/src/lib/theme.js`.
+Typography is Sora (display), Inter (body) and JetBrains Mono (secrets).
 
 ## Keeping the server awake
 
@@ -135,11 +139,23 @@ REACT_APP_API_URL=http://localhost:8000 npm start
 | `POST` | `/register` | – | Create an account |
 | `POST` | `/login` | – | Sign in, sets the `jwtoken` cookie |
 | `GET` | `/logout` | – | Clear the session cookie |
-| `GET` | `/authenticate` | cookie | Current user and their stored passwords |
-| `POST` | `/addnewpassword` | cookie | Store a new encrypted password |
-| `POST` | `/updatepassword` | cookie | Replace the password on an existing entry |
-| `POST` | `/deletepassword` | cookie | Remove an entry |
-| `POST` | `/decrypt` | – | Decrypt a stored value for display |
+| `GET` | `/authenticate` | session | Current user and their stored passwords (no hashes or tokens) |
+| `POST` | `/addnewpassword` | session | Store a new encrypted password |
+| `POST` | `/updatepassword` | session | Change the password, platform or email on an entry |
+| `POST` | `/deletepassword` | session | Remove an entry |
+| `POST` | `/decrypt` | session | Decrypt one of **your own** entries (`{ id }`) |
+| `GET` | `/insights` | session | Vault health: score, strength, reuse and age per entry |
+
+"session" means either the `jwtoken` cookie (website) or an `Authorization: Bearer <token>`
+header (Android app, which gets its token by sending `"client": "mobile"` to `/login`).
+
+## Security notes
+
+* Login and register are rate limited (20 attempts / 15 min per IP).
+* Session JWTs expire after 30 days; each account keeps at most 10 active sessions and
+  `/logout` revokes the current one on the server.
+* The web client auto-hides revealed passwords after 20s; the app also clears copied
+  passwords from the clipboard after 30s.
 
 # How to contribute?
 This project is completely open source. Everyone's contribution is welcome here.
