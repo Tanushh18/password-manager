@@ -16,6 +16,9 @@ const rateLimit = ({ windowMs = 15 * 60 * 1000, max = 20, message = "Too many re
     }, windowMs);
     if (typeof sweep.unref === "function") sweep.unref();
 
+    // RATE_LIMIT_MAX lets tests and self-hosters raise the ceiling.
+    const limit = Number(process.env.RATE_LIMIT_MAX) || max;
+
     return (req, res, next) =>
     {
         const key = req.ip || (req.connection && req.connection.remoteAddress) || "unknown";
@@ -30,7 +33,7 @@ const rateLimit = ({ windowMs = 15 * 60 * 1000, max = 20, message = "Too many re
 
         entry.count += 1;
 
-        if (entry.count > max)
+        if (entry.count > limit)
         {
             res.set("Retry-After", String(Math.ceil((entry.reset - now) / 1000)));
             return res.status(429).json({ error: message });

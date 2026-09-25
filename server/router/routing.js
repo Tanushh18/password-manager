@@ -2,41 +2,26 @@ const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
 const User = require("../models/schema");
-const bcrypt = require("bcrypt");
 const authenticate = require("../middlewares/authenticate");
+const rateLimit = require("../middlewares/rateLimit");
 const { encrypt, decrypt } = require("../models/EncDecManager");
 const { estimate } = require("../utils/strength");
-const rateLimit = require("../middlewares/rateLimit");
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const COOKIE_OPTIONS = {
-    httpOnly: true,     // no JS access
-    secure: true,       // HTTPS only
-    sameSite: "None",   // the web client lives on another origin
-    path: "/"
-};
-const COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days, same as the JWT
-
-const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const str = (value) => (typeof value === "string" ? value.trim() : "");
-
-// Exact match first; older accounts may have been stored with mixed case.
-const findByEmail = async (email) =>
-    (await User.findOne({ email })) ||
-    (await User.findOne({ email: new RegExp(`^${escapeRegex(email)}$`, "i") }));
-
-// The Android app cannot use cross-site cookies, so it asks for the token in the body.
-const wantsToken = (req) =>
-    req.body.client === "mobile" || String(req.headers["x-client"] || "").toLowerCase() === "mobile";
+const {
+    EMAIL_RE, COOKIE_OPTIONS, COOKIE_MAX_AGE, str, raw, findByEmail, isBlob, validKdf,
+    wantsToken, checkPassword, checkSecondFactor, serverError
+} = require("./helpers");
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: "Too many attempts. Please wait a few minutes and try again." });
+
+/* ════════════════ AUTH ════════════════ */
 
 router.post("/register", authLimiter, async (req, res) =>
 {
     const name = str(req.body.name);
     const email = str(req.body.email).toLowerCase();
-    const password = typeof req.body.password === "string" ? req.body.password : "";
-    const cpassword = typeof req.body.cpassword === "string" ? req.body.cpassword : "";
+    const password = raw(req.body.password);
+    const cpassword = raw(req.body.cpassword);
+    const { kdf, keyCheck } = req.body;
 
     if (!name || !email || !password || !cpassword)
     {
@@ -46,13 +31,18 @@ router.post("/register", authLimiter, async (req, res) =>
     {
         return res.status(400).json({ error: "That email doesn't look right." });
     }
-    if (password.length < 6)
+    if (password.length < 8)
     {
-        return res.status(400).json({ error: "Use at least 6 characters for your password." });
+        return res.status(400).json({ error: "Use at least 8 characters for your master password." });
     }
     if (password !== cpassword)
     {
         return res.status(400).json({ error: "Passwords don't match." });
+    }
+    // New clients set up end-to-end encryption at sign up; old clients may not.
+    if ((kdf || keyCheck) && !(validKdf(kdf) && isBlob(keyCheck)))
+    {
+        return res.status(400).json({ error: "Invalid vault settings." });
     }
 
     try
@@ -62,22 +52,26 @@ router.post("/register", authLimiter, async (req, res) =>
             return res.status(400).json({ error: "Email already exists." });
         }
 
-        const newUser = new User({ name, email, password });
-        await newUser.save();
+        const user = new User({ name, email, password });
+        if (kdf && keyCheck)
+        {
+            user.kdf = { salt: kdf.salt, iterations: kdf.iterations };
+            user.keyCheck = keyCheck;
+        }
+        await user.save();
 
         return res.status(201).json({ message: "User created successfully." });
     }
     catch (error)
     {
-        console.error("register failed:", error.message);
-        return res.status(500).json({ error: "There was an internal error. Sorry for the inconvenience." });
+        return serverError(res, "register", error);
     }
-})
+});
 
 router.post("/login", authLimiter, async (req, res) =>
 {
     const email = str(req.body.email).toLowerCase();
-    const password = typeof req.body.password === "string" ? req.body.password : "";
+    const password = raw(req.body.password);
 
     if (!email || !password)
     {
@@ -87,135 +81,54 @@ router.post("/login", authLimiter, async (req, res) =>
     try
     {
         const user = await findByEmail(email);
-        const isMatch = user ? await bcrypt.compare(password, user.password || "") : false;
+        const isMatch = user ? await checkPassword(user, password) : false;
 
         if (!isMatch)
         {
             return res.status(400).json({ error: "Invalid Credentials." });
         }
 
-        // Only issue a session once the password is proven.
-        const token = await user.generateAuthToken();
+        if (user.twoFactor && user.twoFactor.enabled)
+        {
+            if (!req.body.code)
+            {
+                return res.status(401).json({ error: "Enter the code from your authenticator app.", twoFactorRequired: true });
+            }
+            if (!checkSecondFactor(user, req.body.code))
+            {
+                await user.save();
+                return res.status(401).json({ error: "That code didn't work. Try the newest one.", twoFactorRequired: true });
+            }
+        }
+
+        // Only issue a session once every factor is proven.
+        const client = wantsToken(req) ? "mobile" : "web";
+        const token = await user.generateAuthToken(client);
 
         res.cookie("jwtoken", token, { ...COOKIE_OPTIONS, expires: new Date(Date.now() + COOKIE_MAX_AGE) });
 
-        const body = { message: "User login successfully.", name: user.name, email: user.email };
-        if (wantsToken(req)) body.token = token;
+        const body = {
+            message: "User login successfully.",
+            name: user.name,
+            email: user.email,
+            vault: user.toPublic().vault,
+            twoFactorEnabled: Boolean(user.twoFactor && user.twoFactor.enabled)
+        };
+        if (client === "mobile") body.token = token;
 
         return res.status(200).json(body);
     }
     catch (error)
     {
-        console.error("login failed:", error.message);
-        return res.status(500).json({ error: "There was an internal error. Sorry for the inconvenience." });
+        return serverError(res, "login", error);
     }
-})
+});
 
 router.get("/authenticate", authenticate, async (req, res) =>
 {
     res.set("Cache-Control", "no-store");
     res.json(req.rootUser.toPublic());
-})
-
-router.post("/addnewpassword", authenticate, async (req, res) =>
-{
-    const platform = str(req.body.platform);
-    const platEmail = str(req.body.platEmail) || "NA";
-    const userPass = typeof req.body.userPass === "string" ? req.body.userPass : "";
-
-    if (!platform || !userPass)
-    {
-        return res.status(400).json({ error: "Please fill the form properly" });
-    }
-
-    try
-    {
-        const { iv, encryptedPassword } = encrypt(userPass);
-        const isSaved = await req.rootUser.addNewPassword(encryptedPassword, iv, platform, platEmail);
-
-        if (isSaved)
-        {
-            return res.status(200).json({ message: "Successfully added your password." });
-        }
-        return res.status(400).json({ error: "Could not save the password." });
-    }
-    catch (error)
-    {
-        console.error("addnewpassword failed:", error.message);
-        return res.status(500).json({ error: "An unknown error occured." });
-    }
-})
-
-router.post("/updatepassword", authenticate, async (req, res) =>
-{
-    const { id } = req.body;
-    const platform = str(req.body.platform);
-    const platEmail = str(req.body.platEmail);
-    const userPass = typeof req.body.userPass === "string" ? req.body.userPass : "";
-
-    if (!id || (!userPass && !platform && !platEmail))
-    {
-        return res.status(400).json({ error: "Please fill the form properly" });
-    }
-
-    try
-    {
-        const changes = { "passwords.$.updatedAt": new Date() };
-
-        if (userPass)
-        {
-            const { iv, encryptedPassword } = encrypt(userPass);
-            changes["passwords.$.password"] = encryptedPassword;
-            changes["passwords.$.iv"] = iv;
-        }
-        if (platform) changes["passwords.$.platform"] = platform;
-        if (platEmail) changes["passwords.$.platEmail"] = platEmail;
-
-        const result = await User.updateOne(
-            { _id: req.rootUser._id, "passwords._id": id },
-            { $set: changes }
-        );
-
-        if (!result || result.n === 0)
-        {
-            return res.status(404).json({ error: "Could not find that password." });
-        }
-
-        return res.status(200).json({ message: "Successfully updated your password." });
-    }
-    catch (error)
-    {
-        console.error("updatepassword failed:", error.message);
-        return res.status(400).json({ error: "Could not update the password." });
-    }
-})
-
-router.post("/deletepassword", authenticate, async (req, res) =>
-{
-    const { id } = req.body;
-
-    if (!id)
-    {
-        return res.status(400).json({ error: "Could not find data" });
-    }
-
-    try
-    {
-        const result = await User.updateOne({ _id: req.rootUser._id }, { $pull: { passwords: { _id: id } } });
-
-        if (!result || result.nModified === 0)
-        {
-            return res.status(404).json({ error: "Could not find that password." });
-        }
-
-        return res.status(200).json({ message: "Successfully deleted your password." });
-    }
-    catch (error)
-    {
-        console.error("deletepassword failed:", error.message);
-        return res.status(400).json({ error: "Could not delete the password." });
-    }
-})
+});
 
 router.get("/logout", async (req, res) =>
 {
@@ -236,12 +149,109 @@ router.get("/logout", async (req, res) =>
 
     res.clearCookie("jwtoken", COOKIE_OPTIONS);
     res.status(200).send("Logout");
-})
+});
+
+/* ════════════════ LEGACY (server-encrypted) ENTRIES ════════════════
+   Kept so older web builds keep working. New clients encrypt on the device
+   (see router/vault.js) and migrate these entries on first unlock. */
+
+router.post("/addnewpassword", authenticate, async (req, res) =>
+{
+    const platform = str(req.body.platform);
+    const platEmail = str(req.body.platEmail) || "NA";
+    const userPass = raw(req.body.userPass);
+
+    if (!platform || !userPass)
+    {
+        return res.status(400).json({ error: "Please fill the form properly" });
+    }
+
+    try
+    {
+        const { iv, encryptedPassword, tag } = encrypt(userPass);
+        await req.rootUser.addNewPassword(encryptedPassword, iv, platform, platEmail, tag);
+        return res.status(200).json({ message: "Successfully added your password." });
+    }
+    catch (error)
+    {
+        return serverError(res, "addnewpassword", error);
+    }
+});
+
+router.post("/updatepassword", authenticate, async (req, res) =>
+{
+    const { id } = req.body;
+    const platform = str(req.body.platform);
+    const platEmail = str(req.body.platEmail);
+    const userPass = raw(req.body.userPass);
+
+    if (!id || (!userPass && !platform && !platEmail))
+    {
+        return res.status(400).json({ error: "Please fill the form properly" });
+    }
+
+    try
+    {
+        const entry = req.rootUser.passwords.id(id);
+        if (!entry || entry.enc === "e2e")
+        {
+            return res.status(404).json({ error: "Could not find that password." });
+        }
+
+        if (userPass)
+        {
+            const { iv, encryptedPassword, tag } = encrypt(userPass);
+            entry.enc = "gcm";
+            entry.password = encryptedPassword;
+            entry.iv = iv;
+            entry.tag = tag;
+        }
+        if (platform) entry.platform = platform;
+        if (platEmail) entry.platEmail = platEmail;
+        entry.updatedAt = new Date();
+        await req.rootUser.save();
+
+        return res.status(200).json({ message: "Successfully updated your password." });
+    }
+    catch (error)
+    {
+        return serverError(res, "updatepassword", error);
+    }
+});
+
+router.post("/deletepassword", authenticate, async (req, res) =>
+{
+    const { id } = req.body;
+
+    if (!id)
+    {
+        return res.status(400).json({ error: "Could not find data" });
+    }
+
+    try
+    {
+        const result = await User.updateOne(
+            { _id: req.rootUser._id, "passwords._id": id },
+            { $pull: { passwords: { _id: id } } }
+        );
+
+        if (!result || result.matchedCount === 0)
+        {
+            return res.status(404).json({ error: "Could not find that password." });
+        }
+
+        return res.status(200).json({ message: "Successfully deleted your password." });
+    }
+    catch (error)
+    {
+        return res.status(400).json({ error: "Could not delete the password." });
+    }
+});
 
 /**
- * Decrypt one of the signed-in user's own passwords.
- * Accepts `{ id }` (preferred) or the legacy `{ iv, encryptedPassword }`
- * pair — either way the entry must belong to the caller.
+ * Decrypt one of the signed-in user's own legacy entries (so a new client can
+ * migrate it to end-to-end encryption). Accepts `{ id }` or the older
+ * `{ iv, encryptedPassword }` pair.
  */
 router.post("/decrypt", authenticate, (req, res) =>
 {
@@ -252,7 +262,7 @@ router.post("/decrypt", authenticate, (req, res) =>
         ? entries.find((p) => String(p._id) === String(id))
         : entries.find((p) => p.password === encryptedPassword && p.iv === iv);
 
-    if (!entry)
+    if (!entry || entry.enc === "e2e")
     {
         return res.status(404).json({ error: "Could not find that password." });
     }
@@ -260,21 +270,18 @@ router.post("/decrypt", authenticate, (req, res) =>
     try
     {
         res.set("Cache-Control", "no-store");
-        return res.status(200).send(decrypt(entry.password, entry.iv));
+        return res.status(200).send(decrypt(entry.password, entry.iv, entry.tag));
     }
     catch (error)
     {
         return res.status(500).json({ error: "Could not unseal that password." });
     }
-})
+});
 
-/**
- * Vault health: how strong each password is and which ones are reused.
- * Plain text never leaves the server here — only scores and ids.
- */
+/** Health of legacy entries only — end-to-end entries are scored on the device. */
 router.get("/insights", authenticate, (req, res) =>
 {
-    const entries = req.rootUser.passwords || [];
+    const entries = (req.rootUser.passwords || []).filter((e) => e.enc !== "e2e");
     const byValue = new Map();
     const items = [];
     const OLD_MS = 180 * 24 * 60 * 60 * 1000;
@@ -283,9 +290,9 @@ router.get("/insights", authenticate, (req, res) =>
     entries.forEach((entry) =>
     {
         let plain = null;
-        try { plain = decrypt(entry.password, entry.iv); } catch (e) { plain = null; }
+        try { plain = decrypt(entry.password, entry.iv, entry.tag); } catch (e) { plain = null; }
 
-        const strength = plain === null ? { score: 0, label: "Unreadable", bits: 0 } : estimate(plain);
+        const strength = plain === null ? { score: 0, label: "Unreadable" } : estimate(plain);
         const updated = entry.updatedAt || entry.createdAt;
         const item = {
             id: String(entry._id),
@@ -297,7 +304,6 @@ router.get("/insights", authenticate, (req, res) =>
             reused: false
         };
         items.push(item);
-
         if (plain)
         {
             if (!byValue.has(plain)) byValue.set(plain, []);
@@ -316,24 +322,24 @@ router.get("/insights", authenticate, (req, res) =>
     });
 
     const total = items.length;
-    const weak = items.filter((i) => i.score <= 1).length;
-    const reused = items.filter((i) => i.reused).length;
-    const strong = items.filter((i) => i.score >= 3 && !i.reused).length;
-    const old = items.filter((i) => i.old).length;
-
-    // 100 when every password is strong, unique and fresh.
     const score = total === 0
         ? 100
-        : Math.round(items.reduce((sum, i) =>
-        {
-            let s = (i.score / 4) * 100;
-            if (i.reused) s -= 40;
-            if (i.old) s -= 10;
-            return sum + Math.max(0, s);
-        }, 0) / total);
+        : Math.round(items.reduce((sum, i) => sum + Math.max(0, (i.score / 4) * 100 - (i.reused ? 40 : 0) - (i.old ? 10 : 0)), 0) / total);
 
     res.set("Cache-Control", "no-store");
-    return res.status(200).json({ score, total, weak, reused, strong, old, reusedGroups, items });
-})
+    return res.status(200).json({
+        score,
+        total,
+        weak: items.filter((i) => i.score <= 1).length,
+        reused: items.filter((i) => i.reused).length,
+        strong: items.filter((i) => i.score >= 3 && !i.reused).length,
+        old: items.filter((i) => i.old).length,
+        reusedGroups,
+        items
+    });
+});
+
+router.use(require("./vault"));
+router.use(require("./account"));
 
 module.exports = router;

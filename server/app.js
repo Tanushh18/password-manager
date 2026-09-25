@@ -1,14 +1,9 @@
 const express = require("express");
 const app = express();
-const dotenv = require("dotenv");
 const cors = require("cors");
-const cookieParser = require('cookie-parser');
+const helmet = require("helmet");
+const cookieParser = require("cookie-parser");
 const mongoose = require("mongoose");
-const { startKeepAlive } = require("./utils/keepAlive");
-
-// SETTING UP DOTENV
-dotenv.config({ path: "./config.env" });
-dotenv.config();
 
 const allowedOrigins = [
   'http://localhost:3000',
@@ -31,17 +26,11 @@ if (process.env.CLIENT_ORIGINS)
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
 
-// Basic security headers (no extra dependency)
-app.use((req, res, next) =>
-{
-  res.set({
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "no-referrer",
-    "Strict-Transport-Security": "max-age=15552000; includeSubDomains"
-  });
-  next();
-});
+// Security headers. This is a JSON API, so the strictest defaults apply.
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  referrerPolicy: { policy: "no-referrer" }
+}));
 
 app.use(cors({
   origin: function (origin, callback)
@@ -63,11 +52,7 @@ app.use(cors({
 }));
 app.use(cookieParser());
 
-const PORT = process.env.PORT || 8000;
 const STARTED_AT = new Date();
-
-// CONNECTING WITH DATABASE
-require("./db/connection");
 
 app.use(express.json({ limit: "1mb" }));
 
@@ -151,37 +136,6 @@ app.use((err, req, res, next) =>
     return res.status(err.status || 400).json({ error: "Invalid request body." });
   }
   res.status(500).json({ error: "There was an internal error. Sorry for the inconvenience." });
-});
-
-// LISTENING TO PORT 
-const server = app.listen(PORT, () =>
-{
-    console.log(`listening to port : http://localhost:${PORT}/`);
-    console.log(`health check      : http://localhost:${PORT}/health`);
-
-    // Self ping so free-tier hosting does not spin the instance down
-    startKeepAlive();
-});
-
-// KEEPING THE PROCESS ALIVE ON UNEXPECTED FAILURES
-process.on("unhandledRejection", (reason) =>
-{
-    console.error("Unhandled promise rejection:", reason);
-});
-
-process.on("uncaughtException", (error) =>
-{
-    console.error("Uncaught exception:", error);
-});
-
-// GRACEFUL SHUTDOWN
-["SIGTERM", "SIGINT"].forEach((signal) =>
-{
-    process.on(signal, () =>
-    {
-        console.log(`${signal} received, shutting down gracefully.`);
-        server.close(() => process.exit(0));
-    });
 });
 
 module.exports = app;
