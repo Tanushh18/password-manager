@@ -1,39 +1,32 @@
 import React, { useEffect, useState } from "react";
-import { useHistory } from "react-router-dom";
-import { useDispatch } from "react-redux";
-import { logoutUser } from "../../axios/instance";
-import { setAuth } from "../../redux/actions";
+import { useNavigate } from "react-router-dom";
+import { useVault } from "../../state/vault";
 import Ambience from "../../Components/Ambience/Ambience";
 import { HeartLine, LockLine } from "../../Components/Icons/Icons";
 import "./Logout.css";
 
 function Logout() {
-  const history = useHistory();
-  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const { logout: signOut } = useVault();
   const [done, setDone] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
     const logout = async () => {
-      try {
-        await logoutUser();
-      } catch (err) {
-        // Even if the call fails we still clear the session locally
-        console.error("Logout request failed:", err?.message);
-      } finally {
-        if (cancelled) return;
-        dispatch(setAuth(false));
-        setDone(true);
-        setTimeout(() => history.replace("/signin"), 1100);
-      }
+      // Revokes the session on the server and wipes the key from memory.
+      await signOut();
+      if (cancelled) return;
+      setDone(true);
+      setTimeout(() => navigate("/signin", { replace: true }), 1100);
     };
 
     logout();
     return () => {
       cancelled = true;
     };
-  }, [history, dispatch]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="farewell page">

@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { useSelector } from "react-redux";
+import { useVault } from "../../state/vault";
 import { ShieldLine, Menu, Close, Arrow } from "../Icons/Icons";
 import ThemeToggle from "../ThemeToggle/ThemeToggle";
 import "./Navbar.css";
 
 function Navbar() {
-  const isAuthenticated = useSelector((state) => state.isAuthenticated);
-  const name = useSelector((state) => state.name);
+  const { status, profile } = useVault();
+  const isAuthenticated = status === "ready" || status === "locked";
+  const name = profile?.name;
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const location = useLocation();
@@ -33,6 +34,7 @@ function Navbar() {
   const links = isAuthenticated
     ? [
         { to: "/", label: "Home" },
+        { to: "/settings", label: "Settings" },
         { to: "/logout", label: "Sign out" },
       ]
     : [
@@ -60,7 +62,7 @@ function Navbar() {
 
           <nav className="nav__links" aria-label="Primary">
             {links.map((link) => (
-              <NavLink key={link.to} exact to={link.to} className="nav__link" activeClassName="is-active">
+              <NavLink key={link.to} to={link.to} className={({ isActive }) => `nav__link ${isActive ? "is-active" : ""}`} end>
                 {link.label}
               </NavLink>
             ))}
@@ -106,10 +108,9 @@ function Navbar() {
           {links.map((link, i) => (
             <NavLink
               key={link.to}
-              exact
               to={link.to}
-              className="drawer__link"
-              activeClassName="is-active"
+              className={({ isActive }) => `drawer__link ${isActive ? "is-active" : ""}`}
+              end
               style={{ transitionDelay: `${0.06 + i * 0.06}s` }}
             >
               {link.label}

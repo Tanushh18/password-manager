@@ -8,3 +8,13 @@
 }
 
 .App > *:not(.nav) { flex: 1 0 auto; }
+
+/* Splash / waiting state */
+.splash { display: grid; place-items: center; text-align: center; }
+.splash__inner { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; }
+.splash__seal {
+  width: 72px; height: 72px; border-radius: 24px; display: grid; place-items: center; color: #fff;
+  background: var(--grad-brand); box-shadow: var(--shadow-rose-lg); margin-bottom: 0.6rem;
+}
+.splash__title { font-family: var(--font-serif); font-size: 1.5rem; font-weight: 700; color: var(--heading); }
+.splash__body { color: var(--text-muted); }

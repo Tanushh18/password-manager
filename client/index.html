@@ -23,14 +23,14 @@
         } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
       })();
     </script>
-    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <link rel="manifest" href="/manifest.json" />
 
     <!-- Icons -->
-    <link rel="icon" type="image/png" sizes="32x32" href="%PUBLIC_URL%/icons/icon-32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="%PUBLIC_URL%/icons/icon-16.png" />
-    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" sizes="any" />
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/icons/apple-touch-icon.png" />
-    <link rel="mask-icon" href="%PUBLIC_URL%/icons/icon-192.png" color="#8B5CF6" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16.png" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="mask-icon" href="/icons/icon-192.png" color="#8B5CF6" />
 
     <!-- Installed-app behaviour on iOS -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -46,7 +46,7 @@
       property="og:description"
       content="A glowing, private vault for every password you own."
     />
-    <meta property="og:image" content="%PUBLIC_URL%/icons/icon-512.png" />
+    <meta property="og:image" content="/icons/icon-512.png" />
     <meta name="twitter:card" content="summary" />
 
     <!-- Typography: Sora for display, Inter for reading, JetBrains Mono for secrets -->
@@ -60,5 +60,6 @@
   <body>
     <noscript>You need to enable JavaScript to run Aurelia.</noscript>
     <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

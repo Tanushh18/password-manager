@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { useSelector } from "react-redux";
+import { useVault } from "../../state/vault";
 import Ambience from "../../Components/Ambience/Ambience";
 import ServiceStatus from "../../Components/ServiceStatus/ServiceStatus";
 import { useParallax } from "../../hooks/useReveal";
@@ -18,23 +18,23 @@ import "./Home.css";
 const PROMISES = [
   {
     icon: <LockLine size={26} />,
-    title: "Sealed with AES-256",
-    body: "Every secret is encrypted before it touches the database, and only your signed-in session can unseal it.",
+    title: "Zero-knowledge encryption",
+    body: "Everything is encrypted on your device with AES-256-GCM. The key comes from your master password — we never see it.",
   },
   {
     icon: <ShieldLine size={26} />,
     title: "Live vault health",
-    body: "A real-time score spots weak, reused and stale passwords — and tells you exactly which ones to fix.",
+    body: "A real-time score flags weak, reused, old and breached passwords (via Have I Been Pwned) so you know what to fix.",
   },
   {
     icon: <Sparkle size={26} />,
-    title: "Generator built in",
-    body: "One tap creates a strong, unique password with a live strength meter, right where you need it.",
+    title: "2FA codes & two-factor login",
+    body: "Store authenticator secrets and see live codes next to each login — and protect your account with 2FA too.",
   },
   {
     icon: <KeyLine size={26} />,
     title: "Web + Android",
-    body: "The same vault on the web and in the Android app, with fingerprint unlock on your phone.",
+    body: "Folders, favourites, notes, encrypted backups and import from any password manager — on the web and on Android.",
   },
 ];
 
@@ -68,7 +68,10 @@ const ANDROID_URL =
   process.env.REACT_APP_ANDROID_URL || "https://github.com/tanushh18/password-manager/releases/latest";
 
 function Home() {
-  const { name, isAuthenticated, passwords } = useSelector((state) => state);
+  const { status, profile, items } = useVault();
+  const isAuthenticated = status === "ready" || status === "locked";
+  const name = profile?.name;
+  const passwords = status === "ready" ? items : profile ? { length: 0 } : [];
   const [mounted, setMounted] = useState(false);
   const visualRef = useRef(null);
 
@@ -92,7 +95,7 @@ function Home() {
           <div className={`hero__copy ${mounted ? "anim-fade-up" : ""}`}>
             <span className="hero__eyebrow pill">
               <Sparkle size={13} />
-              {isAuthenticated ? "Vault unlocked" : "Encrypted · Live · Free"}
+              {status === "ready" ? "Vault unlocked" : status === "locked" ? "Vault locked" : "Zero-knowledge · Live · Free"}
             </span>
 
             {isAuthenticated ? (
@@ -110,7 +113,9 @@ function Home() {
             )}
 
             <p className="lede hero__lede">
-              {isAuthenticated ? (
+              {status === "locked" ? (
+                <>Your vault is locked on this device. Unlock it with your master password to continue.</>
+              ) : isAuthenticated ? (
                 <>
                   Your vault is unlocked and waiting. {count > 0 ? (
                     <>

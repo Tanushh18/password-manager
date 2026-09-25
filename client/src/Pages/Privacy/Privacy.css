@@ -1,0 +1,7 @@
+.privacy__doc { padding: clamp(1.6rem, 5vw, 3rem); }
+.privacy__doc h1 { font-size: clamp(2rem, 5vw, 2.8rem); margin: 0.4rem 0 0.8rem; }
+.privacy__doc h2 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; }
+.privacy__doc p, .privacy__doc li { color: var(--text-muted); line-height: 1.75; }
+.privacy__doc ul { padding-left: 1.2rem; display: grid; gap: 0.45rem; }
+.privacy__doc strong { color: var(--heading); }
+.privacy__back { margin-top: 2rem; }

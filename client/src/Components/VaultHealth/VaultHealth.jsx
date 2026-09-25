@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ShieldLine, KeyLine, Sparkle, Close, Check } from "../Icons/Icons";
+import { ShieldLine, KeyLine, Close, Check, Alert, Repeat, Clock } from "../Icons/Icons";
 import "./VaultHealth.css";
 
 const R = 54;
@@ -34,7 +34,7 @@ function useCountUp(target, ms = 900) {
  * Live vault-health panel: overall score ring plus weak / reused / old counts.
  * Each count doubles as a filter for the grid below.
  */
-export default function VaultHealth({ insights, loading, filter, onFilter }) {
+export default function VaultHealth({ insights, loading, filter, onFilter, onBreachCheck, breachProgress, breachChecked }) {
   const score = insights?.score ?? 0;
   const shown = useCountUp(loading && !insights ? 0 : score);
   const tone = toneFor(score);
@@ -43,14 +43,17 @@ export default function VaultHealth({ insights, loading, filter, onFilter }) {
     { key: "all", label: "Total", value: insights?.total ?? 0, icon: <KeyLine size={16} />, tone: "accent" },
     { key: "strong", label: "Strong", value: insights?.strong ?? 0, icon: <Check size={16} />, tone: "ok" },
     { key: "weak", label: "Weak", value: insights?.weak ?? 0, icon: <Close size={16} />, tone: "danger" },
-    { key: "reused", label: "Reused", value: insights?.reused ?? 0, icon: <Sparkle size={16} />, tone: "warn" },
-    { key: "old", label: "Older than 6 mo", value: insights?.old ?? 0, icon: <ShieldLine size={16} />, tone: "cool" },
+    { key: "reused", label: "Reused", value: insights?.reused ?? 0, icon: <Repeat size={16} />, tone: "warn" },
+    { key: "breached", label: "Breached", value: breachChecked ? insights?.breached ?? 0 : "–", icon: <Alert size={16} />, tone: "danger" },
+    { key: "old", label: "Older than 6 mo", value: insights?.old ?? 0, icon: <Clock size={16} />, tone: "cool" },
   ];
 
   const tip = !insights
     ? "Scanning your vault…"
     : insights.total === 0
     ? "Add a password to see how healthy your vault is."
+    : insights.breached > 0
+    ? `${insights.breached} password${insights.breached === 1 ? " appears" : "s appear"} in known data breaches — change ${insights.breached === 1 ? "it" : "them"} first.`
     : insights.reused > 0
     ? `${insights.reused} password${insights.reused === 1 ? " is" : "s are"} used more than once — give each account its own.`
     : insights.weak > 0
@@ -89,6 +92,15 @@ export default function VaultHealth({ insights, loading, filter, onFilter }) {
       <div className="health__body">
         <span className="eyebrow">Vault health · live</span>
         <p className="health__tip">{tip}</p>
+        {onBreachCheck ? (
+          <div className="health__actions">
+            <button type="button" className="btn btn--ghost btn--sm" onClick={onBreachCheck} disabled={Boolean(breachProgress)}>
+              {breachProgress ? <span className="spinner spinner--accent" /> : <ShieldLine size={14} />}
+              {breachProgress ? `Checking ${breachProgress.done}/${breachProgress.total}…` : breachChecked ? "Re-run breach check" : "Check for breaches"}
+            </button>
+            <span className="health__note">Uses Have I Been Pwned with k-anonymity — your passwords never leave this device.</span>
+          </div>
+        ) : null}
 
         <div className="health__tiles" role="tablist" aria-label="Filter passwords">
           {tiles.map((t) => (

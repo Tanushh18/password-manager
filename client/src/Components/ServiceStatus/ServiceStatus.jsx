@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { checkHealth } from "../../axios/instance";
+import { checkHealth } from "../../api/client";
 import "./ServiceStatus.css";
 
 /**
