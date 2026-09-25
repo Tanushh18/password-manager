@@ -8,7 +8,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#07061A",
-    "description": "Aurelia \u2014 a glowing, private vault for every password. Same account and server as the Aurelia website.",
+    "description": "Aurelia — a glowing, private vault for every password. Same account and server as the Aurelia website.",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.aurelia.vault"
@@ -79,11 +79,18 @@
     "extra": {
       "apiServers": [
         "https://password-manager-server-xxdr.onrender.com",
+        "https://password-manager-server-8gvj.onrender.com",
+        "https://password-manager-server-xxdr.onrender.com",
         "https://password-manager-server-8gvj.onrender.com"
-      ]
+      ],
+      "router": {},
+      "eas": {
+        "projectId": "f87b3d32-c73b-4f9c-9fae-d1f186c5b3a4"
+      }
     },
     "runtimeVersion": {
       "policy": "appVersion"
-    }
+    },
+    "owner": "tanushhh18"
   }
 }
