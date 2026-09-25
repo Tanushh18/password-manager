@@ -8,7 +8,7 @@
    network and are never stored.
    ══════════════════════════════════════════════════════════ */
 
-const VERSION = "aurelia-v2";
+const VERSION = "aurelia-v3";
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
 
@@ -51,6 +51,7 @@ self.addEventListener("message", (event) => {
 });
 
 const isStaticAsset = (url) =>
+  url.pathname.startsWith("/assets/") ||
   url.pathname.startsWith("/static/") ||
   url.pathname.startsWith("/icons/") ||
   /\.(?:css|js|png|jpg|jpeg|svg|webp|ico|woff2?)$/.test(url.pathname);

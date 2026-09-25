@@ -1,5 +1,5 @@
 /**
- * Vault item model (shared shape with the Android app).
+ * Vault item model (same file in client/ and mobile/).
  * Everything here is encrypted as one blob on the device before upload.
  */
 export const emptyItem = () => ({
@@ -43,12 +43,10 @@ export const fromLegacy = (entry, password) =>
 export function domainOf(url) {
   const text = clean(url);
   if (!text) return "";
-  try {
-    const u = new URL(/^[a-z]+:\/\//i.test(text) ? text : `https://${text}`);
-    return u.hostname.replace(/^www\./, "");
-  } catch (e) {
-    return "";
-  }
+  // Regex rather than URL(): React Native's URL has no reliable hostname.
+  const m = text.match(/^(?:[a-z][a-z0-9+.-]*:\/\/)?(?:[^@/\s]*@)?([^/:?#\s]+)/i);
+  const host = m ? m[1].toLowerCase().replace(/^www\./, "") : "";
+  return host.includes(".") ? host : "";
 }
 
 export const openableUrl = (url) => {

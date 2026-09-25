@@ -1,66 +1,82 @@
 # Aurelia for Android
 
-The Aurelia password vault as a native Android app (Expo SDK 57 + Expo Router).
-It talks to **the same Express API and MongoDB** as the website, so an account
-created on either works on both.
+The Aurelia vault as a native Android app (Expo SDK 57, Expo Router, React Native 0.86).
+It uses **the same API, database and encryption format** as the website, so one account works on both.
 
 ## Features
 
-- **Aurora UI** — animated aurora background, glass cards, gradient buttons,
-  springy haptic interactions, dark / light / system themes
-- **Vault** — search, filter (weak / reused / old), sort, pull to refresh,
-  reveal (auto-hides after 20s), one-tap copy (clipboard wiped after 30s),
-  add / edit / delete
-- **Live vault health** — animated score ring driven by the server's `/insights`
-  endpoint (strength, reuse and age — plaintext never leaves the server)
-- **Generator** — random passwords (8–48 chars, toggles) or memorable passphrases,
-  live strength meter, "save to vault"
-- **Biometric lock** — fingerprint / face unlock, re-locks after 30s in the background
-- **Live server status** — pings `/health`, fails over between the two API servers
-- Session token stored in the Android Keystore via `expo-secure-store`
+- **Zero-knowledge encryption** — PBKDF2-SHA256 (600k rounds) and AES-256-GCM run natively
+  (`react-native-quick-crypto` / OpenSSL). The key is derived on the phone and never sent anywhere.
+- **Biometric unlock** — the vault key is stored in the Android Keystore and released only after a
+  fingerprint / face check; auto-lock when the app is backgrounded (30 s by default).
+- **Rich items** — website, username, password, notes, folders, favourites, and **2FA secrets with live
+  codes** (paste a setup key, or scan the QR code with the camera).
+- **Vault health** — weak, reused, old and **breached** passwords (Have I Been Pwned, k-anonymity).
+- **Generator** — random passwords (8–48 chars) or memorable passphrases.
+- **Account** — two-factor login with recovery codes, change master password (full re-key), sign out
+  other devices, delete account.
+- **Your data** — encrypted backup and CSV export through the share sheet; import Aurelia backups or
+  Chrome / Bitwarden / 1Password / LastPass CSVs.
+- **Offline** — the last synced (encrypted) vault opens read-only without a connection.
+- **Privacy** — screenshots blocked and the app hidden in recents; copied secrets are wiped from the
+  clipboard after 30 s; revealed passwords hide after 20 s.
+- **Aurora UI** — animated aurora background, glass cards, haptics, dark / light / system theme.
 
-## Run it locally
+## Develop
+
+Native modules (crypto, biometrics, camera) need a development build, not Expo Go:
 
 ```sh
 cd mobile
 npm install
-npx expo start          # then press "a" for an Android emulator / device
+npx expo run:android                                  # builds and installs a dev build
+EXPO_PUBLIC_API_URLS=http://192.168.1.20:8000 npx expo start --dev-client
 ```
 
-Biometrics and secure storage need a development build (`npx expo run:android`)
-or an EAS build; Expo Go works for everything else.
+The default API servers are in `app.json → expo.extra.apiServers`.
 
-Point the app at another API (for local development):
+## Build an installable app
+
+### With EAS (recommended)
 
 ```sh
-EXPO_PUBLIC_API_URLS=http://192.168.1.20:8000 npx expo start
+export EXPO_TOKEN=<token from https://expo.dev/settings/access-tokens>
+npx eas-cli@latest init --non-interactive --force   # first time: creates/links the EAS project
+npm run build:apk    # installable .apk (profile "preview")
+npm run build:aab    # Play Store bundle (profile "production")
 ```
 
-The default servers live in `app.json → expo.extra.apiServers`.
+Or add `EXPO_TOKEN` as a GitHub secret and run the **Android build (EAS)** workflow.
+Once the project is linked, `app.config.js` turns on over-the-air updates (`eas update`), and the
+app's *Settings → Check for updates* pulls them.
 
-## Build an APK with EAS
+### Locally (Android SDK + JDK 17)
 
 ```sh
-npm install -g eas-cli
-export EXPO_TOKEN=<your token from expo.dev/settings/access-tokens>
-cd mobile
-eas init --non-interactive --force     # first time: creates the EAS project
-npm run build:apk                      # installable .apk (profile "preview")
-npm run build:aab                      # Play Store bundle (profile "production")
+npx expo prebuild --platform android
+cd android && ./gradlew assembleRelease     # app/build/outputs/apk/release/app-release.apk
 ```
 
-Or run the **Android build (EAS)** GitHub Action after adding `EXPO_TOKEN` as a
-repository secret. The build link appears on expo.dev under your account.
+Local release builds are signed with the debug key; use EAS (or your own keystore) for the Play Store.
+
+## Play Store checklist
+
+- Privacy policy: `https://<your-website>/privacy` (page included in the website).
+- Data safety: account email + name (for sign-in); vault contents are end-to-end encrypted;
+  camera used only for scanning 2FA QR codes; no ads, analytics or tracking.
+- Build with `npm run build:aab` and submit with `npx eas-cli submit -p android`.
 
 ## Structure
 
 ```
-src/app/            routes (Expo Router)
-  _layout.js        providers, fonts, auth guards (signed out / locked / ready)
-  auth/             welcome, login, signup
-  lock.js           biometric lock screen
-  (tabs)/           vault, health, generator, settings + floating tab bar
-  editor.js         add / edit modal
-src/components/     Aurora background, UI kit, cards, ring, toast, icons
-src/lib/            api client, session/vault state, theme tokens, strength
+src/app/              routes (Expo Router)
+  _layout.js          providers, fonts, auth guards (signed out / locked / ready), FLAG_SECURE
+  auth/               welcome, sign in (+2FA), sign up
+  lock.js             biometric / master password unlock
+  (tabs)/             vault, health, generator, settings + floating tab bar
+  editor.js           add / edit item
+  scan.js             camera QR scanner for 2FA secrets
+  account/            two-factor, master password, data (export/import), delete
+src/components/       UI kit, item card, live TOTP code, aurora background…
+src/lib/              api, vault state, cryptoCore (+ native / web adapters), items, health, breach
 ```

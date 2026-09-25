@@ -1,161 +1,111 @@
 # Aurelia — Aurora Password Vault
 
-A password manager on the MERN stack with a website **and a native Android app** that share one API
-and one database. Every secret is encrypted with AES-256 before it reaches the database.
+A zero-knowledge password manager with a website **and a native Android app** that share one API
+and one database. Everything in your vault is encrypted **on your device** with a key derived from your
+master password — the server only ever stores ciphertext.
 
-## What is inside
+[![CI](https://github.com/Tanushh18/password-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Tanushh18/password-manager/actions/workflows/ci.yml)
 
-* **Aurora interface** — midnight glass, animated northern-light gradients, a twinkling star field,
-  a light that follows your pointer, gradient text, and a dark / light theme toggle.
-* **Live vault health** — a real-time score (0–100) with weak, reused and stale password counts,
-  strength badges on every entry, and filters to fix them fast. Scored server side, so plaintext
-  never leaves the API.
-* **Built-in generator** — adjustable length, live strength meter (bits of entropy).
-* **Android app** (`mobile/`) — Expo app with biometric unlock, one-tap copy with clipboard
-  auto-clear, generator, passphrases and the same health score. See [`mobile/README.md`](mobile/README.md).
-* **Installable PWA** — add the website to your home screen; it has its own icon and an offline page.
-* **Live service status** — every page shows the real state of the API, read from `/health`.
-* **A health endpoint for cron jobs** — so free-tier hosting never goes to sleep.
+## Features
 
-### Design system
+| | Web | Android |
+| --- | :---: | :---: |
+| End-to-end encryption (PBKDF2-SHA256 600k → AES-256-GCM) | ✓ | ✓ (native) |
+| Logins with website, username, password, notes, folders, favourites | ✓ | ✓ |
+| Stored 2FA secrets with live codes | ✓ | ✓ + camera QR scan |
+| Vault health: weak, reused, old, **breached** (Have I Been Pwned, k-anonymity) | ✓ | ✓ |
+| Password + passphrase generator with strength meter | ✓ | ✓ |
+| Two-factor login (TOTP) with recovery codes | ✓ | ✓ |
+| Change master password (full re-key), sign out other devices, delete account | ✓ | ✓ |
+| Encrypted backup + CSV export; import from Aurelia, Chrome, Bitwarden, 1Password, LastPass | ✓ (+ Excel) | ✓ |
+| Auto-lock after inactivity | ✓ | ✓ |
+| Biometric unlock (key in Android Keystore) | – | ✓ |
+| Offline read-only vault | PWA shell | ✓ |
+| Screenshot blocking | – | ✓ |
+| Dark / light theme, opt-in website icons | ✓ | ✓ |
 
-| Role | Dark | Light |
-| --- | --- | --- |
-| Background | `#07061A` | `#F6F4FF` |
-| Primary violet | `#8B5CF6` | `#7C3AED` |
-| Magenta | `#EC4899` | `#DB2777` |
-| Cyan | `#22D3EE` | `#0891B2` |
-| Success mint | `#34D399` | `#10B981` |
-| Warning amber | `#FBBF24` | `#D97706` |
-| Danger rose | `#F43F5E` | `#E11D48` |
+Existing accounts from before end-to-end encryption are upgraded automatically: on the first sign-in with
+an updated client, the vault key is created and every old entry is re-encrypted on the device.
 
-Web tokens live in `client/src/styles/theme.css`, app tokens in `mobile/src/lib/theme.js`.
-Typography is Sora (display), Inter (body) and JetBrains Mono (secrets).
+See [`docs/SECURITY.md`](docs/SECURITY.md) for the full security design.
+
+## Repository layout
+
+```
+server/   Express 5 + Mongoose 9 API            npm test  → API tests (in-memory MongoDB)
+client/   Vite + React 19 website (PWA)          npm test  → crypto interop, importers, health
+mobile/   Expo SDK 57 Android app (Expo Router)  see mobile/README.md
+```
+
+## Running locally
+
+```sh
+# API
+cd server && npm install
+cp config.env.example config.env   # or create it, see below
+npm run dev:start                  # http://localhost:8000
+
+# Website
+cd client && npm install
+VITE_API_URLS=http://localhost:8000 npm run dev   # http://localhost:3000
+
+# Android app
+cd mobile && npm install
+EXPO_PUBLIC_API_URLS=http://<your-computer-ip>:8000 npx expo run:android
+```
+
+`server/config.env`:
+
+```sh
+MONGO_URL=<MongoDB connection string>          # DATABASE / MONGODB_URI also accepted
+SECRET_KEY=<long random string for signing sessions>
+CRYPTO_SECRET_KEY=<long random string>         # seals 2FA secrets + legacy entries
+CLIENT_ORIGINS=<optional extra CORS origins, comma separated>
+SELF_URL=<optional public URL, enables keep-alive self ping>
+```
+
+Use the **same** `SECRET_KEY` and `CRYPTO_SECRET_KEY` on every server that shares a database.
+
+## Deploying
+
+* **API** — `render.yaml` is a Render Blueprint (`npm start` runs `server.js`, health check `/health`).
+* **Website** — static site: build command `npm install && npm run build`, publish directory `client/build`,
+  and add a rewrite of `/*` to `/index.html`. Set `VITE_API_URLS` if your API lives elsewhere.
+* **Android** — run the *Android build (EAS)* GitHub Action after adding an `EXPO_TOKEN` secret,
+  or build locally (see `mobile/README.md`). `REACT_APP_ANDROID_URL` / `VITE_ANDROID_URL` sets the
+  website's download link.
 
 ## Keeping the server awake
 
-The API exposes a public, unauthenticated health check that an external cron job
-(cron-job.org, UptimeRobot, a Render cron, ...) can ping on a schedule:
+`GET /health` is public and dependency free so an uptime pinger (cron-job.org, UptimeRobot…) can keep a
+free instance warm. `/healthz`, `/api/health`, `HEAD /health`, `/ping` and `/` also answer 200. With
+`SELF_URL` (or Render's `RENDER_EXTERNAL_URL`) set, the server pings itself every 14 minutes
+(`KEEP_ALIVE=false` disables it, `KEEP_ALIVE_MINUTES` changes the interval).
 
-```
-GET https://<your-api>/health
-```
+## API
 
-```json
-{
-  "status": "ok",
-  "service": "password-manager-api",
-  "uptime": 128.42,
-  "database": { "state": "connected", "connected": true },
-  "memory": { "rssMb": 61.6, "heapUsedMb": 14.9 }
-}
-```
-
-`/healthz`, `/api/health`, `HEAD /health`, `/ping` and `/` all answer 200 as well, so any pinger works.
-
-The server can also keep itself awake. Set `SELF_URL` (Render sets `RENDER_EXTERNAL_URL` for you) and
-it pings its own `/health` every 14 minutes:
-
-| Variable | Meaning |
-| --- | --- |
-| `SELF_URL` | Public URL of the API, e.g. `https://your-api.onrender.com` |
-| `KEEP_ALIVE` | `false` disables the self ping |
-| `KEEP_ALIVE_MINUTES` | Interval in minutes (default `14`) |
-| `CLIENT_ORIGINS` | Extra allowed CORS origins, comma separated |
-
-## Installing Aurelia on a phone
-
-1. Open the site in Chrome (Android) or Safari (iOS).
-2. **Android / desktop Chrome:** accept the "Keep Aurelia on your phone" invitation, or use
-   *Menu → Install app*.
-3. **iOS Safari:** tap *Share → Add to Home Screen*.
-
-The service worker (`client/public/service-worker.js`) caches only the app shell and static assets.
-API traffic is never cached — passwords always come fresh from the server.
-
-<a id="setting">
-<h2>Setting up the project</h2>
-</a>
-Go to the folder in which you want to clone the project and run the following command
-
-```bash
-git clone https://github.com/rockingrohit9639/password-manager-mern.git
-```
-
-### Setting up the server
-To setup the server in your system run the following commands
-
-```sh
-cd server
-npm install
-```
-
-After installing all the server dependencies run the server using the following command 
-
-```sh
-npm run dev:start
-```
-Now, the server will be up and running
-
-**Note :- You have to configure all the environment variables by creating a config.env file in root server folder.
-
-Structure of the config.env file
-
-```js
-MONGO_URL=<your MongoDB URI>
-SECRET_KEY=<your secret key for hashing passwords>
-CRYPTO_SECRET_KEY=<your secret key for encrypting passwords while saving in db>
-SELF_URL=<optional: public URL of this API, enables the keep-alive self ping>
-CLIENT_ORIGINS=<optional: extra allowed origins, comma separated>
-```
-
-`DATABASE` and `MONGODB_URI` are accepted as aliases for `MONGO_URL`.
-
-### Setting up the client
-Go to the client folder and run 
-
-```sh
-npm install
-```
-All the dependencies should be installed. Now, you just have to start the React server by following command
-
-```sh
-npm start
-```
-
-Point the client at a different API by setting `REACT_APP_API_URL` before building:
-
-```sh
-REACT_APP_API_URL=http://localhost:8000 npm start
-```
-
-### You also have to keep the mongodb cluster open in order to run the app properly.
-
-## API routes
+"session" = the `jwtoken` httpOnly cookie (website) or `Authorization: Bearer <token>` (app; the token is
+returned by `/login` when the body has `"client": "mobile"`).
 
 | Method | Route | Auth | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/health` | – | Health check for uptime cron jobs |
-| `POST` | `/register` | – | Create an account |
-| `POST` | `/login` | – | Sign in, sets the `jwtoken` cookie |
-| `GET` | `/logout` | – | Clear the session cookie |
-| `GET` | `/authenticate` | session | Current user and their stored passwords (no hashes or tokens) |
-| `POST` | `/addnewpassword` | session | Store a new encrypted password |
-| `POST` | `/updatepassword` | session | Change the password, platform or email on an entry |
-| `POST` | `/deletepassword` | session | Remove an entry |
-| `POST` | `/decrypt` | session | Decrypt one of **your own** entries (`{ id }`) |
-| `GET` | `/insights` | session | Vault health: score, strength, reuse and age per entry |
-
-"session" means either the `jwtoken` cookie (website) or an `Authorization: Bearer <token>`
-header (Android app, which gets its token by sending `"client": "mobile"` to `/login`).
-
-## Security notes
-
-* Login and register are rate limited (20 attempts / 15 min per IP).
-* Session JWTs expire after 30 days; each account keeps at most 10 active sessions and
-  `/logout` revokes the current one on the server.
-* The web client auto-hides revealed passwords after 20s; the app also clears copied
-  passwords from the clipboard after 30s.
+| `GET` | `/health` | – | Health check |
+| `POST` | `/register` | – | Create an account (`kdf` + `keyCheck` set up end-to-end encryption) |
+| `POST` | `/login` | – | Sign in; `code` for two-factor; returns the vault's KDF settings |
+| `GET` | `/logout` | session | Revoke this session |
+| `GET` | `/authenticate` | session | Profile, vault settings and encrypted items |
+| `POST` | `/vault/setup` | session | One-time key setup for pre-E2E accounts |
+| `POST` | `/vault/items` | session | Add an encrypted item |
+| `POST` | `/vault/items/bulk` | session | Import up to 1000 encrypted items |
+| `PUT` | `/vault/items/:id` | session | Replace an item (also converts a legacy entry) |
+| `DELETE` | `/vault/items/:id` | session | Delete an item |
+| `POST` | `/vault/migrate` | session | Convert legacy entries to encrypted blobs |
+| `POST` | `/account/profile` | session | Rename |
+| `POST` | `/account/password` | session + password (+2FA) | Change master password, atomic re-key |
+| `POST` | `/account/logout-all` | session | Sign out every other device |
+| `POST` | `/account/delete` | session + password (+2FA) | Delete account and vault |
+| `POST` | `/2fa/setup` · `/2fa/enable` · `/2fa/disable` · `/2fa/recovery-codes` | session | Two-factor login |
+| `POST` | `/decrypt`, `/addnewpassword`, `/updatepassword`, `/deletepassword`; `GET /insights` | session | Legacy routes for old clients |
 
 # How to contribute?
 This project is completely open source. Everyone's contribution is welcome here.
@@ -176,7 +126,7 @@ Right-click there and click on git bash. A terminal window will pop up
 Type the command git clone <your-fork-url>.git and hit enter.
 Wait for few seconds till the project gets copied
   
-### Setup the project given at the top of this readme file. [here](#setting)
+### Set up the project as described in "Running locally" above.
 
 ### 🚩 Pushing your changes :
 After doing the changes, and when tests are successfully passing you can push your changes to remote.

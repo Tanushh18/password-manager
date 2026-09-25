@@ -65,7 +65,7 @@ function Scramble({ length = 12, every = 90 }) {
 }
 
 const ANDROID_URL =
-  process.env.REACT_APP_ANDROID_URL || "https://github.com/tanushh18/password-manager/releases/latest";
+  import.meta.env.VITE_ANDROID_URL || import.meta.env.REACT_APP_ANDROID_URL || "https://github.com/tanushh18/password-manager/releases/latest";
 
 function Home() {
   const { status, profile, items } = useVault();
