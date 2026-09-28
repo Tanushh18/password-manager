@@ -22,7 +22,7 @@ function Navbar() {
   }, []);
 
   /* Close the drawer on navigation + lock body scroll while it is open */
-  useEffect(() => setOpen(false), [location.pathname]);
+  useEffect(() => { setOpen(false); }, [location.pathname]);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
