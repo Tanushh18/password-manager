@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { pwnedCount } from "../src/lib/breach.js";
 import { computeHealth } from "../src/lib/health.js";
 import { parseCSV, rowsToItems, toCSV, domainOf } from "../src/lib/items.js";
-import { parseEnvBlock } from "../src/lib/projectItems.js";
+import { parseEnvBlock, rowsToProjects } from "../src/lib/projectItems.js";
 
 test("pwnedCount sends only a 5-char prefix and parses padded responses", async () => {
   const calls = [];
@@ -87,4 +87,24 @@ test("parseEnvBlock ignores blank input and non KEY=VALUE lines", () => {
   assert.deepEqual(parseEnvBlock(""), []);
   assert.deepEqual(parseEnvBlock("   \n # just a comment\n"), []);
   assert.deepEqual(parseEnvBlock("not a valid line"), []);
+});
+
+test("rowsToProjects maps the Excel template and attaches matching databases", () => {
+  const projectRows = [
+    { name: "WeCode", description: "Coding platform", status: "deployed", priority: "high", hosting_provider: "Render", hosting_account_email: "host@example.com" },
+    { name: "", description: "example row with no name should be skipped" },
+  ];
+  const databaseRows = [
+    { project_name: "WeCode", label: "main", provider: "MongoDB Atlas", type: "Mongo", account_email: "a@b.com", notes: "cluster0" },
+    { project_name: "Someone Else", label: "orphan", provider: "Postgres", type: "sql" },
+  ];
+
+  const projects = rowsToProjects(projectRows, databaseRows);
+  assert.equal(projects.length, 1);
+  assert.equal(projects[0].name, "WeCode");
+  assert.equal(projects[0].status, "deployed");
+  assert.equal(projects[0].hostingProvider, "Render");
+  assert.equal(projects[0].databases.length, 1);
+  assert.equal(projects[0].databases[0].provider, "MongoDB Atlas");
+  assert.deepEqual(projects[0].envVars, []);
 });

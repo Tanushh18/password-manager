@@ -324,6 +324,22 @@ export function VaultProvider({ children }) {
     setProjects((list) => list.filter((p) => p.id !== id));
   }, []);
 
+  const importProjects = useCallback(async (list, onProgress) => {
+    const key = requireKey();
+    const prepared = list.map((p) => normalizeProject(p));
+    const created = [];
+    for (let i = 0; i < prepared.length; i += 500) {
+      const chunk = prepared.slice(i, i + 500);
+      const payload = [];
+      for (const p of chunk) payload.push({ data: await C.encryptJSON(key, p) });
+      const res = await api.createProjects(payload);
+      res.data.items.forEach((entry, j) => created.push(toProject(entry, chunk[j])));
+      onProgress?.(Math.min(prepared.length, i + chunk.length), prepared.length);
+    }
+    setProjects((list2) => [...created, ...list2]);
+    return created.length;
+  }, []);
+
   const importItems = useCallback(async (list, onProgress) => {
     const key = requireKey();
     const now = new Date().toISOString();
@@ -441,11 +457,12 @@ export function VaultProvider({ children }) {
       addProject,
       updateProject: updateProjectEntry,
       deleteProject: deleteProjectEntry,
+      importProjects,
     };
   }, [
     status, profile, items, broken, breaches, breachProgress, prefs, setPrefs, login, register, unlock, lock, logout,
     addItem, updateItem, toggleFavorite, deleteItem, importItems, runBreachCheck, changeMasterPassword, refreshProfile,
-    projects, projectsBroken, addProject, updateProjectEntry, deleteProjectEntry,
+    projects, projectsBroken, addProject, updateProjectEntry, deleteProjectEntry, importProjects,
   ]);
 
   return <VaultContext.Provider value={value}>{children}</VaultContext.Provider>;

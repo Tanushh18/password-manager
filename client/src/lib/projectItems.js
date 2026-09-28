@@ -75,6 +75,61 @@ export function normalizeProject(raw = {}) {
   return next;
 }
 
+// Excel header (snake_case, matches the project-tracker template) -> project field.
+const COLUMN_MAP = {
+  name: "name", description: "description", category: "category", tech_stack: "techStack",
+  status: "status", priority: "priority", tags: "tags",
+  repo_url: "repoUrl", repo_account: "repoAccount", live_url: "liveUrl", custom_domain: "customDomain",
+  hosting_provider: "hostingProvider", hosting_account_email: "hostingAccountEmail",
+  hosting_account_label: "hostingAccountLabel", hosting_service_name: "hostingServiceName",
+  hosting_plan: "hostingPlan", hosting_region: "hostingRegion", auto_deploy_branch: "autoDeployBranch",
+  firebase_project_id: "firebaseProjectId", firebase_account_email: "firebaseAccountEmail",
+  google_cloud_project_id: "googleCloudProjectId", google_cloud_account_email: "googleCloudAccountEmail",
+  play_store_package_name: "playStorePackageName", play_store_account_email: "playStoreAccountEmail",
+  play_store_url: "playStoreUrl", play_store_status: "playStoreStatus",
+  dns_provider: "dnsProvider", dns_account_email: "dnsAccountEmail",
+  monitoring_provider: "monitoringProvider", monitoring_account_email: "monitoringAccountEmail",
+  last_deployed_at: "lastDeployedAt", notes: "notes",
+};
+
+const cell = (row, key) => String(row[key] ?? "").trim();
+
+/**
+ * Turns rows from the project-tracker Excel template into project objects,
+ * matching Databases rows to their project by name. Runs entirely in the
+ * browser — nothing here touches the network.
+ *   projectRows: rows from the "Projects" sheet
+ *   databaseRows: rows from the "Databases" sheet (project_name, label, provider, type, account_email, notes)
+ */
+export function rowsToProjects(projectRows = [], databaseRows = []) {
+  const projects = new Map();
+
+  projectRows
+    .filter((row) => cell(row, "name"))
+    .forEach((row) => {
+      const project = emptyProject();
+      Object.entries(COLUMN_MAP).forEach(([col, field]) => { project[field] = cell(row, col); });
+      if (!project.status) project.status = "planning";
+      if (!project.priority) project.priority = "medium";
+      projects.set(project.name, project);
+    });
+
+  databaseRows.forEach((row) => {
+    const project = projects.get(cell(row, "project_name"));
+    if (!project) return;
+    if (!cell(row, "provider") && !cell(row, "type") && !cell(row, "label")) return;
+    project.databases.push({
+      label: cell(row, "label"),
+      provider: cell(row, "provider"),
+      type: cell(row, "type"),
+      accountEmail: cell(row, "account_email"),
+      notes: cell(row, "notes"),
+    });
+  });
+
+  return [...projects.values()];
+}
+
 /**
  * Parses a raw .env-style block — exactly what you get pasting from Render's
  * Environment tab (or any KEY=VALUE dump) — into { name, value } rows.

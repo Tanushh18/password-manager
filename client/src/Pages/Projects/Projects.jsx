@@ -4,7 +4,8 @@ import Ambience from "../../Components/Ambience/Ambience";
 import Reveal from "../../Components/Reveal/Reveal";
 import ProjectCard from "../../Components/Project/ProjectCard";
 import ProjectEditor from "../../Components/Project/ProjectEditor";
-import { ShieldLine, Globe, Plus, Search, Grid, Alert } from "../../Components/Icons/Icons";
+import ProjectImportModal from "../../Components/Project/ProjectImportModal";
+import { ShieldLine, Globe, Plus, Search, Grid, Alert, Upload } from "../../Components/Icons/Icons";
 import { useVault } from "../../state/vault";
 import { STATUS_LABEL } from "../../lib/projectItems";
 import "../Passwords/Passwords.css";
@@ -13,11 +14,12 @@ import "./Projects.css";
 const STATUSES = ["planning", "in_progress", "deployed", "broken", "paused", "archived"];
 
 export default function Projects() {
-  const { profile, projects, projectsBroken, addProject, updateProject, deleteProject } = useVault();
+  const { profile, projects, projectsBroken, addProject, updateProject, deleteProject, importProjects } = useVault();
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("__all");
   const [editing, setEditing] = useState(null); // null | "new" | project
+  const [importing, setImporting] = useState(false);
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -90,6 +92,9 @@ export default function Projects() {
               <span className="btn__sheen" />
               <Plus size={15} /> New project
             </button>
+            <button className="btn btn--ghost" onClick={() => setImporting(true)}>
+              <Upload size={15} /> Import
+            </button>
           </div>
         </div>
 
@@ -117,6 +122,9 @@ export default function Projects() {
             <div className="empty__actions">
               <button className="btn btn--primary btn--lg" onClick={() => setEditing("new")}>
                 <span className="btn__sheen" /> Add your first project
+              </button>
+              <button className="btn btn--ghost btn--lg" onClick={() => setImporting(true)}>
+                <Upload size={15} /> Import from Excel
               </button>
             </div>
           </Reveal>
@@ -152,6 +160,7 @@ export default function Projects() {
           toast.success("Deleted.");
         }}
       />
+      <ProjectImportModal open={importing} onClose={() => setImporting(false)} onImport={importProjects} />
     </div>
   );
 }
