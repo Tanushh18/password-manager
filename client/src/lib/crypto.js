@@ -1,5 +1,5 @@
 /**
- * Aurelia end-to-end encryption (browser, WebCrypto).
+ * Stashr end-to-end encryption (browser, WebCrypto).
  *
  * The vault key is derived from the master password on the device and never
  * sent to the server. Format is shared with the Android app
@@ -144,7 +144,7 @@ export async function exportBackup(items, exportPassword) {
 
 export async function importBackup(text, exportPassword) {
   const file = JSON.parse(text);
-  if (file.format !== "aurelia-backup") throw new Error("That isn't an Aurelia backup file.");
+  if (file.format !== "aurelia-backup") throw new Error("That isn't an Stashr backup file.");
   const { key } = await deriveKey(exportPassword, file.kdf.salt, file.kdf.iterations);
   try {
     return (await decryptJSON(key, file.data)).items || [];

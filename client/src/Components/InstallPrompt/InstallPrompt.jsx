@@ -23,7 +23,7 @@ const dismissedRecently = () => {
 };
 
 /**
- * "Keep Aurelia on your phone" — the install invitation.
+ * "Keep Stashr on your phone" — the install invitation.
  * Chrome/Edge/Android get the real prompt through beforeinstallprompt;
  * iOS Safari gets the Share → Add to Home Screen instructions instead.
  */
@@ -88,13 +88,13 @@ export default function InstallPrompt() {
   if (!visible) return null;
 
   return (
-    <div className="install" role="dialog" aria-label="Install Aurelia">
+    <div className="install" role="dialog" aria-label="Install Stashr">
       <span className="install__mark">
         <HeartLine size={18} />
       </span>
 
       <div className="install__copy">
-        <p className="install__title">Keep Aurelia on your phone</p>
+        <p className="install__title">Keep Stashr on your phone</p>
         <p className="install__body">
           {iosHint ? (
             <>

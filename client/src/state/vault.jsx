@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import * as api from "../api/client";
 import * as C from "../lib/crypto";
 import { fromLegacy, normalizeItem } from "../lib/items";
+import { normalizeProject } from "../lib/projectItems";
 import { computeHealth } from "../lib/health";
 import { pwnedCount } from "../lib/breach";
 
@@ -37,6 +38,13 @@ const toItem = (entry, fields) => ({
   updatedAt: entry.updatedAt,
 });
 
+const toProject = (entry, fields) => ({
+  ...normalizeProject(fields),
+  id: entry._id,
+  createdAt: entry.createdAt,
+  updatedAt: entry.updatedAt,
+});
+
 export function VaultProvider({ children }) {
   const [status, setStatus] = useState("checking");
   const [profile, setProfile] = useState(null); // /authenticate payload minus entries
@@ -45,8 +53,11 @@ export function VaultProvider({ children }) {
   const [breaches, setBreaches] = useState({});
   const [breachProgress, setBreachProgress] = useState(null);
   const [prefs, setPrefsState] = useState(readPrefs);
+  const [projects, setProjects] = useState([]);
+  const [projectsBroken, setProjectsBroken] = useState(0);
   const keyRef = useRef(null);
   const entriesRef = useRef([]);
+  const projectEntriesRef = useRef([]);
 
   const setPrefs = useCallback((patch) => {
     setPrefsState((p) => {
@@ -62,10 +73,11 @@ export function VaultProvider({ children }) {
 
   const loadProfile = useCallback(async () => {
     const res = await api.checkAuthenticated();
-    const { passwords, ...rest } = res.data;
+    const { passwords, projects: projectEntries, ...rest } = res.data;
     entriesRef.current = passwords || [];
+    projectEntriesRef.current = projectEntries || [];
     setProfile(rest);
-    return { profile: rest, entries: passwords || [] };
+    return { profile: rest, entries: passwords || [], projectEntries: projectEntries || [] };
   }, []);
 
   /* ── Boot ── */
@@ -84,10 +96,27 @@ export function VaultProvider({ children }) {
     setItems([]);
     setBreaches({});
     setBroken(0);
+    setProjects([]);
+    setProjectsBroken(0);
+  }, []);
+
+  /* Decrypts every end-to-end project entry (no legacy format here). */
+  const openProjectsWithKey = useCallback(async (key, projectEntries) => {
+    let failed = 0;
+    const decrypted = [];
+    for (const entry of projectEntries) {
+      try {
+        decrypted.push(toProject(entry, await C.decryptJSON(key, entry.data)));
+      } catch (e) {
+        failed += 1;
+      }
+    }
+    setProjects(decrypted);
+    setProjectsBroken(failed);
   }, []);
 
   /* Decrypts every end-to-end entry and migrates legacy ones in the background. */
-  const openWithKey = useCallback(async (key, entries) => {
+  const openWithKey = useCallback(async (key, entries, projectEntries = []) => {
     keyRef.current = key;
     const e2e = entries.filter((e) => e.enc === "e2e");
     const legacy = entries.filter((e) => e.enc !== "e2e");
@@ -124,9 +153,10 @@ export function VaultProvider({ children }) {
 
     setItems(decrypted);
     setBroken(failed);
+    await openProjectsWithKey(key, projectEntries);
     setStatus("ready");
     return { migrated: migrations.length, failed };
-  }, []);
+  }, [openProjectsWithKey]);
 
   /** Derives the key for the signed-in account (sets up e2e for old accounts). */
   const deriveForProfile = useCallback(async (password, prof) => {
@@ -162,11 +192,13 @@ export function VaultProvider({ children }) {
         if (e?.response?.data?.twoFactorRequired) return { twoFactorRequired: true, error: code ? api.errorMessage(e) : null };
         throw new Error(api.errorMessage(e, "That email and password don't match."));
       }
-      const { profile: prof, entries } = await loadProfile();
+      const { profile: prof, entries, projectEntries } = await loadProfile();
       const key = await deriveForProfile(password, prof);
-      const { profile: fresh, entries: latest } = prof.vault?.kdf ? { profile: prof, entries } : await loadProfile();
+      const { profile: fresh, entries: latest, projectEntries: latestProjects } = prof.vault?.kdf
+        ? { profile: prof, entries, projectEntries }
+        : await loadProfile();
       setProfile(fresh);
-      await openWithKey(key, latest);
+      await openWithKey(key, latest, latestProjects);
       return { ok: true };
     },
     [loadProfile, deriveForProfile, openWithKey]
@@ -189,8 +221,8 @@ export function VaultProvider({ children }) {
       if (!profile) throw new Error("Please sign in again.");
       if (!profile.vault?.kdf) return login(profile.email, password, code);
       const key = await deriveForProfile(password, profile);
-      const { entries } = await loadProfile();
-      await openWithKey(key, entries);
+      const { entries, projectEntries } = await loadProfile();
+      await openWithKey(key, entries, projectEntries);
       return { ok: true };
     },
     [profile, login, deriveForProfile, loadProfile, openWithKey]
@@ -269,6 +301,29 @@ export function VaultProvider({ children }) {
     setItems((list) => list.filter((i) => i.id !== id));
   }, []);
 
+  /* ── Projects (same encrypted vault, separate collection) ── */
+  const addProject = useCallback(async (fields) => {
+    const key = requireKey();
+    const project = normalizeProject(fields);
+    const res = await api.createProject(await C.encryptJSON(key, project));
+    const created = toProject(res.data.item, project);
+    setProjects((list) => [created, ...list]);
+    return created;
+  }, []);
+
+  const updateProjectEntry = useCallback(async (id, fields) => {
+    const key = requireKey();
+    const current = projects.find((p) => p.id === id);
+    const next = normalizeProject({ ...current, ...fields });
+    const res = await api.updateProject(id, await C.encryptJSON(key, next));
+    setProjects((list) => list.map((p) => (p.id === id ? { ...next, id, createdAt: p.createdAt, updatedAt: res.data.item.updatedAt } : p)));
+  }, [projects]);
+
+  const deleteProjectEntry = useCallback(async (id) => {
+    await api.deleteProject(id);
+    setProjects((list) => list.filter((p) => p.id !== id));
+  }, []);
+
   const importItems = useCallback(async (list, onProgress) => {
     const key = requireKey();
     const now = new Date().toISOString();
@@ -315,7 +370,7 @@ export function VaultProvider({ children }) {
     const salt = C.randomSalt();
     const { key } = await C.deriveKey(next, salt, C.KDF_ITERATIONS);
     const keyCheck = await C.makeKeyCheck(key);
-    const { entries } = await loadProfile();
+    const { entries, projectEntries } = await loadProfile();
 
     // Re-encrypt every entry, including any that still failed to migrate.
     const payload = [];
@@ -326,6 +381,14 @@ export function VaultProvider({ children }) {
       payload.push({ id: entry._id, data: await C.encryptJSON(key, normalizeItem(fields)) });
     }
 
+    // Same for project entries — all e2e, no legacy format to worry about.
+    const projectPayload = [];
+    for (const entry of projectEntries) {
+      let fields = projects.find((p) => p.id === entry._id);
+      if (!fields) fields = await C.decryptJSON(oldKey, entry.data);
+      projectPayload.push({ id: entry._id, data: await C.encryptJSON(key, normalizeProject(fields)) });
+    }
+
     try {
       await api.changeMasterPassword({
         currentPassword: current,
@@ -334,6 +397,7 @@ export function VaultProvider({ children }) {
         kdf: { salt, iterations: C.KDF_ITERATIONS },
         keyCheck,
         items: payload,
+        projectItems: projectPayload,
       });
     } catch (e) {
       const err = new Error(api.errorMessage(e, "Couldn't change your master password."));
@@ -342,7 +406,7 @@ export function VaultProvider({ children }) {
     }
     keyRef.current = key;
     await loadProfile();
-  }, [items, profile, loadProfile]);
+  }, [items, projects, profile, loadProfile]);
 
   const refreshProfile = useCallback(() => loadProfile().catch(() => null), [loadProfile]);
 
@@ -372,8 +436,17 @@ export function VaultProvider({ children }) {
       changeMasterPassword,
       refreshProfile,
       setProfileName: (name) => setProfile((p) => (p ? { ...p, name } : p)),
+      projects,
+      projectsBroken,
+      addProject,
+      updateProject: updateProjectEntry,
+      deleteProject: deleteProjectEntry,
     };
-  }, [status, profile, items, broken, breaches, breachProgress, prefs, setPrefs, login, register, unlock, lock, logout, addItem, updateItem, toggleFavorite, deleteItem, importItems, runBreachCheck, changeMasterPassword, refreshProfile]);
+  }, [
+    status, profile, items, broken, breaches, breachProgress, prefs, setPrefs, login, register, unlock, lock, logout,
+    addItem, updateItem, toggleFavorite, deleteItem, importItems, runBreachCheck, changeMasterPassword, refreshProfile,
+    projects, projectsBroken, addProject, updateProjectEntry, deleteProjectEntry,
+  ]);
 
   return <VaultContext.Provider value={value}>{children}</VaultContext.Provider>;
 }

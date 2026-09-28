@@ -67,7 +67,7 @@ function RecoveryCodes({ codes, onDone }) {
         <button type="button" className="btn btn--ghost btn--sm" onClick={() => navigator.clipboard.writeText(text).then(() => toast.info("Codes copied"))}>
           <Copy size={14} /> Copy
         </button>
-        <button type="button" className="btn btn--ghost btn--sm" onClick={() => download(`aurelia-recovery-codes-${stamp()}.txt`, `Aurelia recovery codes\n\n${text}\n`, "text/plain")}>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={() => download(`aurelia-recovery-codes-${stamp()}.txt`, `Stashr recovery codes\n\n${text}\n`, "text/plain")}>
           <Download size={14} /> Download
         </button>
         <button type="button" className="btn btn--primary btn--sm" onClick={onDone}>I've saved them</button>
@@ -451,7 +451,7 @@ export default function Settings() {
         </header>
 
         <div className="settings__grid">
-          <Section icon={<User size={18} />} title="Profile" sub="How Aurelia greets you.">
+          <Section icon={<User size={18} />} title="Profile" sub="How Stashr greets you.">
             <form className="settings__inline" onSubmit={saveName}>
               <input className="input" value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" maxLength={80} />
               <button type="submit" className="btn btn--ghost btn--sm" disabled={!name.trim() || name.trim() === profile?.name}>Save</button>

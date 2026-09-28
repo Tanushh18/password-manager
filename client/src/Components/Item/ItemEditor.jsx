@@ -117,7 +117,7 @@ export default function ItemEditor({ open, item, folders, icons, onClose, onSave
           onChange={set("totp")}
           placeholder="Setup key or otpauth://… link"
           error={!totpValid ? "Not a valid 2FA secret" : ""}
-          hint="Store an authenticator secret here and Aurelia shows the live code."
+          hint="Store an authenticator secret here and Stashr shows the live code."
           autoComplete="off"
         />
         {form.totp && totpValid ? (

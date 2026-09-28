@@ -57,7 +57,12 @@ const schema = new mongoose.Schema({
         recoveryCodes: [{ type: String }]  // sha256 hashes
     },
 
-    passwords: [entrySchema]
+    passwords: [entrySchema],
+
+    // Project/infra tracker entries. Same shape and same end-to-end scheme as
+    // `passwords` above — each entry is an opaque AES-256-GCM blob the server
+    // cannot read.
+    projects: [entrySchema]
 }, { timestamps: true });
 
 
@@ -122,7 +127,8 @@ schema.methods.toPublic = function ()
         twoFactorEnabled: Boolean(this.twoFactor && this.twoFactor.enabled),
         recoveryCodesLeft: this.twoFactor && this.twoFactor.enabled ? (this.twoFactor.recoveryCodes || []).length : 0,
         sessions: (this.tokens || []).length,
-        passwords: (this.passwords || []).map(publicEntry)
+        passwords: (this.passwords || []).map(publicEntry),
+        projects: (this.projects || []).map(publicEntry)
     };
 };
 

@@ -128,7 +128,7 @@ function Home() {
                 </>
               ) : (
                 <>
-                  Aurelia is a beautiful, private vault for your passwords. AES-256 encryption,
+                  Stashr is a beautiful, private vault for your passwords. AES-256 encryption,
                   a live health score, a built-in generator — on the web and on Android.
                 </>
               )}
@@ -180,7 +180,7 @@ function Home() {
                 <div className="keepsake__seal anim-beat">
                   <ShieldLine size={26} strokeWidth={1.4} />
                 </div>
-                <p className="keepsake__label eyebrow">Aurelia vault</p>
+                <p className="keepsake__label eyebrow">Stashr vault</p>
                 <p className="keepsake__line script">
                   {isAuthenticated ? `${firstName || "your"}'s vault` : "encrypting live"}
                 </p>
@@ -222,7 +222,7 @@ function Home() {
       {/* ══════════ PROMISES ══════════ */}
       <section className="section shell">
         <Reveal as="header" className="section__head">
-          <span className="eyebrow">Why Aurelia</span>
+          <span className="eyebrow">Why Stashr</span>
           <h2 className="section__title">
             Security that <em className="serif-em">feels alive</em>
           </h2>
@@ -326,7 +326,7 @@ function Home() {
       <footer className="foot">
         <span className="foot__mark">
           <ShieldLine size={15} />
-          Aurelia
+          Stashr
         </span>
         <span className="foot__note">Encrypted with AES-256 · Web &amp; Android</span>
       </footer>

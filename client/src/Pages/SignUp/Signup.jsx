@@ -67,7 +67,7 @@ export default function Signup() {
         <label className={`consent ${errors.agree ? "is-error" : ""}`}>
           <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
           <span>
-            <Alert size={14} /> I understand Aurelia <strong>cannot reset or recover</strong> my master password. If I forget it,
+            <Alert size={14} /> I understand Stashr <strong>cannot reset or recover</strong> my master password. If I forget it,
             my vault can't be opened.
           </span>
         </label>

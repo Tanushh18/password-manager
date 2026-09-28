@@ -1,6 +1,6 @@
 {
-  "name": "Aurelia — Aurora Password Vault",
-  "short_name": "Aurelia",
+  "name": "Stashr — Passwords & Projects, Encrypted",
+  "short_name": "Stashr",
   "description": "A glowing, private vault for every password — sealed with AES-256.",
   "id": "/",
   "start_url": "/",

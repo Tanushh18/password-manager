@@ -7,7 +7,7 @@ import { importBackup } from "../../lib/crypto";
 import { Upload, Check } from "../Icons/Icons";
 
 /**
- * Import from an Aurelia encrypted backup, CSV (Chrome, Bitwarden, 1Password,
+ * Import from an Stashr encrypted backup, CSV (Chrome, Bitwarden, 1Password,
  * LastPass…) or an Excel sheet. Everything is parsed and encrypted in the browser.
  */
 export default function ImportModal({ open, onClose, onImport }) {
@@ -90,7 +90,7 @@ export default function ImportModal({ open, onClose, onImport }) {
         <div className="sheet__head">
           <span className="sheet__seal"><Upload size={22} /></span>
           <h2 className="sheet__title">Import passwords</h2>
-          <p className="sheet__sub">Aurelia backups, CSV exports from Chrome, Bitwarden, 1Password or LastPass, or an Excel sheet.</p>
+          <p className="sheet__sub">Stashr backups, CSV exports from Chrome, Bitwarden, 1Password or LastPass, or an Excel sheet.</p>
         </div>
 
         <label className="dropzone">

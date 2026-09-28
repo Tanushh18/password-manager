@@ -340,6 +340,7 @@ router.get("/insights", authenticate, (req, res) =>
 });
 
 router.use(require("./vault"));
+router.use(require("./projects"));
 router.use(require("./account"));
 
 module.exports = router;

@@ -45,7 +45,7 @@ export function register() {
 
     if (isLocalhost) {
       navigator.serviceWorker.ready.then(() => {
-        console.log("Aurelia is cached and ready to work offline.");
+        console.log("Stashr is cached and ready to work offline.");
       });
     }
   });

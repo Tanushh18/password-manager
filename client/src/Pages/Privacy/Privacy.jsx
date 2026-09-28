@@ -15,7 +15,7 @@ export default function Privacy() {
         <p className="eyebrow">Last updated {UPDATED}</p>
         <h1>Privacy policy</h1>
         <p className="lede">
-          Aurelia is a password manager. It is built so that we <strong>cannot</strong> read what you store in it.
+          Stashr is a password manager. It is built so that we <strong>cannot</strong> read what you store in it.
         </p>
 
         <h2>What we store</h2>
