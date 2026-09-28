@@ -4,25 +4,22 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import Aurora from "../components/Aurora";
 import Icon from "../components/Icon";
-import { Bounce, Field, GhostButton, GradientButton } from "../components/ui";
-import { useToast } from "../components/Toast";
+import { Bounce, GhostButton } from "../components/ui";
 import { useTheme } from "../lib/theme";
 import { useVault } from "../lib/vault";
 
-/** Vault is locked: fingerprint (if enabled) or master password. */
+/** App is locked: a fingerprint/face check gates re-entry (no password needed). */
 export default function Lock() {
   const { theme } = useTheme();
-  const { unlock, unlockWithBiometrics, biometric, biometricAvailable, logout, profile, offline } = useVault();
-  const toast = useToast();
-  const [password, setPassword] = useState("");
+  const { unlockWithBiometrics, logout, profile } = useVault();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const pulse = useRef(new Animated.Value(0)).current;
-  const canBio = biometric && biometricAvailable;
 
   const bio = async () => {
     try {
       setBusy(true);
+      setError("");
       await unlockWithBiometrics();
     } catch (e) {
       if (!/cancel/i.test(e.message || "")) setError(e.message);
@@ -33,27 +30,10 @@ export default function Lock() {
 
   useEffect(() => {
     Animated.loop(Animated.timing(pulse, { toValue: 1, duration: 2000, easing: Easing.out(Easing.quad), useNativeDriver: true })).start();
-    if (canBio) {
-      const t = setTimeout(bio, 350);
-      return () => clearTimeout(t);
-    }
-    return undefined;
+    const t = setTimeout(bio, 350);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const submit = async () => {
-    if (!password || busy) return;
-    try {
-      setBusy(true);
-      setError("");
-      const res = await unlock(password);
-      if (res?.twoFactorRequired) toast("Sign in again to finish setting up your vault.", "info");
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const ring = (d) => ({
     opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5 - d, 0] }),
@@ -70,38 +50,21 @@ export default function Lock() {
             <View style={styles.center}>
               <Animated.View style={[styles.ring, { borderColor: theme.accent }, ring(0)]} />
               <Animated.View style={[styles.ring, { borderColor: theme.accent2 }, ring(0.2)]} />
-              <Bounce onPress={canBio ? bio : undefined} scaleTo={0.9}>
+              <Bounce onPress={bio} scaleTo={0.9}>
                 <LinearGradient colors={theme.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.button, { shadowColor: theme.accent }]}>
-                  <Icon name={canBio ? "fingerprint" : "lock"} size={48} color="#fff" strokeWidth={1.6} />
+                  <Icon name="fingerprint" size={48} color="#fff" strokeWidth={1.6} />
                 </LinearGradient>
               </Bounce>
             </View>
             <Text style={[styles.title, { color: theme.heading, fontFamily: theme.font.displayHeavy }]}>
-              {first ? `Hi ${first}` : "Vault locked"}
+              {first ? `Hi ${first}` : "App locked"}
             </Text>
             <Text style={[styles.sub, { color: theme.textMuted, fontFamily: theme.font.body }]}>
-              {canBio ? "Touch the sensor, or enter your master password." : "Enter your master password to unlock."}
-              {offline ? "\nOffline — showing your last synced vault." : ""}
+              {error || "Touch the sensor to continue."}
             </Text>
 
             <View style={{ alignSelf: "stretch", marginTop: 26 }}>
-              <Field
-                label="Master password"
-                icon="lock"
-                secure
-                value={password}
-                onChangeText={(t) => {
-                  setPassword(t);
-                  setError("");
-                }}
-                placeholder="Your master password"
-                autoCapitalize="none"
-                returnKeyType="go"
-                onSubmitEditing={submit}
-                error={error}
-              />
-              <GradientButton title="Unlock" icon="lock" loading={busy} onPress={submit} />
-              {canBio ? <GhostButton title="Use fingerprint" icon="fingerprint" onPress={bio} style={{ marginTop: 10 }} /> : null}
+              <GhostButton title={busy ? "Checking…" : "Try again"} icon="fingerprint" loading={busy} onPress={bio} />
               <GhostButton title="Sign out" icon="logout" color={theme.textMuted} onPress={logout} style={{ marginTop: 10 }} />
             </View>
           </ScrollView>

@@ -1,9 +1,8 @@
 import { Platform } from "react-native";
 
 /**
- * Offline copy of the vault. It holds exactly what the server returns —
- * encrypted item blobs plus the public profile — so it is useless without
- * the master password (or the biometric-protected key).
+ * Offline copy of the vault: the decrypted items and public profile last
+ * seen from the server, so the app has something to show while offline.
  */
 const NAME = "vault-cache.json";
 

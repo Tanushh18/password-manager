@@ -58,7 +58,7 @@ export default function TwoFactor() {
   };
 
   return (
-    <Screen title="Two-factor login" subtitle="Even if someone learns your master password, they can't sign in without your authenticator.">
+    <Screen title="Two-factor login" subtitle="Even if someone learns your password, they can't sign in without your authenticator.">
       {step === "codes" ? (
         <RecoveryCodes codes={codes} onDone={() => { reset(); refreshProfile(); }} />
       ) : enabled ? (
@@ -69,7 +69,7 @@ export default function TwoFactor() {
             </Text>
             {step === "disable" || step === "regen" ? (
               <>
-                <Field label="Master password" icon="lock" secure value={password} onChangeText={setPassword} autoCapitalize="none" />
+                <Field label="Current password" icon="lock" secure value={password} onChangeText={setPassword} autoCapitalize="none" />
                 <Field label="Authenticator or recovery code" icon="shieldCheck" value={code} onChangeText={setCode} autoCapitalize="none" />
                 <GradientButton
                   title={step === "disable" ? "Turn off two-factor" : "New recovery codes"}
@@ -106,7 +106,7 @@ export default function TwoFactor() {
             <Text style={{ color: theme.textMuted, fontFamily: theme.font.body, lineHeight: 21 }}>
               Works with Google Authenticator, Aegis, Authy, 1Password and others.
             </Text>
-            <Field label="Confirm master password" icon="lock" secure value={password} onChangeText={setPassword} autoCapitalize="none" />
+            <Field label="Confirm password" icon="lock" secure value={password} onChangeText={setPassword} autoCapitalize="none" />
             <GradientButton
               title="Continue"
               icon="shieldCheck"
@@ -159,7 +159,7 @@ export default function TwoFactor() {
       <View style={{ flexDirection: "row", gap: 8, alignItems: "center", paddingHorizontal: 4 }}>
         <Icon name="alert" size={14} color={theme.textFaint} />
         <Text style={{ flex: 1, color: theme.textFaint, fontFamily: theme.font.body, fontSize: 12 }}>
-          Two-factor protects your account sign-in. Your vault is still encrypted with your master password.
+          Two-factor protects your account sign-in.
         </Text>
       </View>
     </Screen>
