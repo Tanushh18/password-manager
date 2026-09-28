@@ -101,21 +101,17 @@ export const api = {
   me: () => request("/authenticate"),
   logout: () => request("/logout"),
 
-  // End-to-end vault
-  setupVault: (data) => request("/vault/setup", { method: "POST", body: data }),
+  // Vault (server-side encrypted)
   createItem: (data) => request("/vault/items", { method: "POST", body: { data } }),
   createItems: (items) => request("/vault/items/bulk", { method: "POST", body: { items }, timeout: 60000 }),
   updateItem: (id, data) => request(`/vault/items/${id}`, { method: "PUT", body: { data } }),
   deleteItem: (id) => request(`/vault/items/${id}`, { method: "DELETE" }),
-  migrate: (items) => request("/vault/migrate", { method: "POST", body: { items }, timeout: 60000 }),
 
-  // End-to-end project tracker (same scheme as the vault, separate collection)
+  // Project tracker (server-side encrypted, same scheme as the vault)
   createProject: (data) => request("/projects/items", { method: "POST", body: { data } }),
   createProjects: (items) => request("/projects/items/bulk", { method: "POST", body: { items }, timeout: 60000 }),
   updateProject: (id, data) => request(`/projects/items/${id}`, { method: "PUT", body: { data } }),
   deleteProject: (id) => request(`/projects/items/${id}`, { method: "DELETE" }),
-  decryptLegacy: (entry) =>
-    request("/decrypt", { method: "POST", body: { id: entry._id, iv: entry.iv, encryptedPassword: entry.password } }),
 
   // Account
   updateProfile: (name) => request("/account/profile", { method: "POST", body: { name } }),

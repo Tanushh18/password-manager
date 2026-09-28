@@ -3,33 +3,33 @@ import { AppState, Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import * as LocalAuthentication from "expo-local-authentication";
 import { api, ApiError, setToken, activeServer, setActiveServer } from "./api";
-import C from "./crypto";
-import { fromLegacy, normalizeItem } from "./items";
+import { normalizeItem } from "./items";
 import { normalizeProject } from "./projectItems";
 import { computeHealth } from "./health";
 import { pwnedCount } from "./breach";
 import { readCache, writeCache, clearCache } from "./cache";
 
 /**
- * Session + end-to-end vault state for the Android app.
+ * Session + vault state for the Android app.
  *
  * status: "booting" | "signedOut" | "locked" | "ready"
  *
- * The vault key is derived on the phone from the master password (PBKDF2-SHA256,
- * 600k rounds, native) and never sent to the server. With biometric unlock on,
- * the key is kept in the Android Keystore and released only after a fingerprint
- * / face check.
+ * Items and projects are encrypted with the server's own key, not with
+ * anything derived from the account password, so there is no separate
+ * vault key on this phone — signing in is enough to see everything.
+ * Biometric unlock, where turned on, is just an app-lock gate (a
+ * fingerprint/face check) rather than something that releases a key,
+ * since there is no key to release.
  */
 
 const K = {
   token: "aurelia_token",
   server: "aurelia_server",
   bio: "aurelia_biometric",
-  key: "aurelia_vault_key",
   prefs: "aurelia_prefs",
 };
 const DEFAULT_PREFS = { autoLock: 0.5, icons: false }; // minutes; -1 = never
-const BIO_OPTIONS = { requireAuthentication: true, authenticationPrompt: "Unlock your Aurelia vault" };
+const BIO_OPTIONS = { promptMessage: "Unlock Aurelia" };
 
 const VaultContext = createContext(null);
 
@@ -41,16 +41,14 @@ const safe = async (fn, fallback = null) => {
   }
 };
 
-const toItem = (entry, fields) => ({ ...normalizeItem(fields), id: entry._id, createdAt: entry.createdAt, updatedAt: entry.updatedAt });
-const toProject = (entry, fields) => ({ ...normalizeProject(fields), id: entry._id, createdAt: entry.createdAt, updatedAt: entry.updatedAt });
+const toItem = (entry) => ({ ...normalizeItem(entry), id: entry._id, createdAt: entry.createdAt, updatedAt: entry.updatedAt });
+const toProject = (entry) => ({ ...normalizeProject(entry), id: entry._id, createdAt: entry.createdAt, updatedAt: entry.updatedAt });
 
 export function VaultProvider({ children }) {
   const [status, setStatus] = useState("booting");
   const [profile, setProfile] = useState(null);
   const [items, setItems] = useState([]);
-  const [broken, setBroken] = useState(0);
   const [projects, setProjects] = useState([]);
-  const [projectsBroken, setProjectsBroken] = useState(0);
   const [offline, setOffline] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [breaches, setBreaches] = useState({});
@@ -60,55 +58,44 @@ export function VaultProvider({ children }) {
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [prefs, setPrefsState] = useState(DEFAULT_PREFS);
 
-  const keyRef = useRef(null);
-  const entriesRef = useRef([]);
   const backgroundAt = useRef(null);
   const pauseLock = useRef(0);
 
-  /* ── Server profile (+ offline cache of the encrypted vault) ── */
-  const projectEntriesRef = useRef([]);
-
+  /* ── Server profile (+ offline cache of the last known items/projects) ── */
   const loadProfile = useCallback(async () => {
     try {
       const me = await api.me();
       const { passwords, projects: projectEntries, ...rest } = me;
-      entriesRef.current = passwords || [];
-      projectEntriesRef.current = projectEntries || [];
+      const decoded = (passwords || []).map(toItem);
+      const decodedProjects = (projectEntries || []).map(toProject);
       setProfile(rest);
+      setItems(decoded);
+      setProjects(decodedProjects);
       setOffline(false);
       SecureStore.setItemAsync(K.server, activeServer()).catch(() => {});
-      writeCache({ profile: rest, entries: entriesRef.current });
-      return { profile: rest, entries: entriesRef.current, projectEntries: projectEntriesRef.current };
+      writeCache({ profile: rest, items: decoded, projects: decodedProjects });
+      return { profile: rest };
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 400)) throw e;
-      // Network down: fall back to the last encrypted copy (read-only).
+      // Network down: fall back to the last cached copy (read-only).
       const cached = await readCache();
       if (!cached) throw e;
-      entriesRef.current = cached.entries || [];
       setProfile(cached.profile);
+      setItems(cached.items || []);
+      setProjects(cached.projects || []);
       setOffline(true);
-      return { profile: cached.profile, entries: entriesRef.current, projectEntries: [] };
+      return { profile: cached.profile };
     }
   }, []);
 
   const wipeLocal = useCallback(async () => {
     setToken(null);
-    keyRef.current = null;
-    entriesRef.current = [];
-    projectEntriesRef.current = [];
     setItems([]);
     setProjects([]);
-    setProjectsBroken(0);
     setProfile(null);
     setBreaches({});
     setBreachChecked(false);
-    setBroken(0);
-    await Promise.all([
-      safe(() => SecureStore.deleteItemAsync(K.token)),
-      safe(() => SecureStore.deleteItemAsync(K.key)),
-      safe(() => SecureStore.deleteItemAsync(K.bio)),
-      clearCache(),
-    ]);
+    await Promise.all([safe(() => SecureStore.deleteItemAsync(K.token)), safe(() => SecureStore.deleteItemAsync(K.bio)), clearCache()]);
     setBiometricState(false);
     setStatus("signedOut");
   }, []);
@@ -133,89 +120,12 @@ export function VaultProvider({ children }) {
       setToken(token === "cookie" ? null : token);
       try {
         await loadProfile();
-        setStatus("locked");
+        setStatus(bio === "1" ? "locked" : "ready");
       } catch (e) {
         await wipeLocal();
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /* ── Projects: all e2e, no legacy format to worry about ── */
-  const openProjectsWithKey = useCallback(async (key, projectEntries) => {
-    const decrypted = [];
-    let failed = 0;
-    for (const entry of projectEntries) {
-      try {
-        decrypted.push(toProject(entry, await C.decryptJSON(key, entry.data)));
-      } catch (e) {
-        failed += 1;
-      }
-    }
-    setProjects(decrypted);
-    setProjectsBroken(failed);
-  }, []);
-
-  /* ── Open the vault with a key ── */
-  const openWithKey = useCallback(async (key, entries, projectEntries = []) => {
-    keyRef.current = key;
-    const decrypted = [];
-    let failed = 0;
-    const legacy = [];
-    for (const entry of entries) {
-      if (entry.enc !== "e2e") {
-        legacy.push(entry);
-        continue;
-      }
-      try {
-        decrypted.push(toItem(entry, await C.decryptJSON(key, entry.data)));
-      } catch (e) {
-        failed += 1;
-      }
-    }
-    // Old server-encrypted entries: unseal once, re-encrypt here, upload.
-    const migrations = [];
-    for (const entry of legacy) {
-      try {
-        const fields = fromLegacy(entry, await api.decryptLegacy(entry));
-        decrypted.push(toItem(entry, fields));
-        migrations.push({ id: entry._id, data: await C.encryptJSON(key, fields) });
-      } catch (e) {
-        failed += 1;
-      }
-    }
-    if (migrations.length) await safe(() => api.migrate(migrations));
-    setItems(decrypted);
-    setBroken(failed);
-    await openProjectsWithKey(key, projectEntries);
-    setStatus("ready");
-  }, [openProjectsWithKey]);
-
-  const deriveForProfile = useCallback(async (password, prof) => {
-    if (prof.vault?.kdf) {
-      const key = await C.deriveKey(password, prof.vault.kdf.salt, prof.vault.kdf.iterations);
-      if (!(await C.verifyKey(key, prof.vault.keyCheck))) throw new Error("That master password is incorrect.");
-      return key;
-    }
-    // Account from before end-to-end encryption: create its vault key now.
-    const salt = C.randomSalt();
-    const key = await C.deriveKey(password, salt, C.KDF_ITERATIONS);
-    const keyCheck = await C.makeKeyCheck(key);
-    try {
-      await api.setupVault({ kdf: { salt, iterations: C.KDF_ITERATIONS }, keyCheck });
-    } catch (e) {
-      if (e.status === 409) {
-        const { profile: fresh } = await loadProfile();
-        return deriveForProfile(password, fresh);
-      }
-      throw e;
-    }
-    return key;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadProfile]);
-
-  const storeBiometricKey = useCallback(async (key) => {
-    await SecureStore.setItemAsync(K.key, C.toB64(key), BIO_OPTIONS);
   }, []);
 
   /* ── Sign in / up ── */
@@ -234,49 +144,35 @@ export function VaultProvider({ children }) {
       } else {
         await safe(() => SecureStore.setItemAsync(K.token, "cookie"));
       }
-      const { profile: prof } = await loadProfile();
-      const key = await deriveForProfile(password, prof);
-      const { entries, projectEntries } = await loadProfile();
-      await openWithKey(key, entries, projectEntries);
+      await loadProfile();
+      setStatus("ready");
       return { ok: true };
     },
-    [loadProfile, deriveForProfile, openWithKey]
-  );
-
-  const register = useCallback(async ({ name, email, password }) => {
-    const salt = C.randomSalt();
-    const key = await C.deriveKey(password, salt, C.KDF_ITERATIONS);
-    const keyCheck = await C.makeKeyCheck(key);
-    await api.register({ name, email, password, cpassword: password, kdf: { salt, iterations: C.KDF_ITERATIONS }, keyCheck });
-  }, []);
-
-  const unlock = useCallback(
-    async (password) => {
-      if (!profile?.vault?.kdf) return login(profile.email, password);
-      const key = await deriveForProfile(password, profile);
-      const { entries, projectEntries } = await loadProfile().catch(() => ({ entries: entriesRef.current, projectEntries: projectEntriesRef.current }));
-      await openWithKey(key, entries, projectEntries);
-      return { ok: true };
-    },
-    [profile, login, deriveForProfile, loadProfile, openWithKey]
+    [loadProfile]
   );
 
   const unlockWithBiometrics = useCallback(async () => {
-    const stored = await SecureStore.getItemAsync(K.key, BIO_OPTIONS);
-    if (!stored) throw new Error("Biometric unlock needs your master password once more.");
-    const key = C.fromB64(stored);
-    if (profile?.vault?.keyCheck && !(await C.verifyKey(key, profile.vault.keyCheck))) {
-      await safe(() => SecureStore.deleteItemAsync(K.key));
-      throw new Error("Your master password changed. Enter it to unlock.");
-    }
-    const { entries, projectEntries } = await loadProfile().catch(() => ({ entries: entriesRef.current, projectEntries: projectEntriesRef.current }));
-    await openWithKey(key, entries, projectEntries);
-  }, [profile, loadProfile, openWithKey]);
+    const result = await LocalAuthentication.authenticateAsync(BIO_OPTIONS);
+    if (!result.success) throw new Error(result.error === "user_cancel" ? "Cancelled" : "Fingerprint didn't match.");
+    setStatus("ready");
+  }, []);
 
   const lock = useCallback(() => {
-    keyRef.current = null;
-    setItems([]);
     setStatus((s) => (s === "ready" ? "locked" : s));
+  }, []);
+
+  const setBiometric = useCallback(async (on) => {
+    if (on) {
+      const result = await LocalAuthentication.authenticateAsync({ ...BIO_OPTIONS, promptMessage: "Confirm it's you" });
+      if (!result.success) throw new Error(result.error === "user_cancel" ? "Cancelled" : "Fingerprint didn't match.");
+    }
+    setBiometricState(on);
+    await safe(() => SecureStore.setItemAsync(K.bio, on ? "1" : "0"));
+    return true;
+  }, []);
+
+  const register = useCallback(async ({ name, email, password }) => {
+    await api.register({ name, email, password, cpassword: password });
   }, []);
 
   const logout = useCallback(async () => {
@@ -294,12 +190,12 @@ export function VaultProvider({ children }) {
       if (next === "active") {
         const away = backgroundAt.current ? Date.now() - backgroundAt.current : 0;
         backgroundAt.current = null;
-        if (pauseLock.current > 0 || prefs.autoLock < 0) return;
+        if (pauseLock.current > 0 || !biometric || prefs.autoLock < 0) return;
         if (status === "ready" && away >= prefs.autoLock * 60 * 1000) lock();
       }
     });
     return () => sub.remove();
-  }, [status, prefs.autoLock, lock]);
+  }, [status, biometric, prefs.autoLock, lock]);
 
   /** Runs fn without auto-locking (file pickers and share sheets background the app). */
   const withoutAutoLock = useCallback(async (fn) => {
@@ -314,28 +210,26 @@ export function VaultProvider({ children }) {
   }, []);
 
   /* ── Items ── */
-  const requireKey = () => {
-    if (!keyRef.current) throw new Error("Your vault is locked.");
+  const requireOnline = () => {
     if (offline) throw new Error("You're offline. Changes can be made once you're back online.");
-    return keyRef.current;
   };
 
   const addItem = useCallback(async (fields) => {
-    const key = requireKey();
+    requireOnline();
     const item = normalizeItem({ ...fields, passwordUpdatedAt: new Date().toISOString() });
-    const res = await api.createItem(await C.encryptJSON(key, item));
-    const created = toItem(res.item, item);
+    const res = await api.createItem(item);
+    const created = toItem(res.item);
     setItems((list) => [created, ...list]);
     return created;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offline]);
 
   const updateItem = useCallback(async (id, fields) => {
-    const key = requireKey();
+    requireOnline();
     const current = items.find((i) => i.id === id);
     const next = normalizeItem({ ...current, ...fields });
     if (current && current.password !== next.password) next.passwordUpdatedAt = new Date().toISOString();
-    const res = await api.updateItem(id, await C.encryptJSON(key, next));
+    const res = await api.updateItem(id, next);
     setItems((list) => list.map((i) => (i.id === id ? { ...next, id, createdAt: i.createdAt, updatedAt: res.item.updatedAt } : i)));
     if (current && current.password !== next.password) {
       setBreaches((b) => {
@@ -361,22 +255,37 @@ export function VaultProvider({ children }) {
     setItems((list) => list.filter((i) => i.id !== id));
   }, [offline]);
 
-  /* ── Projects (same encrypted vault, separate collection) ── */
+  const importItems = useCallback(async (list) => {
+    requireOnline();
+    const now = new Date().toISOString();
+    const prepared = list.map((it) => normalizeItem({ ...it, passwordUpdatedAt: it.passwordUpdatedAt || now }));
+    const created = [];
+    for (let i = 0; i < prepared.length; i += 500) {
+      const chunk = prepared.slice(i, i + 500);
+      const res = await api.createItems(chunk.map((it) => ({ data: it })));
+      res.items.forEach((entry) => created.push(toItem(entry)));
+    }
+    setItems((l) => [...created, ...l]);
+    return created.length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offline]);
+
+  /* ── Projects (same server-side encrypted scheme, separate collection) ── */
   const addProject = useCallback(async (fields) => {
-    const key = requireKey();
+    requireOnline();
     const project = normalizeProject(fields);
-    const res = await api.createProject(await C.encryptJSON(key, project));
-    const created = toProject(res.item, project);
+    const res = await api.createProject(project);
+    const created = toProject(res.item);
     setProjects((list) => [created, ...list]);
     return created;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offline]);
 
   const updateProject = useCallback(async (id, fields) => {
-    const key = requireKey();
+    requireOnline();
     const current = projects.find((p) => p.id === id);
     const next = normalizeProject({ ...current, ...fields });
-    const res = await api.updateProject(id, await C.encryptJSON(key, next));
+    const res = await api.updateProject(id, next);
     setProjects((list) => list.map((p) => (p.id === id ? { ...next, id, createdAt: p.createdAt, updatedAt: res.item.updatedAt } : p)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects, offline]);
@@ -388,48 +297,27 @@ export function VaultProvider({ children }) {
   }, [offline]);
 
   const importProjects = useCallback(async (list) => {
-    const key = requireKey();
+    requireOnline();
     const prepared = list.map((p) => normalizeProject(p));
     const created = [];
     for (let i = 0; i < prepared.length; i += 500) {
       const chunk = prepared.slice(i, i + 500);
-      const payload = [];
-      for (const p of chunk) payload.push({ data: await C.encryptJSON(key, p) });
-      const res = await api.createProjects(payload);
-      res.items.forEach((entry, j) => created.push(toProject(entry, chunk[j])));
+      const res = await api.createProjects(chunk.map((p) => ({ data: p })));
+      res.items.forEach((entry) => created.push(toProject(entry)));
     }
     setProjects((l) => [...created, ...l]);
     return created.length;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offline]);
 
-  const importItems = useCallback(async (list) => {
-    const key = requireKey();
-    const now = new Date().toISOString();
-    const prepared = list.map((it) => normalizeItem({ ...it, passwordUpdatedAt: it.passwordUpdatedAt || now }));
-    const created = [];
-    for (let i = 0; i < prepared.length; i += 500) {
-      const chunk = prepared.slice(i, i + 500);
-      const payload = [];
-      for (const it of chunk) payload.push({ data: await C.encryptJSON(key, it) });
-      const res = await api.createItems(payload);
-      res.items.forEach((entry, j) => created.push(toItem(entry, chunk[j])));
-    }
-    setItems((l) => [...created, ...l]);
-    return created.length;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [offline]);
-
   const refresh = useCallback(async () => {
-    if (!keyRef.current) return;
     setSyncing(true);
     try {
-      const { entries, projectEntries } = await loadProfile();
-      await openWithKey(keyRef.current, entries, projectEntries);
+      await loadProfile();
     } finally {
       setSyncing(false);
     }
-  }, [loadProfile, openWithKey]);
+  }, [loadProfile]);
 
   /* ── Breach check ── */
   const runBreachCheck = useCallback(async () => {
@@ -452,56 +340,13 @@ export function VaultProvider({ children }) {
 
   /* ── Account ── */
   const changeMasterPassword = useCallback(async ({ current, next, code }) => {
-    const oldKey = requireKey();
-    const checkKey = await C.deriveKey(current, profile.vault.kdf.salt, profile.vault.kdf.iterations);
-    if (!(await C.verifyKey(checkKey, profile.vault.keyCheck))) throw new Error("Your current master password is incorrect.");
-    const salt = C.randomSalt();
-    const key = await C.deriveKey(next, salt, C.KDF_ITERATIONS);
-    const keyCheck = await C.makeKeyCheck(key);
-    const { entries, projectEntries } = await loadProfile();
-    const payload = [];
-    for (const entry of entries) {
-      let fields = items.find((i) => i.id === entry._id);
-      if (!fields && entry.enc === "e2e") fields = await C.decryptJSON(oldKey, entry.data);
-      if (!fields) fields = fromLegacy(entry, await api.decryptLegacy(entry));
-      payload.push({ id: entry._id, data: await C.encryptJSON(key, normalizeItem(fields)) });
-    }
-    const projectPayload = [];
-    for (const entry of projectEntries) {
-      let fields = projects.find((p) => p.id === entry._id);
-      if (!fields) fields = await C.decryptJSON(oldKey, entry.data);
-      projectPayload.push({ id: entry._id, data: await C.encryptJSON(key, normalizeProject(fields)) });
-    }
-    const res = await api.changePassword({
-      currentPassword: current,
-      newPassword: next,
-      code: code || undefined,
-      kdf: { salt, iterations: C.KDF_ITERATIONS },
-      keyCheck,
-      items: payload,
-      projectItems: projectPayload,
-    });
+    const res = await api.changePassword({ currentPassword: current, newPassword: next, code: code || undefined });
     if (res.token) {
       setToken(res.token);
       await safe(() => SecureStore.setItemAsync(K.token, res.token));
     }
-    keyRef.current = key;
-    if (biometric) await safe(() => storeBiometricKey(key));
     await loadProfile();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, projects, profile, biometric, loadProfile, storeBiometricKey, offline]);
-
-  const setBiometric = useCallback(async (on) => {
-    if (on) {
-      if (!keyRef.current) throw new Error("Unlock your vault first.");
-      await storeBiometricKey(keyRef.current);
-    } else {
-      await safe(() => SecureStore.deleteItemAsync(K.key));
-    }
-    setBiometricState(on);
-    await safe(() => SecureStore.setItemAsync(K.bio, on ? "1" : "0"));
-    return true;
-  }, [storeBiometricKey]);
+  }, [loadProfile]);
 
   const setPrefs = useCallback((patch) => {
     setPrefsState((p) => {
@@ -517,7 +362,7 @@ export function VaultProvider({ children }) {
       status,
       profile,
       items,
-      broken,
+      broken: 0,
       offline,
       syncing,
       health,
@@ -530,7 +375,6 @@ export function VaultProvider({ children }) {
       setPrefs,
       login,
       register,
-      unlock,
       unlockWithBiometrics,
       lock,
       logout,
@@ -548,13 +392,13 @@ export function VaultProvider({ children }) {
       withoutAutoLock,
       setProfileName: (name) => setProfile((p) => (p ? { ...p, name } : p)),
       projects,
-      projectsBroken,
+      projectsBroken: 0,
       addProject,
       updateProject,
       deleteProject,
       importProjects,
     };
-  }, [status, profile, items, broken, offline, syncing, breaches, breachChecked, breachProgress, biometric, biometricAvailable, prefs, setPrefs, login, register, unlock, unlockWithBiometrics, lock, logout, wipeLocal, refresh, loadProfile, addItem, updateItem, toggleFavorite, deleteItem, importItems, runBreachCheck, changeMasterPassword, setBiometric, withoutAutoLock, projects, projectsBroken, addProject, updateProject, deleteProject, importProjects]);
+  }, [status, profile, items, offline, syncing, breaches, breachChecked, breachProgress, biometric, biometricAvailable, prefs, setPrefs, login, register, unlockWithBiometrics, lock, logout, wipeLocal, refresh, loadProfile, addItem, updateItem, toggleFavorite, deleteItem, importItems, runBreachCheck, changeMasterPassword, setBiometric, withoutAutoLock, projects, addProject, updateProject, deleteProject, importProjects]);
 
   return <VaultContext.Provider value={value}>{children}</VaultContext.Provider>;
 }

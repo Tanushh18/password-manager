@@ -7,7 +7,6 @@ import "./App.css";
 import Home from "./Pages/Home/Home";
 import Login from "./Pages/Login/Login";
 import Signup from "./Pages/SignUp/Signup";
-import Unlock from "./Pages/Unlock/Unlock";
 import Vault from "./Pages/Passwords/Passwords";
 import Projects from "./Pages/Projects/Projects";
 import Settings from "./Pages/Settings/Settings";
@@ -24,7 +23,6 @@ function RequireVault({ children }) {
   const location = useLocation();
   if (status === "checking") return <Splash />;
   if (status === "signedOut") return <Navigate to="/signin" replace state={{ from: location.pathname }} />;
-  if (status === "locked") return <Navigate to="/unlock" replace state={{ from: location.pathname }} />;
   return children;
 }
 
@@ -33,7 +31,6 @@ function GuestOnly({ children }) {
   const { status } = useVault();
   if (status === "checking") return <Splash />;
   if (status === "ready") return <Navigate to="/passwords" replace />;
-  if (status === "locked") return <Navigate to="/unlock" replace />;
   return children;
 }
 
@@ -70,7 +67,6 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/signin" element={<GuestOnly><Login /></GuestOnly>} />
           <Route path="/signup" element={<GuestOnly><Signup /></GuestOnly>} />
-          <Route path="/unlock" element={<Unlock />} />
           <Route path="/passwords" element={<RequireVault><Vault /></RequireVault>} />
           <Route path="/projects" element={<RequireVault><Projects /></RequireVault>} />
           <Route path="/settings" element={<RequireVault><Settings /></RequireVault>} />

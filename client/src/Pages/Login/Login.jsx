@@ -28,14 +28,14 @@ export default function Login() {
     if (loading) return;
     const found = {};
     if (!EMAIL_RE.test(form.email.trim())) found.email = "That email doesn't look right";
-    if (!form.password) found.password = "Enter your master password";
+    if (!form.password) found.password = "Enter your password";
     if (stepTwo && !form.code.trim()) found.code = "Enter the 6-digit code or a recovery code";
     setErrors(found);
     if (Object.keys(found).length) return;
 
     try {
       setLoading(true);
-      setMessage(stepTwo ? "Checking your code…" : "Deriving your key and unlocking the vault…");
+      setMessage(stepTwo ? "Checking your code…" : "Signing you in…");
       const res = await login(form.email.trim(), form.password, stepTwo ? form.code.trim() : undefined);
       if (res.twoFactorRequired) {
         setStepTwo(true);
@@ -70,7 +70,7 @@ export default function Login() {
         <p className="auth__sub">
           {stepTwo
             ? "Open your authenticator app and enter the current code — or use one of your recovery codes."
-            : "Your master password unlocks the vault on this device. It never leaves it unencrypted."}
+            : "Sign in with your email and password to see your saved passwords."}
         </p>
 
         {message ? <div className="notice auth__message">{message}</div> : null}
@@ -78,7 +78,7 @@ export default function Login() {
         {!stepTwo ? (
           <>
             <Field id="login-email" label="Email address" type="email" value={form.email} onChange={set("email")} placeholder="you@example.com" autoComplete="username" error={errors.email} disabled={loading} />
-            <Field id="login-pass" label="Master password" secret value={form.password} onChange={set("password")} placeholder="••••••••••" autoComplete="current-password" error={errors.password} disabled={loading} />
+            <Field id="login-pass" label="Password" secret value={form.password} onChange={set("password")} placeholder="••••••••••" autoComplete="current-password" error={errors.password} disabled={loading} />
           </>
         ) : (
           <Field
@@ -98,7 +98,7 @@ export default function Login() {
         <button type="submit" className="btn btn--primary btn--block auth__submit" disabled={loading}>
           <span className="btn__sheen" />
           {loading ? <span className="spinner" /> : stepTwo ? <ShieldCheck size={16} /> : null}
-          {loading ? "Unlocking…" : stepTwo ? "Verify and unlock" : "Unlock my vault"}
+          {loading ? "Signing in…" : stepTwo ? "Verify and sign in" : "Sign in"}
           {!loading && !stepTwo ? <Arrow size={16} /> : null}
         </button>
 

@@ -131,8 +131,8 @@ export default function Settings() {
           <Section title="SECURITY" delay={100}>
             <Row
               icon="fingerprint"
-              title="Biometric unlock"
-              subtitle={biometricAvailable ? "Your vault key is kept in the Android Keystore, released by your fingerprint" : "Set up a fingerprint or face unlock on this phone first"}
+              title="Biometric app lock"
+              subtitle={biometricAvailable ? "Require a fingerprint or face check to reopen the app" : "Set up a fingerprint or face unlock on this phone first"}
               right={
                 <Switch
                   value={biometric}
@@ -141,7 +141,7 @@ export default function Settings() {
                     tap();
                     try {
                       await setBiometric(v);
-                      toast(v ? "Biometric unlock on" : "Biometric unlock off", "info");
+                      toast(v ? "Biometric app lock on" : "Biometric app lock off", "info");
                     } catch (e) {
                       if (!/cancel/i.test(e.message || "")) toast(e.message, "error");
                     }
@@ -151,15 +151,17 @@ export default function Settings() {
                 />
               }
             />
-            <View>
-              <Row icon="timer" title="Auto-lock" subtitle="Lock the vault after the app has been in the background" color={theme.accent3} right={null} />
-              <View style={styles.chips}>
-                {LOCK_OPTIONS.map((o) => <Chip key={o.v} label={o.label} active={prefs.autoLock === o.v} onPress={() => setPrefs({ autoLock: o.v })} />)}
+            {biometric ? (
+              <View>
+                <Row icon="timer" title="Auto-lock" subtitle="Ask for a fingerprint again after the app has been in the background" color={theme.accent3} right={null} />
+                <View style={styles.chips}>
+                  {LOCK_OPTIONS.map((o) => <Chip key={o.v} label={o.label} active={prefs.autoLock === o.v} onPress={() => setPrefs({ autoLock: o.v })} />)}
+                </View>
               </View>
-            </View>
+            ) : null}
             <Row icon="shieldCheck" title="Two-factor login" subtitle={profile?.twoFactorEnabled ? `On · ${profile.recoveryCodesLeft} recovery codes left` : "Off — add a second step to sign in"} color={profile?.twoFactorEnabled ? theme.ok : theme.warn} onPress={() => router.push("/account/twofactor")} />
-            <Row icon="key" title="Change master password" subtitle="Re-encrypts every item with a new key" onPress={() => router.push("/account/password")} />
-            <Row icon="lock" title="Lock now" onPress={lock} color={theme.accent2} />
+            <Row icon="key" title="Change password" onPress={() => router.push("/account/password")} />
+            {biometric ? <Row icon="lock" title="Lock now" onPress={lock} color={theme.accent2} /> : null}
             <Row icon="logout" title="Sign out other devices" subtitle={`${Math.max(0, (profile?.sessions || 1) - 1)} other session(s)`} onPress={signOutOthers} color={theme.accent2} />
           </Section>
 

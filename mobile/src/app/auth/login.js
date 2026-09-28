@@ -11,7 +11,7 @@ import { useTheme } from "../../lib/theme";
 import { useVault } from "../../lib/vault";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const STAGES = ["Waking the vault…", "Checking it's really you…", "Deriving your key on this phone…", "Decrypting your vault…"];
+const STAGES = ["Waking the server…", "Checking it's really you…", "Loading your vault…"];
 
 /** Shake animation for a failed attempt. */
 function useShake() {
@@ -46,7 +46,7 @@ export default function Login() {
   const submit = async () => {
     const found = {};
     if (!EMAIL_RE.test(email.trim())) found.email = "That email doesn't look right";
-    if (!password) found.password = "Enter your master password";
+    if (!password) found.password = "Enter your password";
     if (needCode && !code.trim()) found.code = "Enter the 6-digit code or a recovery code";
     setErrors(found);
     if (Object.keys(found).length) return shake();
@@ -83,7 +83,7 @@ export default function Login() {
               <Text style={[styles.sub, { color: theme.textMuted, fontFamily: theme.font.body }]}>
                 {needCode
                   ? "Two-factor login is on. Enter the code from your authenticator app."
-                  : "Your master password unlocks the vault on this phone. It never leaves it."}
+                  : "Sign in with your email and password to see your saved passwords."}
               </Text>
             </FadeIn>
 
@@ -114,7 +114,7 @@ export default function Login() {
                       setPassword(t);
                       if (errors.password) setErrors((p) => ({ ...p, password: null }));
                     }}
-                    placeholder="Your master password"
+                    placeholder="Your password"
                     autoCapitalize="none"
                     autoComplete="password"
                     error={errors.password}
@@ -140,7 +140,7 @@ export default function Login() {
                       onSubmitEditing={submit}
                     />
                   ) : null}
-                  <GradientButton title={needCode ? "Verify and unlock" : "Unlock my vault"} icon="arrow" loading={loading} onPress={submit} style={{ marginTop: 6 }} />
+                  <GradientButton title={needCode ? "Verify and sign in" : "Sign in"} icon="arrow" loading={loading} onPress={submit} style={{ marginTop: 6 }} />
                   {loading ? (
                     <Text style={[styles.stage, { color: theme.accentSoft, fontFamily: theme.font.bodyMedium }]}>{STAGES[stage]}</Text>
                   ) : null}

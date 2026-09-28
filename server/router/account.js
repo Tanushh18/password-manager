@@ -6,18 +6,18 @@ const rateLimit = require("../middlewares/rateLimit");
 const totp = require("../utils/totp");
 const { seal, unseal } = require("../models/EncDecManager");
 const {
-    COOKIE_OPTIONS, COOKIE_MAX_AGE, str, raw, isBlob, validKdf, wantsToken,
+    COOKIE_OPTIONS, COOKIE_MAX_AGE, str, raw, wantsToken,
     checkPassword, checkSecondFactor, serverError
 } = require("./helpers");
 
 const sensitiveLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 15, message: "Too many attempts. Please wait a few minutes." });
 
-/* Verifies the master password (and 2FA when on) for sensitive actions. */
+/* Verifies the current password (and 2FA when on) for sensitive actions. */
 const reauth = async (req, res, user) =>
 {
     if (!(await checkPassword(user, req.body.password ?? req.body.currentPassword)))
     {
-        res.status(400).json({ error: "Your master password is incorrect." });
+        res.status(400).json({ error: "Your current password is incorrect." });
         return false;
     }
     if (user.twoFactor && user.twoFactor.enabled && !checkSecondFactor(user, req.body.code))
@@ -46,76 +46,20 @@ router.post("/account/profile", authenticate, async (req, res) =>
     }
 });
 
-/* ════════════════ CHANGE MASTER PASSWORD ════════════════
-   The client re-derives a new key and re-encrypts every item, then sends
-   everything in one request so the change is all-or-nothing. */
+/* ════════════════ CHANGE PASSWORD ════════════════
+   Items are encrypted with the server's own key, not with anything derived
+   from this password, so changing it is just a bcrypt re-hash. */
 
 router.post("/account/password", authenticate, sensitiveLimiter, async (req, res) =>
 {
     const newPassword = raw(req.body.newPassword);
-    const { kdf, keyCheck } = req.body;
-    const items = Array.isArray(req.body.items) ? req.body.items : null;
-    // Project tracker entries share the same vault key, so they need re-encrypting too.
-    // Optional for backward compatibility with older clients that don't send it.
-    const projectItems = Array.isArray(req.body.projectItems) ? req.body.projectItems : null;
-
-    if (newPassword.length < 8) return res.status(400).json({ error: "Use at least 8 characters for your new master password." });
-    if (!validKdf(kdf) || !isBlob(keyCheck) || !items || !items.every((i) => i && i.id && isBlob(i.data)))
-    {
-        return res.status(400).json({ error: "Invalid request." });
-    }
-    if (projectItems && !projectItems.every((i) => i && i.id && isBlob(i.data)))
-    {
-        return res.status(400).json({ error: "Invalid request." });
-    }
+    if (newPassword.length < 8) return res.status(400).json({ error: "Use at least 8 characters for your new password." });
 
     try
     {
         const user = await User.findById(req.rootUser._id);
         if (!(await reauth(req, res, user))) return undefined;
 
-        // Every entry must be re-encrypted with the new key, no more, no less.
-        const current = new Set(user.passwords.map((p) => String(p._id)));
-        const sent = new Set(items.map((i) => String(i.id)));
-        if (current.size !== sent.size || [...current].some((id) => !sent.has(id)))
-        {
-            return res.status(409).json({ error: "Your vault changed while updating. Please try again.", code: "VAULT_CHANGED" });
-        }
-        if (projectItems)
-        {
-            const currentProjects = new Set(user.projects.map((p) => String(p._id)));
-            const sentProjects = new Set(projectItems.map((i) => String(i.id)));
-            if (currentProjects.size !== sentProjects.size || [...currentProjects].some((id) => !sentProjects.has(id)))
-            {
-                return res.status(409).json({ error: "Your project list changed while updating. Please try again.", code: "VAULT_CHANGED" });
-            }
-        }
-
-        const now = new Date();
-        items.forEach(({ id, data }) =>
-        {
-            const entry = user.passwords.id(id);
-            entry.enc = "e2e";
-            entry.data = data;
-            entry.password = undefined;
-            entry.iv = undefined;
-            entry.tag = undefined;
-            entry.platform = undefined;
-            entry.platEmail = undefined;
-            entry.updatedAt = entry.updatedAt || now;
-        });
-        if (projectItems)
-        {
-            projectItems.forEach(({ id, data }) =>
-            {
-                const entry = user.projects.id(id);
-                entry.enc = "e2e";
-                entry.data = data;
-                entry.updatedAt = entry.updatedAt || now;
-            });
-        }
-        user.kdf = { salt: kdf.salt, iterations: kdf.iterations };
-        user.keyCheck = keyCheck;
         user.password = newPassword; // hashed by the pre-save hook
         user.cpassword = undefined;
         user.tokens = []; // sign out every other device
@@ -125,7 +69,7 @@ router.post("/account/password", authenticate, sensitiveLimiter, async (req, res
         const token = await user.generateAuthToken(client);
         res.cookie("jwtoken", token, { ...COOKIE_OPTIONS, expires: new Date(Date.now() + COOKIE_MAX_AGE) });
 
-        const body = { message: "Master password changed. Other devices were signed out.", vault: user.toPublic().vault };
+        const body = { message: "Password changed. Other devices were signed out." };
         if (client === "mobile") body.token = token;
         return res.status(200).json(body);
     }
@@ -177,7 +121,7 @@ router.post("/2fa/setup", authenticate, sensitiveLimiter, async (req, res) =>
     {
         const user = await User.findById(req.rootUser._id);
         if (user.twoFactor && user.twoFactor.enabled) return res.status(409).json({ error: "Two-factor login is already on." });
-        if (!(await checkPassword(user, req.body.password))) return res.status(400).json({ error: "Your master password is incorrect." });
+        if (!(await checkPassword(user, req.body.password))) return res.status(400).json({ error: "Your password is incorrect." });
 
         const secret = totp.generateSecret();
         user.set("twoFactor.enabled", false);

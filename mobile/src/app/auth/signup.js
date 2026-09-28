@@ -62,7 +62,7 @@ export default function Signup() {
                 Create your <GradientText>vault.</GradientText>
               </Text>
               <Text style={[styles.sub, { color: theme.textMuted, fontFamily: theme.font.body }]}>
-                One master password encrypts everything on your phone. Choose it well.
+                Sign up with your email and a password — you'll use them to sign in.
               </Text>
             </FadeIn>
 
@@ -81,7 +81,7 @@ export default function Signup() {
                   error={errors.email}
                 />
                 <Field
-                  label="Master password"
+                  label="Password"
                   icon="lock"
                   secure
                   value={form.password}
@@ -109,7 +109,7 @@ export default function Signup() {
                 >
                   <Icon name="alert" size={16} color={theme.warn} />
                   <Text style={{ flex: 1, color: theme.textMuted, fontFamily: theme.font.body, fontSize: 13, lineHeight: 19 }}>
-                    I understand Aurelia <Text style={{ color: theme.heading, fontFamily: theme.font.bodySemi }}>can't reset or recover</Text> my master password.
+                    I understand that if I forget my password, I can reset it by signing in again.
                   </Text>
                   <Switch value={agree} onValueChange={setAgree} trackColor={{ false: alpha(theme.accent, 0.2), true: theme.accent }} thumbColor="#fff" />
                 </Pressable>
