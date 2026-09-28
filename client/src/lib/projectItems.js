@@ -75,6 +75,63 @@ export function normalizeProject(raw = {}) {
   return next;
 }
 
+/**
+ * Parses a raw .env-style block — exactly what you get pasting from Render's
+ * Environment tab (or any KEY=VALUE dump) — into { name, value } rows.
+ * Handles single-line values, quoted values, and multi-line quoted blocks
+ * (e.g. a pasted Firebase service-account JSON wrapped in '...').
+ * Runs entirely in the browser; nothing here is sent anywhere.
+ */
+export function parseEnvBlock(text) {
+  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  const rows = [];
+  let i = 0;
+
+  const stripQuotes = (v) => {
+    if (v.length >= 2 && ((v[0] === '"' && v[v.length - 1] === '"') || (v[0] === "'" && v[v.length - 1] === "'"))) {
+      return v.slice(1, -1);
+    }
+    return v;
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) { i += 1; continue; }
+
+    const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!m) { i += 1; continue; }
+
+    const [, key, rest] = m;
+
+    // A value that starts with a quote but never closes it on this line is a
+    // multi-line block (e.g. a pasted JSON credential) — collect until we
+    // hit a line that closes it: a bare closing brace, or brace+quote.
+    const startsQuoted = /^['"]/.test(rest.trim());
+    const quoteChar = startsQuoted ? rest.trim()[0] : null;
+    const closesOnSameLine = quoteChar && rest.trim().length > 1 && rest.trim().endsWith(quoteChar);
+
+    if (startsQuoted && !closesOnSameLine) {
+      const blockLines = [rest.trim().slice(1)];
+      i += 1;
+      while (i < lines.length) {
+        const l = lines[i];
+        const closesHere = l.trim() === "}" || l.trim() === `}${quoteChar}` || l.trim().endsWith(`}${quoteChar}`);
+        if (closesHere) { blockLines.push(l.trim().replace(new RegExp(`${quoteChar}$`), "")); i += 1; break; }
+        blockLines.push(l);
+        i += 1;
+      }
+      rows.push({ name: key, value: blockLines.join("\n") });
+      continue;
+    }
+
+    rows.push({ name: key, value: stripQuotes(rest.trim()) });
+    i += 1;
+  }
+
+  return rows.filter((r) => r.name);
+}
+
 export const STATUS_LABEL = {
   planning: "Planning",
   in_progress: "In progress",

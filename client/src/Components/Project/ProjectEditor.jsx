@@ -3,7 +3,7 @@ import { Modal } from "react-responsive-modal";
 import "react-responsive-modal/styles.css";
 import { toast } from "react-toastify";
 import Field from "../Field/Field";
-import { emptyProject, emptyDatabase, emptyEnvVar, emptyExtraField } from "../../lib/projectItems";
+import { emptyProject, emptyDatabase, emptyEnvVar, emptyExtraField, parseEnvBlock } from "../../lib/projectItems";
 import { Globe, Trash, Check, Plus } from "../Icons/Icons";
 
 const text = (id, label, key, form, setForm, extra = {}) => (
@@ -26,13 +26,26 @@ export default function ProjectEditor({ open, project, onClose, onSave, onDelete
   const [form, setForm] = useState(emptyProject());
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
 
   useEffect(() => {
     if (open) {
       setForm(project ? { ...emptyProject(), ...project } : emptyProject());
       setConfirmDelete(false);
+      setPasteOpen(false);
+      setPasteText("");
     }
   }, [open, project]);
+
+  const applyPaste = () => {
+    const parsed = parseEnvBlock(pasteText);
+    if (!parsed.length) { toast.error("Couldn't find any KEY=VALUE lines in that."); return; }
+    setForm((f) => ({ ...f, envVars: [...f.envVars, ...parsed.map((p) => ({ ...emptyEnvVar(), ...p }))] }));
+    setPasteText("");
+    setPasteOpen(false);
+    toast.success(`${parsed.length} variable${parsed.length === 1 ? "" : "s"} added — encrypted once you save.`);
+  };
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -187,6 +200,35 @@ export default function ProjectEditor({ open, project, onClose, onSave, onDelete
           <p className="field__note" style={{ marginTop: "-0.3rem", marginBottom: "0.7rem" }}>
             Real values are welcome here — a Mongo URI, a Cloudinary key, whatever. This whole project entry is encrypted the same way as a password.
           </p>
+
+          {!pasteOpen ? (
+            <button type="button" className="btn btn--ghost btn--sm" style={{ marginBottom: "0.8rem" }} onClick={() => setPasteOpen(true)}>
+              <Plus size={14} /> Paste from Render (or any .env)
+            </button>
+          ) : (
+            <div className="proj-paste">
+              <textarea
+                className="input textarea"
+                rows={6}
+                placeholder={"MONGO_URI=mongodb+srv://...\nFIREBASE_ADMIN_CREDENTIALS='{\n  ...\n}'\n\nPaste the whole block exactly as copied — one KEY=VALUE per line."}
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+                autoFocus
+              />
+              <p className="field__note" style={{ margin: "0.4rem 0 0.6rem" }}>
+                Parsed in your browser only — nothing here is sent anywhere until you hit Save.
+              </p>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button type="button" className="btn btn--primary btn--sm" onClick={applyPaste} disabled={!pasteText.trim()}>
+                  Parse &amp; add
+                </button>
+                <button type="button" className="btn btn--ghost btn--sm" onClick={() => { setPasteOpen(false); setPasteText(""); }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           {(form.envVars || []).map((row, i) => (
             <RepeatRow key={i} onRemove={() => setForm((f) => ({ ...f, envVars: f.envVars.filter((_, idx) => idx !== i) }))}>
               <input className="input" placeholder="Variable name (e.g. MONGO_URI)" value={row.name} onChange={(e) => setForm((f) => ({ ...f, envVars: updateRow(f.envVars, i, { name: e.target.value }) }))} />

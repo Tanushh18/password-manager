@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { pwnedCount } from "../src/lib/breach.js";
 import { computeHealth } from "../src/lib/health.js";
 import { parseCSV, rowsToItems, toCSV, domainOf } from "../src/lib/items.js";
+import { parseEnvBlock } from "../src/lib/projectItems.js";
 
 test("pwnedCount sends only a 5-char prefix and parses padded responses", async () => {
   const calls = [];
@@ -54,4 +55,36 @@ test("CSV round trip and importer column mapping", () => {
   const legacy = rowsToItems([{ platform: "Bank", email: "a@b.c", password: "x" }]);
   assert.deepEqual([legacy[0].name, legacy[0].username], ["Bank", "a@b.c"]);
   assert.equal(domainOf("https://www.github.com/x"), "github.com");
+});
+
+test("parseEnvBlock reads a Render-style paste, including quoted and multi-line values", () => {
+  const pasted = [
+    "PORT=4000",
+    'EMAIL_PASS="app pass with spaces"',
+    "MONGO_URI=mongodb+srv://user:pass@cluster.mongodb.net/db",
+    "# a comment line should be ignored",
+    "",
+    "FIREBASE_ADMIN_CREDENTIALS='{",
+    '  "type": "service_account",',
+    '  "project_id": "demo-project"',
+    "}'",
+    "NEXT_KEY=still-works-after-a-block",
+  ].join("\n");
+
+  const rows = parseEnvBlock(pasted);
+  const byName = Object.fromEntries(rows.map((r) => [r.name, r.value]));
+
+  assert.equal(rows.length, 5);
+  assert.equal(byName.PORT, "4000");
+  assert.equal(byName.EMAIL_PASS, "app pass with spaces");
+  assert.equal(byName.MONGO_URI, "mongodb+srv://user:pass@cluster.mongodb.net/db");
+  assert.equal(byName.NEXT_KEY, "still-works-after-a-block");
+  assert.ok(byName.FIREBASE_ADMIN_CREDENTIALS.includes('"project_id": "demo-project"'));
+  assert.equal(byName.FIREBASE_ADMIN_CREDENTIALS.split("\n").length, 4);
+});
+
+test("parseEnvBlock ignores blank input and non KEY=VALUE lines", () => {
+  assert.deepEqual(parseEnvBlock(""), []);
+  assert.deepEqual(parseEnvBlock("   \n # just a comment\n"), []);
+  assert.deepEqual(parseEnvBlock("not a valid line"), []);
 });

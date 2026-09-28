@@ -33,6 +33,15 @@
 
 .react-responsive-modal-modal.proj-sheet { max-width: 760px !important; }
 
+.proj-paste {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-lg);
+  padding: 0.9rem;
+  margin-bottom: 0.9rem;
+  background: rgba(var(--accent-rgb), 0.04);
+}
+.proj-paste textarea { font-family: var(--font-mono); font-size: 0.78rem; }
+
 @media (max-width: 640px) {
   .proj-repeat-row { align-items: flex-start; }
   .proj-repeat-row__fields { grid-template-columns: 1fr; }
