@@ -160,7 +160,7 @@ export default function Health() {
 function Tile({ n, label, color }) {
   const { theme } = useTheme();
   return (
-    <View style={[styles.tile, { backgroundColor: alpha(color.startsWith("#") ? color : "#8B5CF6", 0.1), borderColor: theme.line }]}>
+    <View style={[styles.tile, { backgroundColor: alpha(color.startsWith("#") ? color : "#31AAA9", 0.1), borderColor: theme.line }]}>
       <Text style={{ color, fontFamily: theme.font.displayHeavy, fontSize: 22 }}>{n ?? "–"}</Text>
       <Text style={{ color: theme.textFaint, fontFamily: theme.font.body, fontSize: 11 }}>{label}</Text>
     </View>

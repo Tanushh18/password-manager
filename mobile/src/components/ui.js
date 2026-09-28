@@ -236,7 +236,7 @@ export function Chip({ label, active, onPress, count, color }) {
 export function GradientText({ children, style }) {
   const { theme } = useTheme();
   // Native has no background-clip:text; a bright accent reads the same at a glance.
-  return <Text style={[{ color: theme.mode === "dark" ? "#C4B5FD" : theme.accent }, style]}>{children}</Text>;
+  return <Text style={[{ color: theme.mode === "dark" ? "#6BC2C1" : theme.accent }, style]}>{children}</Text>;
 }
 
 /* ── Fade + rise on mount ── */

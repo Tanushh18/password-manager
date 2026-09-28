@@ -1,6 +1,6 @@
 /* ════════════════════════════════════════════════════════════
-   Aurelia — "Aurora" design system
-   Midnight glass, northern-light gradients, live motion.
+   Stashr design system
+   Teal, gold and deep red on near-black ground; live motion kept.
    Dark by default, with a light theme (data-theme="light").
    The same tokens drive the Android app (mobile/src/theme.js).
    ════════════════════════════════════════════════════════════ */
@@ -10,65 +10,65 @@
   color-scheme: dark;
 
   /* ── Brand ── */
-  --accent: #8b5cf6;          /* aurora violet */
-  --accent-soft: #a78bfa;
-  --accent-deep: #7c3aed;
-  --accent-2: #ec4899;        /* magenta */
-  --accent-3: #22d3ee;        /* cyan */
-  --ok: #34d399;              /* mint */
-  --ok-deep: #10b981;
-  --warn: #fbbf24;
-  --danger: #f43f5e;
-  --danger-deep: #e11d48;
+  --accent: #31aaa9;          /* teal */
+  --accent-soft: #6bc2c1;
+  --accent-deep: #237a7a;
+  --accent-2: #a82020;        /* red */
+  --accent-3: #f8e0a4;        /* gold */
+  --ok: #2fa36b;               /* green */
+  --ok-deep: #24875a;
+  --warn: #f8e0a4;
+  --danger: #a82020;
+  --danger-deep: #6c1a1a;
 
-  --accent-rgb: 139, 92, 246;
-  --accent-2-rgb: 236, 72, 153;
-  --accent-3-rgb: 34, 211, 238;
-  --ok-rgb: 52, 211, 153;
-  --danger-rgb: 244, 63, 94;
+  --accent-rgb: 49, 170, 169;
+  --accent-2-rgb: 168, 32, 32;
+  --accent-3-rgb: 248, 224, 164;
+  --ok-rgb: 47, 163, 107;
+  --danger-rgb: 168, 32, 32;
 
   /* ── Ground ── */
-  --bg: #07061a;
-  --bg-rgb: 7, 6, 26;
-  --tint: #1a1640;
-  --tint-light: #120f2e;
-  --tint-rgb: 46, 38, 110;
-  --glass-rgb: 22, 19, 52;
+  --bg: #0d0303;
+  --bg-rgb: 13, 3, 3;
+  --tint: #1e0707;
+  --tint-light: #130505;
+  --tint-rgb: 30, 7, 7;
+  --glass-rgb: 40, 15, 15;
   --shade-rgb: 0, 0, 0;
-  --ink-rgb: 237, 233, 254;
+  --ink-rgb: 245, 235, 216;
 
   /* ── Text ── */
-  --ink: #ede9fe;
-  --text: #e9e6ff;
-  --text-muted: rgba(233, 230, 255, 0.68);
-  --text-faint: rgba(233, 230, 255, 0.44);
-  --heading: #ffffff;
-  --heading-2: #ddd6fe;
+  --ink: #f5ebd8;
+  --text: #f0e4cc;
+  --text-muted: rgba(240, 228, 204, 0.68);
+  --text-faint: rgba(240, 228, 204, 0.44);
+  --heading: #fff8ec;
+  --heading-2: #f8e0a4;
   --white: #ffffff;
 
   /* ── Lines & surfaces ── */
-  --line: rgba(167, 139, 250, 0.16);
-  --line-strong: rgba(167, 139, 250, 0.32);
-  --danger-soft: rgba(244, 63, 94, 0.12);
-  --surface: rgba(24, 20, 58, 0.72);
-  --surface-solid: #151233;
-  --surface-tint: rgba(24, 20, 58, 0.6);
-  --surface-grad: linear-gradient(160deg, rgba(34, 28, 82, 0.92) 0%, rgba(19, 16, 46, 0.94) 60%, rgba(14, 12, 36, 0.96) 100%);
-  --surface-blush: linear-gradient(160deg, #1b1745 0%, #141135 60%, #0f0c2a 100%);
+  --line: rgba(49, 170, 169, 0.16);
+  --line-strong: rgba(49, 170, 169, 0.32);
+  --danger-soft: rgba(168, 32, 32, 0.12);
+  --surface: rgba(30, 10, 10, 0.72);
+  --surface-solid: #170808;
+  --surface-tint: rgba(30, 10, 10, 0.6);
+  --surface-grad: linear-gradient(160deg, rgba(40, 14, 14, 0.92) 0%, rgba(20, 8, 8, 0.94) 60%, rgba(13, 5, 5, 0.96) 100%);
+  --surface-blush: linear-gradient(160deg, #201010 0%, #170a0a 60%, #100505 100%);
 
   /* ── Gradients ── */
-  --grad-brand: linear-gradient(135deg, #8b5cf6 0%, #ec4899 55%, #f59e0b 120%);
-  --grad-cool: linear-gradient(135deg, #22d3ee 0%, #8b5cf6 100%);
-  --grad-text: linear-gradient(100deg, #c4b5fd 0%, #f0abfc 40%, #67e8f9 80%, #c4b5fd 100%);
+  --grad-brand: linear-gradient(135deg, #31aaa9 0%, #a82020 55%, #f8e0a4 120%);
+  --grad-cool: linear-gradient(135deg, #f8e0a4 0%, #31aaa9 100%);
+  --grad-text: linear-gradient(100deg, #6bc2c1 0%, #f8e0a4 50%, #6bc2c1 100%);
 
   /* ── Elevation ── */
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-sm: 0 4px 14px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 14px 38px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(167, 139, 250, 0.06);
-  --shadow-lg: 0 28px 70px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(167, 139, 250, 0.1);
-  --shadow-rose: 0 10px 30px rgba(139, 92, 246, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
-  --shadow-rose-lg: 0 18px 46px rgba(236, 72, 153, 0.45), 0 0 26px rgba(139, 92, 246, 0.35);
-  --glow: 0 0 0 1px rgba(167, 139, 250, 0.25), 0 0 40px rgba(139, 92, 246, 0.25);
+  --shadow-md: 0 14px 38px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(49, 170, 169, 0.06);
+  --shadow-lg: 0 28px 70px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(49, 170, 169, 0.1);
+  --shadow-rose: 0 10px 30px rgba(49, 170, 169, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  --shadow-rose-lg: 0 18px 46px rgba(168, 32, 32, 0.45), 0 0 26px rgba(49, 170, 169, 0.35);
+  --glow: 0 0 0 1px rgba(49, 170, 169, 0.25), 0 0 40px rgba(49, 170, 169, 0.25);
 
   /* ── Shape ── */
   --r-sm: 12px;
@@ -99,59 +99,59 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --accent: #7c3aed;
-  --accent-soft: #a78bfa;
-  --accent-deep: #6d28d9;
-  --accent-2: #db2777;
-  --accent-3: #0891b2;
-  --ok: #10b981;
-  --ok-deep: #059669;
-  --warn: #d97706;
-  --danger: #e11d48;
-  --danger-deep: #be123c;
+  --accent: #237a7a;
+  --accent-soft: #31aaa9;
+  --accent-deep: #1c6362;
+  --accent-2: #a82020;
+  --accent-3: #887b5a;
+  --ok: #1f7a4c;
+  --ok-deep: #145c38;
+  --warn: #ad8a2e;
+  --danger: #a82020;
+  --danger-deep: #6c1a1a;
 
-  --accent-rgb: 124, 58, 237;
-  --accent-2-rgb: 219, 39, 119;
-  --accent-3-rgb: 8, 145, 178;
-  --ok-rgb: 16, 185, 129;
-  --danger-rgb: 225, 29, 72;
+  --accent-rgb: 35, 122, 122;
+  --accent-2-rgb: 168, 32, 32;
+  --accent-3-rgb: 136, 123, 90;
+  --ok-rgb: 31, 122, 76;
+  --danger-rgb: 168, 32, 32;
 
-  --bg: #f6f4ff;
-  --bg-rgb: 246, 244, 255;
-  --tint: #ede9fe;
-  --tint-light: #f5f3ff;
-  --tint-rgb: 221, 214, 254;
+  --bg: #fcf1d6;
+  --bg-rgb: 252, 241, 214;
+  --tint: #faebc4;
+  --tint-light: #fdf5e2;
+  --tint-rgb: 250, 235, 196;
   --glass-rgb: 255, 255, 255;
-  --shade-rgb: 46, 16, 101;
-  --ink-rgb: 30, 27, 75;
+  --shade-rgb: 108, 26, 26;
+  --ink-rgb: 58, 16, 16;
 
-  --ink: #1e1b4b;
-  --text: #1e1b4b;
-  --text-muted: rgba(30, 27, 75, 0.68);
-  --text-faint: rgba(30, 27, 75, 0.45);
-  --heading: #1e1b4b;
-  --heading-2: #4c1d95;
+  --ink: #3a1010;
+  --text: #3a1010;
+  --text-muted: rgba(58, 16, 16, 0.68);
+  --text-faint: rgba(58, 16, 16, 0.45);
+  --heading: #2a0b0b;
+  --heading-2: #6c1a1a;
 
-  --line: rgba(124, 58, 237, 0.14);
-  --line-strong: rgba(124, 58, 237, 0.3);
-  --danger-soft: rgba(225, 29, 72, 0.08);
+  --line: rgba(35, 122, 122, 0.14);
+  --line-strong: rgba(35, 122, 122, 0.3);
+  --danger-soft: rgba(168, 32, 32, 0.08);
   --surface: rgba(255, 255, 255, 0.82);
-  --surface-solid: #ffffff;
+  --surface-solid: #fffaf0;
   --surface-tint: rgba(255, 255, 255, 0.72);
-  --surface-grad: linear-gradient(160deg, #ffffff 0%, #fbfaff 60%, #f3efff 100%);
-  --surface-blush: linear-gradient(160deg, #ffffff 0%, #f8f5ff 60%, #efe9ff 100%);
+  --surface-grad: linear-gradient(160deg, #fffaf0 0%, #fdf6e6 60%, #f8ecd2 100%);
+  --surface-blush: linear-gradient(160deg, #fffaf0 0%, #fbf0dd 60%, #f6e9cd 100%);
 
-  --grad-brand: linear-gradient(135deg, #7c3aed 0%, #db2777 60%, #f59e0b 125%);
-  --grad-cool: linear-gradient(135deg, #0891b2 0%, #7c3aed 100%);
-  --grad-text: linear-gradient(100deg, #6d28d9 0%, #db2777 45%, #0891b2 85%, #6d28d9 100%);
+  --grad-brand: linear-gradient(135deg, #237a7a 0%, #a82020 60%, #f8e0a4 125%);
+  --grad-cool: linear-gradient(135deg, #6c1a1a 0%, #237a7a 100%);
+  --grad-text: linear-gradient(100deg, #237a7a 0%, #a82020 45%, #6c1a1a 85%, #237a7a 100%);
 
-  --shadow-xs: 0 1px 2px rgba(46, 16, 101, 0.05);
-  --shadow-sm: 0 4px 14px rgba(46, 16, 101, 0.07);
-  --shadow-md: 0 14px 34px rgba(46, 16, 101, 0.09), 0 2px 8px rgba(46, 16, 101, 0.04);
-  --shadow-lg: 0 26px 64px rgba(46, 16, 101, 0.14), 0 4px 14px rgba(46, 16, 101, 0.05);
-  --shadow-rose: 0 10px 28px rgba(124, 58, 237, 0.32);
-  --shadow-rose-lg: 0 16px 40px rgba(219, 39, 119, 0.32);
-  --glow: 0 0 0 1px rgba(124, 58, 237, 0.2), 0 0 30px rgba(124, 58, 237, 0.15);
+  --shadow-xs: 0 1px 2px rgba(58, 16, 16, 0.05);
+  --shadow-sm: 0 4px 14px rgba(58, 16, 16, 0.07);
+  --shadow-md: 0 14px 34px rgba(58, 16, 16, 0.09), 0 2px 8px rgba(58, 16, 16, 0.04);
+  --shadow-lg: 0 26px 64px rgba(58, 16, 16, 0.14), 0 4px 14px rgba(58, 16, 16, 0.05);
+  --shadow-rose: 0 10px 28px rgba(35, 122, 122, 0.32);
+  --shadow-rose-lg: 0 16px 40px rgba(168, 32, 32, 0.32);
+  --glow: 0 0 0 1px rgba(35, 122, 122, 0.2), 0 0 30px rgba(35, 122, 122, 0.15);
 }
 
 *,

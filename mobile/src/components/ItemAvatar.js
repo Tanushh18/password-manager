@@ -5,12 +5,12 @@ import { useTheme } from "../lib/theme";
 import { faviconUrl } from "../lib/items";
 
 const WASHES = [
-  ["#8B5CF6", "#EC4899"],
-  ["#22D3EE", "#8B5CF6"],
-  ["#F472B6", "#F59E0B"],
-  ["#34D399", "#0891B2"],
-  ["#6366F1", "#22D3EE"],
-  ["#A855F7", "#6366F1"],
+  ["#31AAA9", "#A82020"],
+  ["#F8E0A4", "#31AAA9"],
+  ["#A82020", "#6C1A1A"],
+  ["#6BC2C1", "#F8E0A4"],
+  ["#6C1A1A", "#31AAA9"],
+  ["#A82020", "#F8E0A4"],
 ];
 export const washFor = (name) => WASHES[((name || "?").charCodeAt(0) || 0) % WASHES.length];
 

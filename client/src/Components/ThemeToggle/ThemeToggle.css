@@ -30,15 +30,15 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  color: #c4b5fd;
-  background: #0f0c29;
-  box-shadow: 0 0 12px rgba(139, 92, 246, 0.7);
+  color: #6bc2c1;
+  background: #170808;
+  box-shadow: 0 0 12px rgba(49, 170, 169, 0.7);
   transition: transform 0.45s var(--ease-spring), background var(--t) var(--ease), color var(--t) var(--ease);
 }
 
 .theme-toggle.is-light .theme-toggle__thumb {
   transform: translateX(24px) rotate(180deg);
   background: #fff;
-  color: #f59e0b;
-  box-shadow: 0 0 12px rgba(245, 158, 11, 0.6);
+  color: #ad8a2e;
+  box-shadow: 0 0 12px rgba(248, 224, 164, 0.7);
 }

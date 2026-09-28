@@ -2,12 +2,12 @@ import React, { useState } from "react";
 import { faviconUrl } from "../../lib/items";
 
 const WASHES = [
-  "linear-gradient(140deg, #8b5cf6, #ec4899)",
-  "linear-gradient(140deg, #22d3ee, #8b5cf6)",
-  "linear-gradient(140deg, #f472b6, #f59e0b)",
-  "linear-gradient(140deg, #34d399, #0891b2)",
-  "linear-gradient(140deg, #6366f1, #22d3ee)",
-  "linear-gradient(140deg, #a855f7, #6366f1)",
+  "linear-gradient(140deg, #31aaa9, #a82020)",
+  "linear-gradient(140deg, #f8e0a4, #31aaa9)",
+  "linear-gradient(140deg, #a82020, #6c1a1a)",
+  "linear-gradient(140deg, #6bc2c1, #f8e0a4)",
+  "linear-gradient(140deg, #6c1a1a, #31aaa9)",
+  "linear-gradient(140deg, #a82020, #f8e0a4)",
 ];
 
 export const washFor = (name) => WASHES[((name || "?").charCodeAt(0) || 0) % WASHES.length];
