@@ -1,12 +1,17 @@
-# Builds the Aurelia Android app on Expo's cloud (EAS Build).
+# Builds the Aurelia Android app on Expo's cloud (EAS Build), then
+# distributes the APK to testers via Firebase App Distribution.
 #
 # One-time setup:
 #   1. Create an access token at https://expo.dev/settings/access-tokens
-#   2. Add it to this repo as the secret EXPO_TOKEN
-#      (Settings → Secrets and variables → Actions → New repository secret)
+#      Add it to this repo as the secret EXPO_TOKEN.
+#   2. Create a Firebase project + Android app (package: com.aurelia.vault),
+#      enable App Distribution, and create a tester group.
+#      Add these repo secrets:
+#        - FIREBASE_APP_ID            (Firebase console → Project settings → General)
+#        - FIREBASE_SERVICE_ACCOUNT   (Project settings → Service accounts → Generate new private key, paste the whole JSON)
 #   3. Run this workflow from the Actions tab ("Run workflow").
 #
-# "preview" produces an installable .apk, "production" a Play Store .aab.
+# "preview" produces an installable .apk (used for distribution), "production" a Play Store .aab.
 name: Android build (EAS)
 
 on:
@@ -17,6 +22,14 @@ on:
         type: choice
         options: [preview, production]
         default: preview
+      distribute:
+        description: "Send to Firebase App Distribution testers (only applies to 'preview' APK builds)"
+        type: boolean
+        default: true
+      testerGroups:
+        description: "Firebase tester group alias(es), comma separated"
+        type: string
+        default: "testers"
 
 jobs:
   build:
@@ -24,6 +37,8 @@ jobs:
     defaults:
       run:
         working-directory: mobile
+    outputs:
+      apk-path: ${{ steps.download.outputs.apk-path }}
     steps:
       - uses: actions/checkout@v4
 
@@ -43,4 +58,36 @@ jobs:
       # Links the app to an EAS project on the token's account (creates it the first time).
       - run: eas init --non-interactive --force
 
-      - run: eas build --platform android --profile ${{ inputs.profile }} --non-interactive --no-wait
+      # Waits for the cloud build to finish and prints machine-readable output
+      # (unlike --no-wait, which fires the build and exits immediately).
+      - name: Build on EAS
+        id: build
+        run: |
+          eas build --platform android --profile ${{ inputs.profile }} --non-interactive --json > build-result.json
+          cat build-result.json
+          url=$(node -e "console.log(JSON.parse(require('fs').readFileSync('build-result.json','utf8'))[0].artifacts.buildUrl)")
+          echo "artifact-url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Download built APK
+        id: download
+        if: inputs.profile == 'preview'
+        run: |
+          curl -L -o app-preview.apk "${{ steps.build.outputs.artifact-url }}"
+          echo "apk-path=mobile/app-preview.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact to GitHub Actions
+        if: inputs.profile == 'preview'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-preview-apk
+          path: mobile/app-preview.apk
+
+      - name: Distribute to Firebase testers
+        if: inputs.profile == 'preview' && inputs.distribute
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ secrets.FIREBASE_APP_ID }}
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          groups: ${{ inputs.testerGroups }}
+          file: mobile/app-preview.apk
+          releaseNotes: ${{ github.event.head_commit.message || format('Manual build from {0}', github.ref_name) }}

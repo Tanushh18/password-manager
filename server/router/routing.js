@@ -115,7 +115,8 @@ router.post("/login", authLimiter, async (req, res) =>
 router.get("/authenticate", authenticate, async (req, res) =>
 {
     res.set("Cache-Control", "no-store");
-    res.json(req.rootUser.toPublic());
+    const dataKey = await req.rootUser.getDataKey();
+    res.json(req.rootUser.toPublic(dataKey));
 });
 
 router.get("/logout", async (req, res) =>

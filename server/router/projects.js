@@ -7,8 +7,8 @@ const { serverError } = require("./helpers");
 
 /*
  * Project/infra tracker. Same scheme as the password vault (see
- * router/vault.js): every entry is one JSON document encrypted with the
- * server's own key.
+ * router/vault.js): every entry is one JSON document encrypted with this
+ * account's own data key (see User.getDataKey()).
  */
 
 const MAX_ITEMS = 2000;
@@ -24,10 +24,11 @@ router.post("/projects/items", authenticate, async (req, res) =>
 
     try
     {
+        const dataKey = await req.rootUser.getDataKey();
         const now = new Date();
-        const item = { _id: new mongoose.Types.ObjectId(), enc: "srv", data: User.sealEntry(fields), createdAt: now, updatedAt: now };
+        const item = { _id: new mongoose.Types.ObjectId(), enc: "udk", data: User.sealEntry(dataKey, fields), createdAt: now, updatedAt: now };
         await User.updateOne({ _id: req.rootUser._id }, { $push: { projects: item } });
-        return res.status(201).json({ item: User.publicEntry(item) });
+        return res.status(201).json({ item: User.publicEntry(item, dataKey) });
     }
     catch (error)
     {
@@ -49,10 +50,11 @@ router.post("/projects/items/bulk", authenticate, async (req, res) =>
 
     try
     {
+        const dataKey = await req.rootUser.getDataKey();
         const now = new Date();
-        const docs = items.map((i) => ({ _id: new mongoose.Types.ObjectId(), enc: "srv", data: User.sealEntry(i.data), createdAt: now, updatedAt: now }));
+        const docs = items.map((i) => ({ _id: new mongoose.Types.ObjectId(), enc: "udk", data: User.sealEntry(dataKey, i.data), createdAt: now, updatedAt: now }));
         await User.updateOne({ _id: req.rootUser._id }, { $push: { projects: { $each: docs } } });
-        return res.status(201).json({ items: docs.map(User.publicEntry) });
+        return res.status(201).json({ items: docs.map((d) => User.publicEntry(d, dataKey)) });
     }
     catch (error)
     {
@@ -68,11 +70,12 @@ router.put("/projects/items/:id", authenticate, async (req, res) =>
 
     try
     {
+        const dataKey = await req.rootUser.getDataKey();
         const now = new Date();
-        const data = User.sealEntry(fields);
+        const data = User.sealEntry(dataKey, fields);
         const result = await User.updateOne(
             { _id: req.rootUser._id, "projects._id": req.params.id },
-            { $set: { "projects.$.enc": "srv", "projects.$.data": data, "projects.$.updatedAt": now } }
+            { $set: { "projects.$.enc": "udk", "projects.$.data": data, "projects.$.updatedAt": now } }
         );
         if (result.matchedCount === 0) return res.status(404).json({ error: "Could not find that project." });
         return res.status(200).json({ item: { ...fields, _id: req.params.id, updatedAt: now } });

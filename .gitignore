@@ -1,0 +1,6 @@
+# One-off local recovery scripts/output — never push this. It contains
+# logic and file paths for decrypting a real account's legacy vault items,
+# and can produce plaintext password exports on disk.
+recovery/
+
+.DS_Store

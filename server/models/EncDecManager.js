@@ -62,4 +62,47 @@ const unseal = (sealed) =>
     return decrypt(ct, iv, tag);
 };
 
-module.exports = { encrypt, decrypt, seal, unseal, sealJSON, unsealJSON };
+/*
+ * Envelope encryption for the vault: each user gets one random 256-bit data
+ * key. Items are sealed with that key, not with CRYPTO_SECRET_KEY directly.
+ * The data key itself is wrapped (encrypted) with CRYPTO_SECRET_KEY and
+ * stored on the user document — CRYPTO_SECRET_KEY never touches item
+ * ciphertext directly, so rotating a leaked user data key only means
+ * re-wrapping one 32-byte value, not re-encrypting the whole vault.
+ */
+const generateDataKey = () => crypto.randomBytes(32);
+
+/** Wraps a raw data key (Buffer) with the server key for storage. */
+const wrapDataKey = (rawKey) => seal(rawKey.toString("base64"));
+
+/** Unwraps a stored data key back into raw bytes. */
+const unwrapDataKey = (wrapped) => Buffer.from(unseal(wrapped), "base64");
+
+// Same "gcm:iv:tag:ct" scheme as encrypt/decrypt, but keyed by an explicit
+// key (the unwrapped per-user data key) instead of always using serverKey().
+const encryptWithKey = (keyBytes, plain) =>
+{
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv("aes-256-gcm", keyBytes, iv);
+    let encrypted = cipher.update(String(plain), "utf8", "base64");
+    encrypted += cipher.final("base64");
+    return `gcm:${iv.toString("hex")}:${cipher.getAuthTag().toString("hex")}:${encrypted}`;
+};
+
+const decryptWithKey = (keyBytes, sealed) =>
+{
+    const [kind, ivHex, tagHex, ct] = String(sealed || "").split(":");
+    if (kind !== "gcm") throw new Error("Unknown sealed format");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", keyBytes, Buffer.from(ivHex, "hex"));
+    decipher.setAuthTag(Buffer.from(tagHex, "hex"));
+    return decipher.update(ct, "base64", "utf8") + decipher.final("utf8");
+};
+
+const sealJSONWithKey = (keyBytes, value) => encryptWithKey(keyBytes, JSON.stringify(value));
+const unsealJSONWithKey = (keyBytes, sealed) => JSON.parse(decryptWithKey(keyBytes, sealed));
+
+module.exports = {
+    encrypt, decrypt, seal, unseal, sealJSON, unsealJSON,
+    generateDataKey, wrapDataKey, unwrapDataKey,
+    encryptWithKey, decryptWithKey, sealJSONWithKey, unsealJSONWithKey
+};

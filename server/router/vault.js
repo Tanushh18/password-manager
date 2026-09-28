@@ -7,9 +7,10 @@ const { serverError } = require("./helpers");
 
 /*
  * Password vault. Every item is stored as one JSON document, encrypted with
- * the server's own key (see models/EncDecManager.js). There is no per-user
- * master password key any more — the server can read and write items on the
- * signed-in user's behalf.
+ * this account's own data key (see User.getDataKey() / models/EncDecManager.js).
+ * That key is itself wrapped with the server's key and never leaves the
+ * server — there is no user-typed master password — but a leaked global key
+ * alone no longer decrypts every account's items in one step.
  */
 
 const MAX_ITEMS = 5000;
@@ -25,10 +26,11 @@ router.post("/vault/items", authenticate, async (req, res) =>
 
     try
     {
+        const dataKey = await req.rootUser.getDataKey();
         const now = new Date();
-        const item = { _id: new mongoose.Types.ObjectId(), enc: "srv", data: User.sealEntry(fields), createdAt: now, updatedAt: now };
+        const item = { _id: new mongoose.Types.ObjectId(), enc: "udk", data: User.sealEntry(dataKey, fields), createdAt: now, updatedAt: now };
         await User.updateOne({ _id: req.rootUser._id }, { $push: { passwords: item } });
-        return res.status(201).json({ item: User.publicEntry(item) });
+        return res.status(201).json({ item: User.publicEntry(item, dataKey) });
     }
     catch (error)
     {
@@ -50,10 +52,11 @@ router.post("/vault/items/bulk", authenticate, async (req, res) =>
 
     try
     {
+        const dataKey = await req.rootUser.getDataKey();
         const now = new Date();
-        const docs = items.map((i) => ({ _id: new mongoose.Types.ObjectId(), enc: "srv", data: User.sealEntry(i.data), createdAt: now, updatedAt: now }));
+        const docs = items.map((i) => ({ _id: new mongoose.Types.ObjectId(), enc: "udk", data: User.sealEntry(dataKey, i.data), createdAt: now, updatedAt: now }));
         await User.updateOne({ _id: req.rootUser._id }, { $push: { passwords: { $each: docs } } });
-        return res.status(201).json({ items: docs.map(User.publicEntry) });
+        return res.status(201).json({ items: docs.map((d) => User.publicEntry(d, dataKey)) });
     }
     catch (error)
     {
@@ -69,13 +72,14 @@ router.put("/vault/items/:id", authenticate, async (req, res) =>
 
     try
     {
+        const dataKey = await req.rootUser.getDataKey();
         const now = new Date();
-        const data = User.sealEntry(fields);
+        const data = User.sealEntry(dataKey, fields);
         // Also converts a legacy entry in place (drops the old server-readable fields).
         const result = await User.updateOne(
             { _id: req.rootUser._id, "passwords._id": req.params.id },
             {
-                $set: { "passwords.$.enc": "srv", "passwords.$.data": data, "passwords.$.updatedAt": now },
+                $set: { "passwords.$.enc": "udk", "passwords.$.data": data, "passwords.$.updatedAt": now },
                 $unset: { "passwords.$.password": "", "passwords.$.iv": "", "passwords.$.tag": "", "passwords.$.platform": "", "passwords.$.platEmail": "" }
             }
         );

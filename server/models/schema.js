@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const { sealJSON, unsealJSON } = require("./EncDecManager");
+const { sealJSON, unsealJSON, generateDataKey, wrapDataKey, unwrapDataKey, sealJSONWithKey, unsealJSONWithKey } = require("./EncDecManager");
 
 // How many devices can be signed in at once; the oldest session is dropped first.
 const MAX_SESSIONS = 10;
@@ -33,6 +33,12 @@ const schema = new mongoose.Schema({
 
     // Legacy field: older accounts stored a hash of the confirmation password.
     cpassword: { type: String },
+
+    // Envelope encryption: one random 256-bit key per account, generated on
+    // first use and wrapped (encrypted) with CRYPTO_SECRET_KEY for storage.
+    // Vault/project items are encrypted with the unwrapped key, not with
+    // CRYPTO_SECRET_KEY directly — see EncDecManager.js.
+    dataKey: { type: String },
 
     tokens: [
         {
@@ -87,10 +93,31 @@ schema.methods.addNewPassword = async function (userPass, iv, platform, platEmai
     return true;
 };
 
-const publicEntry = (entry) =>
+// Returns this account's raw 256-bit data key, generating and storing a
+// wrapped one on first use. Never returned to the client, never logged.
+schema.methods.getDataKey = async function ()
 {
-    // "srv": current format — fields are JSON, encrypted with the server key.
-    // The server decrypts here so the client just gets plain fields back.
+    if (!this.dataKey)
+    {
+        this.dataKey = wrapDataKey(generateDataKey());
+        await this.save();
+    }
+    return unwrapDataKey(this.dataKey);
+};
+
+const publicEntry = (entry, dataKey) =>
+{
+    // "udk": current format — fields are JSON, encrypted with this account's
+    // own data key (itself wrapped with the server key). The server unwraps
+    // the data key then decrypts here, so the client just gets plain fields.
+    if (entry.enc === "udk")
+    {
+        let fields = {};
+        try { fields = unsealJSONWithKey(dataKey, entry.data); } catch (e) { fields = { broken: true }; }
+        return { ...fields, _id: entry._id, createdAt: entry.createdAt, updatedAt: entry.updatedAt };
+    }
+    // "srv": previous format — fields are JSON, encrypted directly with the
+    // global server key. Kept readable for accounts not yet migrated to "udk".
     if (entry.enc === "srv")
     {
         let fields = {};
@@ -116,10 +143,12 @@ const publicEntry = (entry) =>
     };
 };
 
-const sealEntry = (fields) => sealJSON(fields);
+// New writes always use the per-account data key ("udk"), not the global server key.
+const sealEntry = (dataKey, fields) => sealJSONWithKey(dataKey, fields);
 
 // Public view of the account: never send hashes, 2FA secrets or session tokens to a client.
-schema.methods.toPublic = function ()
+// `dataKey` is this account's unwrapped data key (from getDataKey()) — required to read "udk" entries.
+schema.methods.toPublic = function (dataKey)
 {
     return {
         _id: this._id,
@@ -128,8 +157,8 @@ schema.methods.toPublic = function ()
         twoFactorEnabled: Boolean(this.twoFactor && this.twoFactor.enabled),
         recoveryCodesLeft: this.twoFactor && this.twoFactor.enabled ? (this.twoFactor.recoveryCodes || []).length : 0,
         sessions: (this.tokens || []).length,
-        passwords: (this.passwords || []).map(publicEntry),
-        projects: (this.projects || []).map(publicEntry)
+        passwords: (this.passwords || []).map((e) => publicEntry(e, dataKey)),
+        projects: (this.projects || []).map((e) => publicEntry(e, dataKey))
     };
 };
 
