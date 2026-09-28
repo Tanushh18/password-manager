@@ -82,25 +82,21 @@ export const loginUser = (data) => instance.post("/login", data);
 export const logoutUser = () => instance.get("/logout");
 export const signupUser = (data) => instance.post("/register", data);
 
-/* ── End-to-end vault ── */
-export const setupVault = (data) => instance.post("/vault/setup", data);
+/* ── Vault (server-side encrypted) ── */
 export const createItem = (data) => instance.post("/vault/items", { data });
 export const createItems = (items) => instance.post("/vault/items/bulk", { items });
 export const updateItem = (id, data) => instance.put(`/vault/items/${id}`, { data });
 export const deleteItem = (id) => instance.delete(`/vault/items/${id}`);
-export const migrateItems = (items) => instance.post("/vault/migrate", { items });
 
-/* ── End-to-end project tracker ── */
+/* ── Project tracker (server-side encrypted) ── */
 export const createProject = (data) => instance.post("/projects/items", { data });
 export const createProjects = (items) => instance.post("/projects/items/bulk", { items });
 export const updateProject = (id, data) => instance.put(`/projects/items/${id}`, { data });
 export const deleteProject = (id) => instance.delete(`/projects/items/${id}`);
-export const decryptLegacy = (entry) =>
-    instance.post("/decrypt", { id: entry._id, iv: entry.iv, encryptedPassword: entry.password }, { responseType: "text", transformResponse: (r) => r });
 
 /* ── Account ── */
 export const updateProfile = (name) => instance.post("/account/profile", { name });
-export const changeMasterPassword = (data) => instance.post("/account/password", data);
+export const changePassword = (data) => instance.post("/account/password", data);
 export const logoutEverywhere = () => instance.post("/account/logout-all");
 export const deleteAccount = (data) => instance.post("/account/delete", data);
 export const twoFactorSetup = (password) => instance.post("/2fa/setup", { password });

@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
+const { sealJSON, unsealJSON } = require("./EncDecManager");
 
 // How many devices can be signed in at once; the oldest session is dropped first.
 const MAX_SESSIONS = 10;
@@ -40,14 +41,6 @@ const schema = new mongoose.Schema({
             client: { type: String }
         }
     ],
-
-    // End-to-end vault settings. The server stores only the public KDF salt and
-    // an encrypted "key check" blob — never the key itself.
-    kdf: {
-        salt: { type: String },
-        iterations: { type: Number }
-    },
-    keyCheck: { type: String },
 
     twoFactor: {
         enabled: { type: Boolean, default: false },
@@ -96,8 +89,18 @@ schema.methods.addNewPassword = async function (userPass, iv, platform, platEmai
 
 const publicEntry = (entry) =>
 {
+    // "srv": current format — fields are JSON, encrypted with the server key.
+    // The server decrypts here so the client just gets plain fields back.
+    if (entry.enc === "srv")
+    {
+        let fields = {};
+        try { fields = unsealJSON(entry.data); } catch (e) { fields = { broken: true }; }
+        return { ...fields, _id: entry._id, createdAt: entry.createdAt, updatedAt: entry.updatedAt };
+    }
     if (entry.enc === "e2e")
     {
+        // Old end-to-end blobs from before the switch to server-side encryption.
+        // The server never had the key, so these can no longer be read.
         return { _id: entry._id, enc: "e2e", data: entry.data, createdAt: entry.createdAt, updatedAt: entry.updatedAt };
     }
     return {
@@ -113,6 +116,8 @@ const publicEntry = (entry) =>
     };
 };
 
+const sealEntry = (fields) => sealJSON(fields);
+
 // Public view of the account: never send hashes, 2FA secrets or session tokens to a client.
 schema.methods.toPublic = function ()
 {
@@ -120,10 +125,6 @@ schema.methods.toPublic = function ()
         _id: this._id,
         name: this.name,
         email: this.email,
-        vault: {
-            kdf: this.kdf && this.kdf.salt ? { salt: this.kdf.salt, iterations: this.kdf.iterations } : null,
-            keyCheck: this.keyCheck || null
-        },
         twoFactorEnabled: Boolean(this.twoFactor && this.twoFactor.enabled),
         recoveryCodesLeft: this.twoFactor && this.twoFactor.enabled ? (this.twoFactor.recoveryCodes || []).length : 0,
         sessions: (this.tokens || []).length,
@@ -133,6 +134,7 @@ schema.methods.toPublic = function ()
 };
 
 schema.statics.publicEntry = publicEntry;
+schema.statics.sealEntry = sealEntry;
 
 const User = mongoose.model("user-data", schema);
 module.exports = User;

@@ -41,7 +41,7 @@ export default function Signup() {
       setLoading(true);
       await register({ name: form.name.trim(), email: form.email.trim(), password: form.password });
       await login(form.email.trim(), form.password);
-      toast.success("Your vault is ready ✨");
+      toast.success("Your account is ready ✨");
       navigate("/passwords", { replace: true });
     } catch (err) {
       toast.error(err.message);
@@ -51,31 +51,31 @@ export default function Signup() {
   };
 
   return (
-    <AuthShell loading={loading} stage={{ label: loading ? "Creating your key…" : "Begin your vault" }}>
+    <AuthShell loading={loading} stage={{ label: loading ? "Creating your account…" : "Get started" }}>
       <form onSubmit={submit} noValidate>
         <h1 className="auth__title">
-          Create your <em className="serif-em">vault.</em>
+          Create your <em className="serif-em">account.</em>
         </h1>
-        <p className="auth__sub">One master password to remember. It encrypts everything — so choose it well.</p>
+        <p className="auth__sub">Sign up with your email and a password — you'll use them to sign in and see your saved passwords.</p>
 
         <Field id="su-name" label="Name" value={form.name} onChange={set("name")} placeholder="Your name" autoComplete="name" error={errors.name} disabled={loading} />
         <Field id="su-email" label="Email" type="email" value={form.email} onChange={set("email")} placeholder="you@example.com" autoComplete="username" error={errors.email} disabled={loading} />
-        <Field id="su-pass" label="Master password" secret value={form.password} onChange={set("password")} placeholder="A long, memorable phrase" autoComplete="new-password" error={errors.password} disabled={loading} />
+        <Field id="su-pass" label="Password" secret value={form.password} onChange={set("password")} placeholder="A long, memorable phrase" autoComplete="new-password" error={errors.password} disabled={loading} />
         {form.password ? <StrengthMeter strength={strength} /> : null}
-        <Field id="su-cpass" label="Confirm master password" secret value={form.cpassword} onChange={set("cpassword")} placeholder="Type it once more" autoComplete="new-password" error={errors.cpassword} disabled={loading} />
+        <Field id="su-cpass" label="Confirm password" secret value={form.cpassword} onChange={set("cpassword")} placeholder="Type it once more" autoComplete="new-password" error={errors.cpassword} disabled={loading} />
 
         <label className={`consent ${errors.agree ? "is-error" : ""}`}>
           <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
           <span>
-            <Alert size={14} /> I understand Stashr <strong>cannot reset or recover</strong> my master password. If I forget it,
-            my vault can't be opened.
+            <Alert size={14} /> I understand that if I forget my password, I can reset it by signing in again — there is no
+            separate vault key to lose.
           </span>
         </label>
 
         <button type="submit" className="btn btn--primary btn--block auth__submit" disabled={loading}>
           <span className="btn__sheen" />
           {loading ? <span className="spinner" /> : <Sparkle size={15} />}
-          {loading ? "Creating your vault…" : "Create my vault"}
+          {loading ? "Creating your account…" : "Create my account"}
         </button>
 
         <p className="auth__swap">

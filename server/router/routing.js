@@ -7,7 +7,7 @@ const rateLimit = require("../middlewares/rateLimit");
 const { encrypt, decrypt } = require("../models/EncDecManager");
 const { estimate } = require("../utils/strength");
 const {
-    EMAIL_RE, COOKIE_OPTIONS, COOKIE_MAX_AGE, str, raw, findByEmail, isBlob, validKdf,
+    EMAIL_RE, COOKIE_OPTIONS, COOKIE_MAX_AGE, str, raw, findByEmail,
     wantsToken, checkPassword, checkSecondFactor, serverError
 } = require("./helpers");
 
@@ -21,7 +21,6 @@ router.post("/register", authLimiter, async (req, res) =>
     const email = str(req.body.email).toLowerCase();
     const password = raw(req.body.password);
     const cpassword = raw(req.body.cpassword);
-    const { kdf, keyCheck } = req.body;
 
     if (!name || !email || !password || !cpassword)
     {
@@ -33,16 +32,11 @@ router.post("/register", authLimiter, async (req, res) =>
     }
     if (password.length < 8)
     {
-        return res.status(400).json({ error: "Use at least 8 characters for your master password." });
+        return res.status(400).json({ error: "Use at least 8 characters for your password." });
     }
     if (password !== cpassword)
     {
         return res.status(400).json({ error: "Passwords don't match." });
-    }
-    // New clients set up end-to-end encryption at sign up; old clients may not.
-    if ((kdf || keyCheck) && !(validKdf(kdf) && isBlob(keyCheck)))
-    {
-        return res.status(400).json({ error: "Invalid vault settings." });
     }
 
     try
@@ -53,11 +47,6 @@ router.post("/register", authLimiter, async (req, res) =>
         }
 
         const user = new User({ name, email, password });
-        if (kdf && keyCheck)
-        {
-            user.kdf = { salt: kdf.salt, iterations: kdf.iterations };
-            user.keyCheck = keyCheck;
-        }
         await user.save();
 
         return res.status(201).json({ message: "User created successfully." });
@@ -111,7 +100,6 @@ router.post("/login", authLimiter, async (req, res) =>
             message: "User login successfully.",
             name: user.name,
             email: user.email,
-            vault: user.toPublic().vault,
             twoFactorEnabled: Boolean(user.twoFactor && user.twoFactor.enabled)
         };
         if (client === "mobile") body.token = token;

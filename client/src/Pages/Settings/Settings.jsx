@@ -237,7 +237,7 @@ function TwoFactor() {
 }
 
 function ChangeMasterPassword() {
-  const { changeMasterPassword, profile } = useVault();
+  const { changePassword, profile } = useVault();
   const [form, setForm] = useState({ current: "", next: "", confirm: "", code: "" });
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
@@ -247,12 +247,12 @@ function ChangeMasterPassword() {
   const submit = async (e) => {
     e.preventDefault();
     if (form.next.length < 8) return toast.error("Use at least 8 characters.");
-    if (strength.score < 2) return toast.error("Choose a stronger master password.");
+    if (strength.score < 2) return toast.error("Choose a stronger password.");
     if (form.next !== form.confirm) return toast.error("The new passwords don't match.");
     try {
       setBusy(true);
-      await changeMasterPassword({ current: form.current, next: form.next, code: form.code });
-      toast.success("Master password changed. Every item was re-encrypted and other devices were signed out.");
+      await changePassword({ current: form.current, next: form.next, code: form.code });
+      toast.success("Password changed. Other devices were signed out.");
       setForm({ current: "", next: "", confirm: "", code: "" });
       setOpen(false);
     } catch (err) {
@@ -265,23 +265,22 @@ function ChangeMasterPassword() {
   if (!open) {
     return (
       <button type="button" className="btn btn--ghost btn--sm" onClick={() => setOpen(true)}>
-        <KeyLine size={14} /> Change master password
+        <KeyLine size={14} /> Change password
       </button>
     );
   }
 
   return (
     <form className="settings__form settings__form--full" onSubmit={submit}>
-      <Field id="mp-current" label="Current master password" secret value={form.current} onChange={set("current")} autoComplete="current-password" />
-      <Field id="mp-next" label="New master password" secret value={form.next} onChange={set("next")} autoComplete="new-password" />
+      <Field id="mp-current" label="Current password" secret value={form.current} onChange={set("current")} autoComplete="current-password" />
+      <Field id="mp-next" label="New password" secret value={form.next} onChange={set("next")} autoComplete="new-password" />
       {form.next ? <StrengthMeter strength={strength} /> : null}
-      <Field id="mp-confirm" label="Confirm new master password" secret value={form.confirm} onChange={set("confirm")} autoComplete="new-password" />
+      <Field id="mp-confirm" label="Confirm new password" secret value={form.confirm} onChange={set("confirm")} autoComplete="new-password" />
       {profile?.twoFactorEnabled ? <Field id="mp-code" label="Authenticator code" value={form.code} onChange={set("code")} autoComplete="one-time-code" /> : null}
-      <p className="field__note">Every item is decrypted and re-encrypted with the new key on this device, then saved in one step.</p>
       <div className="settings__row">
         <button type="button" className="btn btn--ghost btn--sm" onClick={() => setOpen(false)}>Cancel</button>
         <button type="submit" className="btn btn--primary btn--sm" disabled={busy || !form.current || !form.next}>
-          {busy ? <span className="spinner" /> : null} {busy ? "Re-encrypting…" : "Change password"}
+          {busy ? <span className="spinner" /> : null} {busy ? "Saving…" : "Change password"}
         </button>
       </div>
     </form>

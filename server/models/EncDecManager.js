@@ -9,10 +9,14 @@ const crypto = require("crypto");
  */
 const serverKey = () =>
 {
-    const secret = process.env.CRYPTO_SECRET_KEY;
-    if (!secret) throw new Error("CRYPTO_SECRET_KEY is not set");
+    const secret = process.env.CRYPTO_SECRET_KEY || process.env.HASH_KEY;
+    if (!secret) throw new Error("CRYPTO_SECRET_KEY (or HASH_KEY) is not set");
     return crypto.createHash("sha256").update(secret).digest();
 };
+
+/** Encrypts a JS value (via JSON) into the compact "gcm:iv:tag:ct" form. */
+const sealJSON = (value) => seal(JSON.stringify(value));
+const unsealJSON = (sealed) => JSON.parse(unseal(sealed));
 
 // Returns { iv, encryptedPassword, tag } — tag is present for GCM.
 const encrypt = (plain) =>
@@ -58,4 +62,4 @@ const unseal = (sealed) =>
     return decrypt(ct, iv, tag);
 };
 
-module.exports = { encrypt, decrypt, seal, unseal };
+module.exports = { encrypt, decrypt, seal, unseal, sealJSON, unsealJSON };
