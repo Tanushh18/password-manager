@@ -196,6 +196,71 @@ describe("end-to-end vault", () =>
     });
 });
 
+describe("project tracker", () =>
+{
+    test("create, update, bulk import and delete blobs", async () =>
+    {
+        await register();
+        const { token } = (await login()).body;
+
+        expect((await request(app).post("/projects/items").set(auth(token)).send({ data: "plain text" })).status).toBe(400);
+
+        const created = await request(app).post("/projects/items").set(auth(token)).send({ data: blob("a") });
+        expect(created.status).toBe(201);
+        const id = created.body.item._id;
+
+        const updated = await request(app).put(`/projects/items/${id}`).set(auth(token)).send({ data: blob("b") });
+        expect(updated.status).toBe(200);
+
+        const bulk = await request(app).post("/projects/items/bulk").set(auth(token)).send({ items: [{ data: blob("c") }, { data: blob("d") }] });
+        expect(bulk.status).toBe(201);
+
+        let me = await request(app).get("/authenticate").set(auth(token));
+        expect(me.body.projects).toHaveLength(3);
+        expect(me.body.projects.find((p) => p._id === id).data).toBe(blob("b"));
+
+        expect((await request(app).delete(`/projects/items/${id}`).set(auth(token))).status).toBe(200);
+        expect((await request(app).delete(`/projects/items/${id}`).set(auth(token))).status).toBe(404);
+        me = await request(app).get("/authenticate").set(auth(token));
+        expect(me.body.projects).toHaveLength(2);
+    });
+
+    test("another user cannot touch my projects", async () =>
+    {
+        await register();
+        const { token } = (await login()).body;
+        const { item } = (await request(app).post("/projects/items").set(auth(token)).send({ data: blob("a") })).body;
+
+        await register({ email: "eve@example.com" });
+        const eve = (await login({ email: "eve@example.com" })).body.token;
+        expect((await request(app).put(`/projects/items/${item._id}`).set(auth(eve)).send({ data: blob("z") })).status).toBe(404);
+        expect((await request(app).delete(`/projects/items/${item._id}`).set(auth(eve))).status).toBe(404);
+    });
+
+    test("projects need a vault key first, same as passwords", async () =>
+    {
+        await register({ kdf: undefined, keyCheck: undefined });
+        const { token } = (await login()).body;
+        expect((await request(app).post("/projects/items").set(auth(token)).send({ data: blob() })).status).toBe(409);
+        expect((await request(app).post("/vault/setup").set(auth(token)).send({ kdf: KDF, keyCheck: blob("k") })).status).toBe(200);
+        expect((await request(app).post("/projects/items").set(auth(token)).send({ data: blob() })).status).toBe(201);
+    });
+
+    test("passwords and projects are independent collections", async () =>
+    {
+        await register();
+        const { token } = (await login()).body;
+        await request(app).post("/vault/items").set(auth(token)).send({ data: blob("pw") });
+        await request(app).post("/projects/items").set(auth(token)).send({ data: blob("proj") });
+
+        const me = (await request(app).get("/authenticate").set(auth(token))).body;
+        expect(me.passwords).toHaveLength(1);
+        expect(me.projects).toHaveLength(1);
+        expect(me.passwords[0].data).toBe(blob("pw"));
+        expect(me.projects[0].data).toBe(blob("proj"));
+    });
+});
+
 describe("account", () =>
 {
     test("change master password re-keys atomically and signs out other devices", async () =>
@@ -221,6 +286,25 @@ describe("account", () =>
         expect(fresh.body.vault.keyCheck).toBe(blob("k2"));
         const me = (await request(app).get("/authenticate").set(auth(fresh.body.token))).body;
         expect(me.passwords[0].data).toBe(blob("n"));
+    });
+
+    test("change master password re-keys projects too when sent", async () =>
+    {
+        await register();
+        const token = (await login()).body.token;
+        const { item } = (await request(app).post("/projects/items").set(auth(token)).send({ data: blob("a") })).body;
+
+        const base = { currentPassword: "master-pass", newPassword: "new-master-pass", kdf: { ...KDF, salt: Buffer.from("fedcba9876543210").toString("base64") }, keyCheck: blob("k2"), client: "mobile" };
+
+        // Stale project list is rejected, same as passwords.
+        expect((await request(app).post("/account/password").set(auth(token)).send({ ...base, items: [], projectItems: [] })).status).toBe(409);
+
+        const ok = await request(app).post("/account/password").set(auth(token)).send({ ...base, items: [], projectItems: [{ id: item._id, data: blob("n") }] });
+        expect(ok.status).toBe(200);
+
+        const fresh = await login({ password: "new-master-pass" });
+        const me = (await request(app).get("/authenticate").set(auth(fresh.body.token))).body;
+        expect(me.projects[0].data).toBe(blob("n"));
     });
 
     test("logout-all keeps only the current session", async () =>

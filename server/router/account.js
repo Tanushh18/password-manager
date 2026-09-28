@@ -55,9 +55,16 @@ router.post("/account/password", authenticate, sensitiveLimiter, async (req, res
     const newPassword = raw(req.body.newPassword);
     const { kdf, keyCheck } = req.body;
     const items = Array.isArray(req.body.items) ? req.body.items : null;
+    // Project tracker entries share the same vault key, so they need re-encrypting too.
+    // Optional for backward compatibility with older clients that don't send it.
+    const projectItems = Array.isArray(req.body.projectItems) ? req.body.projectItems : null;
 
     if (newPassword.length < 8) return res.status(400).json({ error: "Use at least 8 characters for your new master password." });
     if (!validKdf(kdf) || !isBlob(keyCheck) || !items || !items.every((i) => i && i.id && isBlob(i.data)))
+    {
+        return res.status(400).json({ error: "Invalid request." });
+    }
+    if (projectItems && !projectItems.every((i) => i && i.id && isBlob(i.data)))
     {
         return res.status(400).json({ error: "Invalid request." });
     }
@@ -74,6 +81,15 @@ router.post("/account/password", authenticate, sensitiveLimiter, async (req, res
         {
             return res.status(409).json({ error: "Your vault changed while updating. Please try again.", code: "VAULT_CHANGED" });
         }
+        if (projectItems)
+        {
+            const currentProjects = new Set(user.projects.map((p) => String(p._id)));
+            const sentProjects = new Set(projectItems.map((i) => String(i.id)));
+            if (currentProjects.size !== sentProjects.size || [...currentProjects].some((id) => !sentProjects.has(id)))
+            {
+                return res.status(409).json({ error: "Your project list changed while updating. Please try again.", code: "VAULT_CHANGED" });
+            }
+        }
 
         const now = new Date();
         items.forEach(({ id, data }) =>
@@ -88,6 +104,16 @@ router.post("/account/password", authenticate, sensitiveLimiter, async (req, res
             entry.platEmail = undefined;
             entry.updatedAt = entry.updatedAt || now;
         });
+        if (projectItems)
+        {
+            projectItems.forEach(({ id, data }) =>
+            {
+                const entry = user.projects.id(id);
+                entry.enc = "e2e";
+                entry.data = data;
+                entry.updatedAt = entry.updatedAt || now;
+            });
+        }
         user.kdf = { salt: kdf.salt, iterations: kdf.iterations };
         user.keyCheck = keyCheck;
         user.password = newPassword; // hashed by the pre-save hook

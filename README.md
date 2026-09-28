@@ -1,8 +1,13 @@
-# Aurelia — Aurora Password Vault
+# Stashr — Passwords & Projects, Encrypted
 
-A zero-knowledge password manager with a website **and a native Android app** that share one API
-and one database. Everything in your vault is encrypted **on your device** with a key derived from your
-master password — the server only ever stores ciphertext.
+A zero-knowledge vault with a website **and a native Android app** that share one API
+and one database. Everything you store — passwords, and now every project's hosting, databases and
+env vars — is encrypted **on your device** with a key derived from your master password; the server
+only ever stores ciphertext.
+
+The project tracker lives at `/projects` once you're signed in: one entry per project (hosting
+provider and account, databases, Firebase/GCP, Play Store, env var names *and* values, custom
+fields), encrypted exactly like a password entry.
 
 [![CI](https://github.com/Tanushh18/password-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Tanushh18/password-manager/actions/workflows/ci.yml)
 

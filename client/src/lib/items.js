@@ -116,7 +116,7 @@ const pick = (row, keys) => {
 };
 
 /**
- * Maps spreadsheet / CSV rows from Aurelia, Chrome, Bitwarden, 1Password and
+ * Maps spreadsheet / CSV rows from Stashr, Chrome, Bitwarden, 1Password and
  * LastPass exports (plus the old platform/email/password sheet) to items.
  */
 export const rowsToItems = (rows) =>

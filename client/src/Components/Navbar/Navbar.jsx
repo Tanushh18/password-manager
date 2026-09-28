@@ -34,6 +34,8 @@ function Navbar() {
   const links = isAuthenticated
     ? [
         { to: "/", label: "Home" },
+        { to: "/passwords", label: "Passwords" },
+        { to: "/projects", label: "Projects" },
         { to: "/settings", label: "Settings" },
         { to: "/logout", label: "Sign out" },
       ]
@@ -50,13 +52,13 @@ function Navbar() {
     <>
       <header className={`nav ${scrolled ? "is-scrolled" : ""}`}>
         <div className="nav__inner">
-          <Link to="/" className="nav__brand" aria-label="Aurelia home">
+          <Link to="/" className="nav__brand" aria-label="Stashr home">
             <span className="nav__mark">
               <ShieldLine size={19} strokeWidth={1.8} />
             </span>
             <span className="nav__wordmark">
-              <span className="nav__name">Aurelia</span>
-              <span className="nav__tag">aurora vault</span>
+              <span className="nav__name">Stashr</span>
+              <span className="nav__tag">stash everything</span>
             </span>
           </Link>
 
@@ -97,7 +99,7 @@ function Navbar() {
         <div className="drawer__top">
           <span className="drawer__brand">
             <ShieldLine size={18} />
-            Aurelia
+            Stashr
           </span>
           <button className="drawer__close" onClick={() => setOpen(false)} aria-label="Close menu">
             <Close size={18} />
@@ -127,7 +129,7 @@ function Navbar() {
         </nav>
 
         <p className="drawer__note">
-          <span className="script">Your secrets, lit by the aurora.</span>
+          <span className="script">Passwords, projects, everything — kept safe.</span>
         </p>
       </div>
       <div className={`drawer__scrim ${open ? "is-open" : ""}`} onClick={() => setOpen(false)} />

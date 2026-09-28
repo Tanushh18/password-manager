@@ -14,5 +14,5 @@ createRoot(document.getElementById("root")).render(
   </React.StrictMode>
 );
 
-// Makes Aurelia installable on phones and usable offline.
+// Makes Stashr installable on phones and usable offline.
 registerServiceWorker();

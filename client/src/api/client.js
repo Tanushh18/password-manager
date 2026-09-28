@@ -89,6 +89,12 @@ export const createItems = (items) => instance.post("/vault/items/bulk", { items
 export const updateItem = (id, data) => instance.put(`/vault/items/${id}`, { data });
 export const deleteItem = (id) => instance.delete(`/vault/items/${id}`);
 export const migrateItems = (items) => instance.post("/vault/migrate", { items });
+
+/* ── End-to-end project tracker ── */
+export const createProject = (data) => instance.post("/projects/items", { data });
+export const createProjects = (items) => instance.post("/projects/items/bulk", { items });
+export const updateProject = (id, data) => instance.put(`/projects/items/${id}`, { data });
+export const deleteProject = (id) => instance.delete(`/projects/items/${id}`);
 export const decryptLegacy = (entry) =>
     instance.post("/decrypt", { id: entry._id, iv: entry.iv, encryptedPassword: entry.password }, { responseType: "text", transformResponse: (r) => r });
 
