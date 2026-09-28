@@ -3,7 +3,8 @@ import { Modal } from "react-responsive-modal";
 import "react-responsive-modal/styles.css";
 import { toast } from "react-toastify";
 import { rowsToProjects } from "../../lib/projectItems";
-import { Upload, Check } from "../../Components/Icons/Icons";
+import { parseCSV } from "../../lib/items";
+import { Upload, Check, Refresh } from "../../Components/Icons/Icons";
 
 /**
  * Import projects from the project-tracker Excel template (Projects +
@@ -17,12 +18,41 @@ export default function ProjectImportModal({ open, onClose, onImport }) {
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(null);
+  const [projectsUrl, setProjectsUrl] = useState("");
+  const [databasesUrl, setDatabasesUrl] = useState("");
+  const [syncing, setSyncing] = useState(false);
 
   const reset = () => {
     setFile(null);
     setPreview(null);
     setProgress(null);
     if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const syncFromUrls = async () => {
+    if (!projectsUrl.trim()) { toast.error("Paste the Projects sheet's published CSV link first."); return; }
+    setSyncing(true);
+    try {
+      const fetchCsv = async (url) => {
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Couldn't fetch that link (${res.status}).`);
+        return parseCSV(await res.text());
+      };
+      const projectRows = await fetchCsv(projectsUrl.trim());
+      const databaseRows = databasesUrl.trim() ? await fetchCsv(databasesUrl.trim()) : [];
+      const projects = rowsToProjects(projectRows, databaseRows);
+      if (!projects.length) {
+        toast.error('No rows found under a "name" column. Check the link is the Projects sheet, published as CSV.');
+        return;
+      }
+      setFile(null);
+      setPreview(projects);
+      toast.success(`Fetched ${projects.length} project${projects.length === 1 ? "" : "s"} from the sheet.`);
+    } catch (err) {
+      toast.error(err.message || "Couldn't sync from that link. Make sure the sheet is published to the web.");
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const close = () => {
@@ -77,6 +107,33 @@ export default function ProjectImportModal({ open, onClose, onImport }) {
           <h2 className="sheet__title">Import projects</h2>
           <p className="sheet__sub">The project-tracker Excel template — Projects and Databases sheets. Add env vars afterward with the paste tool on each project.</p>
         </div>
+
+        <div className="proj-sync">
+          <label className="field__label" htmlFor="pi-projects-url">Projects sheet — published CSV link</label>
+          <input
+            id="pi-projects-url"
+            className="input"
+            placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?gid=...&single=true&output=csv"
+            value={projectsUrl}
+            onChange={(e) => setProjectsUrl(e.target.value)}
+          />
+          <label className="field__label" htmlFor="pi-databases-url" style={{ marginTop: "0.6rem" }}>Databases sheet link (optional)</label>
+          <input
+            id="pi-databases-url"
+            className="input"
+            placeholder="Same as above, but for the Databases tab"
+            value={databasesUrl}
+            onChange={(e) => setDatabasesUrl(e.target.value)}
+          />
+          <p className="field__note" style={{ margin: "0.5rem 0 0.7rem" }}>
+            In Google Sheets: File → Share → Publish to web → pick the sheet tab → CSV → Publish, then copy the link. Fetched fresh from your browser each time you click Sync — nothing is cached on a server.
+          </p>
+          <button type="button" className="btn btn--ghost btn--block" onClick={syncFromUrls} disabled={syncing}>
+            {syncing ? <span className="spinner" /> : <Refresh size={15} />} {syncing ? "Syncing…" : "Sync now"}
+          </button>
+        </div>
+
+        <p className="field__note" style={{ textAlign: "center", margin: "0.9rem 0" }}>— or —</p>
 
         <label className="dropzone">
           <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={pick} hidden />

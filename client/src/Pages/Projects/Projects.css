@@ -42,6 +42,9 @@
 }
 .proj-paste textarea { font-family: var(--font-mono); font-size: 0.78rem; }
 
+.proj-sync { margin-bottom: 0.4rem; }
+.proj-sync input { font-family: var(--font-mono); font-size: 0.78rem; }
+
 @media (max-width: 640px) {
   .proj-repeat-row { align-items: flex-start; }
   .proj-repeat-row__fields { grid-template-columns: 1fr; }
