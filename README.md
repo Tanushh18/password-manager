@@ -9,6 +9,12 @@ The project tracker lives at `/projects` once you're signed in: one entry per pr
 provider and account, databases, Firebase/GCP, Play Store, env var names *and* values, custom
 fields), encrypted exactly like a password entry.
 
+**Bulk import from Excel:** `server/scripts/import-projects.js` reads the project-tracker Excel
+template and pushes every row in as an encrypted project — it derives your vault key locally from
+your master password (same PBKDF2 + AES-256-GCM as the browser) and only ever sends the server
+opaque ciphertext, never plaintext. Run it with `node server/scripts/import-projects.js
+path/to/projects.xlsx` (needs `xlsx`: `npm install xlsx --no-save` inside `server/` first).
+
 [![CI](https://github.com/Tanushh18/password-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Tanushh18/password-manager/actions/workflows/ci.yml)
 
 ## Features
