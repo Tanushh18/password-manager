@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Aurelia",
+    "name": "Stashr",
     "slug": "aurelia-vault",
     "scheme": "aurelia",
     "version": "2.0.0",
@@ -8,7 +8,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#0D0303",
-    "description": "Aurelia — a glowing, private vault for every password. Same account and server as the Aurelia website.",
+    "description": "Stashr — a private vault for every password and project. Same account and server as the Stashr website.",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.aurelia.vault"

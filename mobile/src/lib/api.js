@@ -108,6 +108,12 @@ export const api = {
   updateItem: (id, data) => request(`/vault/items/${id}`, { method: "PUT", body: { data } }),
   deleteItem: (id) => request(`/vault/items/${id}`, { method: "DELETE" }),
   migrate: (items) => request("/vault/migrate", { method: "POST", body: { items }, timeout: 60000 }),
+
+  // End-to-end project tracker (same scheme as the vault, separate collection)
+  createProject: (data) => request("/projects/items", { method: "POST", body: { data } }),
+  createProjects: (items) => request("/projects/items/bulk", { method: "POST", body: { items }, timeout: 60000 }),
+  updateProject: (id, data) => request(`/projects/items/${id}`, { method: "PUT", body: { data } }),
+  deleteProject: (id) => request(`/projects/items/${id}`, { method: "DELETE" }),
   decryptLegacy: (entry) =>
     request("/decrypt", { method: "POST", body: { id: entry._id, iv: entry.iv, encryptedPassword: entry.password } }),
 

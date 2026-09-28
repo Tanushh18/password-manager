@@ -5,6 +5,7 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { api, ApiError, setToken, activeServer, setActiveServer } from "./api";
 import C from "./crypto";
 import { fromLegacy, normalizeItem } from "./items";
+import { normalizeProject } from "./projectItems";
 import { computeHealth } from "./health";
 import { pwnedCount } from "./breach";
 import { readCache, writeCache, clearCache } from "./cache";
@@ -41,12 +42,15 @@ const safe = async (fn, fallback = null) => {
 };
 
 const toItem = (entry, fields) => ({ ...normalizeItem(fields), id: entry._id, createdAt: entry.createdAt, updatedAt: entry.updatedAt });
+const toProject = (entry, fields) => ({ ...normalizeProject(fields), id: entry._id, createdAt: entry.createdAt, updatedAt: entry.updatedAt });
 
 export function VaultProvider({ children }) {
   const [status, setStatus] = useState("booting");
   const [profile, setProfile] = useState(null);
   const [items, setItems] = useState([]);
   const [broken, setBroken] = useState(0);
+  const [projects, setProjects] = useState([]);
+  const [projectsBroken, setProjectsBroken] = useState(0);
   const [offline, setOffline] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [breaches, setBreaches] = useState({});
@@ -62,16 +66,19 @@ export function VaultProvider({ children }) {
   const pauseLock = useRef(0);
 
   /* ── Server profile (+ offline cache of the encrypted vault) ── */
+  const projectEntriesRef = useRef([]);
+
   const loadProfile = useCallback(async () => {
     try {
       const me = await api.me();
-      const { passwords, ...rest } = me;
+      const { passwords, projects: projectEntries, ...rest } = me;
       entriesRef.current = passwords || [];
+      projectEntriesRef.current = projectEntries || [];
       setProfile(rest);
       setOffline(false);
       SecureStore.setItemAsync(K.server, activeServer()).catch(() => {});
       writeCache({ profile: rest, entries: entriesRef.current });
-      return { profile: rest, entries: entriesRef.current };
+      return { profile: rest, entries: entriesRef.current, projectEntries: projectEntriesRef.current };
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 400)) throw e;
       // Network down: fall back to the last encrypted copy (read-only).
@@ -80,7 +87,7 @@ export function VaultProvider({ children }) {
       entriesRef.current = cached.entries || [];
       setProfile(cached.profile);
       setOffline(true);
-      return { profile: cached.profile, entries: entriesRef.current };
+      return { profile: cached.profile, entries: entriesRef.current, projectEntries: [] };
     }
   }, []);
 
@@ -88,7 +95,10 @@ export function VaultProvider({ children }) {
     setToken(null);
     keyRef.current = null;
     entriesRef.current = [];
+    projectEntriesRef.current = [];
     setItems([]);
+    setProjects([]);
+    setProjectsBroken(0);
     setProfile(null);
     setBreaches({});
     setBreachChecked(false);
@@ -131,8 +141,23 @@ export function VaultProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* ── Projects: all e2e, no legacy format to worry about ── */
+  const openProjectsWithKey = useCallback(async (key, projectEntries) => {
+    const decrypted = [];
+    let failed = 0;
+    for (const entry of projectEntries) {
+      try {
+        decrypted.push(toProject(entry, await C.decryptJSON(key, entry.data)));
+      } catch (e) {
+        failed += 1;
+      }
+    }
+    setProjects(decrypted);
+    setProjectsBroken(failed);
+  }, []);
+
   /* ── Open the vault with a key ── */
-  const openWithKey = useCallback(async (key, entries) => {
+  const openWithKey = useCallback(async (key, entries, projectEntries = []) => {
     keyRef.current = key;
     const decrypted = [];
     let failed = 0;
@@ -162,8 +187,9 @@ export function VaultProvider({ children }) {
     if (migrations.length) await safe(() => api.migrate(migrations));
     setItems(decrypted);
     setBroken(failed);
+    await openProjectsWithKey(key, projectEntries);
     setStatus("ready");
-  }, []);
+  }, [openProjectsWithKey]);
 
   const deriveForProfile = useCallback(async (password, prof) => {
     if (prof.vault?.kdf) {
@@ -210,8 +236,8 @@ export function VaultProvider({ children }) {
       }
       const { profile: prof } = await loadProfile();
       const key = await deriveForProfile(password, prof);
-      const { entries } = await loadProfile();
-      await openWithKey(key, entries);
+      const { entries, projectEntries } = await loadProfile();
+      await openWithKey(key, entries, projectEntries);
       return { ok: true };
     },
     [loadProfile, deriveForProfile, openWithKey]
@@ -228,8 +254,8 @@ export function VaultProvider({ children }) {
     async (password) => {
       if (!profile?.vault?.kdf) return login(profile.email, password);
       const key = await deriveForProfile(password, profile);
-      const { entries } = await loadProfile().catch(() => ({ entries: entriesRef.current }));
-      await openWithKey(key, entries);
+      const { entries, projectEntries } = await loadProfile().catch(() => ({ entries: entriesRef.current, projectEntries: projectEntriesRef.current }));
+      await openWithKey(key, entries, projectEntries);
       return { ok: true };
     },
     [profile, login, deriveForProfile, loadProfile, openWithKey]
@@ -243,8 +269,8 @@ export function VaultProvider({ children }) {
       await safe(() => SecureStore.deleteItemAsync(K.key));
       throw new Error("Your master password changed. Enter it to unlock.");
     }
-    const { entries } = await loadProfile().catch(() => ({ entries: entriesRef.current }));
-    await openWithKey(key, entries);
+    const { entries, projectEntries } = await loadProfile().catch(() => ({ entries: entriesRef.current, projectEntries: projectEntriesRef.current }));
+    await openWithKey(key, entries, projectEntries);
   }, [profile, loadProfile, openWithKey]);
 
   const lock = useCallback(() => {
@@ -335,6 +361,48 @@ export function VaultProvider({ children }) {
     setItems((list) => list.filter((i) => i.id !== id));
   }, [offline]);
 
+  /* ── Projects (same encrypted vault, separate collection) ── */
+  const addProject = useCallback(async (fields) => {
+    const key = requireKey();
+    const project = normalizeProject(fields);
+    const res = await api.createProject(await C.encryptJSON(key, project));
+    const created = toProject(res.item, project);
+    setProjects((list) => [created, ...list]);
+    return created;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offline]);
+
+  const updateProject = useCallback(async (id, fields) => {
+    const key = requireKey();
+    const current = projects.find((p) => p.id === id);
+    const next = normalizeProject({ ...current, ...fields });
+    const res = await api.updateProject(id, await C.encryptJSON(key, next));
+    setProjects((list) => list.map((p) => (p.id === id ? { ...next, id, createdAt: p.createdAt, updatedAt: res.item.updatedAt } : p)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects, offline]);
+
+  const deleteProject = useCallback(async (id) => {
+    if (offline) throw new Error("You're offline.");
+    await api.deleteProject(id);
+    setProjects((list) => list.filter((p) => p.id !== id));
+  }, [offline]);
+
+  const importProjects = useCallback(async (list) => {
+    const key = requireKey();
+    const prepared = list.map((p) => normalizeProject(p));
+    const created = [];
+    for (let i = 0; i < prepared.length; i += 500) {
+      const chunk = prepared.slice(i, i + 500);
+      const payload = [];
+      for (const p of chunk) payload.push({ data: await C.encryptJSON(key, p) });
+      const res = await api.createProjects(payload);
+      res.items.forEach((entry, j) => created.push(toProject(entry, chunk[j])));
+    }
+    setProjects((l) => [...created, ...l]);
+    return created.length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offline]);
+
   const importItems = useCallback(async (list) => {
     const key = requireKey();
     const now = new Date().toISOString();
@@ -356,8 +424,8 @@ export function VaultProvider({ children }) {
     if (!keyRef.current) return;
     setSyncing(true);
     try {
-      const { entries } = await loadProfile();
-      await openWithKey(keyRef.current, entries);
+      const { entries, projectEntries } = await loadProfile();
+      await openWithKey(keyRef.current, entries, projectEntries);
     } finally {
       setSyncing(false);
     }
@@ -390,13 +458,19 @@ export function VaultProvider({ children }) {
     const salt = C.randomSalt();
     const key = await C.deriveKey(next, salt, C.KDF_ITERATIONS);
     const keyCheck = await C.makeKeyCheck(key);
-    const { entries } = await loadProfile();
+    const { entries, projectEntries } = await loadProfile();
     const payload = [];
     for (const entry of entries) {
       let fields = items.find((i) => i.id === entry._id);
       if (!fields && entry.enc === "e2e") fields = await C.decryptJSON(oldKey, entry.data);
       if (!fields) fields = fromLegacy(entry, await api.decryptLegacy(entry));
       payload.push({ id: entry._id, data: await C.encryptJSON(key, normalizeItem(fields)) });
+    }
+    const projectPayload = [];
+    for (const entry of projectEntries) {
+      let fields = projects.find((p) => p.id === entry._id);
+      if (!fields) fields = await C.decryptJSON(oldKey, entry.data);
+      projectPayload.push({ id: entry._id, data: await C.encryptJSON(key, normalizeProject(fields)) });
     }
     const res = await api.changePassword({
       currentPassword: current,
@@ -405,6 +479,7 @@ export function VaultProvider({ children }) {
       kdf: { salt, iterations: C.KDF_ITERATIONS },
       keyCheck,
       items: payload,
+      projectItems: projectPayload,
     });
     if (res.token) {
       setToken(res.token);
@@ -414,7 +489,7 @@ export function VaultProvider({ children }) {
     if (biometric) await safe(() => storeBiometricKey(key));
     await loadProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, profile, biometric, loadProfile, storeBiometricKey, offline]);
+  }, [items, projects, profile, biometric, loadProfile, storeBiometricKey, offline]);
 
   const setBiometric = useCallback(async (on) => {
     if (on) {
@@ -472,8 +547,14 @@ export function VaultProvider({ children }) {
       setBiometric,
       withoutAutoLock,
       setProfileName: (name) => setProfile((p) => (p ? { ...p, name } : p)),
+      projects,
+      projectsBroken,
+      addProject,
+      updateProject,
+      deleteProject,
+      importProjects,
     };
-  }, [status, profile, items, broken, offline, syncing, breaches, breachChecked, breachProgress, biometric, biometricAvailable, prefs, setPrefs, login, register, unlock, unlockWithBiometrics, lock, logout, wipeLocal, refresh, loadProfile, addItem, updateItem, toggleFavorite, deleteItem, importItems, runBreachCheck, changeMasterPassword, setBiometric, withoutAutoLock]);
+  }, [status, profile, items, broken, offline, syncing, breaches, breachChecked, breachProgress, biometric, biometricAvailable, prefs, setPrefs, login, register, unlock, unlockWithBiometrics, lock, logout, wipeLocal, refresh, loadProfile, addItem, updateItem, toggleFavorite, deleteItem, importItems, runBreachCheck, changeMasterPassword, setBiometric, withoutAutoLock, projects, projectsBroken, addProject, updateProject, deleteProject, importProjects]);
 
   return <VaultContext.Provider value={value}>{children}</VaultContext.Provider>;
 }
