@@ -4,13 +4,16 @@ import "./styles/theme.css";
 import "./index.css";
 import App from "./App";
 import { VaultProvider } from "./state/vault";
+import ErrorBoundary from "./Components/ErrorBoundary/ErrorBoundary";
 import { register as registerServiceWorker } from "./serviceWorkerRegistration";
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <VaultProvider>
-      <App />
-    </VaultProvider>
+    <ErrorBoundary>
+      <VaultProvider>
+        <App />
+      </VaultProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );
 
