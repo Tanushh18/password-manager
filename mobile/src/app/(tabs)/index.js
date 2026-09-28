@@ -71,6 +71,8 @@ export default function Vault() {
             <GradientText>{firstName}</GradientText> ✦
           </Text>
         </View>
+        <IconButton name="folder" onPress={() => router.push("/projects")} />
+        <View style={{ width: 10 }} />
         <IconButton name="lock" onPress={lock} />
         <View style={{ width: 10 }} />
         <Bounce onPress={() => router.navigate("/settings")}>
