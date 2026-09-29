@@ -46,7 +46,8 @@ function Home() {
   return (
     <div className="App home bg-white dark:bg-dark-bg">
       {/* HERO SECTION */}
-      <section className="section bg-gradient-to-b from-white to-gray-50 dark:from-dark-bg dark:to-dark-surface pt-20 md:pt-32 pb-16 md:pb-24">
+      <section className="section bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 dark:from-dark-bg dark:to-dark-surface pt-20 md:pt-32 pb-16 md:pb-24 relative overflow-hidden">
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-purple-200 dark:bg-purple-900/20 rounded-full blur-3xl opacity-40"></div>
         <div className="container-max px-6 md:px-8">
           <div className={`grid grid-cols-1 lg:grid-cols-2 gap-16 items-center ${mounted ? "animate-fade-up" : "opacity-0"}`}>
             {/* Left side copy */}
@@ -139,7 +140,8 @@ function Home() {
       </section>
 
       {/* FEATURES SECTION */}
-      <section className="section py-16 md:py-24">
+      <section className="section py-16 md:py-24 bg-gradient-to-br from-sky-50 via-cyan-50 to-amber-50 dark:from-dark-surface dark:via-dark-surface dark:to-dark-bg relative overflow-hidden">
+        <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-cyan-200 dark:bg-cyan-900/20 rounded-full blur-3xl opacity-40"></div>
         <div className="container-max px-6 md:px-8">
           <div className="max-w-2xl mb-16">
             <span className="inline-block px-3 py-1.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-sm font-medium mb-4">Why Stashr</span>
@@ -166,7 +168,8 @@ function Home() {
       </section>
 
       {/* HOW IT WORKS */}
-      <section className="section py-16 md:py-24 bg-gray-50 dark:bg-dark-surface">
+      <section className="section py-16 md:py-24 bg-gradient-to-br from-rose-50 via-blue-50 to-purple-50 dark:from-dark-surface dark:via-dark-bg dark:to-dark-surface relative overflow-hidden">
+        <div className="absolute -top-32 -right-32 w-96 h-96 bg-red-200 dark:bg-red-900/20 rounded-full blur-3xl opacity-40"></div>
         <div className="container-max px-6 md:px-8">
           <div className="max-w-2xl mb-16">
             <span className="inline-block px-3 py-1.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-sm font-medium mb-4">How it works</span>
@@ -221,7 +224,8 @@ function Home() {
       </section>
 
       {/* FEATURES GRID */}
-      <section className="section py-16 md:py-24 bg-gray-50 dark:bg-dark-surface">
+      <section className="section py-16 md:py-24 bg-gradient-to-br from-purple-50 via-amber-50 to-pink-50 dark:from-dark-bg dark:via-dark-surface dark:to-dark-surface relative overflow-hidden">
+        <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-purple-200 dark:bg-purple-900/20 rounded-full blur-3xl opacity-40"></div>
         <div className="container-max px-6 md:px-8">
           <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-12">Everything you need</h2>
 
