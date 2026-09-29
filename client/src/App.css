@@ -1,4 +1,4 @@
-/* App shell — tokens and global styling live in styles/theme.css */
+/* App shell */
 
 .App {
   position: relative;
@@ -7,14 +7,53 @@
   flex-direction: column;
 }
 
-.App > *:not(.nav) { flex: 1 0 auto; }
+.App > *:not(.nav) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
 
 /* Splash / waiting state */
-.splash { display: grid; place-items: center; text-align: center; }
-.splash__inner { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; }
-.splash__seal {
-  width: 72px; height: 72px; border-radius: 24px; display: grid; place-items: center; color: #fff;
-  background: var(--grad-brand); box-shadow: var(--shadow-rose-lg); margin-bottom: 0.6rem;
+.splash {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  min-height: 100vh;
 }
-.splash__title { font-family: var(--font-serif); font-size: 1.5rem; font-weight: 700; color: var(--heading); }
-.splash__body { color: var(--text-muted); }
+
+.splash__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.splash__seal {
+  width: 5rem;
+  height: 5rem;
+  border-radius: 1rem;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: linear-gradient(135deg, rgb(139, 92, 246), rgb(109, 40, 217));
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  margin-bottom: 0.5rem;
+}
+
+.splash__title {
+  font-weight: bold;
+  font-size: 1.5rem;
+  color: rgb(17, 24, 39);
+}
+
+.splash__title.dark {
+  color: rgb(241, 245, 249);
+}
+
+.splash__body {
+  color: rgb(107, 114, 128);
+}
+
+.splash__body.dark {
+  color: rgb(203, 213, 225);
+}

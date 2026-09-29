@@ -3,7 +3,6 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { useVault } from "../../state/vault";
 import { ShieldLine, Menu, Close, Arrow } from "../Icons/Icons";
 import ThemeToggle from "../ThemeToggle/ThemeToggle";
-import "./Navbar.css";
 
 function Navbar() {
   const { status, profile } = useVault();
@@ -13,7 +12,6 @@ function Navbar() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
 
-  /* Sticky nav condenses once the page moves */
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
     onScroll();
@@ -21,7 +19,6 @@ function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  /* Close the drawer on navigation + lock body scroll while it is open */
   useEffect(() => { setOpen(false); }, [location.pathname]);
 
   useEffect(() => {
@@ -37,11 +34,9 @@ function Navbar() {
         { to: "/passwords", label: "Passwords" },
         { to: "/projects", label: "Projects" },
         { to: "/settings", label: "Settings" },
-        { to: "/logout", label: "Sign out" },
       ]
     : [
         { to: "/", label: "Home" },
-        { to: "/signin", label: "Sign in" },
       ];
 
   const cta = isAuthenticated
@@ -50,40 +45,58 @@ function Navbar() {
 
   return (
     <>
-      <header className={`nav ${scrolled ? "is-scrolled" : ""}`}>
-        <div className="nav__inner">
-          <Link to="/" className="nav__brand" aria-label="Stashr home">
-            <span className="nav__mark">
-              <ShieldLine size={19} strokeWidth={1.8} />
-            </span>
-            <span className="nav__wordmark">
-              <span className="nav__name">Stashr</span>
-              <span className="nav__tag">stash everything</span>
-            </span>
+      <header className={`sticky top-0 z-50 bg-white dark:bg-dark-surface border-b border-gray-200 dark:border-dark-surface-light transition-all duration-300 ${scrolled ? "shadow-lg" : ""}`}>
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-2 no-underline group" aria-label="Stashr home">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-purple-700 text-white">
+              <ShieldLine size={18} strokeWidth={1.8} />
+            </div>
+            <div className="hidden sm:block">
+              <div className="font-bold text-gray-900 dark:text-white text-lg">Stashr</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 -mt-1">Secure Vault</div>
+            </div>
           </Link>
 
-          <nav className="nav__links" aria-label="Primary">
+          {/* Desktop Navigation */}
+          <nav className="hidden md:flex items-center gap-1" aria-label="Primary">
             {links.map((link) => (
-              <NavLink key={link.to} to={link.to} className={({ isActive }) => `nav__link ${isActive ? "is-active" : ""}`} end>
+              <NavLink
+                key={link.to}
+                to={link.to}
+                className={({ isActive }) =>
+                  `px-4 py-2 rounded-lg transition-colors ${
+                    isActive
+                      ? "text-purple-600 dark:text-purple-400 font-medium"
+                      : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                  }`
+                }
+                end
+              >
                 {link.label}
               </NavLink>
             ))}
           </nav>
 
-          <div className="nav__actions">
+          {/* Right Actions */}
+          <div className="flex items-center gap-4">
             <ThemeToggle />
             {isAuthenticated && name && (
-              <span className="nav__greeting">
-                Hello, <em>{name.split(" ")[0]}</em>
+              <span className="hidden lg:inline-block text-sm text-gray-600 dark:text-gray-400">
+                Hello, <span className="font-medium text-gray-900 dark:text-white">{name.split(" ")[0]}</span>
               </span>
             )}
-            <Link to={cta.to} className="btn btn--primary btn--sm nav__cta">
-              <span className="btn__sheen" />
+            <Link to={cta.to} className="btn btn-primary hidden sm:flex">
               {cta.label}
               <Arrow size={14} />
             </Link>
+            {isAuthenticated && (
+              <Link to="/logout" className="btn btn-ghost hidden sm:flex text-sm">
+                Sign out
+              </Link>
+            )}
             <button
-              className="nav__burger"
+              className="md:hidden p-2 hover:bg-gray-100 dark:hover:bg-dark-surface-light rounded-lg transition-colors"
               onClick={() => setOpen(true)}
               aria-label="Open menu"
               aria-expanded={open}
@@ -94,45 +107,59 @@ function Navbar() {
         </div>
       </header>
 
-      {/* ── Mobile drawer ── */}
-      <div className={`drawer ${open ? "is-open" : ""}`} role="dialog" aria-hidden={!open}>
-        <div className="drawer__top">
-          <span className="drawer__brand">
+      {/* Mobile drawer */}
+      <div
+        className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 md:hidden ${
+          open ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+        onClick={() => setOpen(false)}
+      />
+      <div
+        className={`fixed top-0 right-0 h-screen w-80 bg-white dark:bg-dark-surface z-40 md:hidden transform transition-transform duration-300 ${
+          open ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-dark-surface-light">
+          <span className="flex items-center gap-2 font-bold">
             <ShieldLine size={18} />
             Stashr
           </span>
-          <button className="drawer__close" onClick={() => setOpen(false)} aria-label="Close menu">
-            <Close size={18} />
+          <button onClick={() => setOpen(false)} aria-label="Close menu" className="p-1">
+            <Close size={20} />
           </button>
         </div>
 
-        <nav className="drawer__links">
-          {links.map((link, i) => (
+        <nav className="flex flex-col p-6 gap-2">
+          {links.map((link) => (
             <NavLink
               key={link.to}
               to={link.to}
-              className={({ isActive }) => `drawer__link ${isActive ? "is-active" : ""}`}
+              className={({ isActive }) =>
+                `px-4 py-3 rounded-lg transition-colors ${
+                  isActive
+                    ? "bg-purple-100 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 font-medium"
+                    : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-surface-light"
+                }`
+              }
               end
-              style={{ transitionDelay: `${0.06 + i * 0.06}s` }}
             >
               {link.label}
             </NavLink>
           ))}
-          <NavLink
-            to={cta.to}
-            className="drawer__link drawer__link--cta"
-            style={{ transitionDelay: `${0.06 + links.length * 0.06}s` }}
-          >
+          <Link to={cta.to} className="btn btn-primary w-full justify-center">
             {cta.label}
-            <Arrow size={15} />
-          </NavLink>
+          </Link>
+          {isAuthenticated && (
+            <Link to="/logout" className="btn btn-secondary w-full justify-center">
+              Sign out
+            </Link>
+          )}
         </nav>
 
-        <p className="drawer__note">
-          <span className="script">Passwords, projects, everything — kept safe.</span>
+        <p className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-dark-surface-light">
+          Passwords, projects, everything — kept safe.
         </p>
       </div>
-      <div className={`drawer__scrim ${open ? "is-open" : ""}`} onClick={() => setOpen(false)} />
     </>
   );
 }
