@@ -46,10 +46,10 @@ function Home() {
   return (
     <div className="App home bg-white dark:bg-dark-bg">
       {/* HERO SECTION */}
-      <section className="section pt-20 md:pt-32 pb-16 md:pb-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(49, 170, 169, 0.05) 0%, rgba(248, 224, 164, 0.08) 50%, rgba(168, 32, 32, 0.05) 100%)' }}>
+      <section className="section pt-16 md:pt-32 pb-16 md:pb-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(49, 170, 169, 0.05) 0%, rgba(248, 224, 164, 0.08) 50%, rgba(168, 32, 32, 0.05) 100%)' }}>
         <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full blur-3xl opacity-30" style={{ background: 'radial-gradient(circle, rgba(49, 170, 169, 0.2) 0%, transparent 70%)' }}></div>
-        <div className="container-max px-6 md:px-8">
-          <div className={`grid grid-cols-1 lg:grid-cols-2 gap-16 items-center ${mounted ? "animate-fade-up" : "opacity-0"}`}>
+        <div className="container-max px-4 md:px-6 lg:px-8 max-w-6xl mx-auto">
+          <div className={`grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center ${mounted ? "animate-fade-up" : "opacity-0"}`}>
             {/* Left side copy */}
             <div className="space-y-6">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-100 dark:bg-purple-900/30 rounded-full">
@@ -140,10 +140,10 @@ function Home() {
       </section>
 
       {/* FEATURES SECTION */}
-      <section className="section py-16 md:py-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(248, 224, 164, 0.1) 0%, rgba(49, 170, 169, 0.06) 50%, rgba(108, 26, 26, 0.05) 100%)' }}>
+      <section className="py-16 md:py-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(248, 224, 164, 0.1) 0%, rgba(49, 170, 169, 0.06) 50%, rgba(108, 26, 26, 0.05) 100%)' }}>
         <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full blur-3xl opacity-30" style={{ background: 'radial-gradient(circle, rgba(248, 224, 164, 0.15) 0%, transparent 70%)' }}></div>
-        <div className="container-max px-6 md:px-8">
-          <div className="max-w-2xl mb-16">
+        <div className="max-w-6xl mx-auto px-4 md:px-6 lg:px-8">
+          <div className="max-w-2xl mb-12 md:mb-16">
             <span className="inline-block px-3 py-1.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-sm font-medium mb-4">Why Stashr</span>
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
               Security that <span className="italic">feels alive</span>
@@ -153,7 +153,7 @@ function Home() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {features.map((feature, i) => {
               const colors = [
                 { bg: 'rgba(49, 170, 169, 0.1)', text: '#31AAA9' },  // Teal
@@ -176,17 +176,17 @@ function Home() {
       </section>
 
       {/* HOW IT WORKS */}
-      <section className="section py-16 md:py-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(168, 32, 32, 0.06) 0%, rgba(49, 170, 169, 0.05) 50%, rgba(248, 224, 164, 0.08) 100%)' }}>
+      <section className="py-16 md:py-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(168, 32, 32, 0.06) 0%, rgba(49, 170, 169, 0.05) 50%, rgba(248, 224, 164, 0.08) 100%)' }}>
         <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full blur-3xl opacity-30" style={{ background: 'radial-gradient(circle, rgba(168, 32, 32, 0.15) 0%, transparent 70%)' }}></div>
-        <div className="container-max px-6 md:px-8">
-          <div className="max-w-2xl mb-16">
+        <div className="max-w-6xl mx-auto px-4 md:px-6 lg:px-8">
+          <div className="max-w-2xl mb-12 md:mb-16">
             <span className="inline-block px-3 py-1.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-sm font-medium mb-4">How it works</span>
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
               Three steps to a <span className="italic">secure vault</span>
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {steps.map((step, i) => {
               const stepColors = [
                 '#31AAA9',  // Teal
@@ -218,9 +218,9 @@ function Home() {
       </section>
 
       {/* CTA SECTION */}
-      <section className="section py-16 md:py-24">
-        <div className="container-max px-6 md:px-8">
-          <div className="rounded-2xl p-12 md:p-16 text-center text-white space-y-6" style={{ background: 'linear-gradient(135deg, #31AAA9 0%, #2a9a9a 100%)' }}>
+      <section className="py-16 md:py-24 px-4 md:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="rounded-2xl p-8 md:p-12 lg:p-16 text-center text-white space-y-6" style={{ background: 'linear-gradient(135deg, #31AAA9 0%, #2a9a9a 100%)' }}>
             <h2 className="text-3xl md:text-4xl font-bold">
               Your whole digital life,
               <br />
@@ -229,7 +229,7 @@ function Home() {
             <p className="text-lg opacity-90 max-w-2xl mx-auto">
               Secure password management on every device. Encrypted. Private. Always free.
             </p>
-            <div className="flex flex-wrap gap-3 justify-center pt-6">
+            <div className="flex flex-wrap gap-3 justify-center pt-4 md:pt-6">
               <Link to={isAuthenticated ? "/passwords" : "/signup"} className="btn btn-primary">
                 {isAuthenticated ? "Open my vault" : "Begin your vault"}
                 <Arrow size={16} />
@@ -240,9 +240,9 @@ function Home() {
       </section>
 
       {/* FEATURES GRID */}
-      <section className="section py-16 md:py-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(49, 170, 169, 0.08) 0%, rgba(248, 224, 164, 0.1) 50%, rgba(168, 32, 32, 0.06) 100%)' }}>
+      <section className="py-16 md:py-24 relative overflow-hidden px-4 md:px-6 lg:px-8" style={{ background: 'linear-gradient(135deg, rgba(49, 170, 169, 0.08) 0%, rgba(248, 224, 164, 0.1) 50%, rgba(168, 32, 32, 0.06) 100%)' }}>
         <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full blur-3xl opacity-30" style={{ background: 'radial-gradient(circle, rgba(49, 170, 169, 0.2) 0%, transparent 70%)' }}></div>
-        <div className="container-max px-6 md:px-8">
+        <div className="max-w-6xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-12">Everything you need</h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -267,8 +267,8 @@ function Home() {
       </section>
 
       {/* FOOTER */}
-      <footer className="bg-gray-900 dark:bg-black text-white py-12">
-        <div className="container-max px-6 md:px-8 text-center">
+      <footer className="bg-gray-900 dark:bg-black text-white py-12 px-4 md:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
             <ShieldLine size={20} />
             <span className="font-bold text-lg">Stashr</span>
