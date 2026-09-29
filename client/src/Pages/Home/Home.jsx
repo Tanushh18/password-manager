@@ -46,8 +46,8 @@ function Home() {
   return (
     <div className="App home bg-white dark:bg-dark-bg">
       {/* HERO SECTION */}
-      <section className="section bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 dark:from-dark-bg dark:to-dark-surface pt-20 md:pt-32 pb-16 md:pb-24 relative overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-purple-200 dark:bg-purple-900/20 rounded-full blur-3xl opacity-40"></div>
+      <section className="section pt-20 md:pt-32 pb-16 md:pb-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(49, 170, 169, 0.05) 0%, rgba(248, 224, 164, 0.08) 50%, rgba(168, 32, 32, 0.05) 100%)' }}>
+        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full blur-3xl opacity-30" style={{ background: 'radial-gradient(circle, rgba(49, 170, 169, 0.2) 0%, transparent 70%)' }}></div>
         <div className="container-max px-6 md:px-8">
           <div className={`grid grid-cols-1 lg:grid-cols-2 gap-16 items-center ${mounted ? "animate-fade-up" : "opacity-0"}`}>
             {/* Left side copy */}
@@ -140,8 +140,8 @@ function Home() {
       </section>
 
       {/* FEATURES SECTION */}
-      <section className="section py-16 md:py-24 bg-gradient-to-br from-sky-50 via-cyan-50 to-amber-50 dark:from-dark-surface dark:via-dark-surface dark:to-dark-bg relative overflow-hidden">
-        <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-cyan-200 dark:bg-cyan-900/20 rounded-full blur-3xl opacity-40"></div>
+      <section className="section py-16 md:py-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(248, 224, 164, 0.1) 0%, rgba(49, 170, 169, 0.06) 50%, rgba(108, 26, 26, 0.05) 100%)' }}>
+        <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full blur-3xl opacity-30" style={{ background: 'radial-gradient(circle, rgba(248, 224, 164, 0.15) 0%, transparent 70%)' }}></div>
         <div className="container-max px-6 md:px-8">
           <div className="max-w-2xl mb-16">
             <span className="inline-block px-3 py-1.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-sm font-medium mb-4">Why Stashr</span>
@@ -154,22 +154,30 @@ function Home() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {features.map((feature, i) => (
+            {features.map((feature, i) => {
+              const colors = [
+                { bg: 'rgba(49, 170, 169, 0.1)', text: '#31AAA9' },  // Teal
+                { bg: 'rgba(248, 224, 164, 0.1)', text: '#d49a0f' },  // Cream
+                { bg: 'rgba(168, 32, 32, 0.1)', text: '#A82020' },   // Red
+              ];
+              const color = colors[i % colors.length];
+              return (
               <div key={i} className="card hover:shadow-primary cursor-pointer">
-                <div className="w-12 h-12 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400 mb-4">
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center mb-4" style={{ backgroundColor: color.bg, color: color.text }}>
                   {feature.icon}
                 </div>
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">{feature.title}</h3>
                 <p className="text-gray-600 dark:text-gray-400">{feature.desc}</p>
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       </section>
 
       {/* HOW IT WORKS */}
-      <section className="section py-16 md:py-24 bg-gradient-to-br from-rose-50 via-blue-50 to-purple-50 dark:from-dark-surface dark:via-dark-bg dark:to-dark-surface relative overflow-hidden">
-        <div className="absolute -top-32 -right-32 w-96 h-96 bg-red-200 dark:bg-red-900/20 rounded-full blur-3xl opacity-40"></div>
+      <section className="section py-16 md:py-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(168, 32, 32, 0.06) 0%, rgba(49, 170, 169, 0.05) 50%, rgba(248, 224, 164, 0.08) 100%)' }}>
+        <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full blur-3xl opacity-30" style={{ background: 'radial-gradient(circle, rgba(168, 32, 32, 0.15) 0%, transparent 70%)' }}></div>
         <div className="container-max px-6 md:px-8">
           <div className="max-w-2xl mb-16">
             <span className="inline-block px-3 py-1.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-sm font-medium mb-4">How it works</span>
@@ -179,11 +187,18 @@ function Home() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {steps.map((step, i) => (
+            {steps.map((step, i) => {
+              const stepColors = [
+                '#31AAA9',  // Teal
+                '#A82020',  // Red
+                '#d49a0f',  // Cream/Gold
+              ];
+              const color = stepColors[i % stepColors.length];
+              return (
               <div key={i} className="relative">
                 <div className="flex items-start gap-4">
                   <div className="flex-shrink-0">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-purple-600 text-white font-bold">
+                    <div className="flex items-center justify-center w-12 h-12 rounded-lg text-white font-bold" style={{ background: color }}>
                       {step.num}
                     </div>
                   </div>
@@ -193,10 +208,11 @@ function Home() {
                   </div>
                 </div>
                 {i < steps.length - 1 && (
-                  <div className="hidden md:block absolute top-6 -right-4 w-8 h-1 bg-gradient-to-r from-purple-600 to-transparent"></div>
+                  <div className="hidden md:block absolute top-6 -right-4 w-8 h-1" style={{ background: `linear-gradient(90deg, ${color} 0%, transparent 100%)` }}></div>
                 )}
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       </section>
@@ -204,7 +220,7 @@ function Home() {
       {/* CTA SECTION */}
       <section className="section py-16 md:py-24">
         <div className="container-max px-6 md:px-8">
-          <div className="bg-gradient-to-r from-purple-600 to-purple-700 rounded-2xl p-12 md:p-16 text-center text-white space-y-6">
+          <div className="rounded-2xl p-12 md:p-16 text-center text-white space-y-6" style={{ background: 'linear-gradient(135deg, #31AAA9 0%, #2a9a9a 100%)' }}>
             <h2 className="text-3xl md:text-4xl font-bold">
               Your whole digital life,
               <br />
@@ -224,23 +240,23 @@ function Home() {
       </section>
 
       {/* FEATURES GRID */}
-      <section className="section py-16 md:py-24 bg-gradient-to-br from-purple-50 via-amber-50 to-pink-50 dark:from-dark-bg dark:via-dark-surface dark:to-dark-surface relative overflow-hidden">
-        <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-purple-200 dark:bg-purple-900/20 rounded-full blur-3xl opacity-40"></div>
+      <section className="section py-16 md:py-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(49, 170, 169, 0.08) 0%, rgba(248, 224, 164, 0.1) 50%, rgba(168, 32, 32, 0.06) 100%)' }}>
+        <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full blur-3xl opacity-30" style={{ background: 'radial-gradient(circle, rgba(49, 170, 169, 0.2) 0%, transparent 70%)' }}></div>
         <div className="container-max px-6 md:px-8">
           <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-12">Everything you need</h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { icon: "🔐", title: "AES-256 Encryption", desc: "Military-grade security" },
-              { icon: "📊", title: "Health Score", desc: "Real-time security audit" },
-              { icon: "🤖", title: "Auto-Generate", desc: "Strong password creation" },
-              { icon: "📱", title: "Mobile Sync", desc: "Access everywhere" },
-              { icon: "🔄", title: "Import/Export", desc: "Easy data migration" },
-              { icon: "🎯", title: "Organize", desc: "Folders & favorites" },
-              { icon: "🔍", title: "Search", desc: "Instant access" },
-              { icon: "⚡", title: "Lightning Fast", desc: "Instant encryption" },
+              { icon: "🔐", title: "AES-256 Encryption", desc: "Military-grade security", color: '#31AAA9' },
+              { icon: "📊", title: "Health Score", desc: "Real-time security audit", color: '#F8E0A4' },
+              { icon: "🤖", title: "Auto-Generate", desc: "Strong password creation", color: '#A82020' },
+              { icon: "📱", title: "Mobile Sync", desc: "Access everywhere", color: '#31AAA9' },
+              { icon: "🔄", title: "Import/Export", desc: "Easy data migration", color: '#A82020' },
+              { icon: "🎯", title: "Organize", desc: "Folders & favorites", color: '#d49a0f' },
+              { icon: "🔍", title: "Search", desc: "Instant access", color: '#A82020' },
+              { icon: "⚡", title: "Lightning Fast", desc: "Instant encryption", color: '#31AAA9' },
             ].map((feature, i) => (
-              <div key={i} className="card text-center hover:shadow-primary">
+              <div key={i} className="card text-center hover:shadow-primary" style={{ borderTopColor: feature.color, borderTopWidth: '3px' }}>
                 <div className="text-3xl mb-3">{feature.icon}</div>
                 <h3 className="font-bold text-gray-900 dark:text-white mb-1">{feature.title}</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400">{feature.desc}</p>

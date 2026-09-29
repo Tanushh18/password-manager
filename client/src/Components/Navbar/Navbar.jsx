@@ -49,7 +49,7 @@ function Navbar() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 no-underline group" aria-label="Stashr home">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-purple-700 text-white">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg text-white" style={{ background: 'linear-gradient(135deg, #31AAA9 0%, #2a9a9a 100%)' }}>
               <ShieldLine size={18} strokeWidth={1.8} />
             </div>
             <div className="hidden sm:block">
@@ -65,9 +65,9 @@ function Navbar() {
                 key={link.to}
                 to={link.to}
                 className={({ isActive }) =>
-                  `px-4 py-2 rounded-lg transition-colors ${
+                  `px-4 py-2 rounded-lg transition-colors font-medium ${
                     isActive
-                      ? "text-purple-600 dark:text-purple-400 font-medium"
+                      ? "text-teal-300 dark:text-teal-300"
                       : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
                   }`
                 }
@@ -135,12 +135,13 @@ function Navbar() {
               key={link.to}
               to={link.to}
               className={({ isActive }) =>
-                `px-4 py-3 rounded-lg transition-colors ${
+                `px-4 py-3 rounded-lg transition-colors font-medium ${
                   isActive
-                    ? "bg-purple-100 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 font-medium"
+                    ? "text-teal-300 dark:text-teal-300"
                     : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-surface-light"
                 }`
               }
+              style={({ isActive }) => isActive ? { backgroundColor: 'rgba(49, 170, 169, 0.1)' } : {}}
               end
             >
               {link.label}
