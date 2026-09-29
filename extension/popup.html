@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Password Manager</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>🔐 Autofill</h2>
+    </div>
+
+    <!-- Login State -->
+    <div id="loginSection" class="section hidden">
+      <input type="email" id="email" placeholder="Email" class="input">
+      <input type="password" id="password" placeholder="Password" class="input">
+      <button id="loginBtn" class="btn btn-primary">Login</button>
+      <div id="loginError" class="error hidden"></div>
+    </div>
+
+    <!-- Logged In State -->
+    <div id="mainSection" class="section hidden">
+      <!-- Current Domain Passwords -->
+      <div id="currentDomainSection">
+        <h3>For this website</h3>
+        <div id="currentPasswords" class="password-list"></div>
+      </div>
+
+      <!-- All Passwords -->
+      <div id="allPasswordsSection">
+        <h3>All Accounts</h3>
+        <div id="allPasswords" class="password-list"></div>
+      </div>
+
+      <!-- QR Code View -->
+      <div id="qrSection" class="section hidden">
+        <h3>QR Code</h3>
+        <div id="qrContainer"></div>
+        <button id="closeQrBtn" class="btn btn-secondary">Close</button>
+      </div>
+
+      <div class="footer">
+        <button id="logoutBtn" class="btn btn-secondary">Logout</button>
+      </div>
+    </div>
+
+    <div id="loadingSpinner" class="spinner hidden"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

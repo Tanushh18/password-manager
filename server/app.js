@@ -7,7 +7,8 @@ const mongoose = require("mongoose");
 
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://password-website.onrender.com'
+  'https://password-website.onrender.com',
+  'chrome-extension://*'  // Allow Chrome extension
 ];
 
 // Extra origins can be supplied as a comma separated list (CLIENT_ORIGINS)
