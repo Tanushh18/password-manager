@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Password Manager Autofill",
+  "version": "1.0.0",
+  "description": "Autofill passwords securely with QR code backup",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Autofill Password"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ]
+}
