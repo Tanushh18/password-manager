@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:5000/api'; // Change to your actual domain
+const API_BASE = 'http://localhost:8000/api'; // Change to your actual domain
 
 // DOM Elements
 const loginSection = document.getElementById('loginSection');
