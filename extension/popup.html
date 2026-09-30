@@ -3,19 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Password Manager</title>
+  <title>Stashr Autofill</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h2>🔐 Autofill</h2>
+      <h2>Stashr Autofill</h2>
     </div>
 
     <!-- Login State -->
     <div id="loginSection" class="section hidden">
       <input type="email" id="email" placeholder="Email" class="input">
       <input type="password" id="password" placeholder="Password" class="input">
+      <input type="text" id="code" placeholder="2-step code" class="input hidden" autocomplete="one-time-code" inputmode="numeric">
       <button id="loginBtn" class="btn btn-primary">Login</button>
       <div id="loginError" class="error hidden"></div>
     </div>
