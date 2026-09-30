@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Alert, Linking, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Alert, AppState, Linking, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Constants from "expo-constants";
@@ -13,6 +13,7 @@ import { Bounce, Card, Chip, FadeIn, GhostButton, GradientText, tap } from "../.
 import { useTheme, alpha } from "../../lib/theme";
 import { useVault } from "../../lib/vault";
 import { api, activeServer } from "../../lib/api";
+import { autofillSupported, isServiceEnabled, openAccessibilitySettings } from "../../../modules/stashr-autofill";
 
 const WEBSITE = "https://password-website.onrender.com";
 const LOCK_OPTIONS = [
@@ -52,9 +53,18 @@ function Section({ title, children, delay }) {
 
 export default function Settings() {
   const { theme, preference, setPreference } = useTheme();
+  const [serviceOn, setServiceOn] = useState(false);
   const { profile, items, biometric, biometricAvailable, setBiometric, logout, lock, prefs, setPrefs, setProfileName, refreshProfile } = useVault();
   const toast = useToast();
   const [name, setName] = useState(profile?.name || "");
+
+  useEffect(() => {
+    if (!autofillSupported) return undefined;
+    const check = () => setServiceOn(isServiceEnabled());
+    check();
+    const sub = AppState.addEventListener("change", (s) => s === "active" && check());
+    return () => sub.remove();
+  }, []);
 
   const saveName = async () => {
     try {
@@ -164,6 +174,55 @@ export default function Settings() {
             {biometric ? <Row icon="lock" title="Lock now" onPress={lock} color={theme.accent2} /> : null}
             <Row icon="logout" title="Sign out other devices" subtitle={`${Math.max(0, (profile?.sessions || 1) - 1)} other session(s)`} onPress={signOutOthers} color={theme.accent2} />
           </Section>
+
+          {Platform.OS === "android" && autofillSupported ? (
+            <Section title="AUTOFILL" delay={120}>
+              <Row
+                icon="key"
+                title="Autofill in other apps"
+                subtitle="Show your saved logins when you tap a username or password field"
+                right={
+                  <Switch
+                    value={Boolean(prefs.autofill)}
+                    onValueChange={(v) => {
+                      tap();
+                      setPrefs({ autofill: v });
+                      if (v && !serviceOn) openAccessibilitySettings();
+                    }}
+                    trackColor={{ false: alpha(theme.accent, 0.2), true: theme.accent }}
+                    thumbColor="#fff"
+                  />
+                }
+              />
+              {prefs.autofill ? (
+                <View>
+                  <Row
+                    icon="shieldCheck"
+                    title={serviceOn ? "Accessibility service is on" : "Turn on the Stashr accessibility service"}
+                    subtitle={serviceOn ? "Stashr can see login fields in other apps" : "Tap, then choose Stashr Autofill and switch it on"}
+                    color={serviceOn ? theme.ok : theme.warn}
+                    onPress={openAccessibilitySettings}
+                  />
+                  <Row
+                    icon="fingerprint"
+                    title="Confirm before filling"
+                    subtitle="Ask for your fingerprint or screen lock each time"
+                    right={
+                      <Switch
+                        value={prefs.autofillBiometric !== false}
+                        onValueChange={(v) => {
+                          tap();
+                          setPrefs({ autofillBiometric: v });
+                        }}
+                        trackColor={{ false: alpha(theme.accent, 0.2), true: theme.accent }}
+                        thumbColor="#fff"
+                      />
+                    }
+                  />
+                </View>
+              ) : null}
+            </Section>
+          ) : null}
 
           <Section title="APPEARANCE" delay={140}>
             <View>

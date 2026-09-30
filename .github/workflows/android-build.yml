@@ -4,7 +4,7 @@
 # One-time setup:
 #   1. Create an access token at https://expo.dev/settings/access-tokens
 #      Add it to this repo as the secret EXPO_TOKEN.
-#   2. Create a Firebase project + Android app (package: com.aurelia.vault),
+#   2. Create a Firebase project + Android app (package: com.tanush.stashr.com),
 #      enable App Distribution, and create a tester group.
 #      Add these repo secrets:
 #        - FIREBASE_APP_ID            (Firebase console → Project settings → General)

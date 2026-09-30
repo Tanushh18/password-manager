@@ -1,0 +1,4 @@
+<resources>
+  <string name="stashr_autofill_label">Stashr Autofill</string>
+  <string name="stashr_autofill_description">Shows your saved Stashr logins when you tap a username or password field, and fills the one you pick. Stashr only reads the screen to find login fields and never sends what it sees anywhere.</string>
+</resources>

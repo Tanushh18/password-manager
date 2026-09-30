@@ -8,6 +8,7 @@ import { normalizeProject } from "./projectItems";
 import { computeHealth } from "./health";
 import { pwnedCount } from "./breach";
 import { readCache, writeCache, clearCache } from "./cache";
+import { saveCredentials, clearCredentials, setRequireBiometric as setAutofillBiometric } from "../../modules/stashr-autofill";
 
 /**
  * Session + vault state for the Android app.
@@ -28,7 +29,7 @@ const K = {
   bio: "aurelia_biometric",
   prefs: "aurelia_prefs",
 };
-const DEFAULT_PREFS = { autoLock: 0.5, icons: false }; // minutes; -1 = never
+const DEFAULT_PREFS = { autoLock: 0.5, icons: false, autofill: false, autofillBiometric: true }; // minutes; -1 = never
 const BIO_OPTIONS = { promptMessage: "Unlock Aurelia" };
 
 const VaultContext = createContext(null);
@@ -95,6 +96,7 @@ export function VaultProvider({ children }) {
     setProfile(null);
     setBreaches({});
     setBreachChecked(false);
+    safe(() => clearCredentials());
     await Promise.all([safe(() => SecureStore.deleteItemAsync(K.token)), safe(() => SecureStore.deleteItemAsync(K.bio)), clearCache()]);
     setBiometricState(false);
     setStatus("signedOut");
@@ -355,6 +357,17 @@ export function VaultProvider({ children }) {
       return next;
     });
   }, []);
+
+  /* ── Autofill: keep the native service's encrypted copy of the vault in step with it ── */
+  useEffect(() => {
+    if (status !== "ready" && status !== "locked") return;
+    if (prefs.autofill) safe(() => saveCredentials(items));
+    else safe(() => clearCredentials());
+  }, [status, items, prefs.autofill]);
+
+  useEffect(() => {
+    safe(() => setAutofillBiometric(prefs.autofillBiometric));
+  }, [prefs.autofillBiometric]);
 
   const value = useMemo(() => {
     const health = computeHealth(items, breaches);
