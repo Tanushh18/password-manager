@@ -79,14 +79,31 @@ object Matcher {
     return base.length >= 3 && name.length >= 3 && (name == base || name.contains(base) || base.contains(name))
   }
 
-  /** Credentials for the app/site in front. Empty when nothing matches (caller shows everything). */
-  fun match(all: List<Credential>, pkg: String, appLabel: String, browserUrl: String?): List<Credential> {
+  /** Stable id for "this app" or "this website", used to remember which login the user picked for it. */
+  fun siteKey(pkg: String, browserUrl: String?): String? {
+    if (!isBrowser(pkg)) return "app:$pkg"
+    val domain = browserUrl?.let { domainOf(it) }.orEmpty()
+    return if (domain.isEmpty()) null else "web:${registrableDomain(domain)}"
+  }
+
+  private fun heuristic(all: List<Credential>, pkg: String, appLabel: String, browserUrl: String?): List<Credential> {
     if (isBrowser(pkg)) {
       val domain = browserUrl?.let { domainOf(it) }.orEmpty()
       if (domain.isEmpty()) return emptyList()
       return all.filter { matchesDomain(it, domain) }
     }
     val tokens = tokensFor(pkg, appLabel)
-    return all.filter { matchesTokens(it, tokens) }
+    val appUri = "androidapp://${pkg.lowercase()}"
+    return all.filter { it.url.trim().lowercase().startsWith(appUri) || matchesTokens(it, tokens) }
   }
+
+  /** Logins the user linked to this app/site first, then the name/URL matches. Empty means nothing matched. */
+  fun match(
+    all: List<Credential>,
+    pkg: String,
+    appLabel: String,
+    browserUrl: String?,
+    linkedIds: Set<String> = emptySet(),
+  ): List<Credential> =
+    (all.filter { it.id in linkedIds } + heuristic(all, pkg, appLabel, browserUrl)).distinctBy { it.id }
 }

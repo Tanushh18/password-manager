@@ -54,4 +54,33 @@ class MatcherTest {
     assertEquals("google", Matcher.baseLabel("accounts.google.com"))
     assertEquals("bbc", Matcher.baseLabel("news.bbc.co.uk"))
   }
+
+  @Test fun linkedLoginComesFirstAndIsNotDuplicated() {
+    val ids = Matcher.match(vault, "com.instagram.android", "Instagram", null, setOf("4", "2")).map { it.id }
+    assertEquals(listOf("2", "4", "1"), ids)
+  }
+
+  @Test fun linkedLoginAppearsEvenWhenNothingElseMatches() {
+    val ids = Matcher.match(vault, "com.some.bankapp", "Some Bank", null, setOf("3")).map { it.id }
+    assertEquals(listOf("3"), ids)
+  }
+
+  @Test fun siteKeys() {
+    assertEquals("app:com.instagram.android", Matcher.siteKey("com.instagram.android", null))
+    assertEquals("web:google.com", Matcher.siteKey("com.android.chrome", "https://accounts.google.com/signin"))
+    assertEquals(null, Matcher.siteKey("com.android.chrome", null))
+  }
+
+  @Test fun androidAppUrlMatchesThatApp() {
+    val v = listOf(c("9", "My bank", "androidapp://com.some.bankapp"))
+    assertEquals(listOf("9"), Matcher.match(v, "com.some.bankapp", "Whatever", null).map { it.id })
+  }
+
+  @Test fun linksRoundTrip() {
+    val links = mapOf("web:google.com" to setOf("a", "b"), "app:com.x" to setOf("c"))
+    assertEquals(links, Links.parse(Links.toJson(links)))
+    val pending = listOf("web:google.com" to "a", "app:com.x" to "c")
+    assertEquals(pending, Links.parsePending(Links.pendingToJson(pending)))
+    assertTrue(Links.parse("not json").isEmpty())
+  }
 }

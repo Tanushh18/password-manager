@@ -16,6 +16,8 @@ import javax.crypto.spec.GCMParameterSpec
 object CredentialStore {
   private const val PREFS = "stashr_autofill"
   private const val K_DATA = "data"
+  private const val K_LINKS = "links"
+  private const val K_PENDING = "pending_links"
   private const val K_BIO = "require_biometric"
   private const val ALIAS = "stashr_autofill_key"
 
@@ -35,24 +37,57 @@ object CredentialStore {
 
   private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-  fun save(ctx: Context, json: String) {
+  private fun put(ctx: Context, name: String, text: String) {
     val cipher = Cipher.getInstance("AES/GCM/NoPadding")
     cipher.init(Cipher.ENCRYPT_MODE, key())
-    val blob = cipher.iv + cipher.doFinal(json.toByteArray(Charsets.UTF_8))
-    prefs(ctx).edit().putString(K_DATA, Base64.encodeToString(blob, Base64.NO_WRAP)).apply()
+    val blob = cipher.iv + cipher.doFinal(text.toByteArray(Charsets.UTF_8))
+    prefs(ctx).edit().putString(name, Base64.encodeToString(blob, Base64.NO_WRAP)).apply()
   }
 
-  fun load(ctx: Context): List<Credential> {
-    val stored = prefs(ctx).getString(K_DATA, null) ?: return emptyList()
+  private fun get(ctx: Context, name: String): String? {
+    val stored = prefs(ctx).getString(name, null) ?: return null
     return try {
       val blob = Base64.decode(stored, Base64.NO_WRAP)
       val cipher = Cipher.getInstance("AES/GCM/NoPadding")
       cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, blob, 0, 12))
-      val text = String(cipher.doFinal(blob, 12, blob.size - 12), Charsets.UTF_8)
-      parse(text)
+      String(cipher.doFinal(blob, 12, blob.size - 12), Charsets.UTF_8)
     } catch (e: Exception) {
-      emptyList()
+      null
     }
+  }
+
+  fun save(ctx: Context, json: String) = put(ctx, K_DATA, json)
+
+  fun load(ctx: Context): List<Credential> {
+    val text = get(ctx, K_DATA) ?: return emptyList()
+    return try { parse(text) } catch (e: Exception) { emptyList() }
+  }
+
+  /** Logins the user has picked for a given app/site before. */
+  fun linksFor(ctx: Context, siteKey: String): Set<String> =
+    Links.parse(get(ctx, K_LINKS).orEmpty())[siteKey].orEmpty()
+
+  /** Remembers the pick and queues it so the app can also fill the item's empty website field. */
+  fun addLink(ctx: Context, siteKey: String, id: String) {
+    val links = Links.parse(get(ctx, K_LINKS).orEmpty()).toMutableMap()
+    links[siteKey] = links[siteKey].orEmpty() + id
+    put(ctx, K_LINKS, Links.toJson(links))
+    val pending = Links.parsePending(get(ctx, K_PENDING).orEmpty())
+    if (pending.none { it.first == siteKey && it.second == id }) {
+      put(ctx, K_PENDING, Links.pendingToJson(pending + (siteKey to id)))
+    }
+  }
+
+  fun pendingLinksJson(ctx: Context): String = Links.pendingToJson(Links.parsePending(get(ctx, K_PENDING).orEmpty()))
+
+  fun ackPending(ctx: Context, json: String) {
+    val done = Links.parsePending(json).toSet()
+    val left = Links.parsePending(get(ctx, K_PENDING).orEmpty()).filterNot { it in done }
+    put(ctx, K_PENDING, Links.pendingToJson(left))
+  }
+
+  fun clearLinks(ctx: Context) {
+    prefs(ctx).edit().remove(K_LINKS).remove(K_PENDING).apply()
   }
 
   fun parse(json: String): List<Credential> {

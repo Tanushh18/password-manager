@@ -8,7 +8,7 @@ import { normalizeProject } from "./projectItems";
 import { computeHealth } from "./health";
 import { pwnedCount } from "./breach";
 import { readCache, writeCache, clearCache } from "./cache";
-import { saveCredentials, clearCredentials, setRequireBiometric as setAutofillBiometric } from "../../modules/stashr-autofill";
+import { saveCredentials, clearCredentials, clearLinks, getPendingLinks, ackPendingLinks, setRequireBiometric as setAutofillBiometric } from "../../modules/stashr-autofill";
 
 /**
  * Session + vault state for the Android app.
@@ -97,6 +97,7 @@ export function VaultProvider({ children }) {
     setBreaches({});
     setBreachChecked(false);
     safe(() => clearCredentials());
+    safe(() => clearLinks());
     await Promise.all([safe(() => SecureStore.deleteItemAsync(K.token)), safe(() => SecureStore.deleteItemAsync(K.bio)), clearCache()]);
     setBiometricState(false);
     setStatus("signedOut");
@@ -368,6 +369,38 @@ export function VaultProvider({ children }) {
   useEffect(() => {
     safe(() => setAutofillBiometric(prefs.autofillBiometric));
   }, [prefs.autofillBiometric]);
+
+  /* Logins picked in autofill for a website get saved as that item's website (if it has none), so the extension and other devices know it too. */
+  const [foregroundTick, setForegroundTick] = useState(0);
+  const syncingLinks = useRef(false);
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (s) => s === "active" && setForegroundTick((n) => n + 1));
+    return () => sub.remove();
+  }, []);
+  useEffect(() => {
+    if (status !== "ready" || offline || !prefs.autofill || syncingLinks.current) return;
+    const pending = getPendingLinks();
+    if (!pending.length) return;
+    syncingLinks.current = true;
+    (async () => {
+      const done = [];
+      for (const link of pending) {
+        const item = items.find((i) => i.id === link.id);
+        if (item && !item.url && link.key.startsWith("web:")) {
+          try {
+            await updateItem(link.id, { url: link.key.slice(4) });
+          } catch (e) {
+            continue;
+          }
+        }
+        done.push(link);
+      }
+      if (done.length) ackPendingLinks(done);
+    })().finally(() => {
+      syncingLinks.current = false;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, offline, prefs.autofill, foregroundTick, items]);
 
   const value = useMemo(() => {
     const health = computeHealth(items, breaches);

@@ -20,5 +20,14 @@
       android:taskAffinity=""
       android:launchMode="singleTask"
       android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+    <activity
+      android:name=".PickerActivity"
+      android:exported="false"
+      android:excludeFromRecents="true"
+      android:taskAffinity=""
+      android:launchMode="singleTask"
+      android:windowSoftInputMode="adjustResize|stateVisible"
+      android:theme="@android:style/Theme.Translucent.NoTitleBar" />
   </application>
 </manifest>

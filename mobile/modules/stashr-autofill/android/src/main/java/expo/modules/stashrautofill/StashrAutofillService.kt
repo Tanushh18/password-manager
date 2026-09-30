@@ -24,6 +24,11 @@ class StashrAutofillService : AccessibilityService() {
   private var overlayPackage: String? = null
   private val autoHide = Runnable { hideOverlay() }
 
+  // What the overlay was last shown for; kept after it closes so the fill and the link go to the right place.
+  private var shownPackage: String? = null
+  private var shownKey: String? = null
+  private var shownMatchIds: Set<String> = emptySet()
+
   private val browserUrlIds = listOf(
     "com.android.chrome:id/url_bar",
     "com.brave.browser:id/url_bar",
@@ -123,7 +128,12 @@ class StashrAutofillService : AccessibilityService() {
     val all = CredentialStore.load(this)
     val root = rootInActiveWindow ?: return
     val url = if (Matcher.isBrowser(pkg)) browserUrl(root, pkg) else null
-    val matches = Matcher.match(all, pkg, appLabel(pkg), url)
+    val key = Matcher.siteKey(pkg, url)
+    val linked = key?.let { CredentialStore.linksFor(this, it) }.orEmpty()
+    val matches = Matcher.match(all, pkg, appLabel(pkg), url, linked)
+    shownPackage = pkg
+    shownKey = key
+    shownMatchIds = matches.map { it.id }.toSet()
     val bounds = Rect().also { anchor.getBoundsInScreen(it) }
     val header = when {
       all.isEmpty() -> "Open Stashr and sign in to load your logins"
@@ -165,6 +175,13 @@ class StashrAutofillService : AccessibilityService() {
       },
       LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
     )
+    top.addView(TextView(this).apply {
+      text = "Search"
+      setTextColor(0xFF31AAA9.toInt())
+      textSize = 13f
+      setPadding(dp(10), dp(8), dp(10), dp(8))
+      setOnClickListener { openPicker() }
+    })
     top.addView(TextView(this).apply {
       text = "✕"
       setTextColor(0xFFB89A9A.toInt())
@@ -251,12 +268,26 @@ class StashrAutofillService : AccessibilityService() {
     overlayPackage = null
   }
 
+  private fun openPicker() {
+    hideOverlay()
+    val all = CredentialStore.load(this)
+    PickerActivity.request(this, shownMatchIds) { id -> all.firstOrNull { it.id == id }?.let { confirmAndFill(it) } }
+  }
+
   private fun confirmAndFill(c: Credential) {
     hideOverlay()
+    val pkg = shownPackage
+    val key = shownKey
+    val wasMatched = c.id in shownMatchIds
+    val go = {
+      main.postDelayed({
+        if (fill(c, pkg) && key != null && !wasMatched) CredentialStore.addLink(this, key, c.id)
+      }, 350)
+    }
     if (CredentialStore.requireBiometric(this) && AuthActivity.canPrompt(this)) {
-      AuthActivity.request(this) { ok -> if (ok) main.postDelayed({ fill(c) }, 300) }
+      AuthActivity.request(this) { ok -> if (ok) go() }
     } else {
-      fill(c)
+      go()
     }
   }
 
@@ -265,14 +296,17 @@ class StashrAutofillService : AccessibilityService() {
     node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
   }
 
-  private fun fill(c: Credential) {
-    val root = rootInActiveWindow ?: return
-    val password = passwordNodes(root).firstOrNull() ?: return
+  /** Fills only if the app in front is still the one the list was shown for. */
+  private fun fill(c: Credential, expectedPackage: String?): Boolean {
+    val root = rootInActiveWindow ?: return false
+    if (expectedPackage != null && root.packageName?.toString() != expectedPackage) return false
+    val password = passwordNodes(root).firstOrNull() ?: return false
     val fields = editableNodes(root)
     val idx = fields.indexOfFirst { it == password }
     val userField = if (idx > 0 && !fields[idx - 1].isPassword) fields[idx - 1] else null
     if (userField != null && c.username.isNotEmpty()) setText(userField, c.username)
     setText(password, c.password)
+    return true
   }
 
   companion object {

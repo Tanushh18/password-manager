@@ -30,6 +30,12 @@ class StashrAutofillModule : Module() {
       CredentialStore.save(context, json)
     }
 
+    Function("getPendingLinks") { CredentialStore.pendingLinksJson(context) }
+
+    Function("ackPendingLinks") { json: String -> CredentialStore.ackPending(context, json) }
+
+    Function("clearLinks") { CredentialStore.clearLinks(context) }
+
     Function("clearCredentials") { CredentialStore.clear(context) }
 
     Function("setRequireBiometric") { on: Boolean -> CredentialStore.setRequireBiometric(context, on) }
