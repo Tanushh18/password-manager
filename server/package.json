@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev:start": "node --watch server.js",
-    "test": "node --test --test-force-exit --test-concurrency=1 tests/*.test.js"
+    "test": "node --test --test-concurrency=1 tests/*.test.js"
   },
   "author": "Rohit Saini",
   "license": "ISC",
