@@ -1,0 +1,51 @@
+# Sends an APK that "Android build (EAS)" already built to the Firebase testers,
+# without building again. Use it when only the Firebase step failed.
+#
+# Actions tab -> "Send an existing APK to Firebase" -> Run workflow, and give the
+# run id of the build (the number at the end of that run's URL).
+name: Send an existing APK to Firebase
+
+on:
+  workflow_dispatch:
+    inputs:
+      runId:
+        description: "Run id of an 'Android build (EAS)' run that has the android-preview-apk artifact"
+        type: string
+        required: true
+      testerGroups:
+        description: "Firebase tester group alias(es), comma separated"
+        type: string
+        default: "testers"
+
+jobs:
+  distribute:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check Firebase secrets
+        env:
+          APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+          CREDENTIALS: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON || secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          test -n "$APP_ID" || { echo "::error::Add the FIREBASE_APP_ID secret"; exit 1; }
+          test -n "$CREDENTIALS" || { echo "::error::Add the FIREBASE_SERVICE_ACCOUNT_JSON secret (the whole service account JSON)"; exit 1; }
+          echo "$CREDENTIALS" | python3 -c 'import json,sys; json.load(sys.stdin)' || { echo "::error::The service account secret is not valid JSON. Paste the whole file, from { to }"; exit 1; }
+
+      - name: Download the built APK
+        uses: actions/download-artifact@v4
+        with:
+          name: android-preview-apk
+          run-id: ${{ inputs.runId }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: apk
+
+      - name: Distribute to Firebase testers
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ secrets.FIREBASE_APP_ID }}
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          groups: ${{ inputs.testerGroups }}
+          file: apk/app-preview.apk
+          releaseNotes: APK from build run ${{ inputs.runId }}

@@ -8,7 +8,8 @@
 #      enable App Distribution, and create a tester group.
 #      Add these repo secrets:
 #        - FIREBASE_APP_ID            (Firebase console → Project settings → General)
-#        - FIREBASE_SERVICE_ACCOUNT   (Project settings → Service accounts → Generate new private key, paste the whole JSON)
+#        - FIREBASE_SERVICE_ACCOUNT_JSON  (Project settings → Service accounts → Generate new private key, paste the whole JSON;
+#                                          the older name FIREBASE_SERVICE_ACCOUNT also works)
 #   3. Run this workflow from the Actions tab ("Run workflow").
 #
 # "preview" produces an installable .apk (used for distribution), "production" a Play Store .aab.
@@ -87,7 +88,7 @@ jobs:
         uses: wzieba/Firebase-Distribution-Github-Action@v1
         with:
           appId: ${{ secrets.FIREBASE_APP_ID }}
-          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON || secrets.FIREBASE_SERVICE_ACCOUNT }}
           groups: ${{ inputs.testerGroups }}
           file: mobile/app-preview.apk
           releaseNotes: ${{ github.event.head_commit.message || format('Manual build from {0}', github.ref_name) }}
