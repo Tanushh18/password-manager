@@ -2,7 +2,7 @@
   "expo": {
     "name": "Stashr",
     "slug": "aurelia-vault",
-    "scheme": "aurelia",
+    "scheme": "stashr",
     "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -11,10 +11,10 @@
     "description": "Stashr — a private vault for every password and project. Same account and server as the Stashr website.",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.aurelia.vault"
+      "bundleIdentifier": "com.tanush.stashr.com"
     },
     "android": {
-      "package": "com.aurelia.vault",
+      "package": "com.tanush.stashr.com",
       "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
