@@ -1,201 +1,31 @@
-# Password Manager Browser Extension
+# Stashr Autofill (Chrome extension)
 
-A secure Chrome/Firefox extension for autofilling passwords from your password manager vault directly onto login pages.
+Fills your saved Stashr logins on any website with one click.
 
-## Features
+- Sign in with your Stashr email and password (and your 2-step code if you use one).
+- Click the toolbar icon on a login page: logins for that site are listed first, then all accounts.
+- Autofill, copy the password, or show a QR code with the account name and username (the password is never put in the QR).
+- Talks only to the Stashr servers listed in `manifest.json` and tries the second one if the first is asleep.
+- Only asks for the `activeTab`, `scripting` and `storage` permissions. It does nothing on a page until you click the icon.
 
-✅ **One-Click Autofill** - Auto-detect website and fill credentials  
-✅ **QR Code Display** - Show QR codes for phone-based access  
-✅ **Clipboard Copy** - Copy passwords securely  
-✅ **Fast & Secure** - All passwords are encrypted end-to-end  
-✅ **Works Offline** - Once logged in, cached data works without internet  
+## Try it locally (Chrome / Edge / Brave)
 
-## Installation
+1. Open `chrome://extensions`, turn on **Developer mode**.
+2. **Load unpacked** and pick this `extension/` folder.
 
-### For Development (Chrome)
+## Build the zip for the Chrome Web Store
 
-1. Open `chrome://extensions/`
-2. Enable **Developer mode** (top right)
-3. Click **Load unpacked**
-4. Select the `extension/` folder from this repository
-5. The extension should appear in your Chrome toolbar
+From the repository root:
 
-### For Firefox
-
-1. Open `about:debugging#/runtime/this-firefox`
-2. Click **Load Temporary Add-on**
-3. Select any file from the `extension/` folder
-4. The extension should appear in Firefox
-
-## Configuration
-
-### Update Server URL
-
-Edit `extension/popup.js` and change:
-
-```javascript
-const API_BASE = 'http://localhost:5000/api'; // Change this
+```sh
+cd extension
+zip -r ../stashr-autofill-extension.zip manifest.json popup.html popup.css popup.js icons
 ```
 
-To your actual server:
-- **Development**: `http://localhost:5000/api`
-- **Production**: `https://your-domain.com/api`
+Upload that zip in the Chrome Web Store Developer Dashboard. Bump `version` in `manifest.json` for every new upload.
 
-## How to Use
+## Notes
 
-### Login
-
-1. Click the extension icon in your toolbar
-2. Enter your email and password
-3. Click **Login**
-
-### Autofill Password
-
-1. Go to any login page (Google, Figma, etc.)
-2. Click the extension icon
-3. You'll see "For this website" section with matching passwords
-4. Click the **📝** (Autofill) button
-5. Username and password are automatically filled!
-
-### Copy Password
-
-1. Click the extension icon
-2. Find the password entry
-3. Click the **📋** (Copy) button
-4. Password copied to clipboard - paste where needed
-
-### View QR Code
-
-1. Click the extension icon
-2. Click the **📱** (QR Code) button on any password
-3. A QR code appears showing account info
-4. **On Mobile**: Open your password manager app and scan the QR to copy password
-
-## API Endpoints
-
-The extension uses these endpoints on your server:
-
-### Login
-```
-POST /login
-Body: { email: string, password: string }
-Response: { token: string, message: string }
-```
-
-### Get All Passwords
-```
-GET /password/all
-Headers: { Authorization: Bearer <token> }
-Response: { passwords: [...] }
-```
-
-### Get Password By Domain
-```
-GET /password/by-domain?domain=google.com
-Headers: { Authorization: Bearer <token> }
-Response: { passwords: [...] }
-```
-
-### Get Single Password
-```
-GET /password/:id
-Headers: { Authorization: Bearer <token> }
-Response: { password: {...} }
-```
-
-### Get Decrypted Password (for autofill)
-```
-GET /password/:id/decrypted
-Headers: { Authorization: Bearer <token> }
-Response: { password: string, username: string, service: string }
-```
-
-## Security
-
-🔒 **End-to-End Encrypted**
-- All passwords are encrypted on your device
-- Server cannot read your passwords
-- Extension never stores passwords in plain text
-
-🔒 **Secure Communication**
-- Uses HTTPS only in production
-- JWT token-based authentication
-- Session tokens expire after 30 days
-
-🔒 **Auto-Logout**
-- Logout button in extension popup
-- Clear your session when not in use
-- Token stored securely in Chrome storage
-
-## Files Structure
-
-```
-extension/
-├── manifest.json        # Extension configuration
-├── popup.html          # Main UI
-├── popup.js            # Popup logic
-├── popup.css           # Styles
-├── content.js          # Injects into websites
-├── background.js       # Service worker
-├── README.md           # This file
-└── icons/              # Extension icons (add 16x16, 48x48, 128x128 PNG)
-```
-
-## Development
-
-### Add Icons
-
-Add PNG icons to `extension/icons/`:
-- `icon-16.png` (16x16)
-- `icon-48.png` (48x48)
-- `icon-128.png` (128x128)
-
-### Testing Autofill
-
-1. Visit a login page with input fields
-2. Fill email/username field with ID `"email"`, `"user"`, `"login"` etc.
-3. Fill password field with type `password`
-4. Click extension → Click autofill button
-5. Fields should be automatically populated
-
-### Debug in Chrome
-
-1. Right-click extension icon → Inspect popup
-2. Right-click webpage → Inspect → Application tab
-3. Go to Chrome Developers Tools for extension scripts
-
-## Troubleshooting
-
-**Autofill not working?**
-- Make sure you're on a login page with `<input>` fields
-- Check browser console for errors (right-click → Inspect)
-- Verify API_BASE URL is correct
-
-**Login fails?**
-- Check email/password is correct
-- Verify server is running
-- Check CORS settings on server
-
-**Passwords not appearing?**
-- Refresh the extension popup
-- Make sure you're logged in
-- Check that server API is responding
-
-## Keyboard Shortcuts
-
-You can set custom shortcuts for the extension in:
-- **Chrome**: `chrome://extensions/shortcuts`
-- **Firefox**: Extensions settings
-
-Suggested shortcut: `Ctrl+Shift+P` to quickly open autofill
-
-## Privacy & Terms
-
-- Your passwords are never stored in plain text
-- Extension data is stored locally in your browser
-- No data is sent to third parties
-- Clear your login session when done using the extension
-
-## Support
-
-For issues or feature requests, open an issue on GitHub.
+- Only logins that have a plain password are shown. Very old entries that the server still keeps encrypted are hidden.
+- Item names are always shown as text, never as HTML.
+- The QR image is drawn by api.qrserver.com, which sees the account name and username. Say so in the store's privacy section, or remove the QR button.

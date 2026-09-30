@@ -1,27 +1,25 @@
 {
   "manifest_version": 3,
-  "name": "Password Manager Autofill",
-  "version": "1.0.0",
-  "description": "Autofill passwords securely with QR code backup",
-  "permissions": [
-    "activeTab",
-    "scripting",
-    "storage"
-  ],
+  "name": "Stashr Autofill",
+  "version": "1.0.1",
+  "description": "Fill your saved Stashr logins on any website with one click.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
-    "<all_urls>"
+    "https://password-manager-server-8gvj.onrender.com/*",
+    "https://password-manager-server-xxdr.onrender.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Autofill Password"
-  },
-  "background": {
-    "service_worker": "background.js"
-  },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"]
+    "default_title": "Stashr Autofill",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
     }
-  ]
+  }
 }
