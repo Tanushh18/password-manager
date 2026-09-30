@@ -26,12 +26,9 @@ afterAll(async () =>
 });
 beforeEach(async () => { await User.deleteMany({}); });
 
-// Any syntactically valid blob works: the server never reads e2e data.
-const blob = (tag = "x") => `v1:${Buffer.from(`iv-${tag}`).toString("base64")}:${Buffer.from(`ct-${tag}-payload`).toString("base64")}`;
-const KDF = { salt: Buffer.from("0123456789abcdef").toString("base64"), iterations: 600000 };
 
 const register = (body = {}) =>
-    request(app).post("/register").send({ name: "Ana", email: "Ana@Example.com", password: "master-pass", cpassword: "master-pass", kdf: KDF, keyCheck: blob("check"), ...body });
+    request(app).post("/register").send({ name: "Ana", email: "Ana@Example.com", password: "master-pass", cpassword: "master-pass", ...body });
 
 const login = async (body = {}) =>
 {
@@ -39,6 +36,9 @@ const login = async (body = {}) =>
     return res;
 };
 const auth = (token) => ({ Authorization: `Bearer ${token}` });
+
+// Vault and project entries are plain fields: the server seals them with the account's own data key.
+const fields = (tag = "x", extra = {}) => ({ name: `Site ${tag}`, username: `user-${tag}`, password: `pw-${tag}`, url: `${tag}.example.com`, ...extra });
 
 describe("health", () =>
 {
@@ -57,12 +57,13 @@ describe("auth", () =>
     {
         expect((await register({ password: "short", cpassword: "short" })).status).toBe(400);
         expect((await register({ cpassword: "different" })).status).toBe(400);
-        expect((await register({ kdf: { salt: "!!", iterations: 5 } })).status).toBe(400);
+        expect((await register({ email: "not-an-email" })).status).toBe(400);
+        expect((await register({ name: "" })).status).toBe(400);
         expect((await register()).status).toBe(201);
         expect((await register()).status).toBe(400); // duplicate
     });
 
-    test("login returns vault settings and a token only for mobile", async () =>
+    test("login returns a token only for mobile", async () =>
     {
         await register();
         const bad = await login({ password: "nope" });
@@ -71,7 +72,8 @@ describe("auth", () =>
         const res = await login();
         expect(res.status).toBe(200);
         expect(res.body.token).toBeTruthy();
-        expect(res.body.vault.kdf).toEqual(KDF);
+        expect(res.body.email).toBe("ana@example.com");
+        expect(res.body.twoFactorEnabled).toBe(false);
 
         const web = await request(app).post("/login").send({ email: "ana@example.com", password: "master-pass" });
         expect(web.body.token).toBeUndefined();
@@ -88,6 +90,7 @@ describe("auth", () =>
         expect(text).not.toMatch(/\$2[aby]\$/); // bcrypt hash
         expect(me.body.tokens).toBeUndefined();
         expect(me.body.twoFactor).toBeUndefined();
+        expect(me.body.dataKey).toBeUndefined();
     });
 
     test("logout revokes the token", async () =>
@@ -99,28 +102,35 @@ describe("auth", () =>
     });
 });
 
-describe("end-to-end vault", () =>
+describe("vault", () =>
 {
-    test("create, update, bulk import and delete blobs", async () =>
+    test("create, update, bulk import and delete items", async () =>
     {
         await register();
         const { token } = (await login()).body;
 
         expect((await request(app).post("/vault/items").set(auth(token)).send({ data: "plain text" })).status).toBe(400);
+        expect((await request(app).post("/vault/items").set(auth(token)).send({ data: [1, 2] })).status).toBe(400);
 
-        const created = await request(app).post("/vault/items").set(auth(token)).send({ data: blob("a") });
+        const created = await request(app).post("/vault/items").set(auth(token)).send({ data: fields("a") });
         expect(created.status).toBe(201);
+        expect(created.body.item.password).toBe("pw-a");
         const id = created.body.item._id;
 
-        const updated = await request(app).put(`/vault/items/${id}`).set(auth(token)).send({ data: blob("b") });
+        const updated = await request(app).put(`/vault/items/${id}`).set(auth(token)).send({ data: fields("b") });
         expect(updated.status).toBe(200);
+        expect(updated.body.item.name).toBe("Site b");
 
-        const bulk = await request(app).post("/vault/items/bulk").set(auth(token)).send({ items: [{ data: blob("c") }, { data: blob("d") }] });
+        const bulk = await request(app).post("/vault/items/bulk").set(auth(token)).send({ items: [{ data: fields("c") }, { data: fields("d") }] });
         expect(bulk.status).toBe(201);
+        expect(bulk.body.items).toHaveLength(2);
+        expect((await request(app).post("/vault/items/bulk").set(auth(token)).send({ items: [] })).status).toBe(400);
 
         let me = await request(app).get("/authenticate").set(auth(token));
         expect(me.body.passwords).toHaveLength(3);
-        expect(me.body.passwords.find((p) => p._id === id).data).toBe(blob("b"));
+        const back = me.body.passwords.find((p) => p._id === id);
+        expect(back.password).toBe("pw-b");
+        expect(back.username).toBe("user-b");
 
         expect((await request(app).delete(`/vault/items/${id}`).set(auth(token))).status).toBe(200);
         expect((await request(app).delete(`/vault/items/${id}`).set(auth(token))).status).toBe(404);
@@ -128,24 +138,37 @@ describe("end-to-end vault", () =>
         expect(me.body.passwords).toHaveLength(2);
     });
 
+    test("items are encrypted at rest with the account's own key", async () =>
+    {
+        await register();
+        const { token } = (await login()).body;
+        await request(app).post("/vault/items").set(auth(token)).send({ data: fields("a") });
+
+        const stored = await User.findOne({ email: "ana@example.com" }).lean();
+        expect(stored.passwords[0].enc).toBe("udk");
+        expect(stored.dataKey).toBeTruthy();
+        const text = JSON.stringify(stored.passwords);
+        expect(text).not.toContain("pw-a");
+        expect(text).not.toContain("user-a");
+    });
+
     test("another user cannot touch my items", async () =>
     {
         await register();
         const { token } = (await login()).body;
-        const { item } = (await request(app).post("/vault/items").set(auth(token)).send({ data: blob("a") })).body;
+        const { item } = (await request(app).post("/vault/items").set(auth(token)).send({ data: fields("a") })).body;
 
         await register({ email: "eve@example.com" });
         const eve = (await login({ email: "eve@example.com" })).body.token;
-        expect((await request(app).put(`/vault/items/${item._id}`).set(auth(eve)).send({ data: blob("z") })).status).toBe(404);
+        expect((await request(app).put(`/vault/items/${item._id}`).set(auth(eve)).send({ data: fields("z") })).status).toBe(404);
         expect((await request(app).delete(`/vault/items/${item._id}`).set(auth(eve))).status).toBe(404);
         expect((await request(app).post("/decrypt").set(auth(eve)).send({ id: item._id })).status).toBe(404);
     });
 
-    test("legacy accounts: setup, decrypt and migrate", async () =>
+    test("legacy entries stay readable and are converted when edited", async () =>
     {
-        await register({ kdf: undefined, keyCheck: undefined });
-        const { token, vault } = (await login()).body;
-        expect(vault.kdf).toBeNull();
+        await register();
+        const { token } = (await login()).body;
 
         // Old client stores a server-encrypted password
         expect((await request(app).post("/addnewpassword").set(auth(token)).send({ platform: "Gmail", userPass: "hunter2" })).status).toBe(200);
@@ -165,24 +188,21 @@ describe("end-to-end vault", () =>
         expect((await request(app).post("/decrypt").set(auth(token)).send({ id: gcm._id })).text).toBe("hunter2");
         expect((await request(app).post("/decrypt").set(auth(token)).send({ id: cbc._id })).text).toBe("cbc-secret");
 
-        // e2e writes need a vault key first
-        expect((await request(app).post("/vault/items").set(auth(token)).send({ data: blob() })).status).toBe(409);
-        expect((await request(app).post("/vault/setup").set(auth(token)).send({ kdf: KDF, keyCheck: blob("k") })).status).toBe(200);
-        expect((await request(app).post("/vault/setup").set(auth(token)).send({ kdf: KDF, keyCheck: blob("k") })).status).toBe(409);
-
-        const mig = await request(app).post("/vault/migrate").set(auth(token)).send({ items: [{ id: gcm._id, data: blob("g") }, { id: cbc._id, data: blob("c") }] });
-        expect(mig.status).toBe(200);
-        expect(mig.body.migrated).toBe(2);
+        // Saving through the vault API converts each entry in place and drops the old fields.
+        expect((await request(app).put(`/vault/items/${gcm._id}`).set(auth(token)).send({ data: fields("g", { name: "Gmail", password: "hunter2" }) })).status).toBe(200);
+        expect((await request(app).put(`/vault/items/${cbc._id}`).set(auth(token)).send({ data: fields("c", { name: "Old", password: "cbc-secret" }) })).status).toBe(200);
 
         const stored = await User.findOne({ email: "ana@example.com" }).lean();
         stored.passwords.forEach((p) =>
         {
-            expect(p.enc).toBe("e2e");
+            expect(p.enc).toBe("udk");
             expect(p.password).toBeUndefined();
             expect(p.platform).toBeUndefined();
         });
-        // Server can no longer decrypt migrated entries
-        expect((await request(app).post("/decrypt").set(auth(token)).send({ id: gcm._id })).status).toBe(404);
+
+        me = (await request(app).get("/authenticate").set(auth(token))).body;
+        expect(me.passwords.find((p) => p._id === gcm._id).password).toBe("hunter2");
+        expect(me.passwords.find((p) => p._id === cbc._id).password).toBe("cbc-secret");
     });
 
     test("GCM legacy ciphertext is tamper evident", () =>
@@ -198,26 +218,26 @@ describe("end-to-end vault", () =>
 
 describe("project tracker", () =>
 {
-    test("create, update, bulk import and delete blobs", async () =>
+    test("create, update, bulk import and delete projects", async () =>
     {
         await register();
         const { token } = (await login()).body;
 
         expect((await request(app).post("/projects/items").set(auth(token)).send({ data: "plain text" })).status).toBe(400);
 
-        const created = await request(app).post("/projects/items").set(auth(token)).send({ data: blob("a") });
+        const created = await request(app).post("/projects/items").set(auth(token)).send({ data: fields("a") });
         expect(created.status).toBe(201);
         const id = created.body.item._id;
 
-        const updated = await request(app).put(`/projects/items/${id}`).set(auth(token)).send({ data: blob("b") });
+        const updated = await request(app).put(`/projects/items/${id}`).set(auth(token)).send({ data: fields("b") });
         expect(updated.status).toBe(200);
 
-        const bulk = await request(app).post("/projects/items/bulk").set(auth(token)).send({ items: [{ data: blob("c") }, { data: blob("d") }] });
+        const bulk = await request(app).post("/projects/items/bulk").set(auth(token)).send({ items: [{ data: fields("c") }, { data: fields("d") }] });
         expect(bulk.status).toBe(201);
 
         let me = await request(app).get("/authenticate").set(auth(token));
         expect(me.body.projects).toHaveLength(3);
-        expect(me.body.projects.find((p) => p._id === id).data).toBe(blob("b"));
+        expect(me.body.projects.find((p) => p._id === id).name).toBe("Site b");
 
         expect((await request(app).delete(`/projects/items/${id}`).set(auth(token))).status).toBe(200);
         expect((await request(app).delete(`/projects/items/${id}`).set(auth(token))).status).toBe(404);
@@ -229,82 +249,70 @@ describe("project tracker", () =>
     {
         await register();
         const { token } = (await login()).body;
-        const { item } = (await request(app).post("/projects/items").set(auth(token)).send({ data: blob("a") })).body;
+        const { item } = (await request(app).post("/projects/items").set(auth(token)).send({ data: fields("a") })).body;
 
         await register({ email: "eve@example.com" });
         const eve = (await login({ email: "eve@example.com" })).body.token;
-        expect((await request(app).put(`/projects/items/${item._id}`).set(auth(eve)).send({ data: blob("z") })).status).toBe(404);
+        expect((await request(app).put(`/projects/items/${item._id}`).set(auth(eve)).send({ data: fields("z") })).status).toBe(404);
         expect((await request(app).delete(`/projects/items/${item._id}`).set(auth(eve))).status).toBe(404);
     });
 
-    test("projects need a vault key first, same as passwords", async () =>
+    test("projects are encrypted at rest too", async () =>
     {
-        await register({ kdf: undefined, keyCheck: undefined });
+        await register();
         const { token } = (await login()).body;
-        expect((await request(app).post("/projects/items").set(auth(token)).send({ data: blob() })).status).toBe(409);
-        expect((await request(app).post("/vault/setup").set(auth(token)).send({ kdf: KDF, keyCheck: blob("k") })).status).toBe(200);
-        expect((await request(app).post("/projects/items").set(auth(token)).send({ data: blob() })).status).toBe(201);
+        expect((await request(app).post("/projects/items").set(auth(token)).send({ data: fields("p") })).status).toBe(201);
+
+        const stored = await User.findOne({ email: "ana@example.com" }).lean();
+        expect(stored.projects[0].enc).toBe("udk");
+        expect(JSON.stringify(stored.projects)).not.toContain("pw-p");
     });
 
     test("passwords and projects are independent collections", async () =>
     {
         await register();
         const { token } = (await login()).body;
-        await request(app).post("/vault/items").set(auth(token)).send({ data: blob("pw") });
-        await request(app).post("/projects/items").set(auth(token)).send({ data: blob("proj") });
+        await request(app).post("/vault/items").set(auth(token)).send({ data: fields("pw") });
+        await request(app).post("/projects/items").set(auth(token)).send({ data: fields("proj") });
 
         const me = (await request(app).get("/authenticate").set(auth(token))).body;
         expect(me.passwords).toHaveLength(1);
         expect(me.projects).toHaveLength(1);
-        expect(me.passwords[0].data).toBe(blob("pw"));
-        expect(me.projects[0].data).toBe(blob("proj"));
+        expect(me.passwords[0].name).toBe("Site pw");
+        expect(me.projects[0].name).toBe("Site proj");
     });
 });
 
 describe("account", () =>
 {
-    test("change master password re-keys atomically and signs out other devices", async () =>
+    test("changing the password signs out every device and keeps the vault readable", async () =>
     {
         await register();
         const phone = (await login()).body.token;
         const laptop = (await login()).body.token;
-        const { item } = (await request(app).post("/vault/items").set(auth(phone)).send({ data: blob("a") })).body;
+        await request(app).post("/vault/items").set(auth(phone)).send({ data: fields("a") });
+        await request(app).post("/projects/items").set(auth(phone)).send({ data: fields("p") });
 
-        const base = { currentPassword: "master-pass", newPassword: "new-master-pass", kdf: { ...KDF, salt: Buffer.from("fedcba9876543210").toString("base64") }, keyCheck: blob("k2"), client: "mobile" };
+        const base = { currentPassword: "master-pass", newPassword: "new-master-pass", client: "mobile" };
 
-        expect((await request(app).post("/account/password").set(auth(phone)).send({ ...base, currentPassword: "wrong", items: [{ id: item._id, data: blob("n") }] })).status).toBe(400);
-        expect((await request(app).post("/account/password").set(auth(phone)).send({ ...base, items: [] })).status).toBe(409);
+        expect((await request(app).post("/account/password").set(auth(phone)).send({ ...base, currentPassword: "wrong" })).status).toBe(400);
+        expect((await request(app).post("/account/password").set(auth(phone)).send({ ...base, newPassword: "short" })).status).toBe(400);
 
-        const ok = await request(app).post("/account/password").set(auth(phone)).send({ ...base, items: [{ id: item._id, data: blob("n") }] });
+        const ok = await request(app).post("/account/password").set(auth(phone)).send(base);
         expect(ok.status).toBe(200);
         expect(ok.body.token).toBeTruthy();
 
+        // Every older session is revoked, including the one that made the change.
         expect((await request(app).get("/authenticate").set(auth(laptop))).status).toBe(401);
+        expect((await request(app).get("/authenticate").set(auth(phone))).status).toBe(401);
+        expect((await request(app).get("/authenticate").set(auth(ok.body.token))).status).toBe(200);
+
         expect((await login()).status).toBe(400);
         const fresh = await login({ password: "new-master-pass" });
         expect(fresh.status).toBe(200);
-        expect(fresh.body.vault.keyCheck).toBe(blob("k2"));
         const me = (await request(app).get("/authenticate").set(auth(fresh.body.token))).body;
-        expect(me.passwords[0].data).toBe(blob("n"));
-    });
-
-    test("change master password re-keys projects too when sent", async () =>
-    {
-        await register();
-        const token = (await login()).body.token;
-        const { item } = (await request(app).post("/projects/items").set(auth(token)).send({ data: blob("a") })).body;
-
-        const base = { currentPassword: "master-pass", newPassword: "new-master-pass", kdf: { ...KDF, salt: Buffer.from("fedcba9876543210").toString("base64") }, keyCheck: blob("k2"), client: "mobile" };
-
-        // Stale project list is rejected, same as passwords.
-        expect((await request(app).post("/account/password").set(auth(token)).send({ ...base, items: [], projectItems: [] })).status).toBe(409);
-
-        const ok = await request(app).post("/account/password").set(auth(token)).send({ ...base, items: [], projectItems: [{ id: item._id, data: blob("n") }] });
-        expect(ok.status).toBe(200);
-
-        const fresh = await login({ password: "new-master-pass" });
-        const me = (await request(app).get("/authenticate").set(auth(fresh.body.token))).body;
-        expect(me.projects[0].data).toBe(blob("n"));
+        expect(me.passwords[0].password).toBe("pw-a");
+        expect(me.projects[0].name).toBe("Site p");
     });
 
     test("logout-all keeps only the current session", async () =>
