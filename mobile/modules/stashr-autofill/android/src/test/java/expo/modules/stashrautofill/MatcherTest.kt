@@ -83,4 +83,43 @@ class MatcherTest {
     assertEquals(pending, Links.parsePending(Links.pendingToJson(pending)))
     assertTrue(Links.parse("not json").isEmpty())
   }
+
+  private fun f(pw: Boolean = false, user: Boolean = false) = FieldTraits(pw, user)
+
+  @Test fun loginFieldsUsernameThenPassword() {
+    val pick = LoginFields.pick(listOf(f(user = true), f(pw = true)))!!
+    assertEquals(1, pick.passwordIdx)
+    assertEquals(0, pick.usernameIdx)
+  }
+
+  @Test fun loginFieldsPrefersHintedUsernameOverNeighbour() {
+    val pick = LoginFields.pick(listOf(f(user = true), f(), f(pw = true)))!!
+    assertEquals(0, pick.usernameIdx)
+  }
+
+  @Test fun loginFieldsFarUnhintedFieldIsNotAUsername() {
+    val pick = LoginFields.pick(listOf(f(), f(), f(pw = true)))!!
+    assertEquals(2, pick.passwordIdx)
+    assertEquals(1, pick.usernameIdx)
+  }
+
+  @Test fun loginFieldsNoPasswordMeansNoForm() {
+    assertEquals(null, LoginFields.pick(listOf(f(user = true), f())))
+  }
+
+  @Test fun changePasswordFormUsesTheNewPassword() {
+    val pick = LoginFields.pick(listOf(f(pw = true), f(pw = true), f(pw = true)))!!
+    assertEquals(1, pick.passwordIdx)
+    assertEquals(null, pick.usernameIdx)
+  }
+
+  @Test fun pendingSavesRoundTrip() {
+    val saves = listOf(
+      Links.PendingSave("r1", null, "example.com", "example.com", "me@x.com", "p@ss\"word"),
+      Links.PendingSave("r2", "id9", "Netflix", "", "me", "pw2"),
+    )
+    assertEquals(saves, Links.parseSaves(Links.savesToJson(saves)))
+    val creds = listOf(Credential("1", "A", "u", "p", "a.com"))
+    assertEquals(creds, CredentialStore.parse(Links.credentialsToJson(creds)))
+  }
 }

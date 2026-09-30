@@ -13,6 +13,19 @@
         android:resource="@xml/stashr_accessibility_config" />
     </service>
 
+    <service
+      android:name=".StashrSaveService"
+      android:exported="true"
+      android:label="@string/stashr_autofill_label"
+      android:permission="android.permission.BIND_AUTOFILL_SERVICE">
+      <intent-filter>
+        <action android:name="android.service.autofill.AutofillService" />
+      </intent-filter>
+      <meta-data
+        android:name="android.autofill"
+        android:resource="@xml/stashr_autofill_service" />
+    </service>
+
     <activity
       android:name=".AuthActivity"
       android:exported="false"

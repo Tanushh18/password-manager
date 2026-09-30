@@ -13,7 +13,7 @@ import { Bounce, Card, Chip, FadeIn, GhostButton, GradientText, tap } from "../.
 import { useTheme, alpha } from "../../lib/theme";
 import { useVault } from "../../lib/vault";
 import { api, activeServer } from "../../lib/api";
-import { autofillSupported, isServiceEnabled, openAccessibilitySettings } from "../../../modules/stashr-autofill";
+import { autofillSupported, isServiceEnabled, openAccessibilitySettings, isAutofillServiceEnabled, openAutofillServiceSettings } from "../../../modules/stashr-autofill";
 
 const WEBSITE = "https://password-website.onrender.com";
 const LOCK_OPTIONS = [
@@ -54,13 +54,17 @@ function Section({ title, children, delay }) {
 export default function Settings() {
   const { theme, preference, setPreference } = useTheme();
   const [serviceOn, setServiceOn] = useState(false);
+  const [saveOn, setSaveOn] = useState(false);
   const { profile, items, biometric, biometricAvailable, setBiometric, logout, lock, prefs, setPrefs, setProfileName, refreshProfile } = useVault();
   const toast = useToast();
   const [name, setName] = useState(profile?.name || "");
 
   useEffect(() => {
     if (!autofillSupported) return undefined;
-    const check = () => setServiceOn(isServiceEnabled());
+    const check = () => {
+      setServiceOn(isServiceEnabled());
+      setSaveOn(isAutofillServiceEnabled());
+    };
     check();
     const sub = AppState.addEventListener("change", (s) => s === "active" && check());
     return () => sub.remove();
@@ -221,6 +225,17 @@ export default function Settings() {
                   />
                 </View>
               ) : null}
+              <Row
+                icon="download"
+                title={saveOn ? "Saving new logins is on" : "Save new logins"}
+                subtitle={
+                  saveOn
+                    ? "Android will ask “Save password to Stashr?” after you sign in somewhere new"
+                    : "Tap and choose Stashr as your autofill service. Android will then offer to save logins you type."
+                }
+                color={saveOn ? theme.ok : theme.warn}
+                onPress={openAutofillServiceSettings}
+              />
             </Section>
           ) : null}
 

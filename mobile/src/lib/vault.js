@@ -8,7 +8,7 @@ import { normalizeProject } from "./projectItems";
 import { computeHealth } from "./health";
 import { pwnedCount } from "./breach";
 import { readCache, writeCache, clearCache } from "./cache";
-import { saveCredentials, clearCredentials, clearLinks, getPendingLinks, ackPendingLinks, setRequireBiometric as setAutofillBiometric } from "../../modules/stashr-autofill";
+import { saveCredentials, clearCredentials, clearLinks, getPendingLinks, ackPendingLinks, getPendingSaves, ackPendingSaves, setRequireBiometric as setAutofillBiometric } from "../../modules/stashr-autofill";
 
 /**
  * Session + vault state for the Android app.
@@ -401,6 +401,34 @@ export function VaultProvider({ children }) {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, offline, prefs.autofill, foregroundTick, items]);
+
+  /* Logins the user saved from Android's "Save password to Stashr?" prompt go into the vault the next time the app is open and online. */
+  const syncingSaves = useRef(false);
+  useEffect(() => {
+    if (status !== "ready" || offline || syncingSaves.current) return;
+    const pending = getPendingSaves();
+    if (!pending.length) return;
+    syncingSaves.current = true;
+    (async () => {
+      const done = [];
+      for (const save of pending) {
+        try {
+          const same = items.some((i) => i.username === save.username && i.password === save.password && (i.url === save.url || i.name === save.name));
+          if (!same) {
+            if (save.existingId) await updateItem(save.existingId, { username: save.username, password: save.password });
+            else await addItem({ name: save.name, url: save.url, username: save.username, password: save.password });
+          }
+          done.push(save.ref);
+        } catch (e) {
+          // still offline or the server said no: keep it queued and try again next time
+        }
+      }
+      if (done.length) ackPendingSaves(done);
+    })().finally(() => {
+      syncingSaves.current = false;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, offline, foregroundTick, items]);
 
   const value = useMemo(() => {
     const health = computeHealth(items, breaches);

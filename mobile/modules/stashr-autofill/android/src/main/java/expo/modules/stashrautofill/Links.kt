@@ -38,4 +38,61 @@ object Links {
     list.forEach { (k, id) -> a.put(JSONObject().put("key", k).put("id", id)) }
     return a.toString()
   }
+
+  /** A login the user asked Android to save; waits here until the app can put it in the vault. */
+  data class PendingSave(
+    val ref: String,
+    val existingId: String?,
+    val name: String,
+    val url: String,
+    val username: String,
+    val password: String,
+  )
+
+  fun parseSaves(json: String): List<PendingSave> {
+    if (json.isBlank()) return emptyList()
+    return try {
+      val a = JSONArray(json)
+      (0 until a.length()).map {
+        val o = a.getJSONObject(it)
+        PendingSave(
+          ref = o.getString("ref"),
+          existingId = if (o.isNull("existingId")) null else o.getString("existingId"),
+          name = o.optString("name"),
+          url = o.optString("url"),
+          username = o.optString("username"),
+          password = o.optString("password"),
+        )
+      }
+    } catch (e: Exception) {
+      emptyList()
+    }
+  }
+
+  fun savesToJson(list: List<PendingSave>): String {
+    val a = JSONArray()
+    list.forEach {
+      a.put(
+        JSONObject()
+          .put("ref", it.ref)
+          .put("existingId", it.existingId ?: JSONObject.NULL)
+          .put("name", it.name)
+          .put("url", it.url)
+          .put("username", it.username)
+          .put("password", it.password)
+      )
+    }
+    return a.toString()
+  }
+
+  fun credentialsToJson(list: List<Credential>): String {
+    val a = JSONArray()
+    list.forEach {
+      a.put(
+        JSONObject().put("id", it.id).put("name", it.name).put("username", it.username)
+          .put("password", it.password).put("url", it.url)
+      )
+    }
+    return a.toString()
+  }
 }

@@ -6,6 +6,18 @@ const native = Platform.OS === "android" ? requireOptionalNativeModule("StashrAu
 export const autofillSupported = Boolean(native);
 export const isServiceEnabled = () => (native ? native.isServiceEnabled() : false);
 export const openAccessibilitySettings = () => native?.openAccessibilitySettings();
+export const isAutofillServiceEnabled = () => (native ? native.isAutofillServiceEnabled() : false);
+export const openAutofillServiceSettings = () => native?.openAutofillServiceSettings();
+
+/** Logins the user asked Android to save: [{ ref, existingId, name, url, username, password }]. */
+export const getPendingSaves = () => {
+  try {
+    return native ? JSON.parse(native.getPendingSaves()) : [];
+  } catch (e) {
+    return [];
+  }
+};
+export const ackPendingSaves = (refs) => native?.ackPendingSaves(JSON.stringify(refs));
 export const clearLinks = () => native?.clearLinks();
 
 /** Picks the autofill service made since the app last looked: [{ key: "web:example.com" | "app:pkg", id }]. */

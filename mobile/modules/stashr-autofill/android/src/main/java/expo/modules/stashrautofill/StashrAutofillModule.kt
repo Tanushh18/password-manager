@@ -3,7 +3,10 @@ package expo.modules.stashrautofill
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.provider.Settings
+import android.view.autofill.AutofillManager
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -29,6 +32,22 @@ class StashrAutofillModule : Module() {
       CredentialStore.parse(json)
       CredentialStore.save(context, json)
     }
+
+    Function("isAutofillServiceEnabled") {
+      Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+        context.getSystemService(AutofillManager::class.java)?.hasEnabledAutofillServices() == true
+    }
+
+    Function("openAutofillServiceSettings") {
+      context.startActivity(
+        Intent(Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE, Uri.parse("package:${context.packageName}"))
+          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      )
+    }
+
+    Function("getPendingSaves") { CredentialStore.pendingSavesJson(context) }
+
+    Function("ackPendingSaves") { refsJson: String -> CredentialStore.ackSaves(context, refsJson) }
 
     Function("getPendingLinks") { CredentialStore.pendingLinksJson(context) }
 

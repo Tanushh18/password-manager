@@ -18,6 +18,7 @@ object CredentialStore {
   private const val K_DATA = "data"
   private const val K_LINKS = "links"
   private const val K_PENDING = "pending_links"
+  private const val K_SAVES = "pending_saves"
   private const val K_BIO = "require_biometric"
   private const val ALIAS = "stashr_autofill_key"
 
@@ -86,8 +87,32 @@ object CredentialStore {
     put(ctx, K_PENDING, Links.pendingToJson(left))
   }
 
+  /** Queues a new/changed login and makes it fillable on this phone straight away. */
+  fun queueSave(ctx: Context, save: Links.PendingSave) {
+    val saves = Links.parseSaves(get(ctx, K_SAVES).orEmpty()).filterNot { it.ref == save.ref } + save
+    put(ctx, K_SAVES, Links.savesToJson(saves))
+    val localId = save.existingId ?: "pending:${save.ref}"
+    val all = load(ctx)
+    val cred = Credential(localId, save.name, save.username, save.password, save.url)
+    val next = if (all.any { it.id == localId }) all.map { if (it.id == localId) cred else it } else all + cred
+    put(ctx, K_DATA, Links.credentialsToJson(next))
+  }
+
+  fun pendingSavesJson(ctx: Context): String = get(ctx, K_SAVES) ?: "[]"
+
+  fun ackSaves(ctx: Context, refsJson: String) {
+    val done = try {
+      val a = JSONArray(refsJson)
+      (0 until a.length()).map { a.getString(it) }.toSet()
+    } catch (e: Exception) {
+      emptySet()
+    }
+    val left = Links.parseSaves(get(ctx, K_SAVES).orEmpty()).filterNot { it.ref in done }
+    put(ctx, K_SAVES, Links.savesToJson(left))
+  }
+
   fun clearLinks(ctx: Context) {
-    prefs(ctx).edit().remove(K_LINKS).remove(K_PENDING).apply()
+    prefs(ctx).edit().remove(K_LINKS).remove(K_PENDING).remove(K_SAVES).apply()
   }
 
   fun parse(json: String): List<Credential> {
