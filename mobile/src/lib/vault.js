@@ -8,6 +8,7 @@ import { normalizeProject } from "./projectItems";
 import { computeHealth } from "./health";
 import { pwnedCount } from "./breach";
 import { readCache, writeCache, clearCache } from "./cache";
+import { saveCredentials, clearCredentials, clearLinks, getPendingLinks, ackPendingLinks, getPendingSaves, ackPendingSaves, setRequireBiometric as setAutofillBiometric } from "../../modules/stashr-autofill";
 
 /**
  * Session + vault state for the Android app.
@@ -28,7 +29,7 @@ const K = {
   bio: "aurelia_biometric",
   prefs: "aurelia_prefs",
 };
-const DEFAULT_PREFS = { autoLock: 0.5, icons: false }; // minutes; -1 = never
+const DEFAULT_PREFS = { autoLock: 0.5, icons: false, autofill: false, autofillBiometric: true }; // minutes; -1 = never
 const BIO_OPTIONS = { promptMessage: "Unlock Aurelia" };
 
 const VaultContext = createContext(null);
@@ -95,6 +96,8 @@ export function VaultProvider({ children }) {
     setProfile(null);
     setBreaches({});
     setBreachChecked(false);
+    safe(() => clearCredentials());
+    safe(() => clearLinks());
     await Promise.all([safe(() => SecureStore.deleteItemAsync(K.token)), safe(() => SecureStore.deleteItemAsync(K.bio)), clearCache()]);
     setBiometricState(false);
     setStatus("signedOut");
@@ -355,6 +358,77 @@ export function VaultProvider({ children }) {
       return next;
     });
   }, []);
+
+  /* ── Autofill: keep the native service's encrypted copy of the vault in step with it ── */
+  useEffect(() => {
+    if (status !== "ready" && status !== "locked") return;
+    if (prefs.autofill) safe(() => saveCredentials(items));
+    else safe(() => clearCredentials());
+  }, [status, items, prefs.autofill]);
+
+  useEffect(() => {
+    safe(() => setAutofillBiometric(prefs.autofillBiometric));
+  }, [prefs.autofillBiometric]);
+
+  /* Logins picked in autofill for a website get saved as that item's website (if it has none), so the extension and other devices know it too. */
+  const [foregroundTick, setForegroundTick] = useState(0);
+  const syncingLinks = useRef(false);
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (s) => s === "active" && setForegroundTick((n) => n + 1));
+    return () => sub.remove();
+  }, []);
+  useEffect(() => {
+    if (status !== "ready" || offline || !prefs.autofill || syncingLinks.current) return;
+    const pending = getPendingLinks();
+    if (!pending.length) return;
+    syncingLinks.current = true;
+    (async () => {
+      const done = [];
+      for (const link of pending) {
+        const item = items.find((i) => i.id === link.id);
+        if (item && !item.url && link.key.startsWith("web:")) {
+          try {
+            await updateItem(link.id, { url: link.key.slice(4) });
+          } catch (e) {
+            continue;
+          }
+        }
+        done.push(link);
+      }
+      if (done.length) ackPendingLinks(done);
+    })().finally(() => {
+      syncingLinks.current = false;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, offline, prefs.autofill, foregroundTick, items]);
+
+  /* Logins the user saved from Android's "Save password to Stashr?" prompt go into the vault the next time the app is open and online. */
+  const syncingSaves = useRef(false);
+  useEffect(() => {
+    if (status !== "ready" || offline || syncingSaves.current) return;
+    const pending = getPendingSaves();
+    if (!pending.length) return;
+    syncingSaves.current = true;
+    (async () => {
+      const done = [];
+      for (const save of pending) {
+        try {
+          const same = items.some((i) => i.username === save.username && i.password === save.password && (i.url === save.url || i.name === save.name));
+          if (!same) {
+            if (save.existingId) await updateItem(save.existingId, { username: save.username, password: save.password });
+            else await addItem({ name: save.name, url: save.url, username: save.username, password: save.password });
+          }
+          done.push(save.ref);
+        } catch (e) {
+          // still offline or the server said no: keep it queued and try again next time
+        }
+      }
+      if (done.length) ackPendingSaves(done);
+    })().finally(() => {
+      syncingSaves.current = false;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, offline, foregroundTick, items]);
 
   const value = useMemo(() => {
     const health = computeHealth(items, breaches);
