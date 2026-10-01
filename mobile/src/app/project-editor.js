@@ -275,9 +275,9 @@ export default function ProjectEditor() {
 const styles = StyleSheet.create({
   top: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  label: { fontSize: 11, letterSpacing: 1.6, marginBottom: 8, marginTop: 4 },
+  label: { fontSize: 12, letterSpacing: 0.4, marginBottom: 8, marginTop: 4 },
   notes: { minHeight: 80, borderWidth: 1.2, borderRadius: 16, padding: 14, fontSize: 15, textAlignVertical: "top", marginBottom: 4 },
-  sectionTitle: { fontSize: 11, letterSpacing: 1.6, marginBottom: 12 },
+  sectionTitle: { fontSize: 12, letterSpacing: 0.4, marginBottom: 12 },
   avatar: { width: 72, height: 72, borderRadius: 24, alignItems: "center", justifyContent: "center" },
   repeatRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, borderWidth: 1, borderRadius: 14, padding: 10, marginBottom: 10 },
   pasteBox: { borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 14 },

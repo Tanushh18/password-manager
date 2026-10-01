@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
   profile: { flexDirection: "row", alignItems: "center", gap: 16 },
   avatar: { width: 64, height: 64, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 1, paddingTop: 12 },
-  section: { fontSize: 11, letterSpacing: 1.8, marginBottom: 8, marginLeft: 4 },
+  section: { fontSize: 12, letterSpacing: 0.4, marginBottom: 8, marginLeft: 4 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   rowIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10, marginLeft: 50 },

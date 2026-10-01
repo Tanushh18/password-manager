@@ -9,7 +9,7 @@ import HealthRing from "../../components/HealthRing";
 import ItemCard from "../../components/ItemCard";
 import StatusPill from "../../components/StatusPill";
 import { useToast } from "../../components/Toast";
-import { Bounce, Card, Chip, FadeIn, GradientButton, GradientText, IconButton } from "../../components/ui";
+import { Bounce, Card, Chip, FadeIn, GradientButton, IconButton } from "../../components/ui";
 import { useTheme, alpha } from "../../lib/theme";
 import { useVault } from "../../lib/vault";
 import { domainOf } from "../../lib/items";
@@ -66,9 +66,9 @@ export default function Vault() {
     <View>
       <FadeIn style={styles.top}>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: theme.textMuted, fontFamily: theme.font.bodyMedium, fontSize: 14 }}>{greeting()},</Text>
-          <Text style={{ color: theme.heading, fontFamily: theme.font.displayHeavy, fontSize: 26, letterSpacing: -0.4 }}>
-            <GradientText>{firstName}</GradientText> ✦
+          <Text style={{ color: theme.heading, fontFamily: theme.font.display, fontSize: 26, letterSpacing: -0.4 }}>Vault</Text>
+          <Text style={{ color: theme.textMuted, fontFamily: theme.font.body, fontSize: 13, marginTop: 2 }}>
+            {greeting()}, {firstName}
           </Text>
         </View>
         <IconButton name="folder" onPress={() => router.push("/projects")} />
@@ -101,11 +101,11 @@ export default function Vault() {
 
       <FadeIn delay={80}>
         <Bounce onPress={() => router.navigate("/health")} scaleTo={0.98}>
-          <Card glow style={styles.summary}>
-            <HealthRing score={health.score} size={104} stroke={10} />
+          <Card style={styles.summary}>
+            <HealthRing score={health.score} size={72} stroke={7} />
             <View style={{ flex: 1, gap: 8 }}>
-              <Text style={{ color: theme.accentSoft, fontFamily: theme.font.bodySemi, fontSize: 11, letterSpacing: 1.6 }}>VAULT HEALTH · LIVE</Text>
-              <Text style={{ color: theme.heading, fontFamily: theme.font.display, fontSize: 18 }}>
+              <Text style={{ color: theme.accentSoft, fontFamily: theme.font.bodySemi, fontSize: 12 }}>Vault health</Text>
+              <Text style={{ color: theme.heading, fontFamily: theme.font.bodySemi, fontSize: 15 }}>
                 {items.length} item{items.length === 1 ? "" : "s"} · end-to-end encrypted
               </Text>
               <View style={{ flexDirection: "row", gap: 14 }}>

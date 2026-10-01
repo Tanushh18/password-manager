@@ -177,7 +177,7 @@ export default function Generator() {
 
           {history.length ? (
             <FadeIn delay={40} style={{ marginTop: 18 }}>
-              <Text style={{ color: theme.textFaint, fontFamily: theme.font.bodySemi, fontSize: 11, letterSpacing: 1.6, marginBottom: 8 }}>
+              <Text style={{ color: theme.textFaint, fontFamily: theme.font.bodySemi, fontSize: 12, letterSpacing: 0.4, marginBottom: 8 }}>
                 RECENTLY COPIED (THIS SESSION)
               </Text>
               <Card style={{ padding: 8 }}>
