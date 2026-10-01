@@ -148,7 +148,7 @@ export default function Projects() {
               refreshing={syncing}
               onRefresh={() => refresh().catch((e) => toast(e.message, "error"))}
               tintColor={theme.accent}
-              colors={[theme.accent, theme.accent2]}
+              colors={[theme.accent, theme.accent]}
               progressBackgroundColor={theme.surfaceSolid}
             />
           }
@@ -181,9 +181,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    shadowOpacity: 0.5,
+    shadowOpacity: 0,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
-    elevation: 10,
+    elevation: 0,
   },
 });

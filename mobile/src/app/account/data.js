@@ -124,7 +124,7 @@ export default function Data() {
                 </Text>
                 <Switch value={ack} onValueChange={setAck} trackColor={{ false: alpha(theme.accent, 0.2), true: theme.danger }} thumbColor="#fff" />
               </View>
-              <GradientButton title="Share CSV" icon="download" colors={[theme.danger, "#9F1239"]} disabled={!ack} loading={busy} onPress={exportCSV} />
+              <GradientButton title="Share CSV" icon="download" colors={[theme.danger, theme.danger]} disabled={!ack} loading={busy} onPress={exportCSV} />
             </View>
           ) : null}
         </Card>
@@ -134,7 +134,7 @@ export default function Data() {
         <Card style={{ gap: 12 }}>
           <Text style={{ color: theme.heading, fontFamily: theme.font.display, fontSize: 17 }}>Import</Text>
           <Text style={{ color: theme.textMuted, fontFamily: theme.font.body, fontSize: 13, lineHeight: 19 }}>
-            Aurelia backups (.aurelia) and CSV exports from Chrome, Bitwarden, 1Password or LastPass. Files are read and encrypted on this phone.
+            Stashr backups (.aurelia) and CSV exports from Chrome, Bitwarden, 1Password or LastPass. Files are read and encrypted on this phone.
           </Text>
           {pending ? (
             <View>

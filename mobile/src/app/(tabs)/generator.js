@@ -48,7 +48,7 @@ function LengthSlider({ value, onChange }) {
       {...responder.panHandlers}
     >
       <View pointerEvents="none" style={[styles.track, { backgroundColor: alpha(theme.accent, 0.18) }]}>
-        <LinearGradient colors={[theme.accent3, theme.accent, theme.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ width: `${pct * 100}%`, height: "100%", borderRadius: 4 }} />
+        <LinearGradient colors={[theme.accent, theme.accent]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ width: `${pct * 100}%`, height: "100%", borderRadius: 4 }} />
       </View>
       {width ? (
         <View pointerEvents="none" style={[styles.thumb, { left: pct * width - 13, borderColor: theme.accent, shadowColor: theme.accent }]} />
@@ -199,11 +199,11 @@ export default function Generator() {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 32, letterSpacing: -0.8, marginTop: 6, marginBottom: 4 },
+  title: { fontSize: 26, letterSpacing: -0.4, marginTop: 6, marginBottom: 4 },
   value: { fontSize: 20, lineHeight: 30, textAlign: "center", padding: 16, borderRadius: 18, borderWidth: 1, letterSpacing: 0.5 },
   rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   optLabel: { fontSize: 15 },
   track: { height: 8, borderRadius: 4, overflow: "hidden" },
-  thumb: { position: "absolute", top: 5, width: 26, height: 26, borderRadius: 13, backgroundColor: "#fff", borderWidth: 4, shadowOpacity: 0.8, shadowRadius: 10, elevation: 6 },
+  thumb: { position: "absolute", top: 5, width: 26, height: 26, borderRadius: 13, backgroundColor: "#fff", borderWidth: 4, shadowOpacity: 0, shadowRadius: 10, elevation: 0 },
   hist: { flexDirection: "row", alignItems: "center", gap: 10, padding: 10 },
 });

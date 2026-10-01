@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
   scroll: { flexGrow: 1, padding: 22, alignItems: "center", justifyContent: "center" },
   center: { width: 180, height: 180, alignItems: "center", justifyContent: "center" },
   ring: { position: "absolute", width: 110, height: 110, borderRadius: 55, borderWidth: 2 },
-  button: { width: 110, height: 110, borderRadius: 55, alignItems: "center", justifyContent: "center", shadowOpacity: 0.7, shadowRadius: 30, elevation: 16 },
-  title: { fontSize: 30, marginTop: 16, letterSpacing: -0.8 },
+  button: { width: 110, height: 110, borderRadius: 55, alignItems: "center", justifyContent: "center", shadowOpacity: 0, shadowRadius: 30, elevation: 0 },
+  title: { fontSize: 24, marginTop: 16, letterSpacing: -0.4 },
   sub: { fontSize: 15, marginTop: 8, textAlign: "center", lineHeight: 22 },
 });

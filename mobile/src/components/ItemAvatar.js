@@ -4,23 +4,18 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useTheme } from "../lib/theme";
 import { faviconUrl } from "../lib/items";
 
-const WASHES = [
-  ["#31AAA9", "#A82020"],
-  ["#F8E0A4", "#31AAA9"],
-  ["#A82020", "#6C1A1A"],
-  ["#6BC2C1", "#F8E0A4"],
-  ["#6C1A1A", "#31AAA9"],
-  ["#A82020", "#F8E0A4"],
-];
+// Calm solid tints for the letter fallback; two equal stops keep the
+// LinearGradient flat.
+const WASHES = ["#0F7F7D", "#3B6FD6", "#7C5CC4", "#C2410C", "#15803D", "#BE185D", "#475569"].map((c) => [c, c]);
 export const washFor = (name) => WASHES[((name || "?").charCodeAt(0) || 0) % WASHES.length];
 
-/** Website icon (opt-in) with a gradient-letter fallback. */
+/** Website icon (opt-in) with a solid letter fallback. */
 export default function ItemAvatar({ name, url, icons, size = 46 }) {
   const { theme } = useTheme();
   const [failed, setFailed] = useState(false);
   const src = icons && !failed ? faviconUrl(url) : "";
   const letter = (name || "•").trim().charAt(0).toUpperCase() || "•";
-  const shape = { width: size, height: size, borderRadius: size * 0.3, alignItems: "center", justifyContent: "center" };
+  const shape = { width: size, height: size, borderRadius: size * 0.24, alignItems: "center", justifyContent: "center" };
 
   if (src) {
     return (

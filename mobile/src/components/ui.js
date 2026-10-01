@@ -8,7 +8,7 @@ import Icon from "./Icon";
 
 export const tap = () => Haptics.selectionAsync().catch(() => {});
 
-/* ── Glass card ── */
+/* ── Card ── */
 export function Card({ style, children, glow = false }) {
   const { theme } = useTheme();
   return (
@@ -16,15 +16,15 @@ export function Card({ style, children, glow = false }) {
       style={[
         {
           backgroundColor: theme.surface,
-          borderRadius: theme.radius.xl,
+          borderRadius: theme.radius.lg,
           borderWidth: 1,
           borderColor: glow ? theme.lineStrong : theme.line,
-          padding: 18,
-          shadowColor: glow ? theme.accent : theme.shadow,
-          shadowOpacity: glow ? 0.45 : 0.25,
-          shadowRadius: 22,
-          shadowOffset: { width: 0, height: 12 },
-          elevation: glow ? 10 : 4,
+          padding: 16,
+          shadowColor: theme.shadow,
+          shadowOpacity: theme.mode === "dark" ? 0.25 : 0.06,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: 2 },
+          elevation: theme.mode === "dark" ? 0 : 1,
         },
         style,
       ]}
@@ -35,9 +35,9 @@ export function Card({ style, children, glow = false }) {
 }
 
 /* ── Springy press wrapper ── */
-export function Bounce({ onPress, style, outerStyle, children, disabled, haptic = true, scaleTo = 0.96, ...rest }) {
+export function Bounce({ onPress, style, outerStyle, children, disabled, haptic = true, scaleTo = 0.98, ...rest }) {
   const s = useRef(new Animated.Value(1)).current;
-  const to = (v) => Animated.spring(s, { toValue: v, useNativeDriver: true, speed: 40, bounciness: 8 }).start();
+  const to = (v) => Animated.spring(s, { toValue: v, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
   return (
     <Pressable
       style={outerStyle}
@@ -55,32 +55,17 @@ export function Bounce({ onPress, style, outerStyle, children, disabled, haptic 
   );
 }
 
-/* ── Primary gradient button ── */
+/* ── Primary button (solid; `colors[0]` picks the fill) ── */
 export function GradientButton({ title, onPress, loading, disabled, icon, colors, style, small }) {
   const { theme } = useTheme();
-  const shine = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.delay(2200),
-        Animated.timing(shine, { toValue: 1, duration: 1100, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        Animated.timing(shine, { toValue: 0, duration: 0, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [shine]);
-  const translateX = shine.interpolate({ inputRange: [0, 1], outputRange: [-220, 420] });
-
   return (
     <Bounce onPress={onPress} disabled={disabled || loading} outerStyle={style} style={{ opacity: disabled ? 0.6 : 1 }}>
       <LinearGradient
-        colors={colors || theme.brand}
+        colors={[(colors || theme.brand)[0], (colors || theme.brand)[0]]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={[styles.btn, small && styles.btnSmall, { shadowColor: theme.accent }]}
+        style={[styles.btn, small && styles.btnSmall]}
       >
-        <Animated.View style={[styles.shine, { transform: [{ translateX }, { rotate: "20deg" }] }]} />
         {loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
@@ -98,7 +83,7 @@ export function GhostButton({ title, onPress, icon, color, style, small, disable
   const { theme } = useTheme();
   const c = color || theme.text;
   return (
-    <Bounce onPress={onPress} disabled={disabled} style={[styles.ghost, small && styles.btnSmall, { borderColor: theme.lineStrong, backgroundColor: alpha(theme.accent, 0.08), opacity: disabled ? 0.5 : 1 }, style]}>
+    <Bounce onPress={onPress} disabled={disabled} style={[styles.ghost, small && styles.btnSmall, { borderColor: theme.lineStrong, backgroundColor: "transparent", opacity: disabled ? 0.5 : 1 }, style]}>
       {icon ? <Icon name={icon} size={small ? 16 : 18} color={c} /> : null}
       <Text style={{ color: c, fontFamily: theme.font.bodySemi, fontSize: small ? 14 : 15 }}>{title}</Text>
     </Bounce>
@@ -114,15 +99,15 @@ export function IconButton({ name, onPress, color, bg, size = 40, iconSize = 18,
       style={{
         width: size,
         height: size,
-        borderRadius: size * 0.34,
+        borderRadius: theme.radius.md,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: bg || (active ? alpha(theme.accent, 0.22) : alpha(theme.accent, 0.1)),
+        backgroundColor: bg || (active ? alpha(theme.accent, 0.15) : theme.surface),
         borderWidth: 1,
         borderColor: active ? theme.accent : theme.line,
       }}
     >
-      <Icon name={name} size={iconSize} color={color || theme.accentSoft} />
+      <Icon name={name} size={iconSize} color={color || (active ? theme.accent : theme.text)} />
     </Bounce>
   );
 }
@@ -143,7 +128,7 @@ export function Field({ label, icon, secure, value, onChangeText, error, right, 
   return (
     <View style={[{ marginBottom: 14 }, style]}>
       {label ? <Text style={[styles.label, { color: theme.textFaint, fontFamily: theme.font.bodySemi }]}>{label}</Text> : null}
-      <Animated.View style={[styles.field, { borderColor, backgroundColor: alpha(theme.accent, theme.mode === "dark" ? 0.07 : 0.04) }]}>
+      <Animated.View style={[styles.field, { borderColor, backgroundColor: theme.surface }]}>
         {icon ? <Icon name={icon} size={18} color={focused ? theme.accentSoft : theme.textFaint} /> : null}
         <TextInput
           value={value}
@@ -183,7 +168,7 @@ export function StrengthMeter({ strength }) {
               flex: 1,
               height: 5,
               borderRadius: 3,
-              backgroundColor: strength.score >= n ? color : alpha(theme.accent, 0.15),
+              backgroundColor: strength.score >= n ? color : theme.line,
             }}
           />
         ))}
@@ -218,32 +203,31 @@ export function Chip({ label, active, onPress, count, color }) {
         styles.chip,
         {
           borderColor: active ? c : theme.line,
-          backgroundColor: active ? alpha(c, 0.2) : alpha(theme.accent, 0.06),
+          backgroundColor: active ? alpha(c, 0.12) : theme.surface,
         },
       ]}
     >
       <Text style={{ color: active ? theme.heading : theme.textMuted, fontFamily: theme.font.bodySemi, fontSize: 13 }}>{label}</Text>
       {count !== undefined ? (
-        <View style={[styles.chipCount, { backgroundColor: active ? c : alpha(theme.accent, 0.18) }]}>
-          <Text style={{ color: "#fff", fontSize: 11, fontFamily: theme.font.bodyBold }}>{count}</Text>
+        <View style={[styles.chipCount, { backgroundColor: active ? c : theme.line }]}>
+          <Text style={{ color: active ? "#fff" : theme.textMuted, fontSize: 11, fontFamily: theme.font.bodyBold }}>{count}</Text>
         </View>
       ) : null}
     </Bounce>
   );
 }
 
-/* ── Gradient text-like heading accent ── */
+/* ── Accent-coloured heading text ── */
 export function GradientText({ children, style }) {
   const { theme } = useTheme();
-  // Native has no background-clip:text; a bright accent reads the same at a glance.
-  return <Text style={[{ color: theme.mode === "dark" ? "#6BC2C1" : theme.accent }, style]}>{children}</Text>;
+  return <Text style={[{ color: theme.accent }, style]}>{children}</Text>;
 }
 
 /* ── Fade + rise on mount ── */
-export function FadeIn({ delay = 0, children, style, from = 18 }) {
+export function FadeIn({ delay = 0, children, style, from = 6 }) {
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(v, { toValue: 1, duration: 520, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    Animated.timing(v, { toValue: 1, duration: 220, delay: Math.min(delay, 120), easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
   }, [v, delay]);
   const translateY = v.interpolate({ inputRange: [0, 1], outputRange: [from, 0] });
   return <Animated.View style={[style, { opacity: v, transform: [{ translateY }] }]}>{children}</Animated.View>;
@@ -251,25 +235,20 @@ export function FadeIn({ delay = 0, children, style, from = 18 }) {
 
 const styles = StyleSheet.create({
   btn: {
-    height: 56,
-    borderRadius: 18,
+    height: 50,
+    borderRadius: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 8,
     overflow: "hidden",
-    paddingHorizontal: 22,
-    shadowOpacity: 0.5,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
+    paddingHorizontal: 20,
   },
-  btnSmall: { height: 44, borderRadius: 14, paddingHorizontal: 16 },
-  btnText: { color: "#fff", fontSize: 16, letterSpacing: 0.2 },
-  shine: { position: "absolute", top: -30, bottom: -30, width: 60, backgroundColor: "rgba(255,255,255,0.28)" },
+  btnSmall: { height: 40, borderRadius: 8, paddingHorizontal: 14 },
+  btnText: { color: "#fff", fontSize: 15 },
   ghost: {
-    height: 56,
-    borderRadius: 18,
+    height: 50,
+    borderRadius: 10,
     borderWidth: 1,
     flexDirection: "row",
     alignItems: "center",
@@ -277,18 +256,18 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 20,
   },
-  label: { fontSize: 11, letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 8 },
+  label: { fontSize: 13, marginBottom: 6 },
   field: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    borderWidth: 1.2,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    height: 54,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 48,
   },
   input: { flex: 1, fontSize: 15, height: "100%" },
-  badge: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  badge: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
   chip: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
   chipCount: { minWidth: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", paddingHorizontal: 5 },
 });

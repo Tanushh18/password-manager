@@ -45,7 +45,7 @@ export default function Scan() {
         ) : (
           <View style={styles.ask}>
             <Icon name="scan" size={48} color="#fff" />
-            <Text style={styles.askText}>Aurelia needs the camera to read 2FA QR codes. Nothing is recorded or uploaded.</Text>
+            <Text style={styles.askText}>Stashr needs the camera to read 2FA QR codes. Nothing is recorded or uploaded.</Text>
             <GradientButton title="Allow camera" icon="scan" onPress={requestPermission} />
           </View>
         )}

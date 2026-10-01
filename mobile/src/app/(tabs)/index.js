@@ -67,7 +67,7 @@ export default function Vault() {
       <FadeIn style={styles.top}>
         <View style={{ flex: 1 }}>
           <Text style={{ color: theme.textMuted, fontFamily: theme.font.bodyMedium, fontSize: 14 }}>{greeting()},</Text>
-          <Text style={{ color: theme.heading, fontFamily: theme.font.displayHeavy, fontSize: 30, letterSpacing: -0.8 }}>
+          <Text style={{ color: theme.heading, fontFamily: theme.font.displayHeavy, fontSize: 26, letterSpacing: -0.4 }}>
             <GradientText>{firstName}</GradientText> ✦
           </Text>
         </View>
@@ -199,7 +199,7 @@ export default function Vault() {
               refreshing={syncing}
               onRefresh={() => refresh().catch((e) => toast(e.message, "error"))}
               tintColor={theme.accent}
-              colors={[theme.accent, theme.accent2]}
+              colors={[theme.accent, theme.accent]}
               progressBackgroundColor={theme.surfaceSolid}
             />
           }

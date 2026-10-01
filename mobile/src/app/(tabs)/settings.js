@@ -95,7 +95,7 @@ export default function Settings() {
       const res = await Updates.checkForUpdateAsync();
       if (!res.isAvailable) return toast("You're on the latest version ✨", "info");
       await Updates.fetchUpdateAsync();
-      Alert.alert("Update ready", "Restart Aurelia to use the new version?", [
+      Alert.alert("Update ready", "Restart Stashr to use the new version?", [
         { text: "Later", style: "cancel" },
         { text: "Restart", onPress: () => Updates.reloadAsync() },
       ]);
@@ -280,7 +280,7 @@ export default function Settings() {
             />
             <GhostButton title="Delete account" icon="trash" color={theme.textFaint} small onPress={() => router.push("/account/delete")} />
             <Text style={{ textAlign: "center", color: theme.textFaint, fontFamily: theme.font.body, fontSize: 12 }}>
-              Aurelia {Constants.expoConfig?.version || "1.0.0"} · your keys, your vault
+              Stashr {Constants.expoConfig?.version || "1.0.0"} · your keys, your vault
             </Text>
           </FadeIn>
         </ScrollView>
@@ -290,7 +290,7 @@ export default function Settings() {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 32, letterSpacing: -0.8, marginTop: 6 },
+  title: { fontSize: 26, letterSpacing: -0.4, marginTop: 6 },
   profile: { flexDirection: "row", alignItems: "center", gap: 16 },
   avatar: { width: 64, height: 64, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 1, paddingTop: 12 },
