@@ -43,3 +43,10 @@ test("search matches values and project names; empty query returns all", () => {
   assert.equal(searchProjects([shop, blog], "  ").projects.length, 2);
   assert.equal(searchProjects([shop, blog], "nothing-here").values.length, 0);
 });
+
+test("web and app copies of projectTree.js are identical", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const web = await readFile(new URL("../src/lib/projectTree.js", import.meta.url), "utf8");
+  const app = await readFile(new URL("../../mobile/src/lib/projectTree.js", import.meta.url), "utf8");
+  assert.equal(app, web);
+});
