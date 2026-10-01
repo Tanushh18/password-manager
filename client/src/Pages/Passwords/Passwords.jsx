@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
+import useShortcuts from "../../hooks/useShortcuts";
 import Ambience from "../../Components/Ambience/Ambience";
 import ServiceStatus from "../../Components/ServiceStatus/ServiceStatus";
 import Reveal from "../../Components/Reveal/Reveal";
@@ -24,6 +25,7 @@ export default function Passwords() {
   const [folder, setFolder] = useState("__all"); // __all | __fav | <folder>
   const [sort, setSort] = useState("recent");
   const [editing, setEditing] = useState(null); // null | "new" | item
+  const searchRef = useShortcuts(() => setEditing("new"));
   const [importing, setImporting] = useState(false);
   const [breachChecked, setBreachChecked] = useState(false);
 
@@ -131,7 +133,8 @@ export default function Passwords() {
             <input
               className="input vault__search-input"
               type="search"
-              placeholder="Search names, usernames, websites, notes…"
+              ref={searchRef}
+              placeholder="Search names, usernames, websites, notes…  ( / )"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               aria-label="Search your vault"
@@ -145,7 +148,7 @@ export default function Passwords() {
             </select>
             <button className="btn btn--primary" onClick={() => setEditing("new")}>
               <span className="btn__sheen" />
-              <Plus size={15} /> New item
+              <Plus size={15} /> New item <kbd className="kbd">N</kbd>
             </button>
             <button className="btn btn--ghost" onClick={() => setImporting(true)}>
               <Upload size={15} /> Import

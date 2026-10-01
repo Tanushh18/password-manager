@@ -1087,3 +1087,7 @@ input, select, textarea { border-radius: var(--r-md); }
 .card__ribbon { display: none !important; }
 .card--hover::after { display: none !important; }
 .avatar { border-radius: var(--r-md) !important; box-shadow: none !important; color: #fff; }
+
+/* Keyboard shortcut hint inside a button */
+.kbd { font-family: var(--font-mono); font-size: 0.68rem; line-height: 1; padding: 0.15rem 0.35rem; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.45); opacity: 0.85; }
+@media (hover: none) { .kbd { display: none; } }

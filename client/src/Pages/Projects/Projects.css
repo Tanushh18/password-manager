@@ -84,3 +84,11 @@
 .proj-values .ptree__leaf { grid-template-columns: minmax(140px, 28%) 1fr auto; }
 .proj-values .ptree__value { white-space: normal; overflow-wrap: anywhere; }
 .vault__grid:has(.proj-card) { align-items: start; }
+
+/* Optional editor sections fold away until needed */
+.proj-optional > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0; }
+.proj-optional > summary::-webkit-details-marker { display: none; }
+.proj-optional > summary::before { content: "+"; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--line-strong); font-size: 0.8rem; color: var(--text-muted); }
+.proj-optional[open] > summary::before { content: "−"; }
+.proj-optional[open] > summary { margin-bottom: 0.7rem; }
+.proj-optional > summary:hover { color: var(--accent); }

@@ -10,6 +10,17 @@ const text = (id, label, key, form, setForm, extra = {}) => (
   <Field id={id} label={label} value={form[key]} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} {...extra} />
 );
 
+// An optional section starts open only when it already has something in it.
+// Decided once when the form loads, so it doesn't fold shut while typing.
+const filled = (...values) => values.some((v) => (Array.isArray(v) ? v.length > 0 : Boolean(v && String(v).trim())));
+const optionalOpen = (f) => ({
+  databases: filled(f.databases),
+  firebase: filled(f.firebaseProjectId, f.firebaseAccountEmail, f.googleCloudProjectId, f.googleCloudAccountEmail),
+  play: filled(f.playStorePackageName, f.playStoreAccountEmail, f.playStoreUrl, f.playStoreStatus),
+  dns: filled(f.dnsProvider, f.dnsAccountEmail, f.monitoringProvider, f.monitoringAccountEmail),
+  custom: filled(f.extraFields),
+});
+
 function RepeatRow({ children, onRemove }) {
   return (
     <div className="proj-repeat-row">
@@ -31,10 +42,13 @@ export default function ProjectEditor({ open, project, onClose, onSave, onDelete
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
+  const [startOpen, setStartOpen] = useState({});
 
   useEffect(() => {
     if (open) {
-      setForm(project ? { ...emptyProject(), ...project } : emptyProject());
+      const initial = project ? { ...emptyProject(), ...project } : emptyProject();
+      setForm(initial);
+      setStartOpen(optionalOpen(initial));
       setConfirmDelete(false);
       setPasteOpen(false);
       setPasteText("");
@@ -89,7 +103,7 @@ export default function ProjectEditor({ open, project, onClose, onSave, onDelete
           </span>
           <div>
             <h2 className="sheet__title">{project ? "Edit project" : "New project"}</h2>
-            <p className="sheet__sub">Encrypted on this device with AES-256-GCM before it's saved — same as your passwords.</p>
+            <p className="sheet__sub">Encrypted with AES-256-GCM before it's saved, same as your passwords.</p>
           </div>
         </div>
 
@@ -150,8 +164,8 @@ export default function ProjectEditor({ open, project, onClose, onSave, onDelete
           </div>
         </div>
 
-        <div className="proj-section">
-          <h3 className="proj-section__title">Databases</h3>
+        <details className="proj-section proj-optional" open={startOpen.databases}>
+          <summary className="proj-section__title">Databases</summary>
           {(form.databases || []).map((row, i) => (
             <RepeatRow key={i} onRemove={() => setForm((f) => ({ ...f, databases: f.databases.filter((_, idx) => idx !== i) }))}>
               <input className="input" placeholder="Label" value={row.label} onChange={(e) => setForm((f) => ({ ...f, databases: updateRow(f.databases, i, { label: e.target.value }) }))} />
@@ -164,37 +178,37 @@ export default function ProjectEditor({ open, project, onClose, onSave, onDelete
           <button type="button" className="btn btn--ghost btn--sm" onClick={() => setForm((f) => ({ ...f, databases: [...f.databases, emptyDatabase()] }))}>
             <Plus size={14} /> Add database
           </button>
-        </div>
+        </details>
 
-        <div className="proj-section">
-          <h3 className="proj-section__title">Firebase / Google Cloud</h3>
+        <details className="proj-section proj-optional" open={startOpen.firebase}>
+          <summary className="proj-section__title">Firebase / Google Cloud</summary>
           <div className="editor__grid">
             {text("pr-fb-id", "Firebase project ID", "firebaseProjectId", form, setForm)}
             {text("pr-fb-email", "Firebase account email", "firebaseAccountEmail", form, setForm)}
             {text("pr-gcp-id", "Google Cloud project ID", "googleCloudProjectId", form, setForm)}
             {text("pr-gcp-email", "Google Cloud account email", "googleCloudAccountEmail", form, setForm)}
           </div>
-        </div>
+        </details>
 
-        <div className="proj-section">
-          <h3 className="proj-section__title">Play Store</h3>
+        <details className="proj-section proj-optional" open={startOpen.play}>
+          <summary className="proj-section__title">Play Store</summary>
           <div className="editor__grid">
             {text("pr-ps-pkg", "Package name", "playStorePackageName", form, setForm)}
             {text("pr-ps-email", "Play Console account email", "playStoreAccountEmail", form, setForm)}
             {text("pr-ps-url", "Play Store URL", "playStoreUrl", form, setForm)}
             {text("pr-ps-status", "Status", "playStoreStatus", form, setForm, { placeholder: "internal testing, live…" })}
           </div>
-        </div>
+        </details>
 
-        <div className="proj-section">
-          <h3 className="proj-section__title">DNS &amp; monitoring</h3>
+        <details className="proj-section proj-optional" open={startOpen.dns}>
+          <summary className="proj-section__title">DNS &amp; monitoring</summary>
           <div className="editor__grid">
             {text("pr-dns", "DNS provider", "dnsProvider", form, setForm)}
             {text("pr-dns-email", "DNS account email", "dnsAccountEmail", form, setForm)}
             {text("pr-mon", "Monitoring provider", "monitoringProvider", form, setForm)}
             {text("pr-mon-email", "Monitoring account email", "monitoringAccountEmail", form, setForm)}
           </div>
-        </div>
+        </details>
 
         <div className="proj-section">
           <h3 className="proj-section__title">Environment variables &amp; secrets</h3>
@@ -242,8 +256,8 @@ export default function ProjectEditor({ open, project, onClose, onSave, onDelete
           </button>
         </div>
 
-        <div className="proj-section">
-          <h3 className="proj-section__title">Custom fields</h3>
+        <details className="proj-section proj-optional" open={startOpen.custom}>
+          <summary className="proj-section__title">Custom fields</summary>
           {(form.extraFields || []).map((row, i) => (
             <RepeatRow key={i} onRemove={() => setForm((f) => ({ ...f, extraFields: f.extraFields.filter((_, idx) => idx !== i) }))}>
               <input className="input" placeholder="Label" value={row.label} onChange={(e) => setForm((f) => ({ ...f, extraFields: updateRow(f.extraFields, i, { label: e.target.value }) }))} />
@@ -253,7 +267,7 @@ export default function ProjectEditor({ open, project, onClose, onSave, onDelete
           <button type="button" className="btn btn--ghost btn--sm" onClick={() => setForm((f) => ({ ...f, extraFields: [...f.extraFields, emptyExtraField()] }))}>
             <Plus size={14} /> Add custom field
           </button>
-        </div>
+        </details>
 
         <div className="field">
           <label className="field__label" htmlFor="pr-notes">Notes</label>

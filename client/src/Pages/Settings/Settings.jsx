@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import QRCode from "qrcode";
-import Ambience from "../../Components/Ambience/Ambience";
 import Field from "../../Components/Field/Field";
 import StrengthMeter from "../../Components/StrengthMeter/StrengthMeter";
 import ThemeToggle from "../../Components/ThemeToggle/ThemeToggle";
@@ -27,19 +26,26 @@ const download = (name, text, type) => {
 };
 const stamp = () => new Date().toISOString().slice(0, 10);
 
-function Section({ icon, title, sub, children, danger }) {
+/* Grouped list: a small heading, then a card of rows split by dividers. */
+function Group({ title, children, danger }) {
   return (
-    <section className={`settings__section card ${danger ? "settings__section--danger" : ""}`}>
-      <span className="card__ribbon" />
-      <header className="settings__head">
-        <span className="settings__icon">{icon}</span>
-        <div>
-          <h2>{title}</h2>
-          {sub ? <p>{sub}</p> : null}
-        </div>
-      </header>
-      {children}
+    <section className="sgroup">
+      <h2 className={`sgroup__title ${danger ? "is-danger" : ""}`}>{title}</h2>
+      <div className={`sgroup__card card ${danger ? "sgroup__card--danger" : ""}`}>{children}</div>
     </section>
+  );
+}
+
+/* One row: label (+ hint) on the left, control on the right. `block` puts the control underneath. */
+function Row({ icon, label, hint, children, block }) {
+  return (
+    <div className={`srow ${block ? "srow--block" : ""}`}>
+      <div className="srow__text">
+        <span className="srow__label">{icon}{label}</span>
+        {hint ? <span className="srow__hint">{hint}</span> : null}
+      </div>
+      {children ? <div className="srow__control">{children}</div> : null}
+    </div>
   );
 }
 
@@ -439,72 +445,80 @@ export default function Settings() {
 
   return (
     <div className="settings page">
-      <Ambience petals={false} />
       <div className="shell-narrow">
-        <header className="settings__top anim-fade-up">
-          <Link to="/passwords" className="btn btn--quiet btn--sm">
-            <Arrow size={14} style={{ transform: "rotate(180deg)" }} /> Back to vault
+        <header className="settings__top">
+          <Link to="/passwords" className="proj-back">
+            <Arrow size={14} style={{ transform: "rotate(180deg)" }} /> Vault
           </Link>
           <h1 className="vault__title">Settings</h1>
           <p className="vault__count">{profile?.email}</p>
         </header>
 
-        <div className="settings__grid">
-          <Section icon={<User size={18} />} title="Profile" sub="How Stashr greets you.">
+        <Group title="Account">
+          <Row icon={<User size={15} />} label="Name" hint="How Stashr greets you.">
             <form className="settings__inline" onSubmit={saveName}>
               <input className="input" value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" maxLength={80} />
               <button type="submit" className="btn btn--ghost btn--sm" disabled={!name.trim() || name.trim() === profile?.name}>Save</button>
             </form>
-          </Section>
+          </Row>
+          <Row icon={<LockLine size={15} />} label="Master password" hint="Changing it signs out your other devices." block>
+            <ChangeMasterPassword />
+          </Row>
+          <Row icon={<Logout size={15} />} label="Other devices" hint={`${Math.max(0, (profile?.sessions || 1) - 1)} other signed-in session(s).`}>
+            <button type="button" className="btn btn--ghost btn--sm" onClick={signOutOthers}>Sign out others</button>
+          </Row>
+        </Group>
 
-          <Section icon={<Globe size={18} />} title="Appearance" sub="Make it yours.">
-            <div className="settings__line">
-              <span>Theme</span>
-              <ThemeToggle />
-            </div>
-            <Toggle
-              checked={prefs.icons}
-              onChange={(v) => setPrefs({ icons: v })}
-              label="Show website icons. Icons are fetched from DuckDuckGo, which can see which sites you have saved."
-            />
-          </Section>
-
-          <Section icon={<ShieldCheck size={18} />} title="Two-factor login" sub="Protect your account even if your master password leaks.">
+        <Group title="Two-factor login">
+          <Row icon={<ShieldCheck size={15} />} label="Authenticator app" hint="Protects your account even if your password leaks." block>
             <TwoFactor />
-          </Section>
+          </Row>
+        </Group>
 
-          <Section icon={<LockLine size={18} />} title="Security" sub="Your master password never leaves this device.">
-            <div className="settings__line">
-              <span><Timer size={14} /> Auto-lock after inactivity</span>
-              <select className="input settings__select" value={prefs.autoLock} onChange={(e) => setPrefs({ autoLock: Number(e.target.value) })}>
-                <option value={1}>1 minute</option>
-                <option value={5}>5 minutes</option>
-                <option value={15}>15 minutes</option>
-                <option value={60}>1 hour</option>
-                <option value={0}>Never</option>
-              </select>
-            </div>
-            <div className="settings__row">
-              <ChangeMasterPassword />
-              <button type="button" className="btn btn--ghost btn--sm" onClick={lock}><LockLine size={14} /> Lock now</button>
-              <button type="button" className="btn btn--ghost btn--sm" onClick={signOutOthers}>
-                <Logout size={14} /> Sign out other devices ({Math.max(0, (profile?.sessions || 1) - 1)})
-              </button>
-            </div>
-          </Section>
+        <Group title="Security">
+          <Row icon={<Timer size={15} />} label="Auto-lock" hint="Lock the vault after this much inactivity.">
+            <select className="input settings__select" value={prefs.autoLock} onChange={(e) => setPrefs({ autoLock: Number(e.target.value) })}>
+              <option value={1}>1 minute</option>
+              <option value={5}>5 minutes</option>
+              <option value={15}>15 minutes</option>
+              <option value={60}>1 hour</option>
+              <option value={0}>Never</option>
+            </select>
+          </Row>
+          <Row icon={<LockLine size={15} />} label="Lock now" hint="Hide everything until you sign in again.">
+            <button type="button" className="btn btn--ghost btn--sm" onClick={lock}>Lock</button>
+          </Row>
+          <Row label="Show values in project search" hint="When off, matching secret values stay hidden (••••) until you tap the eye.">
+            <Toggle checked={prefs.searchValues} onChange={(v) => setPrefs({ searchValues: v })} label="" />
+          </Row>
+        </Group>
 
-          <Section icon={<Download size={18} />} title="Your data" sub="Take it anywhere. Bring it back anytime.">
+        <Group title="Appearance">
+          <Row icon={<Globe size={15} />} label="Theme">
+            <ThemeToggle />
+          </Row>
+          <Row label="Website icons" hint="Fetched from DuckDuckGo, which can see which sites you have saved.">
+            <Toggle checked={prefs.icons} onChange={(v) => setPrefs({ icons: v })} label="" />
+          </Row>
+        </Group>
+
+        <Group title="Your data">
+          <Row icon={<Download size={15} />} label="Export" hint="Take it anywhere." block>
             <ExportData />
-            <div className="settings__row" style={{ marginTop: "0.8rem" }}>
-              <button type="button" className="btn btn--ghost btn--sm" onClick={() => setImporting(true)}><Upload size={14} /> Import</button>
-              <Link to="/privacy" className="btn btn--quiet btn--sm">Privacy policy</Link>
-            </div>
-          </Section>
+          </Row>
+          <Row icon={<Upload size={15} />} label="Import" hint="From a backup, CSV or another password manager.">
+            <button type="button" className="btn btn--ghost btn--sm" onClick={() => setImporting(true)}>Import</button>
+          </Row>
+          <Row label="Privacy policy">
+            <Link to="/privacy" className="btn btn--quiet btn--sm">Open</Link>
+          </Row>
+        </Group>
 
-          <Section icon={<Trash size={18} />} title="Danger zone" sub="Permanent actions." danger>
+        <Group title="Danger zone" danger>
+          <Row icon={<Trash size={15} />} label="Delete account" hint="Permanently deletes your account and vault." block>
             <DeleteAccount />
-          </Section>
-        </div>
+          </Row>
+        </Group>
       </div>
       <ImportModal open={importing} onClose={() => setImporting(false)} onImport={importItems} />
     </div>

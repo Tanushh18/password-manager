@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import useShortcuts from "../../hooks/useShortcuts";
 import Reveal from "../../Components/Reveal/Reveal";
 import ProjectCard from "../../Components/Project/ProjectCard";
 import ProjectImportModal from "../../Components/Project/ProjectImportModal";
@@ -15,12 +16,14 @@ import "./Projects.css";
 const STATUSES = ["planning", "in_progress", "deployed", "broken", "paused", "archived"];
 
 export default function Projects() {
-  const { projects, projectsBroken, importProjects } = useVault();
+  const { projects, projectsBroken, importProjects, prefs } = useVault();
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("__all");
   const [view, setView] = useState("all"); // all | values | projects (while searching)
   const [importing, setImporting] = useState(false);
+  const navigate = useNavigate();
+  const searchRef = useShortcuts(() => navigate("/projects/new"));
 
   const byStatus = useMemo(() => projects.filter((p) => status === "__all" || p.status === status), [projects, status]);
 
@@ -61,7 +64,8 @@ export default function Projects() {
             <input
               className="input vault__search-input"
               type="search"
-              placeholder="Search projects, variables (e.g. MONGO_URI), values…"
+              ref={searchRef}
+              placeholder="Search projects, variables (e.g. MONGO_URI), values…  ( / )"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               aria-label="Search your projects and their variables"
@@ -69,7 +73,7 @@ export default function Projects() {
           </div>
           <div className="vault__actions">
             <Link className="btn btn--primary" to="/projects/new">
-              <Plus size={15} /> New project
+              <Plus size={15} /> New project <kbd className="kbd">N</kbd>
             </Link>
             <button className="btn btn--ghost" onClick={() => setImporting(true)}>
               <Upload size={15} /> Import
@@ -112,7 +116,7 @@ export default function Projects() {
             {results.values.slice(0, 50).map((hit, i) => (
               <div key={`${hit.project.id}-${i}`} className="proj-values__row">
                 <Link to={`/projects/${hit.project.id}`} className="proj-values__project">{hit.project.name}</Link>
-                <TreeLeaf node={hit.field} showPath={hit.field.path.join(" › ")} reveal />
+                <TreeLeaf node={hit.field} showPath={hit.field.path.join(" › ")} reveal={prefs.searchValues !== false} />
               </div>
             ))}
             {results.values.length > 50 ? <p className="field__note">Showing the first 50. Type more to narrow it down.</p> : null}
