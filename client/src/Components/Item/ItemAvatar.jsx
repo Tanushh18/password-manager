@@ -1,18 +1,12 @@
 import React, { useState } from "react";
 import { faviconUrl } from "../../lib/items";
 
-const WASHES = [
-  "linear-gradient(140deg, #31aaa9, #a82020)",
-  "linear-gradient(140deg, #f8e0a4, #31aaa9)",
-  "linear-gradient(140deg, #a82020, #6c1a1a)",
-  "linear-gradient(140deg, #6bc2c1, #f8e0a4)",
-  "linear-gradient(140deg, #6c1a1a, #31aaa9)",
-  "linear-gradient(140deg, #a82020, #f8e0a4)",
-];
+// Calm solid tints for the letter fallback (no gradients).
+const WASHES = ["#0f7f7d", "#3b6fd6", "#7c5cc4", "#c2410c", "#15803d", "#be185d", "#475569"];
 
 export const washFor = (name) => WASHES[((name || "?").charCodeAt(0) || 0) % WASHES.length];
 
-/** Website icon (when enabled) with a gradient-letter fallback. */
+/** Website icon (when enabled) with a solid letter fallback. */
 export default function ItemAvatar({ name, url, icons, size = 46 }) {
   const [failed, setFailed] = useState(false);
   const src = icons && !failed ? faviconUrl(url) : "";

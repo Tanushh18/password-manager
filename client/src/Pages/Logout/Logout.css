@@ -21,13 +21,13 @@
   display: grid;
   place-items: center;
   color: #fff;
-  background: linear-gradient(140deg, var(--accent), var(--heading-2));
-  box-shadow: 0 14px 30px rgba(var(--accent-rgb), 0.38);
+  background: var(--accent);
+  box-shadow: var(--shadow-sm);
   transition: background var(--t-slow) var(--ease);
 }
 
 .farewell__seal.is-done {
-  background: linear-gradient(140deg, var(--ok), var(--ok-deep));
+  background: var(--ok);
   box-shadow: 0 14px 30px rgba(var(--ok-rgb), 0.38);
   animation: scale-in 0.4s var(--ease);
 }

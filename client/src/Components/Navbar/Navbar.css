@@ -51,13 +51,13 @@
   place-items: center;
   color: #fff;
   background: var(--grad-brand);
-  box-shadow: 0 6px 16px rgba(var(--accent-rgb), 0.34);
+  box-shadow: var(--shadow-sm);
   transition: transform var(--t) var(--ease), box-shadow var(--t) var(--ease);
 }
 
 .nav__brand:hover .nav__mark {
   transform: rotate(-6deg) scale(1.06);
-  box-shadow: 0 10px 22px rgba(var(--accent-rgb), 0.44);
+  box-shadow: var(--shadow-sm);
 }
 
 .nav__wordmark { display: flex; flex-direction: column; line-height: 1; }
@@ -155,15 +155,16 @@
   width: min(360px, 86vw);
   z-index: 80;
   background: var(--surface-grad);
-  box-shadow: -24px 0 60px rgba(var(--shade-rgb), 0.16);
+  border-left: 1px solid var(--line);
   transform: translateX(102%);
-  transition: transform 0.5s var(--ease);
+  visibility: hidden;
+  transition: transform var(--t-slow) var(--ease), visibility 0s linear var(--t-slow);
   display: flex;
   flex-direction: column;
   padding: 1.4rem 1.6rem 2.4rem;
 }
 
-.drawer.is-open { transform: translateX(0); }
+.drawer.is-open { transform: translateX(0); visibility: visible; transition: transform var(--t-slow) var(--ease); box-shadow: var(--shadow-lg); }
 
 .drawer__top {
   display: flex;
@@ -219,7 +220,7 @@
 .drawer__link--cta {
   margin-top: 1.2rem;
   border-bottom: none;
-  background: linear-gradient(135deg, var(--accent), var(--heading-2));
+  background: var(--accent);
   color: #fff;
   border-radius: var(--r-pill);
   padding: 0.85rem 1.4rem;

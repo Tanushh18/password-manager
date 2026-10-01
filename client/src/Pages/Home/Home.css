@@ -72,9 +72,8 @@
   width: 118%;
   height: 118%;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(var(--accent-rgb), 0.26) 0%, transparent 66%);
+  background: transparent;
   filter: blur(34px);
-  animation: float-soft 9s ease-in-out infinite;
 }
 
 .keepsake__ring {
@@ -86,7 +85,6 @@
 .keepsake__ring--outer {
   width: 116%;
   height: 116%;
-  animation: spin-slow 46s linear infinite;
 }
 
 .keepsake__ring--inner {
@@ -94,7 +92,6 @@
   height: 96%;
   border-style: solid;
   border-color: rgba(var(--accent-rgb), 0.16);
-  animation: spin-slow 34s linear infinite reverse;
 }
 
 .keepsake__card {
@@ -104,7 +101,6 @@
   text-align: center;
   overflow: hidden;
   background: var(--surface-grad);
-  animation: float-soft 7.5s ease-in-out infinite;
 }
 
 .keepsake__seal {
@@ -115,8 +111,8 @@
   display: grid;
   place-items: center;
   color: #fff;
-  background: linear-gradient(140deg, var(--accent), var(--heading-2));
-  box-shadow: 0 10px 24px rgba(var(--accent-rgb), 0.36);
+  background: var(--accent);
+  box-shadow: var(--shadow-sm);
 }
 
 .keepsake__label { display: block; font-size: 0.62rem; margin-bottom: 0.35rem; }
@@ -187,9 +183,9 @@
   border: 1px solid rgba(var(--glass-rgb), 0.95);
 }
 
-.keepsake__orbit--a { top: -6%; right: 4%; animation: float-soft 6s ease-in-out infinite; }
-.keepsake__orbit--b { bottom: 6%; left: -6%; color: var(--heading-2); animation: float-soft 7.5s ease-in-out 0.6s infinite; }
-.keepsake__orbit--c { top: 42%; right: -8%; color: var(--ok-deep); animation: float-soft 8.5s ease-in-out 1.1s infinite; }
+.keepsake__orbit--a { top: -6%; right: 4%; }
+.keepsake__orbit--b { bottom: 6%; left: -6%; color: var(--heading-2); }
+.keepsake__orbit--c { top: 42%; right: -8%; color: var(--ok-deep); }
 
 /* ── Sections ── */
 
@@ -224,7 +220,7 @@
   height: 54px;
   border-radius: var(--r-md);
   color: var(--accent-deep);
-  background: linear-gradient(145deg, rgba(var(--tint-rgb), 0.9), rgba(var(--glass-rgb), 0.8));
+  background: var(--surface);
   border: 1px solid rgba(var(--glass-rgb), 0.9);
   box-shadow: var(--shadow-xs);
   margin-bottom: 1.3rem;
@@ -253,7 +249,7 @@
   left: 8%;
   right: 8%;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--line-strong), var(--line-strong), transparent);
+  background: var(--line);
 }
 
 .step { position: relative; text-align: center; padding: 0 0.6rem; }
@@ -278,7 +274,7 @@
 
 .step:hover .step__n {
   color: #fff;
-  background: linear-gradient(140deg, var(--accent), var(--heading-2));
+  background: var(--accent);
   border-color: transparent;
   transform: translateY(-3px);
   box-shadow: var(--shadow-rose);
@@ -365,13 +361,13 @@
   font-family: var(--font-mono);
   letter-spacing: 0.08em;
   color: var(--accent-soft);
-  text-shadow: 0 0 12px rgba(var(--accent-rgb), 0.6);
+  text-shadow: none;
   white-space: nowrap;
   overflow: hidden;
 }
 
 .promise { transition: transform var(--t) var(--ease-spring), box-shadow var(--t) var(--ease), border-color var(--t) var(--ease); }
-.promise__icon { background: var(--grad-brand) !important; color: #fff !important; box-shadow: 0 10px 26px rgba(var(--accent-rgb), 0.4); }
+.promise__icon { background: var(--grad-brand) !important; color: #fff !important; box-shadow: var(--shadow-sm); }
 
 .android {
   display: grid;
@@ -390,10 +386,8 @@
   height: 420px;
   border-radius: 36px;
   padding: 10px;
-  background: linear-gradient(160deg, #2e2a5c, #0b0a1f);
-  box-shadow: var(--shadow-lg), 0 0 60px rgba(var(--accent-rgb), 0.35);
-  transform: rotate(6deg);
-  animation: float-soft 6s ease-in-out infinite;
+  background: #1d2125;
+  box-shadow: var(--shadow-lg);
 }
 
 .android__screen {
@@ -401,10 +395,7 @@
   height: 100%;
   border-radius: 28px;
   padding: 2.4rem 1rem 1rem;
-  background:
-    radial-gradient(200px 160px at 20% 0%, rgba(139, 92, 246, 0.5), transparent 70%),
-    radial-gradient(200px 160px at 100% 100%, rgba(236, 72, 153, 0.35), transparent 70%),
-    #0b0920;
+  background: #0f1113;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
@@ -432,13 +423,12 @@
   text-align: center;
   margin-bottom: 0.6rem;
   background:
-    radial-gradient(closest-side, #0d0303 78%, transparent 80% 100%),
-    conic-gradient(#f8e0a4, #31aaa9, #a82020, #31aaa9 92%, rgba(49, 170, 169, 0.15) 0);
-  animation: spin-slow 16s linear infinite;
+    radial-gradient(closest-side, #0f1113 80%, transparent 82% 100%),
+    conic-gradient(#2bb3b1 0 78%, #262a2f 0);
 }
 
 .android__ring strong,
-.android__ring span { animation: spin-slow 16s linear infinite reverse; display: block; }
+.android__ring span { display: block; }
 .android__ring strong { font-family: var(--font-serif); font-size: 1.9rem; color: #fff; line-height: 1; }
 .android__ring span { font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ok); }
 
@@ -462,7 +452,7 @@
   font-size: 0.75rem;
   font-weight: 700;
   color: #fff;
-  background: linear-gradient(140deg, #31aaa9, #a82020);
+  background: var(--accent);
 }
 
 .android__name { flex: 1; font-size: 0.8rem; color: var(--text); }

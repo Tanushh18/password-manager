@@ -83,7 +83,7 @@ export default function ProjectEditor({ open, project, onClose, onSave, onDelete
       <form className="sheet__body editor" onSubmit={save}>
         <span className="card__ribbon" />
         <div className="editor__head">
-          <span className="avatar" style={{ width: 52, height: 52, background: "linear-gradient(140deg, var(--accent), var(--heading-2))" }}>
+          <span className="avatar" style={{ width: 52, height: 52, background: "var(--accent)" }}>
             <Globe size={22} />
           </span>
           <div>

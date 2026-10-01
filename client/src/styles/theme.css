@@ -5,153 +5,152 @@
    The same tokens drive the Android app (mobile/src/theme.js).
    ════════════════════════════════════════════════════════════ */
 
+/* Shared, theme-independent tokens */
+:root {
+  /* ── Shape ── */
+  --r-sm: 8px;
+  --r-md: 10px;
+  --r-lg: 12px;
+  --r-xl: 14px;
+  --r-pill: 999px;
+
+  /* ── Motion (short and quiet) ── */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.2, 0, 0, 1);
+  --t-fast: 0.12s;
+  --t: 0.18s;
+  --t-slow: 0.25s;
+
+  /* ── Type ── */
+  --font-serif: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-script: var(--font-sans);
+  --font-mono: "JetBrains Mono", "SF Mono", "Menlo", "Ubuntu Mono", monospace;
+
+  /* ── Layout ── */
+  --nav-h: 64px;
+  --page-max: 1120px;
+}
+
+/* Dark (default) */
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  /* ── Brand ── */
-  --accent: #31aaa9;          /* teal */
-  --accent-soft: #6bc2c1;
-  --accent-deep: #237a7a;
-  --accent-2: #a82020;        /* red */
-  --accent-3: #f8e0a4;        /* gold */
-  --ok: #2fa36b;               /* green */
-  --ok-deep: #24875a;
-  --warn: #f8e0a4;
-  --danger: #a82020;
-  --danger-deep: #6c1a1a;
+  --accent: #2bb3b1;
+  --accent-soft: #4cc6c4;
+  --accent-deep: #1f8e8c;
+  --accent-2: #e5484d;
+  --accent-3: #d4a72c;
+  --ok: #30a46c;
+  --ok-deep: #258a59;
+  --warn: #d4a72c;
+  --danger: #e5484d;
+  --danger-deep: #b8383c;
 
-  --accent-rgb: 49, 170, 169;
-  --accent-2-rgb: 168, 32, 32;
-  --accent-3-rgb: 248, 224, 164;
-  --ok-rgb: 47, 163, 107;
-  --danger-rgb: 168, 32, 32;
+  --accent-rgb: 43, 179, 177;
+  --accent-2-rgb: 229, 72, 77;
+  --accent-3-rgb: 212, 167, 44;
+  --ok-rgb: 48, 164, 108;
+  --danger-rgb: 229, 72, 77;
 
-  /* ── Ground ── */
-  --bg: #0d0303;
-  --bg-rgb: 13, 3, 3;
-  --tint: #1e0707;
-  --tint-light: #130505;
-  --tint-rgb: 30, 7, 7;
-  --glass-rgb: 40, 15, 15;
+  --bg: #0f1113;
+  --bg-rgb: 15, 17, 19;
+  --tint: #1d2125;
+  --tint-light: #15181b;
+  --tint-rgb: 29, 33, 37;
+  --glass-rgb: 23, 26, 29;
   --shade-rgb: 0, 0, 0;
-  --ink-rgb: 245, 235, 216;
+  --ink-rgb: 236, 238, 240;
 
-  /* ── Text ── */
-  --ink: #f5ebd8;
-  --text: #f0e4cc;
-  --text-muted: rgba(240, 228, 204, 0.68);
-  --text-faint: rgba(240, 228, 204, 0.44);
-  --heading: #fff8ec;
-  --heading-2: #f8e0a4;
+  --ink: #eceef0;
+  --text: #e2e5e8;
+  --text-muted: #9ba1a8;
+  --text-faint: #6b7178;
+  --heading: #f4f5f6;
+  --heading-2: #f4f5f6;
   --white: #ffffff;
 
-  /* ── Lines & surfaces ── */
-  --line: rgba(49, 170, 169, 0.16);
-  --line-strong: rgba(49, 170, 169, 0.32);
-  --danger-soft: rgba(168, 32, 32, 0.12);
-  --surface: rgba(30, 10, 10, 0.72);
-  --surface-solid: #170808;
-  --surface-tint: rgba(30, 10, 10, 0.6);
-  --surface-grad: linear-gradient(160deg, rgba(40, 14, 14, 0.92) 0%, rgba(20, 8, 8, 0.94) 60%, rgba(13, 5, 5, 0.96) 100%);
-  --surface-blush: linear-gradient(160deg, #201010 0%, #170a0a 60%, #100505 100%);
+  --line: #262a2f;
+  --line-strong: #353a40;
+  --danger-soft: rgba(229, 72, 77, 0.12);
+  --surface: #171a1d;
+  --surface-solid: #171a1d;
+  --surface-tint: #1b1e22;
+  --surface-grad: #171a1d;
+  --surface-blush: #171a1d;
 
-  /* ── Gradients ── */
-  --grad-brand: linear-gradient(135deg, #31aaa9 0%, #a82020 55%, #f8e0a4 120%);
-  --grad-cool: linear-gradient(135deg, #f8e0a4 0%, #31aaa9 100%);
-  --grad-text: linear-gradient(100deg, #6bc2c1 0%, #f8e0a4 50%, #6bc2c1 100%);
+  /* Kept as names for older rules; all flat now */
+  --grad-brand: var(--accent);
+  --grad-cool: var(--accent);
+  --grad-text: none;
 
-  /* ── Elevation ── */
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-sm: 0 4px 14px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 14px 38px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(49, 170, 169, 0.06);
-  --shadow-lg: 0 28px 70px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(49, 170, 169, 0.1);
-  --shadow-rose: 0 10px 30px rgba(49, 170, 169, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
-  --shadow-rose-lg: 0 18px 46px rgba(168, 32, 32, 0.45), 0 0 26px rgba(49, 170, 169, 0.35);
-  --glow: 0 0 0 1px rgba(49, 170, 169, 0.25), 0 0 40px rgba(49, 170, 169, 0.25);
-
-  /* ── Shape ── */
-  --r-sm: 12px;
-  --r-md: 16px;
-  --r-lg: 20px;
-  --r-xl: 26px;
-  --r-pill: 999px;
-
-  /* ── Motion ── */
-  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
-  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --t-fast: 0.2s;
-  --t: 0.32s;
-  --t-slow: 0.6s;
-
-  /* ── Type ── */
-  --font-serif: "Sora", "Space Grotesk", "Inter", system-ui, sans-serif; /* display face */
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-script: "Sora", "Inter", sans-serif;
-  --font-mono: "JetBrains Mono", "SF Mono", "Menlo", "Ubuntu Mono", monospace;
-
-  /* ── Layout ── */
-  --nav-h: 74px;
-  --page-max: 1180px;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --shadow-rose: none;
+  --shadow-rose-lg: none;
+  --glow: 0 0 0 3px rgba(43, 179, 177, 0.25);
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --accent: #237a7a;
-  --accent-soft: #31aaa9;
-  --accent-deep: #1c6362;
-  --accent-2: #a82020;
-  --accent-3: #887b5a;
-  --ok: #1f7a4c;
-  --ok-deep: #145c38;
-  --warn: #ad8a2e;
-  --danger: #a82020;
-  --danger-deep: #6c1a1a;
+  --accent: #0f7f7d;
+  --accent-soft: #0f7f7d;
+  --accent-deep: #0b6664;
+  --accent-2: #d1343a;
+  --accent-3: #9a6b00;
+  --ok: #1d7f4e;
+  --ok-deep: #16653e;
+  --warn: #9a6b00;
+  --danger: #d1343a;
+  --danger-deep: #a8282d;
 
-  --accent-rgb: 35, 122, 122;
-  --accent-2-rgb: 168, 32, 32;
-  --accent-3-rgb: 136, 123, 90;
-  --ok-rgb: 31, 122, 76;
-  --danger-rgb: 168, 32, 32;
+  --accent-rgb: 15, 127, 125;
+  --accent-2-rgb: 209, 52, 58;
+  --accent-3-rgb: 154, 107, 0;
+  --ok-rgb: 29, 127, 78;
+  --danger-rgb: 209, 52, 58;
 
-  --bg: #fcf1d6;
-  --bg-rgb: 252, 241, 214;
-  --tint: #faebc4;
-  --tint-light: #fdf5e2;
-  --tint-rgb: 250, 235, 196;
+  --bg: #f6f7f9;
+  --bg-rgb: 246, 247, 249;
+  --tint: #eef0f3;
+  --tint-light: #f9fafb;
+  --tint-rgb: 238, 240, 243;
   --glass-rgb: 255, 255, 255;
-  --shade-rgb: 108, 26, 26;
-  --ink-rgb: 58, 16, 16;
+  --shade-rgb: 17, 24, 39;
+  --ink-rgb: 17, 24, 39;
 
-  --ink: #3a1010;
-  --text: #3a1010;
-  --text-muted: rgba(58, 16, 16, 0.68);
-  --text-faint: rgba(58, 16, 16, 0.45);
-  --heading: #2a0b0b;
-  --heading-2: #6c1a1a;
+  --ink: #111827;
+  --text: #1f2937;
+  --text-muted: #5b6472;
+  --text-faint: #8a929e;
+  --heading: #111827;
+  --heading-2: #111827;
 
-  --line: rgba(35, 122, 122, 0.14);
-  --line-strong: rgba(35, 122, 122, 0.3);
-  --danger-soft: rgba(168, 32, 32, 0.08);
-  --surface: rgba(255, 255, 255, 0.82);
-  --surface-solid: #fffaf0;
-  --surface-tint: rgba(255, 255, 255, 0.72);
-  --surface-grad: linear-gradient(160deg, #fffaf0 0%, #fdf6e6 60%, #f8ecd2 100%);
-  --surface-blush: linear-gradient(160deg, #fffaf0 0%, #fbf0dd 60%, #f6e9cd 100%);
+  --line: #e3e6ea;
+  --line-strong: #cfd4da;
+  --danger-soft: rgba(209, 52, 58, 0.08);
+  --surface: #ffffff;
+  --surface-solid: #ffffff;
+  --surface-tint: #fbfbfc;
+  --surface-grad: #ffffff;
+  --surface-blush: #ffffff;
 
-  --grad-brand: linear-gradient(135deg, #237a7a 0%, #a82020 60%, #f8e0a4 125%);
-  --grad-cool: linear-gradient(135deg, #6c1a1a 0%, #237a7a 100%);
-  --grad-text: linear-gradient(100deg, #237a7a 0%, #a82020 45%, #6c1a1a 85%, #237a7a 100%);
+  --grad-brand: var(--accent);
+  --grad-cool: var(--accent);
+  --grad-text: none;
 
-  --shadow-xs: 0 1px 2px rgba(58, 16, 16, 0.05);
-  --shadow-sm: 0 4px 14px rgba(58, 16, 16, 0.07);
-  --shadow-md: 0 14px 34px rgba(58, 16, 16, 0.09), 0 2px 8px rgba(58, 16, 16, 0.04);
-  --shadow-lg: 0 26px 64px rgba(58, 16, 16, 0.14), 0 4px 14px rgba(58, 16, 16, 0.05);
-  --shadow-rose: 0 10px 28px rgba(35, 122, 122, 0.32);
-  --shadow-rose-lg: 0 16px 40px rgba(168, 32, 32, 0.32);
-  --glow: 0 0 0 1px rgba(35, 122, 122, 0.2), 0 0 30px rgba(35, 122, 122, 0.15);
+  --shadow-xs: 0 1px 2px rgba(17, 24, 39, 0.05);
+  --shadow-sm: 0 1px 3px rgba(17, 24, 39, 0.08);
+  --shadow-md: 0 4px 12px rgba(17, 24, 39, 0.08);
+  --shadow-lg: 0 10px 30px rgba(17, 24, 39, 0.12);
+  --shadow-rose: none;
+  --shadow-rose-lg: none;
+  --glow: 0 0 0 3px rgba(15, 127, 125, 0.2);
 }
 
 *,
@@ -177,20 +176,6 @@ body {
   line-height: 1.65;
   overflow-x: hidden;
   transition: background-color 0.5s var(--ease), color 0.5s var(--ease);
-}
-
-/* Midnight ground with aurora washes */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -2;
-  background:
-    radial-gradient(1100px 700px at 10% -10%, rgba(var(--accent-rgb), 0.22) 0%, transparent 60%),
-    radial-gradient(900px 620px at 95% 5%, rgba(var(--accent-2-rgb), 0.14) 0%, transparent 58%),
-    radial-gradient(1000px 800px at 50% 110%, rgba(var(--accent-3-rgb), 0.14) 0%, transparent 60%),
-    var(--bg);
-  pointer-events: none;
 }
 
 ::selection {
@@ -1039,3 +1024,66 @@ a { color: var(--accent-soft); text-decoration: none; }
 .consent input { margin-top: 0.2rem; accent-color: var(--accent); width: 16px; height: 16px; flex-shrink: 0; }
 .consent svg { display: inline-block; vertical-align: -2px; color: var(--warn); margin-right: 2px; }
 .consent strong { color: var(--heading); }
+
+/* ════════════════ FLAT LAYER ════════════════
+   The clean, solid look: no glass blur, no glow, no gradient text, no
+   looping decoration. Sits last so it wins over the older rules above. */
+
+*, *::before, *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+body { line-height: 1.55; transition: none; }
+
+h1, h2, h3, h4, .display { letter-spacing: -0.02em; font-weight: 650; }
+.display { font-size: clamp(1.9rem, 5vw, 3.2rem); line-height: 1.1; }
+
+.display em, .serif-em, h1 em, h2 em, .script {
+  background: none !important;
+  -webkit-text-fill-color: currentColor !important;
+  color: var(--accent) !important;
+  animation: none !important;
+}
+.script { color: var(--text-muted) !important; font-weight: 500; letter-spacing: 0; }
+
+.eyebrow { letter-spacing: 0.08em; color: var(--accent); font-size: 0.72rem; }
+
+.btn__sheen, .ornament, .ambience { display: none !important; }
+
+.btn {
+  border-radius: var(--r-md);
+  padding: 0.7rem 1.25rem;
+  font-weight: 600;
+  box-shadow: none;
+}
+.btn:not(:disabled):hover { transform: none; }
+.btn--primary, .btn-primary {
+  background: var(--accent) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+.btn--primary:not(:disabled):hover, .btn-primary:not(:disabled):hover {
+  background: var(--accent-deep) !important;
+  box-shadow: none !important;
+}
+.btn--success { background: var(--ok) !important; }
+.btn--error { background: var(--danger) !important; }
+
+.card, .glass, .panel {
+  background: var(--surface) !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: var(--shadow-sm) !important;
+  border-radius: var(--r-lg);
+}
+.card::before, .card::after, .glass::before, .glass::after { display: none !important; }
+.card--hover:hover { box-shadow: var(--shadow-md) !important; border-color: var(--line-strong) !important; }
+
+.anim-float, .anim-beat { animation: none !important; }
+
+input, select, textarea { border-radius: var(--r-md); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.card__ribbon { display: none !important; }
+.card--hover::after { display: none !important; }
+.avatar { border-radius: var(--r-md) !important; box-shadow: none !important; color: #fff; }

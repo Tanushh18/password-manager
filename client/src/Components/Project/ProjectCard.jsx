@@ -17,7 +17,7 @@ export default function ProjectCard({ project, onEdit, style }) {
   return (
     <div className="card card--hover vault-card" style={style}>
       <div className="vault-card__head">
-        <span className="avatar" style={{ width: 44, height: 44, background: "linear-gradient(140deg, var(--accent), var(--heading-2))" }}>
+        <span className="avatar" style={{ width: 44, height: 44, background: "var(--accent)" }}>
           <Globe size={20} />
         </span>
         <div className="vault-card__id">

@@ -16,7 +16,7 @@
   left: -120px;
   top: -140px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(var(--accent-rgb), 0.28), transparent 65%);
+  background: transparent;
   pointer-events: none;
 }
 
@@ -30,7 +30,7 @@
   width: 100%;
   height: 100%;
   transform: rotate(-90deg);
-  filter: drop-shadow(0 0 14px rgba(var(--accent-rgb), 0.45));
+  filter: none;
 }
 
 .health__track {
@@ -111,12 +111,12 @@
 .tile--warn { --tile: var(--warn); }
 .tile--cool { --tile: var(--accent-3); }
 
-.tile:hover { transform: translateY(-3px); border-color: var(--tile); }
+.tile:hover { border-color: var(--tile); }
 
 .tile.is-active {
   border-color: var(--tile);
   background: color-mix(in srgb, var(--tile) 16%, transparent);
-  box-shadow: 0 0 0 1px var(--tile), 0 10px 26px color-mix(in srgb, var(--tile) 30%, transparent);
+  box-shadow: 0 0 0 1px var(--tile);
 }
 
 .tile__icon {
