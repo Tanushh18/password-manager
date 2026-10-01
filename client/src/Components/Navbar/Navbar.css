@@ -267,3 +267,8 @@
   .nav__tag { display: none; }
   .nav__name { font-size: 1.2rem; }
 }
+
+/* ════════ Polish ════════ */
+.nav__mark { box-shadow: none !important; border-radius: var(--r-md); }
+.nav__brand:hover .nav__mark { transform: none; }
+.nav__links a, .nav__link { font-size: 0.92rem; }

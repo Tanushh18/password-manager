@@ -90,7 +90,7 @@ export default function VaultHealth({ insights, loading, filter, onFilter, onBre
       </div>
 
       <div className="health__body">
-        <span className="eyebrow">Vault health · live</span>
+        <span className="eyebrow">Vault health</span>
         <p className="health__tip">{tip}</p>
         {onBreachCheck ? (
           <div className="health__actions">
