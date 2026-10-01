@@ -8,7 +8,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#0D0303",
-    "description": "Stashr — a private vault for every password and project. Same account and server as the Stashr website.",
+    "description": "Stashr \u2014 a private vault for every password and project. Same account and server as the Stashr website.",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tanush.stashr.com"
@@ -81,14 +81,11 @@
         "https://password-manager-server-xxdr.onrender.com",
         "https://password-manager-server-8gvj.onrender.com"
       ],
-      "router": {},
-      "eas": {
-        "projectId": "37f23494-462b-4541-8ec2-82ff0616887a"
-      }
+      "router": {}
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
-    "owner": "tanushhhh18"
+    "owner": "tanushhhhh18"
   }
 }
