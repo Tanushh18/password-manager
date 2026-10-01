@@ -1,8 +1,11 @@
-import React from "react";
-import { Globe, Folder, Pencil } from "../Icons/Icons";
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
+import { Globe, Pencil, Arrow } from "../Icons/Icons";
 import { STATUS_LABEL } from "../../lib/projectItems";
+import { flattenProject } from "../../lib/projectTree";
+import ProjectTree from "./ProjectTree";
 
-const STATUS_BADGE = {
+export const STATUS_BADGE = {
   planning: "badge--muted",
   in_progress: "badge--warn",
   deployed: "badge--ok",
@@ -11,43 +14,45 @@ const STATUS_BADGE = {
   archived: "badge--muted",
 };
 
-export default function ProjectCard({ project, onEdit, style }) {
-  const dbSummary = (project.databases || []).map((d) => d.provider || d.type).filter(Boolean).join(", ");
+export default function ProjectCard({ project, style }) {
+  const [open, setOpen] = useState(false);
+  const fields = flattenProject(project).length;
+  const envCount = (project.envVars || []).length;
+  const dbCount = (project.databases || []).length;
 
   return (
-    <div className="card card--hover vault-card" style={style}>
+    <article className="card vault-card proj-card" style={style}>
       <div className="vault-card__head">
-        <span className="avatar" style={{ width: 44, height: 44, background: "linear-gradient(140deg, var(--accent), var(--heading-2))" }}>
-          <Globe size={20} />
+        <span className="avatar" style={{ width: 40, height: 40, background: "var(--accent)" }}>
+          <Globe size={18} />
         </span>
         <div className="vault-card__id">
-          <div className="vault-card__name">{project.name || "Untitled project"}</div>
-          <div className="vault-card__email">{project.hostingProvider || project.category || " "}</div>
+          <Link to={`/projects/${project.id}`} className="vault-card__name proj-card__name">{project.name || "Untitled project"}</Link>
+          <div className="vault-card__email">{[project.hostingProvider, project.category].filter(Boolean).join(" · ") || " "}</div>
         </div>
-        <button type="button" className="icon-btn icon-btn--quiet vault-card__edit" onClick={onEdit} aria-label="Edit project">
-          <Pencil size={17} />
-        </button>
+        <Link to={`/projects/${project.id}/edit`} className="icon-btn icon-btn--quiet" aria-label="Edit project">
+          <Pencil size={16} />
+        </Link>
       </div>
 
       <div className="vault-card__badges">
         <span className={`badge ${STATUS_BADGE[project.status] || "badge--muted"}`}>{STATUS_LABEL[project.status] || project.status}</span>
-        {project.hostingAccountEmail ? <span className="badge badge--cool">{project.hostingAccountEmail}</span> : null}
+        {dbCount ? <span className="badge badge--muted">{dbCount} database{dbCount === 1 ? "" : "s"}</span> : null}
+        {envCount ? <span className="badge badge--muted">{envCount} env var{envCount === 1 ? "" : "s"}</span> : null}
       </div>
 
-      {project.description ? <p className="field__note" style={{ margin: "0.6rem 0 0" }}>{project.description}</p> : null}
+      {project.description ? <p className="proj-card__desc">{project.description}</p> : null}
 
-      <div className="vault-card__body" style={{ marginTop: "0.6rem", display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-        {dbSummary ? (
-          <div className="vault-card__folder">
-            <Folder size={13} /> <span className="field__note" style={{ margin: 0 }}>{dbSummary}</span>
-          </div>
-        ) : null}
-        {project.liveUrl ? (
-          <a href={/^https?:\/\//i.test(project.liveUrl) ? project.liveUrl : `https://${project.liveUrl}`} target="_blank" rel="noreferrer" className="vault-card__email">
-            {project.liveUrl}
-          </a>
-        ) : null}
+      <div className="proj-card__foot">
+        <button type="button" className="proj-card__toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+          {open ? "Hide structure" : `Show structure · ${fields} field${fields === 1 ? "" : "s"}`}
+        </button>
+        <Link to={`/projects/${project.id}`} className="proj-card__open">
+          Open <Arrow size={13} />
+        </Link>
       </div>
-    </div>
+
+      {open ? <ProjectTree project={project} compact /> : null}
+    </article>
   );
 }

@@ -1,334 +1,156 @@
-import React, { useEffect, useRef, useState } from "react";
+import React from "react";
 import { Link } from "react-router-dom";
 import { useVault } from "../../state/vault";
-import Ambience from "../../Components/Ambience/Ambience";
 import ServiceStatus from "../../Components/ServiceStatus/ServiceStatus";
-import { useParallax } from "../../hooks/useReveal";
-import Reveal from "../../Components/Reveal/Reveal";
-import {
-  LockLine,
-  ShieldLine,
-  KeyLine,
-  Sparkle,
-  Arrow,
-  Flourish,
-} from "../../Components/Icons/Icons";
+import { LockLine, ShieldLine, KeyLine, Globe, Arrow, Copy } from "../../Components/Icons/Icons";
 import "./Home.css";
 
-const PROMISES = [
+const FEATURES = [
   {
-    icon: <LockLine size={26} />,
-    title: "Zero-knowledge encryption",
-    body: "Everything is encrypted on your device with AES-256-GCM. The key comes from your master password — we never see it.",
+    icon: <LockLine size={20} />,
+    title: "Encrypted storage",
+    body: "Every item is sealed with AES-256-GCM using a key unique to your account before it is written to the database.",
   },
   {
-    icon: <ShieldLine size={26} />,
-    title: "Live vault health",
-    body: "A real-time score flags weak, reused, old and breached passwords (via Have I Been Pwned) so you know what to fix.",
+    icon: <ShieldLine size={20} />,
+    title: "Vault health",
+    body: "Spots weak, reused, old and breached passwords (checked with Have I Been Pwned) so you know what to fix first.",
   },
   {
-    icon: <Sparkle size={26} />,
-    title: "2FA codes & two-factor login",
-    body: "Store authenticator secrets and see live codes next to each login — and protect your account with 2FA too.",
+    icon: <Globe size={20} />,
+    title: "Projects",
+    body: "Keep hosting, databases and env vars for every project in one tree. Search MONGO_URI and get the value.",
   },
   {
-    icon: <KeyLine size={26} />,
-    title: "Web + Android",
-    body: "Folders, favourites, notes, encrypted backups and import from any password manager — on the web and on Android.",
+    icon: <KeyLine size={20} />,
+    title: "Web, Android, Chrome",
+    body: "Same account everywhere. Android autofill and a Chrome extension fill logins for you.",
   },
 ];
 
 const STEPS = [
-  { n: "01", title: "Create your vault", body: "One account, one master password. That is all you have to remember." },
-  { n: "02", title: "Fill it up", body: "Add a password in seconds — or import a whole spreadsheet at once." },
-  { n: "03", title: "Watch your score climb", body: "Fix what the health check flags and see your vault glow green." },
+  { title: "Create an account", body: "One email and one password to remember." },
+  { title: "Add or import", body: "Type logins in, or import a CSV from Chrome, Bitwarden, 1Password or LastPass." },
+  { title: "Use it anywhere", body: "Open it on the web, on your phone, or let autofill do it." },
 ];
 
-const GLYPHS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*";
-
-/** Ciphertext that keeps re-rolling, so the hero card feels alive. */
-function Scramble({ length = 12, every = 90 }) {
-  const [text, setText] = useState(() => "•".repeat(length));
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
-    const id = setInterval(() => {
-      setText((prev) =>
-        prev
-          .split("")
-          .map((c) => (Math.random() < 0.35 ? GLYPHS[Math.floor(Math.random() * GLYPHS.length)] : c))
-          .join("")
-      );
-    }, every);
-    return () => clearInterval(id);
-  }, [every]);
-  return <span className="keepsake__mask keepsake__mask--live">{text}</span>;
-}
+const PREVIEW = [
+  { name: "GitHub", user: "you@example.com", color: "#3b6fd6" },
+  { name: "Netflix", user: "you@example.com", color: "#be185d" },
+  { name: "HDFC Bank", user: "98•••••210", color: "#7c5cc4" },
+];
 
 const ANDROID_URL =
   import.meta.env.VITE_ANDROID_URL || import.meta.env.REACT_APP_ANDROID_URL || "https://github.com/tanushh18/password-manager/releases/latest";
 
 function Home() {
   const { status, profile, items } = useVault();
-  const isAuthenticated = status === "ready" || status === "locked";
-  const name = profile?.name;
-  const passwords = status === "ready" ? items : profile ? { length: 0 } : [];
-  const [mounted, setMounted] = useState(false);
-  const visualRef = useRef(null);
-
-  useParallax(visualRef, 0.05);
-
-  useEffect(() => {
-    const id = window.setTimeout(() => setMounted(true), 60);
-    return () => window.clearTimeout(id);
-  }, []);
-
-  const firstName = (name || "").split(" ")[0];
-  const count = passwords?.length || 0;
+  const signedIn = status === "ready" || status === "locked";
+  const firstName = (profile?.name || "").split(" ")[0];
+  const count = status === "ready" ? items.length : 0;
 
   return (
-    <div className="home">
-      <Ambience />
-
-      {/* ══════════ HERO ══════════ */}
-      <section className="hero">
-        <div className="hero__inner shell">
-          <div className={`hero__copy ${mounted ? "anim-fade-up" : ""}`}>
-            <span className="hero__eyebrow pill">
-              <Sparkle size={13} />
-              {status === "ready" ? "Vault unlocked" : status === "locked" ? "Vault locked" : "Zero-knowledge · Live · Free"}
-            </span>
-
-            {isAuthenticated ? (
-              <h1 className="display hero__title">
-                Welcome back,
-                <br />
-                <em>{firstName || "friend"}.</em>
-              </h1>
-            ) : (
-              <h1 className="display hero__title">
-                Every password,
-                <br />
-                <em>glowing and safe.</em>
-              </h1>
-            )}
-
-            <p className="lede hero__lede">
-              {status === "locked" ? (
-                <>Your vault is locked on this device. Unlock it with your master password to continue.</>
-              ) : isAuthenticated ? (
-                <>
-                  Your vault is unlocked and waiting. {count > 0 ? (
-                    <>
-                      There {count === 1 ? "is" : "are"} <strong>{count}</strong> secret
-                      {count === 1 ? "" : "s"} resting safely inside.
-                    </>
-                  ) : (
-                    <>It is empty in there — add your first password and watch your health score light up.</>
-                  )}
-                </>
-              ) : (
-                <>
-                  Stashr is a beautiful, private vault for your passwords. AES-256 encryption,
-                  a live health score, a built-in generator — on the web and on Android.
-                </>
-              )}
-            </p>
-
-            <div className="hero__actions">
-              {isAuthenticated ? (
-                <>
-                  <Link to="/passwords" className="btn btn--primary btn--lg">
-                    <span className="btn__sheen" />
-                    Open my vault
-                    <Arrow size={16} />
-                  </Link>
-                  <Link to="/logout" className="btn btn--ghost btn--lg">
-                    Sign out
-                  </Link>
-                </>
-              ) : (
-                <>
-                  <Link to="/signup" className="btn btn--primary btn--lg">
-                    <span className="btn__sheen" />
-                    Create your vault
-                    <Arrow size={16} />
-                  </Link>
-                  <Link to="/signin" className="btn btn--ghost btn--lg">
-                    I already have one
-                  </Link>
-                </>
-              )}
-            </div>
-
-            <div className="hero__meta">
-              <ServiceStatus />
-              <span className="hero__meta-note">
-                <Sparkle size={13} /> free, forever
-              </span>
-            </div>
-          </div>
-
-          {/* ── Romantic visual ── */}
-          <div className="hero__visual" ref={visualRef} aria-hidden="true">
-            <div className="keepsake">
-              <span className="keepsake__halo" />
-              <span className="keepsake__ring keepsake__ring--outer" />
-              <span className="keepsake__ring keepsake__ring--inner" />
-
-              <div className="keepsake__card card">
-                <span className="card__ribbon" />
-                <div className="keepsake__seal anim-beat">
-                  <ShieldLine size={26} strokeWidth={1.4} />
-                </div>
-                <p className="keepsake__label eyebrow">Stashr vault</p>
-                <p className="keepsake__line script">
-                  {isAuthenticated ? `${firstName || "your"}'s vault` : "encrypting live"}
-                </p>
-
-                <div className="keepsake__rows">
-                  {["•••••••••••", "••••••••", "•••••••••••••"].map((mask, i) => (
-                    <div className="keepsake__row" key={i} style={{ animationDelay: `${0.5 + i * 0.18}s` }}>
-                      <span className="keepsake__chip">
-                        <KeyLine size={13} />
-                      </span>
-                      <Scramble length={mask.length} every={110 + i * 40} />
-                      <span className="keepsake__lock">
-                        <LockLine size={13} />
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="keepsake__foot">
-                  <span className="dot dot--live" />
-                  encrypted just now
-                </div>
+    <div className="hm">
+      <section className="hm-hero shell">
+        <div className="hm-hero__copy">
+          {signedIn ? (
+            <>
+              <h1 className="hm-hero__title">Welcome back{firstName ? `, ${firstName}` : ""}.</h1>
+              <p className="hm-hero__sub">
+                {status === "locked"
+                  ? "Your vault is locked on this device. Sign in again to open it."
+                  : count > 0
+                    ? `${count} item${count === 1 ? "" : "s"} in your vault.`
+                    : "Your vault is empty. Add your first login to get started."}
+              </p>
+              <div className="hm-hero__actions">
+                <Link to="/passwords" className="btn btn--primary btn--lg">Open vault <Arrow size={16} /></Link>
+                <Link to="/projects" className="btn btn--ghost btn--lg">Projects</Link>
               </div>
+            </>
+          ) : (
+            <>
+              <h1 className="hm-hero__title">A simple, private home for your passwords.</h1>
+              <p className="hm-hero__sub">
+                Stashr keeps your logins, 2FA codes and project secrets encrypted, and fills them in for you on the web and on Android.
+              </p>
+              <div className="hm-hero__actions">
+                <Link to="/signup" className="btn btn--primary btn--lg">Create free account <Arrow size={16} /></Link>
+                <Link to="/signin" className="btn btn--ghost btn--lg">Sign in</Link>
+              </div>
+            </>
+          )}
+          <div className="hm-hero__meta">
+            <ServiceStatus />
+            <span>Free · No ads</span>
+          </div>
+        </div>
 
-              <span className="keepsake__orbit keepsake__orbit--a">
-                <LockLine size={16} />
+        <div className="hm-preview card" aria-hidden="true">
+          <div className="hm-preview__bar">
+            <span className="hm-preview__search">Search…</span>
+          </div>
+          {PREVIEW.map((row) => (
+            <div className="hm-preview__row" key={row.name}>
+              <span className="hm-preview__avatar" style={{ background: row.color }}>{row.name[0]}</span>
+              <span className="hm-preview__text">
+                <strong>{row.name}</strong>
+                <span>{row.user}</span>
               </span>
-              <span className="keepsake__orbit keepsake__orbit--b">
-                <Sparkle size={14} />
-              </span>
-              <span className="keepsake__orbit keepsake__orbit--c">
-                <KeyLine size={16} />
-              </span>
+              <span className="hm-preview__copy"><Copy size={14} /></span>
             </div>
+          ))}
+          <div className="hm-preview__foot">
+            <ShieldLine size={13} /> Encrypted with AES-256-GCM
           </div>
         </div>
       </section>
 
-      {/* ══════════ PROMISES ══════════ */}
-      <section className="section shell">
-        <Reveal as="header" className="section__head">
-          <span className="eyebrow">Why Stashr</span>
-          <h2 className="section__title">
-            Security that <em className="serif-em">feels alive</em>
-          </h2>
-          <p className="lede section__lede">
-            Strong encryption, live insights and a design you will actually enjoy opening.
-          </p>
-        </Reveal>
-
-        <div className="promises">
-          {PROMISES.map((p, i) => (
-            <Reveal as="article" className="promise card card--hover" key={p.title} delay={i * 0.09}>
-              <span className="promise__icon">{p.icon}</span>
-              <h3 className="promise__title">{p.title}</h3>
-              <p className="promise__body">{p.body}</p>
-            </Reveal>
+      <section className="hm-section shell">
+        <h2 className="hm-section__title">What you get</h2>
+        <div className="hm-features">
+          {FEATURES.map((f) => (
+            <article className="hm-feature card" key={f.title}>
+              <span className="hm-feature__icon">{f.icon}</span>
+              <h3>{f.title}</h3>
+              <p>{f.body}</p>
+            </article>
           ))}
         </div>
       </section>
 
-      {/* ══════════ STEPS ══════════ */}
-      <section className="section shell">
-        <Reveal as="header" className="section__head">
-          <span className="eyebrow">How it works</span>
-          <h2 className="section__title">
-            Three steps to a <em className="serif-em">glowing vault</em>
-          </h2>
-        </Reveal>
-
-        <ol className="steps">
+      <section className="hm-section shell">
+        <h2 className="hm-section__title">How it works</h2>
+        <ol className="hm-steps">
           {STEPS.map((s, i) => (
-            <Reveal as="li" className="step" key={s.n} delay={i * 0.1}>
-              <span className="step__n">{s.n}</span>
-              <h3 className="step__title">{s.title}</h3>
-              <p className="step__body">{s.body}</p>
-            </Reveal>
+            <li className="hm-step" key={s.title}>
+              <span className="hm-step__n">{i + 1}</span>
+              <div>
+                <h3>{s.title}</h3>
+                <p>{s.body}</p>
+              </div>
+            </li>
           ))}
         </ol>
       </section>
 
-      {/* ══════════ CLOSING ══════════ */}
-      <section className="section shell">
-        <Reveal className="closing card" variant="reveal--scale">
-          <span className="card__ribbon" />
-          <div className="ornament closing__ornament">
-            <Flourish width={150} />
+      <section className="hm-section shell">
+        <div className="hm-android card">
+          <div>
+            <h2 className="hm-section__title" style={{ marginBottom: "0.35rem" }}>Stashr for Android</h2>
+            <p className="hm-android__body">Fingerprint unlock, one-tap copy and autofill in other apps. Same account as the website.</p>
           </div>
-          <p className="closing__quote">
-            Your whole digital life,
-            <br />
-            <em>one tap away — on every screen.</em>
-          </p>
-          <div className="closing__cta">
-            <Link to={isAuthenticated ? "/passwords" : "/signup"} className="btn btn--primary btn--lg">
-              <span className="btn__sheen" />
-              {isAuthenticated ? "Open my vault" : "Begin your vault"}
-              <Arrow size={16} />
-            </Link>
-          </div>
-          <p className="closing__sign script">sealed with AES-256</p>
-        </Reveal>
+          <a className="btn btn--primary" href={ANDROID_URL} target="_blank" rel="noopener noreferrer">
+            Get the app <Arrow size={15} />
+          </a>
+        </div>
       </section>
 
-      {/* ══════════ ANDROID ══════════ */}
-      <section className="section shell">
-        <Reveal className="android card card--hover" variant="reveal--scale">
-          <span className="card__ribbon" />
-          <div className="android__copy">
-            <span className="eyebrow">New · Android app</span>
-            <h2 className="section__title">
-              Your vault, <em className="serif-em">in your pocket</em>
-            </h2>
-            <p className="lede">
-              Same account, same server, same encryption. Fingerprint unlock, one-tap copy and the live
-              health score — built for your phone.
-            </p>
-            <a className="btn btn--primary btn--lg" href={ANDROID_URL} target="_blank" rel="noopener noreferrer">
-              <span className="btn__sheen" />
-              Get the Android app
-              <Arrow size={16} />
-            </a>
-          </div>
-          <div className="android__phone" aria-hidden="true">
-            <div className="android__screen">
-              <span className="android__notch" />
-              <div className="android__ring">
-                <strong>92</strong>
-                <span>Excellent</span>
-              </div>
-              {["Gmail", "GitHub", "Bank"].map((n, i) => (
-                <div className="android__row" key={n} style={{ animationDelay: `${0.2 + i * 0.15}s` }}>
-                  <span className="android__avatar">{n[0]}</span>
-                  <span className="android__name">{n}</span>
-                  <span className="android__dot" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </Reveal>
-      </section>
-
-      <footer className="foot">
-        <span className="foot__mark">
-          <ShieldLine size={15} />
-          Stashr
+      <footer className="hm-foot shell">
+        <span className="hm-foot__mark"><ShieldLine size={15} /> Stashr</span>
+        <span>
+          <Link to="/privacy">Privacy</Link> · Web, Android &amp; Chrome
         </span>
-        <span className="foot__note">Encrypted with AES-256 · Web &amp; Android</span>
       </footer>
     </div>
   );

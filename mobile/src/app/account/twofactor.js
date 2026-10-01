@@ -22,7 +22,7 @@ function RecoveryCodes({ codes, onDone }) {
           </Text>
         ))}
       </View>
-      <GhostButton title="Share / save" icon="download" small onPress={() => Share.share({ message: `Aurelia recovery codes\n\n${text}` })} />
+      <GhostButton title="Share / save" icon="download" small onPress={() => Share.share({ message: `Stashr recovery codes\n\n${text}` })} />
       <GradientButton title="I've saved them" icon="check" onPress={onDone} />
     </Card>
   );
@@ -124,7 +124,7 @@ export default function TwoFactor() {
       ) : (
         <FadeIn>
           <Card glow style={{ gap: 14 }}>
-            <Text style={{ color: theme.heading, fontFamily: theme.font.bodySemi }}>1. Add Aurelia to your authenticator</Text>
+            <Text style={{ color: theme.heading, fontFamily: theme.font.bodySemi }}>1. Add Stashr to your authenticator</Text>
             <GradientButton
               title="Open authenticator app"
               icon="phone"

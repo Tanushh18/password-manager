@@ -30,7 +30,7 @@ on:
       testerGroups:
         description: "Firebase tester group alias(es), comma separated"
         type: string
-        default: "testers"
+        default: "tester-01"
 
 jobs:
   build:

@@ -158,7 +158,7 @@ export default function Login() {
               <View style={styles.note}>
                 <Icon name="lock" size={13} color={theme.textFaint} />
                 <Text style={{ color: theme.textFaint, fontSize: 12, fontFamily: theme.font.body }}>
-                  Same account as the Aurelia website
+                  Same account as the Stashr website
                 </Text>
               </View>
             </FadeIn>
@@ -171,7 +171,7 @@ export default function Login() {
 
 const styles = StyleSheet.create({
   scroll: { padding: 22, paddingBottom: 40, gap: 18 },
-  title: { fontSize: 34, letterSpacing: -1, marginTop: 8 },
+  title: { fontSize: 26, letterSpacing: -0.4, marginTop: 8 },
   sub: { fontSize: 15, lineHeight: 22, marginTop: 8 },
   stage: { textAlign: "center", marginTop: 14, fontSize: 13 },
   note: { flexDirection: "row", alignItems: "center", gap: 6 },

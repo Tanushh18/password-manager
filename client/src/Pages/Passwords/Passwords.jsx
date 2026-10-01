@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
+import useShortcuts from "../../hooks/useShortcuts";
 import Ambience from "../../Components/Ambience/Ambience";
 import ServiceStatus from "../../Components/ServiceStatus/ServiceStatus";
 import Reveal from "../../Components/Reveal/Reveal";
@@ -8,7 +9,7 @@ import VaultHealth from "../../Components/VaultHealth/VaultHealth";
 import ItemCard from "../../Components/Item/ItemCard";
 import ItemEditor from "../../Components/Item/ItemEditor";
 import ImportModal from "../../Components/Item/ImportModal";
-import { ShieldLine, KeyLine, Plus, Search, Upload, Arrow, Star, Folder, Grid, LockLine, Gear, Alert } from "../../Components/Icons/Icons";
+import { KeyLine, Plus, Search, Upload, Arrow, Star, Folder, Grid, LockLine, Gear, Alert } from "../../Components/Icons/Icons";
 import { useVault } from "../../state/vault";
 import { domainOf } from "../../lib/items";
 import "./Passwords.css";
@@ -24,6 +25,7 @@ export default function Passwords() {
   const [folder, setFolder] = useState("__all"); // __all | __fav | <folder>
   const [sort, setSort] = useState("recent");
   const [editing, setEditing] = useState(null); // null | "new" | item
+  const searchRef = useShortcuts(() => setEditing("new"));
   const [importing, setImporting] = useState(false);
   const [breachChecked, setBreachChecked] = useState(false);
 
@@ -83,24 +85,19 @@ export default function Passwords() {
     }
   };
 
-  const firstName = (profile?.name || "").split(" ")[0];
 
   return (
     <div className="vault page">
       <Ambience petals={false} />
 
       <div className="shell">
-        <header className="vault__head anim-fade-up">
-          <span className="pill vault__pill">
-            <ShieldLine size={13} />
-            End-to-end encrypted
-          </span>
-          <h1 className="vault__title">
-            Kept for you, <em className="serif-em">{firstName || "friend"}</em>
-          </h1>
-          <p className="vault__count">
-            {items.length === 0 ? "Nothing inside yet — let's change that." : `${items.length} item${items.length === 1 ? "" : "s"}, readable only on your devices`}
-          </p>
+        <header className="vault__head">
+          <div>
+            <h1 className="vault__title">Vault</h1>
+            <p className="vault__count">
+              {items.length === 0 ? "Nothing saved yet." : `${items.length} item${items.length === 1 ? "" : "s"} · end-to-end encrypted`}
+            </p>
+          </div>
           <div className="vault__status">
             <ServiceStatus />
             <button type="button" className="btn btn--quiet btn--sm" onClick={lock} title="Lock now">
@@ -136,7 +133,8 @@ export default function Passwords() {
             <input
               className="input vault__search-input"
               type="search"
-              placeholder="Search names, usernames, websites, notes…"
+              ref={searchRef}
+              placeholder="Search names, usernames, websites, notes…  ( / )"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               aria-label="Search your vault"
@@ -150,7 +148,7 @@ export default function Passwords() {
             </select>
             <button className="btn btn--primary" onClick={() => setEditing("new")}>
               <span className="btn__sheen" />
-              <Plus size={15} /> New item
+              <Plus size={15} /> New item <kbd className="kbd">N</kbd>
             </button>
             <button className="btn btn--ghost" onClick={() => setImporting(true)}>
               <Upload size={15} /> Import

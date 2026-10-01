@@ -13,7 +13,7 @@
 .settings__head p { font-size: 0.86rem; color: var(--text-muted); margin-top: 0.15rem; }
 .settings__icon {
   width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; flex-shrink: 0;
-  color: #fff; background: var(--grad-brand); box-shadow: 0 8px 20px rgba(var(--accent-rgb), 0.35);
+  color: #fff; background: var(--grad-brand); box-shadow: var(--shadow-sm);
 }
 .settings__section--danger .settings__icon { background: var(--danger); box-shadow: none; }
 .settings__row { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
@@ -55,3 +55,28 @@
   .twofa__scan { flex-direction: column; text-align: center; }
   .settings__line { flex-direction: column; align-items: flex-start; }
 }
+
+/* ════════ Grouped list layout ════════ */
+.settings__top { text-align: left; margin-bottom: 1.5rem; }
+.sgroup { margin-bottom: 1.5rem; }
+.sgroup__title { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 0.45rem 0.25rem; }
+.sgroup__title.is-danger { color: var(--danger); }
+.sgroup__card { padding: 0 !important; overflow: hidden; }
+.sgroup__card--danger { border-color: rgba(var(--danger-rgb), 0.35) !important; }
+.srow { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.85rem 1.1rem; border-top: 1px solid var(--line); }
+.srow:first-child { border-top: 0; }
+.srow--block { flex-direction: column; align-items: stretch; }
+.srow__text { display: flex; flex-direction: column; min-width: 0; }
+.srow__label { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 500; color: var(--heading); }
+.srow__label svg { color: var(--text-muted); }
+.srow__hint { font-size: 0.82rem; color: var(--text-muted); margin-top: 0.1rem; }
+.srow__control { flex-shrink: 0; display: flex; align-items: center; gap: 0.5rem; }
+.srow--block .srow__control { flex-shrink: 1; display: block; }
+.srow .settings__select { border-radius: var(--r-md); }
+.srow .switch__label:empty { display: none; }
+@media (max-width: 560px) {
+  .srow { flex-direction: column; align-items: stretch; }
+  .srow .settings__inline input { min-width: 0; }
+}
+.settings__top .proj-back { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.86rem; color: var(--text-muted); margin-bottom: 1rem; }
+.settings__top .proj-back:hover { color: var(--accent); }

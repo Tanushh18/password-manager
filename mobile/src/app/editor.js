@@ -120,8 +120,8 @@ export default function Editor() {
             <Field label="Password" icon="lock" secure value={form.password} onChangeText={set("password")} placeholder="The secret itself" autoCapitalize="none" />
             {form.password ? <StrengthMeter strength={strength} /> : null}
             <View style={styles.row}>
-              <Chip label="✦ Strong random" onPress={() => set("password")(generatePassword({ length: 20 }))} />
-              <Chip label="✦ Passphrase" onPress={() => set("password")(generatePassphrase({ words: 4 }))} />
+              <Chip label="Strong random" onPress={() => set("password")(generatePassword({ length: 20 }))} />
+              <Chip label="Passphrase" onPress={() => set("password")(generatePassphrase({ words: 4 }))} />
             </View>
 
             <Field
@@ -165,6 +165,6 @@ export default function Editor() {
 const styles = StyleSheet.create({
   top: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
-  label: { fontSize: 11, letterSpacing: 1.6, marginBottom: 8 },
+  label: { fontSize: 12, letterSpacing: 0.4, marginBottom: 8 },
   notes: { minHeight: 96, borderWidth: 1.2, borderRadius: 16, padding: 14, fontSize: 15, textAlignVertical: "top" },
 });

@@ -58,7 +58,6 @@ function Navbar() {
             </span>
             <span className="nav__wordmark">
               <span className="nav__name">Stashr</span>
-              <span className="nav__tag">stash everything</span>
             </span>
           </Link>
 

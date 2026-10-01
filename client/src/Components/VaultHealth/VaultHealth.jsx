@@ -68,9 +68,9 @@ export default function VaultHealth({ insights, loading, filter, onFilter, onBre
         <svg viewBox="0 0 128 128" aria-hidden="true">
           <defs>
             <linearGradient id="health-grad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="var(--accent-3)" />
+              <stop offset="0%" stopColor="var(--accent)" />
               <stop offset="50%" stopColor="var(--accent)" />
-              <stop offset="100%" stopColor="var(--accent-2)" />
+              <stop offset="100%" stopColor="var(--accent)" />
             </linearGradient>
           </defs>
           <circle className="health__track" cx="64" cy="64" r={R} />
@@ -90,7 +90,7 @@ export default function VaultHealth({ insights, loading, filter, onFilter, onBre
       </div>
 
       <div className="health__body">
-        <span className="eyebrow">Vault health · live</span>
+        <span className="eyebrow">Vault health</span>
         <p className="health__tip">{tip}</p>
         {onBreachCheck ? (
           <div className="health__actions">

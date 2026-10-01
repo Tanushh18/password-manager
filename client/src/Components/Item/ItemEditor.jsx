@@ -67,7 +67,7 @@ export default function ItemEditor({ open, item, folders, icons, onClose, onSave
           <ItemAvatar name={form.name || "?"} url={form.url} icons={icons} size={52} />
           <div>
             <h2 className="sheet__title">{item ? "Edit item" : "New item"}</h2>
-            <p className="sheet__sub">Encrypted on this device with AES-256-GCM before it's saved.</p>
+            <p className="sheet__sub">Encrypted with AES-256-GCM before it's saved.</p>
           </div>
           <button type="button" className={`icon-btn icon-btn--quiet editor__fav ${form.favorite ? "is-fav" : ""}`} onClick={() => setForm((f) => ({ ...f, favorite: !f.favorite }))} aria-label="Favourite">
             {form.favorite ? <StarFill size={18} /> : <Star size={18} />}

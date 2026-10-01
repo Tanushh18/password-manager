@@ -31,7 +31,7 @@
   display: block;
   height: 100%;
   border-radius: var(--r-pill);
-  background: linear-gradient(90deg, var(--tint), var(--accent), var(--heading-2));
+  background: var(--accent);
   animation: bar-grow 7s var(--ease) forwards;
 }
 
@@ -141,7 +141,7 @@
   justify-content: center;
   text-align: center;
   overflow: hidden;
-  background: linear-gradient(155deg, rgba(var(--tint-rgb), 0.75) 0%, rgba(var(--tint-rgb), 0.9) 45%, rgba(var(--glass-rgb), 0.75) 100%);
+  background: var(--surface);
   border-left: 1px solid var(--line);
 }
 
@@ -152,9 +152,8 @@
   border-radius: 50%;
   top: -120px;
   right: -140px;
-  background: radial-gradient(circle, rgba(var(--accent-rgb), 0.28) 0%, transparent 68%);
+  background: transparent;
   filter: blur(30px);
-  animation: drift-a 22s var(--ease-soft) infinite;
 }
 
 .auth__aside-ring {
@@ -165,7 +164,6 @@
   border: 1px dashed rgba(var(--accent-rgb), 0.28);
   bottom: -90px;
   left: -80px;
-  animation: spin-slow 40s linear infinite;
 }
 
 .auth__seal {
@@ -176,8 +174,8 @@
   place-items: center;
   margin: 0 auto 1.5rem;
   color: #fff;
-  background: linear-gradient(140deg, var(--accent), var(--heading-2));
-  box-shadow: 0 14px 30px rgba(var(--accent-rgb), 0.4);
+  background: var(--accent);
+  box-shadow: var(--shadow-sm);
   position: relative;
   z-index: 1;
 }

@@ -168,7 +168,7 @@ function Tile({ n, label, color }) {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 32, letterSpacing: -0.8, marginTop: 6, marginBottom: 4 },
+  title: { fontSize: 26, letterSpacing: -0.4, marginTop: 6, marginBottom: 4 },
   grid: { flexDirection: "row", gap: 8, marginTop: 22, alignSelf: "stretch" },
   tile: { flex: 1, alignItems: "center", paddingVertical: 12, borderRadius: 16, borderWidth: 1 },
   sectionHead: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },

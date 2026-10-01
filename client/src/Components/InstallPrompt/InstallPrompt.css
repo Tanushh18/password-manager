@@ -31,8 +31,8 @@
   place-items: center;
   flex-shrink: 0;
   color: #fff;
-  background: linear-gradient(140deg, var(--accent), var(--heading-2));
-  box-shadow: 0 6px 16px rgba(var(--accent-rgb), 0.34);
+  background: var(--accent);
+  box-shadow: var(--shadow-sm);
 }
 
 .install__copy { flex: 1; min-width: 0; }

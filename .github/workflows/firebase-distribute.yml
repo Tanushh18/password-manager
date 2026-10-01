@@ -15,7 +15,11 @@ on:
       testerGroups:
         description: "Firebase tester group alias(es), comma separated"
         type: string
-        default: "testers"
+        default: "tester-01"
+      testers:
+        description: "Individual tester emails, comma separated (optional)"
+        type: string
+        default: ""
 
 jobs:
   distribute:
@@ -47,5 +51,6 @@ jobs:
           appId: ${{ secrets.FIREBASE_APP_ID }}
           serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON || secrets.FIREBASE_SERVICE_ACCOUNT }}
           groups: ${{ inputs.testerGroups }}
+          testers: ${{ inputs.testers }}
           file: apk/app-preview.apk
           releaseNotes: APK from build run ${{ inputs.runId }}

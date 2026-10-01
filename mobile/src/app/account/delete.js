@@ -41,7 +41,7 @@ export default function DeleteAccount() {
           <GradientButton
             title="Delete forever"
             icon="trash"
-            colors={[theme.danger, "#9F1239"]}
+            colors={[theme.danger, theme.danger]}
             loading={busy}
             disabled={form.confirm !== "DELETE" || !form.password}
             onPress={submit}
