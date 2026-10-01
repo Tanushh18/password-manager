@@ -9,6 +9,8 @@ import Login from "./Pages/Login/Login";
 import Signup from "./Pages/SignUp/Signup";
 import Vault from "./Pages/Passwords/Passwords";
 import Projects from "./Pages/Projects/Projects";
+import ProjectDetail from "./Pages/Projects/ProjectDetail";
+import ProjectForm from "./Pages/Projects/ProjectForm";
 import Settings from "./Pages/Settings/Settings";
 import Privacy from "./Pages/Privacy/Privacy";
 import Logout from "./Pages/Logout/Logout";
@@ -69,6 +71,9 @@ export default function App() {
           <Route path="/signup" element={<GuestOnly><Signup /></GuestOnly>} />
           <Route path="/passwords" element={<RequireVault><Vault /></RequireVault>} />
           <Route path="/projects" element={<RequireVault><Projects /></RequireVault>} />
+          <Route path="/projects/new" element={<RequireVault><ProjectForm /></RequireVault>} />
+          <Route path="/projects/:id" element={<RequireVault><ProjectDetail /></RequireVault>} />
+          <Route path="/projects/:id/edit" element={<RequireVault><ProjectForm /></RequireVault>} />
           <Route path="/settings" element={<RequireVault><Settings /></RequireVault>} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/logout" element={<Logout />} />

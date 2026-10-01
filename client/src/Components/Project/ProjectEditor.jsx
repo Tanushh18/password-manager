@@ -21,8 +21,11 @@ function RepeatRow({ children, onRemove }) {
   );
 }
 
-/** Create or edit a project. `project` null = new. */
-export default function ProjectEditor({ open, project, onClose, onSave, onDelete }) {
+/**
+ * Create or edit a project. `project` null = new.
+ * `asPage` renders the form inline (its own page) instead of in a modal.
+ */
+export default function ProjectEditor({ open, project, onClose, onSave, onDelete, asPage = false }) {
   const [form, setForm] = useState(emptyProject());
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -78,10 +81,8 @@ export default function ProjectEditor({ open, project, onClose, onSave, onDelete
     }
   };
 
-  return (
-    <Modal open={open} onClose={onClose} center classNames={{ modal: "sheet sheet--wide proj-sheet" }}>
-      <form className="sheet__body editor" onSubmit={save}>
-        <span className="card__ribbon" />
+  const body = (
+      <form className={`sheet__body editor ${asPage ? "proj-form card" : ""}`} onSubmit={save}>
         <div className="editor__head">
           <span className="avatar" style={{ width: 52, height: 52, background: "var(--accent)" }}>
             <Globe size={22} />
@@ -275,6 +276,12 @@ export default function ProjectEditor({ open, project, onClose, onSave, onDelete
           </div>
         </div>
       </form>
+  );
+
+  if (asPage) return body;
+  return (
+    <Modal open={open} onClose={onClose} center classNames={{ modal: "sheet sheet--wide proj-sheet" }}>
+      {body}
     </Modal>
   );
 }

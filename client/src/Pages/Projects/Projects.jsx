@@ -1,72 +1,52 @@
 import React, { useMemo, useState } from "react";
-import { toast } from "react-toastify";
-import Ambience from "../../Components/Ambience/Ambience";
+import { Link } from "react-router-dom";
 import Reveal from "../../Components/Reveal/Reveal";
 import ProjectCard from "../../Components/Project/ProjectCard";
-import ProjectEditor from "../../Components/Project/ProjectEditor";
 import ProjectImportModal from "../../Components/Project/ProjectImportModal";
-import { ShieldLine, Globe, Plus, Search, Grid, Alert, Upload } from "../../Components/Icons/Icons";
+import { TreeLeaf } from "../../Components/Project/ProjectTree";
+import { Globe, Plus, Search, Grid, Alert, Upload } from "../../Components/Icons/Icons";
 import { useVault } from "../../state/vault";
 import { STATUS_LABEL } from "../../lib/projectItems";
+import { searchProjects } from "../../lib/projectTree";
 import "../Passwords/Passwords.css";
+import "../../Components/Project/ProjectTree.css";
 import "./Projects.css";
 
 const STATUSES = ["planning", "in_progress", "deployed", "broken", "paused", "archived"];
 
 export default function Projects() {
-  const { profile, projects, projectsBroken, addProject, updateProject, deleteProject, importProjects } = useVault();
+  const { projects, projectsBroken, importProjects } = useVault();
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("__all");
-  const [editing, setEditing] = useState(null); // null | "new" | project
+  const [view, setView] = useState("all"); // all | values | projects (while searching)
   const [importing, setImporting] = useState(false);
 
-  const visible = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return projects
-      .filter((p) => status === "__all" || p.status === status)
-      .filter((p) => {
-        if (!term) return true;
-        const haystack = [
-          p.name, p.description, p.tags, p.category, p.techStack,
-          p.hostingProvider, p.hostingAccountEmail, p.liveUrl,
-          ...(p.databases || []).map((d) => `${d.provider} ${d.type} ${d.accountEmail}`),
-        ].join(" ").toLowerCase();
-        return haystack.includes(term);
-      })
-      .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
-  }, [projects, search, status]);
+  const byStatus = useMemo(() => projects.filter((p) => status === "__all" || p.status === status), [projects, status]);
 
-  const saveProject = async (form) => {
-    if (editing === "new") {
-      await addProject(form);
-      toast.success("Encrypted and saved ✨");
-    } else {
-      await updateProject(editing.id, form);
-      toast.success("Updated and re-encrypted.");
-    }
-  };
+  const results = useMemo(() => {
+    const r = searchProjects(byStatus, search);
+    const recent = (a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
+    return { projects: [...r.projects].sort(recent), values: r.values };
+  }, [byStatus, search]);
 
-  const firstName = (profile?.name || "").split(" ")[0];
+  const searching = search.trim().length > 0;
+  const showValues = searching && view !== "projects" && results.values.length > 0;
+  const showProjects = !searching || view !== "values";
+  const visible = results.projects;
 
   return (
     <div className="vault page">
-      <Ambience petals={false} />
-
       <div className="shell">
-        <header className="vault__head anim-fade-up">
-          <span className="pill vault__pill">
-            <ShieldLine size={13} />
-            End-to-end encrypted
-          </span>
-          <h1 className="vault__title">
-            Every project, <em className="serif-em">{firstName || "friend"}</em>
-          </h1>
-          <p className="vault__count">
-            {projects.length === 0
-              ? "No projects yet — add the first one."
-              : `${projects.length} project${projects.length === 1 ? "" : "s"}, readable only on your devices`}
-          </p>
+        <header className="vault__head">
+          <div>
+            <h1 className="vault__title">Projects</h1>
+            <p className="vault__count">
+              {projects.length === 0
+                ? "No projects yet."
+                : `${projects.length} project${projects.length === 1 ? "" : "s"} · end-to-end encrypted`}
+            </p>
+          </div>
         </header>
 
         {projectsBroken ? (
@@ -75,30 +55,43 @@ export default function Projects() {
           </div>
         ) : null}
 
-        <div className="vault__tools anim-fade-up d-2">
+        <div className="vault__tools">
           <div className="vault__search field__wrap">
             <span className="vault__search-icon"><Search size={17} /></span>
             <input
               className="input vault__search-input"
               type="search"
-              placeholder="Search name, hosting, database, tags…"
+              placeholder="Search projects, variables (e.g. MONGO_URI), values…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              aria-label="Search your projects"
+              aria-label="Search your projects and their variables"
             />
           </div>
           <div className="vault__actions">
-            <button className="btn btn--primary" onClick={() => setEditing("new")}>
-              <span className="btn__sheen" />
+            <Link className="btn btn--primary" to="/projects/new">
               <Plus size={15} /> New project
-            </button>
+            </Link>
             <button className="btn btn--ghost" onClick={() => setImporting(true)}>
               <Upload size={15} /> Import
             </button>
           </div>
         </div>
 
-        <nav className="folders anim-fade-up d-3" aria-label="Status filters">
+        <nav className="folders" aria-label="Filters">
+          {searching ? (
+            <>
+              <button type="button" className={`folder-chip ${view === "all" ? "is-active" : ""}`} onClick={() => setView("all")}>
+                All results
+              </button>
+              <button type="button" className={`folder-chip ${view === "values" ? "is-active" : ""}`} onClick={() => setView("values")}>
+                Values <span>{results.values.length}</span>
+              </button>
+              <button type="button" className={`folder-chip ${view === "projects" ? "is-active" : ""}`} onClick={() => setView("projects")}>
+                Projects <span>{results.projects.length}</span>
+              </button>
+              <span className="folders__sep" />
+            </>
+          ) : null}
           <button type="button" className={`folder-chip ${status === "__all" ? "is-active" : ""}`} onClick={() => setStatus("__all")}>
             <Grid size={13} /> All <span>{projects.length}</span>
           </button>
@@ -113,53 +106,51 @@ export default function Projects() {
           })}
         </nav>
 
+        {showValues ? (
+          <section className="card proj-values" aria-label="Matching values">
+            <h2 className="proj-values__title">Values matching “{search.trim()}”</h2>
+            {results.values.slice(0, 50).map((hit, i) => (
+              <div key={`${hit.project.id}-${i}`} className="proj-values__row">
+                <Link to={`/projects/${hit.project.id}`} className="proj-values__project">{hit.project.name}</Link>
+                <TreeLeaf node={hit.field} showPath={hit.field.path.join(" › ")} reveal />
+              </div>
+            ))}
+            {results.values.length > 50 ? <p className="field__note">Showing the first 50. Type more to narrow it down.</p> : null}
+          </section>
+        ) : null}
+
         {projects.length === 0 ? (
           <Reveal className="empty card" variant="reveal--scale">
-            <span className="card__ribbon" />
             <span className="empty__icon"><Globe size={28} /></span>
             <h2 className="empty__title">Nothing tracked yet</h2>
-            <p className="empty__body">Add a project — its hosting, database, accounts and env vars, all encrypted the same way as your passwords.</p>
+            <p className="empty__body">Add a project with its hosting, database, accounts and env vars, all encrypted the same way as your passwords.</p>
             <div className="empty__actions">
-              <button className="btn btn--primary btn--lg" onClick={() => setEditing("new")}>
-                <span className="btn__sheen" /> Add your first project
-              </button>
+              <Link className="btn btn--primary btn--lg" to="/projects/new">Add your first project</Link>
               <button className="btn btn--ghost btn--lg" onClick={() => setImporting(true)}>
                 <Upload size={15} /> Import from Excel
               </button>
             </div>
           </Reveal>
-        ) : visible.length === 0 ? (
+        ) : searching && !visible.length && !results.values.length ? (
           <Reveal className="empty empty--slim card">
             <span className="empty__icon"><Search size={24} /></span>
-            <h2 className="empty__title">{search ? <>Nothing matches “{search}”</> : "Nothing here"}</h2>
+            <h2 className="empty__title">Nothing matches “{search}”</h2>
             <button className="btn btn--ghost" onClick={() => { setSearch(""); setStatus("__all"); }}>
               Show everything
             </button>
           </Reveal>
-        ) : (
-          <div className="vault__grid">
-            {visible.map((project, i) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                onEdit={() => setEditing(project)}
-                style={{ animationDelay: `${Math.min(i, 10) * 0.04}s` }}
-              />
-            ))}
-          </div>
-        )}
+        ) : showProjects && visible.length ? (
+          <>
+            {searching ? <h2 className="proj-values__title proj-list__title">Projects</h2> : null}
+            <div className="vault__grid">
+              {visible.map((project) => (
+                <ProjectCard key={project.id} project={project} />
+              ))}
+            </div>
+          </>
+        ) : null}
       </div>
 
-      <ProjectEditor
-        open={Boolean(editing)}
-        project={editing && editing !== "new" ? editing : null}
-        onClose={() => setEditing(null)}
-        onSave={saveProject}
-        onDelete={async () => {
-          await deleteProject(editing.id);
-          toast.success("Deleted.");
-        }}
-      />
       <ProjectImportModal open={importing} onClose={() => setImporting(false)} onImport={importProjects} />
     </div>
   );
