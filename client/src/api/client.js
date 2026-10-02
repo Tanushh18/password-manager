@@ -2,8 +2,9 @@ import axios from "axios";
 
 // API servers, in order of preference. If one is down the client falls over
 // to the next. Override with REACT_APP_API_URLS (comma separated) at build time.
-// password-manager-server-xxdr was removed: that Render service is suspended.
+// xxdr is the fixed address apps use to find the current server list (see "Server registry" below).
 const DEFAULT_SERVERS = [
+    "https://password-manager-server-xxdr.onrender.com",
     "https://password-manager-server-8gvj.onrender.com"
 ];
 
@@ -12,6 +13,27 @@ const SERVERS = (import.meta.env.VITE_API_URLS || import.meta.env.REACT_APP_API_
     .map((u) => u.trim().replace(/\/+$/, ""))
     .filter(Boolean);
 if (SERVERS.length === 0) SERVERS.push(...DEFAULT_SERVERS);
+
+// Servers come from the Stashr registry (edited on the Servers page), so changing a URL never needs a
+// redeploy. The build-time list above is only the bootstrap: it is asked for the registry on start,
+// the last answer is cached on this device, and the bootstrap stays at the end as a last resort.
+const BOOTSTRAP = [...SERVERS];
+const REGISTRY_CACHE_KEY = "pm_registry_stashr";
+const REGISTRY_APP = "stashr";
+
+const mergeServers = (fresh) =>
+{
+    const list = [...fresh, ...BOOTSTRAP].filter((u, i, a) => u && a.indexOf(u) === i);
+    const current = SERVERS[active];
+    SERVERS.splice(0, SERVERS.length, ...list);
+    const i = SERVERS.indexOf(current);
+    active = i >= 0 ? i : 0;
+};
+
+const cleanList = (urls) =>
+    (Array.isArray(urls) ? urls : [])
+        .map((u) => (typeof u === "string" ? u.trim().replace(/\/+$/, "") : ""))
+        .filter((u) => /^https?:\/\//i.test(u));
 
 const STORAGE_KEY = "pm_active_server";
 const REQUEST_TIMEOUT_MS = 20000;
@@ -33,6 +55,13 @@ const setActive = (i) =>
     active = i;
     try { sessionStorage.setItem(STORAGE_KEY, SERVERS[i]); } catch (e) { /* ignore */ }
 };
+
+try
+{
+    const cached = cleanList(JSON.parse(localStorage.getItem(REGISTRY_CACHE_KEY) || "[]"));
+    if (cached.length) mergeServers(cached);
+}
+catch (e) { /* no cache yet */ }
 
 const instance = axios.create({
     headers: {
@@ -75,6 +104,35 @@ instance.interceptors.response.use(
 );
 
 export const API_URL = () => SERVERS[active];
+
+// Ask the servers for the current list (in the background, never blocks the UI).
+export const refreshServers = async () =>
+{
+    for (const base of [...SERVERS])
+    {
+        try
+        {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 60000);
+            const res = await fetch(`${base}/registry/${REGISTRY_APP}`, { signal: controller.signal });
+            clearTimeout(timer);
+            if (!res.ok) continue;
+            const urls = cleanList((await res.json()).urls);
+            if (!urls.length) continue;
+            mergeServers(urls);
+            try { localStorage.setItem(REGISTRY_CACHE_KEY, JSON.stringify(urls)); } catch (e) { /* ignore */ }
+            return urls;
+        }
+        catch (e) { /* try the next server */ }
+    }
+    return null;
+};
+refreshServers();
+
+/* ── Server registry (admin only) ── */
+export const getRegistry = () => instance.get("/registry");
+export const saveRegistry = (app, urls) => instance.put(`/registry/${app}`, { urls });
+export const checkServer = (url) => instance.post("/registry/check", { url }, { timeout: 30000 });
 
 /* ── Auth ── */
 export const checkAuthenticated = () => instance.get("/authenticate");

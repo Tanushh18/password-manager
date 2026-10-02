@@ -12,6 +12,7 @@ import Projects from "./Pages/Projects/Projects";
 import ProjectDetail from "./Pages/Projects/ProjectDetail";
 import ProjectForm from "./Pages/Projects/ProjectForm";
 import Settings from "./Pages/Settings/Settings";
+import Servers from "./Pages/Servers/Servers";
 import Privacy from "./Pages/Privacy/Privacy";
 import Logout from "./Pages/Logout/Logout";
 import Navbar from "./Components/Navbar/Navbar";
@@ -26,6 +27,12 @@ function RequireVault({ children }) {
   if (status === "checking") return <Splash />;
   if (status === "signedOut") return <Navigate to="/signin" replace state={{ from: location.pathname }} />;
   return children;
+}
+
+/* The server list is for the owner's account only (the server enforces this too). */
+function RequireAdmin({ children }) {
+  const { profile } = useVault();
+  return profile?.isAdmin ? children : <Navigate to="/passwords" replace />;
 }
 
 /* Sign-in pages bounce away once there's a session. */
@@ -75,6 +82,7 @@ export default function App() {
           <Route path="/projects/:id" element={<RequireVault><ProjectDetail /></RequireVault>} />
           <Route path="/projects/:id/edit" element={<RequireVault><ProjectForm /></RequireVault>} />
           <Route path="/settings" element={<RequireVault><Settings /></RequireVault>} />
+          <Route path="/servers" element={<RequireVault><RequireAdmin><Servers /></RequireAdmin></RequireVault>} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/logout" element={<Logout />} />
           <Route path="*" element={<Navigate to="/" replace />} />

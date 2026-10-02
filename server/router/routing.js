@@ -11,6 +11,8 @@ const {
     wantsToken, checkPassword, checkSecondFactor, serverError
 } = require("./helpers");
 
+const registry = require("./registry");
+
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: "Too many attempts. Please wait a few minutes and try again." });
 
 /* ════════════════ AUTH ════════════════ */
@@ -116,7 +118,7 @@ router.get("/authenticate", authenticate, async (req, res) =>
 {
     res.set("Cache-Control", "no-store");
     const dataKey = await req.rootUser.getDataKey();
-    res.json(req.rootUser.toPublic(dataKey));
+    res.json({ ...req.rootUser.toPublic(dataKey), isAdmin: registry.isAdminUser(req.rootUser) });
 });
 
 router.get("/logout", async (req, res) =>
@@ -332,5 +334,6 @@ router.use(require("./vault"));
 router.use(require("./projects"));
 router.use(require("./account"));
 router.use(require("./extension"));
+router.use(registry);
 
 module.exports = router;

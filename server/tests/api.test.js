@@ -24,7 +24,7 @@ afterAll(async () =>
     await mongoose.disconnect();
     await mongo.stop();
 });
-beforeEach(async () => { await User.deleteMany({}); });
+beforeEach(async () => { await User.deleteMany({}); await require("../models/registry").deleteMany({}); });
 
 
 const register = (body = {}) =>
@@ -390,5 +390,52 @@ describe("totp util", () =>
         const secret = totp.base32Encode(Buffer.from("12345678901234567890"));
         // RFC gives 8 digits (94287082); we use the last 6.
         expect(totp.codeAt(secret, Math.floor(59 / 30))).toBe("287082");
+    });
+});
+
+describe("server registry", () =>
+{
+    const ADMIN = "tanushchawla16@gmail.com";
+    const signIn = async (email) =>
+    {
+        await register({ email });
+        return (await login({ email })).body.token;
+    };
+
+    test("anyone can read an app's list; unknown apps 404", async () =>
+    {
+        const res = await request(app).get("/registry/wethree");
+        expect(res.status).toBe(200);
+        expect(res.body.urls.length > 0).toBe(true);
+        expect(res.headers["access-control-allow-origin"]).toBe("*");
+        expect((await request(app).get("/registry/nope")).status).toBe(404);
+    });
+
+    test("only the admin account can read all or edit", async () =>
+    {
+        const other = await signIn("ana@example.com");
+        expect((await request(app).get("/registry").set(auth(other))).status).toBe(403);
+        expect((await request(app).put("/registry/stashr").set(auth(other)).send({ urls: ["https://a.example.com"] })).status).toBe(403);
+        expect((await request(app).put("/registry/stashr")).status).toBe(401);
+        expect((await request(app).get("/authenticate").set(auth(other))).body.isAdmin).toBe(false);
+    });
+
+    test("admin edits are normalised, validated and publicly visible", async () =>
+    {
+        const token = await signIn(ADMIN);
+        expect((await request(app).get("/authenticate").set(auth(token))).body.isAdmin).toBe(true);
+
+        const bad = await request(app).put("/registry/dealradar").set(auth(token)).send({ urls: ["javascript:alert(1)"] });
+        expect(bad.status).toBe(400);
+        expect((await request(app).put("/registry/dealradar").set(auth(token)).send({ urls: [] })).status).toBe(400);
+
+        const ok = await request(app).put("/registry/dealradar").set(auth(token))
+            .send({ urls: [" https://one.example.com/ ", "https://one.example.com", "https://two.example.com/api/"] });
+        expect(ok.status).toBe(200);
+        expect(ok.body.urls.join(",")).toBe("https://one.example.com,https://two.example.com/api");
+
+        expect((await request(app).get("/registry/dealradar")).body.urls.join(",")).toBe("https://one.example.com,https://two.example.com/api");
+        const all = await request(app).get("/registry").set(auth(token));
+        expect(all.body.apps.length).toBe(3);
     });
 });

@@ -834,3 +834,11 @@ ISC License — See the repository for details.
 - **Security issues**: Please email privately instead of opening a public issue
 
 Happy vaulting! 🔐
+
+## Server registry (one place for every app's backend URLs)
+
+Stashr keeps the backend URL list for Stashr, Deal Radar and We Three. Sign in as the admin account
+(`REGISTRY_ADMINS`, default `tanushchawla16@gmail.com`), open **Servers**, and edit the lists.
+Apps read `GET /registry/<stashr|dealradar|wethree>` on start, cache the answer on the device, and fall
+back to their built-in URLs if Stashr can't be reached. The registry holds URLs only, never secrets.
+`https://password-manager-server-xxdr.onrender.com` is the fixed address the other apps ask, so keep it alive.

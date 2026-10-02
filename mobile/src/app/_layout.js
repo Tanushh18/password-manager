@@ -13,6 +13,10 @@ import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } f
 import { ThemeProvider, useTheme } from "../lib/theme";
 import { VaultProvider, useVault } from "../lib/vault";
 import { ToastProvider } from "../components/Toast";
+import { refreshServers } from "../lib/api";
+
+// Load the latest server list from the registry in the background.
+refreshServers().catch(() => {});
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 SplashScreen.setOptions({ duration: 450, fade: true });

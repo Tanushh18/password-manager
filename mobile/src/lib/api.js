@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import * as SecureStore from "expo-secure-store";
 
 /**
  * Talks to the same Express API as the website.
@@ -7,6 +8,7 @@ import Constants from "expo-constants";
  */
 // Override at build time with EXPO_PUBLIC_API_URLS="https://a.com,https://b.com"
 const fromEnv = (process.env.EXPO_PUBLIC_API_URLS || "").split(",").map((u) => u.trim()).filter(Boolean);
+let active = 0;
 const SERVERS = (fromEnv.length
   ? fromEnv
   : Constants.expoConfig?.extra?.apiServers || [
@@ -17,7 +19,25 @@ const SERVERS = (fromEnv.length
 
 const TIMEOUT_MS = 25000;
 
-let active = 0;
+// The server list is kept in the Stashr registry (edited on the web "Servers" page), so a changed URL
+// never needs a rebuild. The list above is only the bootstrap: the app asks the registry on start,
+// caches the answer on the device, and keeps the bootstrap at the end as a last resort.
+const BOOTSTRAP = [...SERVERS];
+const REGISTRY_KEY = "stashr.registry.stashr";
+
+const cleanList = (urls) =>
+  (Array.isArray(urls) ? urls : [])
+    .map((u) => (typeof u === "string" ? u.trim().replace(/\/+$/, "") : ""))
+    .filter((u) => /^https?:\/\//i.test(u));
+
+function applyServers(fresh) {
+  const list = [...fresh, ...BOOTSTRAP].filter((u, i, a) => u && a.indexOf(u) === i);
+  const current = SERVERS[active];
+  SERVERS.splice(0, SERVERS.length, ...list);
+  const i = SERVERS.indexOf(current);
+  active = i >= 0 ? i : 0;
+}
+
 let token = null;
 
 export const setToken = (t) => {
@@ -28,6 +48,26 @@ export const setActiveServer = (url) => {
   const i = SERVERS.indexOf(url);
   if (i >= 0) active = i;
 };
+
+/** Pull the current server list from the registry (background; the app never waits on it). */
+export async function refreshServers() {
+  try {
+    const cached = cleanList(JSON.parse((await SecureStore.getItemAsync(REGISTRY_KEY)) || "[]"));
+    if (cached.length) applyServers(cached);
+  } catch (e) {
+    /* no cache yet */
+  }
+  for (const base of [...SERVERS]) {
+    const res = await once(base, "/registry/stashr", { auth: false, timeout: 60000 });
+    const urls = res.status === 200 ? cleanList(res.data && res.data.urls) : [];
+    if (urls.length) {
+      applyServers(urls);
+      SecureStore.setItemAsync(REGISTRY_KEY, JSON.stringify(urls)).catch(() => {});
+      return urls;
+    }
+  }
+  return null;
+}
 
 export class ApiError extends Error {
   constructor(message, status, data) {
