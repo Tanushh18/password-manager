@@ -293,6 +293,27 @@ router.get("/render/audit", async (req, res) => {
   }
 });
 
+router.get("/render/accounts/:accountId/postgres/:postgresId/exports", async (req, res) => {
+  const saved = await getAccount(req, res);
+  if (!saved) return;
+  if (!safeId(req.params.postgresId) || !String(req.params.postgresId).startsWith("dpg-")) return res.status(400).json({ error: "A valid Render Postgres ID is required." });
+  try {
+    const exports = await renderRequest(saved.account.apiKey, "/v1/postgres/" + encodeURIComponent(req.params.postgresId) + "/export");
+    return res.json({ exports: Array.isArray(exports) ? exports : [] });
+  } catch (error) { return sendUpstreamError(res, error); }
+});
+
+router.post("/render/accounts/:accountId/postgres/:postgresId/exports", async (req, res) => {
+  const saved = await getAccount(req, res);
+  if (!saved) return;
+  if (!safeId(req.params.postgresId) || !String(req.params.postgresId).startsWith("dpg-")) return res.status(400).json({ error: "A valid Render Postgres ID is required." });
+  try {
+    const result = await renderRequest(saved.account.apiKey, "/v1/postgres/" + encodeURIComponent(req.params.postgresId) + "/export", { method: "POST" });
+    await recordAudit(req, "postgres_export_started", saved.entry._id, req.params.postgresId);
+    return res.status(202).json(result);
+  } catch (error) { return sendUpstreamError(res, error); }
+});
+
 router.get("/render/accounts/:accountId/services/:serviceId/metrics", async (req, res) => {
   const saved = await getAccount(req, res);
   if (!saved) return;
