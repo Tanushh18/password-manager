@@ -207,3 +207,11 @@
 .rd-metric-bars span { flex:1; min-width:2px; max-width:20px; border-radius:3px 3px 0 0; background:var(--accent); opacity:.82; transition:height .15s ease; }
 .rd-metric-bars span:hover { opacity:1; }
 .rd-metric-axis { display:flex; justify-content:space-between; color:var(--text-faint); font-size:.68rem; }
+
+.rd-env-groups { margin:.8rem 0 1rem; padding:.8rem; border:1px solid var(--line); border-radius:var(--r-md); background:var(--bg); }
+.rd-env-groups>div { display:flex; flex-direction:column; gap:.2rem; margin-bottom:.5rem; }
+.rd-env-groups>div strong { color:var(--heading); font-size:.8rem; }
+.rd-env-groups small,.rd-env-groups>span { color:var(--text-muted); font-size:.69rem; }
+.rd-env-groups article { display:flex; align-items:center; flex-wrap:wrap; gap:.5rem .8rem; padding:.6rem 0; border-top:1px solid var(--line); }
+.rd-env-groups article b { color:var(--heading-2); font-size:.77rem; }
+.rd-env-groups article a { margin-left:auto; color:var(--accent-deep); font-size:.72rem; text-decoration:none; }
