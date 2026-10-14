@@ -379,7 +379,7 @@ export default function RenderDashboard() {
   };
 
   const diagnoseLogs = () => {
-    const text = logs.map((l) => String(l.message || "")).join("\\n").toLowerCase();
+    const text = logs.map((l) => String(l.message || "")).join("\n").toLowerCase();
     const findings = [];
     if (/econnrefused|connection refused|connect econn/.test(text)) findings.push("Connection refused: verify the target service is running, the hostname/port is correct, and private services share the expected network.");
     if (/econnreset|socket hang up|timeout|timed out/.test(text)) findings.push("Connection instability or timeout: check downstream latency, request timeouts, and whether the service is waking from a spin-down.");
@@ -388,9 +388,9 @@ export default function RenderDashboard() {
     if (/missing environment|undefined|not configured|no such file|module not found/.test(text)) findings.push("Configuration or startup failure: compare required environment variables, root directory, build command and installed dependencies.");
     if (/syntaxerror|typeerror|referenceerror|uncaught exception|traceback|fatal/.test(text)) findings.push("Application exception detected: inspect the first stack trace and correlate it with the latest commit/deployment.");
     if (/429|rate limit|too many requests/.test(text)) findings.push("Rate limiting detected: review client retries, upstream quotas and request burst patterns.");
-    if (/5\\d\\d|internal server error/.test(text)) findings.push("Server-side errors found: correlate request logs with app logs and compare against the last healthy deployment.");
+    if (/5\d\d|internal server error/.test(text)) findings.push("Server-side errors found: correlate request logs with app logs and compare against the last healthy deployment.");
     if (!findings.length) findings.push(logs.length ? "No common failure signature matched. Review the newest entries, deployment build logs and service health result." : "Load application or build logs first, then run diagnostics.");
-    setDiagnosis(findings.join("\\n\\n"));
+    setDiagnosis(findings.join("\n\n"));
   };
 
   const toggleServiceState = async () => {
