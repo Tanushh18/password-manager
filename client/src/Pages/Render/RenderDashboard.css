@@ -318,3 +318,6 @@
   .rd-unified-logs .rd-section-head { flex-direction:column; }
   .rd-unified-logs .rd-filter-input { max-width:none; width:100%; }
 }
+
+.rd-log-diagnosis-actions { display:flex; flex-wrap:wrap; gap:.5rem; margin:.55rem 0; }
+@media (max-width:460px) { .rd-log-diagnosis-actions .rd-btn { flex:1; white-space:normal; } }
