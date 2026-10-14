@@ -48,11 +48,19 @@ function normalizeConfig(input, previous = defaultConfig()) {
     const dependencies = Array.isArray(group?.dependencies) ? group.dependencies.slice(0, 100)
       .filter((edge) => serviceKeys.includes(edge?.from) && serviceKeys.includes(edge?.to) && edge.from !== edge.to)
       .map((edge) => ({ from: edge.from, to: edge.to })) : [];
+    const estimates = {};
+    const rawEstimates = group?.serviceCostEstimates && typeof group.serviceCostEstimates === "object" ? group.serviceCostEstimates : {};
+    Object.entries(rawEstimates).forEach(([key, amount]) => {
+      const value = Number(amount);
+      if (serviceKeys.includes(key) && Number.isFinite(value) && value >= 0 && value <= 100000) estimates[key] = Math.round(value * 100) / 100;
+    });
     return {
       id: typeof group?.id === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(group.id) ? group.id : "group-" + (index + 1),
       name: String(group?.name || "Server group " + (index + 1)).trim().slice(0, 60) || "Server group " + (index + 1),
       serviceKeys,
-      dependencies: [...new Map(dependencies.map((edge) => [edge.from + ">" + edge.to, edge])).values()]
+      dependencies: [...new Map(dependencies.map((edge) => [edge.from + ">" + edge.to, edge])).values()],
+      serviceCostEstimates: estimates,
+      monthlyBudgetUsd: boundedNumber(group?.monthlyBudgetUsd, 0, 1000000, 0)
     };
   }).filter((group) => group.serviceKeys.length >= 2) : prior.groups || [];
 
@@ -360,9 +368,32 @@ async function runUserMonitoring(user, options = {}) {
         unit: available[0]?.unit || ""
       };
     }
+    const estimatedMonthlyCostUsd = Object.values(group.serviceCostEstimates || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+    const monthlyBudgetUsd = Number(group.monthlyBudgetUsd || 0);
+    const latestBudgetIncident = priorIncidents
+      .filter((incident) => incident.groupId === group.id && incident.serviceKey === "group-budget" && incident.type === "budget")
+      .reduce((latest, incident) => !latest || Date.parse(incident.at || incident.openedAt || 0) >= Date.parse(latest.at || latest.openedAt || 0) ? incident : latest, null);
+    if (monthlyBudgetUsd > 0 && estimatedMonthlyCostUsd > monthlyBudgetUsd && latestBudgetIncident?.state !== "open") {
+      pendingIncidents.push({
+        id: crypto.randomUUID(), groupId: group.id, groupName: group.name, serviceKey: "group-budget",
+        serviceName: group.name, type: "budget", severity: "warning", state: "open",
+        message: "Manual monthly cost estimate ($" + estimatedMonthlyCostUsd.toFixed(2) + ") exceeds the group budget ($" + monthlyBudgetUsd.toFixed(2) + ").",
+        openedAt: endTime, at: endTime
+      });
+      incidentsOpened += 1;
+    } else if ((monthlyBudgetUsd <= 0 || estimatedMonthlyCostUsd <= monthlyBudgetUsd) && latestBudgetIncident?.state === "open") {
+      pendingIncidents.push({
+        id: crypto.randomUUID(), groupId: group.id, groupName: group.name, serviceKey: "group-budget",
+        serviceName: group.name, type: "budget", severity: "warning", state: "resolved",
+        message: "Manual monthly cost estimate is within the configured budget again.",
+        openedAt: latestBudgetIncident.openedAt || latestBudgetIncident.at, at: endTime
+      });
+    }
     pendingHistory.push({
       id: crypto.randomUUID(), groupId: group.id, groupName: group.name, sampledAt: endTime,
-      services: groupResults, combined: metricTotals, source: options.force ? "manual" : "scheduled"
+      services: groupResults, combined: metricTotals,
+      estimatedMonthlyCostUsd, monthlyBudgetUsd,
+      source: options.force ? "manual" : "scheduled"
     });
   }
 
