@@ -114,7 +114,7 @@ router.get("/render/ops/config", async (req, res) => {
   try {
     const config = await renderOps.readConfig(req.rootUser);
     res.set("Cache-Control", "no-store");
-    return res.json({ config: renderOps.publicConfig(config), schedulerConfigured: Boolean(process.env.RENDER_MONITOR_CRON_SECRET) });
+    return res.json({ config: renderOps.publicConfig(config), schedulerConfigured: Boolean(process.env.RENDER_MONITOR_CRON_SECRET), aiDiagnosisAvailable: Boolean(process.env.GROQ_API_KEY) });
   } catch {
     return res.status(500).json({ error: "Could not load monitoring configuration." });
   }
@@ -275,7 +275,7 @@ router.get("/render/ops/report", async (req, res) => {
       const csv = rows.map((row) => row.map((value) => {
         let valueText = String(value ?? "");
         // Prevent spreadsheet formula injection when exported names/log text are opened in Excel.
-        if (/^[\\s]*[=+@-]/.test(valueText)) valueText = "'" + valueText;
+        if (/^\s*[=+@-]/.test(valueText)) valueText = "'" + valueText;
         return /[",\r\n]/.test(valueText) ? '"' + valueText.replace(/"/g, '""') + '"' : valueText;
       }).join(",")).join("\r\n");
       res.set("Content-Type", "text/csv; charset=utf-8");
