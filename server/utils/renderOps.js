@@ -7,9 +7,10 @@ const METRICS = {
   memory: "memory",
   "http-latency": "http-latency"
 };
-const MAX_GROUPS = 20;
-const MAX_SERVICES_PER_GROUP = 30;
-const HISTORY_LIMIT = 500;
+const MAX_GROUPS = 10;
+const MAX_SERVICES_PER_GROUP = 10;
+const MAX_MONITORED_SERVICES_PER_USER = 20;
+const HISTORY_LIMIT = 200;
 const INCIDENT_LIMIT = 200;
 const TICK_WINDOW_MS = 10 * 60 * 1000;
 
@@ -195,6 +196,14 @@ async function runUserMonitoring(user, options = {}) {
   const config = await readConfig(user);
   if (!options.force && !config.monitor?.enabled) return { skipped: true, groupsChecked: 0, samplesSaved: 0, incidentsOpened: 0 };
   const dataKey = await user.getDataKey();
+  if (!options.force) {
+    const lastSample = encryptedList(user, "renderMetricHistory", dataKey, 1)[0];
+    const lastAt = Date.parse(lastSample?.sampledAt || "");
+    const intervalMs = (Number(config.monitor?.intervalMinutes) || 5) * 60 * 1000;
+    if (Number.isFinite(lastAt) && Date.now() - lastAt < intervalMs) {
+      return { skipped: true, reason: "interval_not_elapsed", groupsChecked: 0, samplesSaved: 0, incidentsOpened: 0 };
+    }
+  }
   const priorIncidents = encryptedList(user, "renderIncidents", dataKey, INCIDENT_LIMIT);
   const pendingHistory = [];
   const pendingIncidents = [];
@@ -206,6 +215,8 @@ async function runUserMonitoring(user, options = {}) {
 
   const accountCache = new Map();
   const serviceCache = new Map();
+  const observedServices = new Map();
+  let remainingServiceBudget = MAX_MONITORED_SERVICES_PER_USER;
   async function resolveService(key) {
     if (serviceCache.has(key)) return serviceCache.get(key);
     const split = key.indexOf(":");
@@ -226,15 +237,24 @@ async function runUserMonitoring(user, options = {}) {
   for (const group of (config.groups || []).slice(0, MAX_GROUPS)) {
     const members = [];
     for (const key of (group.serviceKeys || []).slice(0, MAX_SERVICES_PER_GROUP)) {
+      if (remainingServiceBudget <= 0 && !observedServices.has(key)) continue;
       const member = await resolveService(key);
-      if (member) members.push(member);
+      if (member) {
+        members.push(member);
+        if (!observedServices.has(key)) remainingServiceBudget -= 1;
+      }
     }
     if (!members.length) continue;
     groupsChecked += 1;
     const groupResults = [];
     for (const member of members) {
+      let result = observedServices.get(member.key);
+      if (result) {
+        groupResults.push(result);
+        continue;
+      }
       let service = null;
-      const result = {
+      result = {
         key: member.key, serviceId: member.serviceId, accountId: member.accountId,
         accountName: member.accountName, sampledAt: endTime, health: { state: "unknown" }, metrics: {}
       };
@@ -268,8 +288,15 @@ async function runUserMonitoring(user, options = {}) {
         }
       }
       groupResults.push(result);
+      observedServices.set(member.key, result);
 
-      const openFor = (type) => priorIncidents.find((incident) => incident.groupId === group.id && incident.serviceKey === member.key && incident.type === type && incident.state === "open");
+      const latestIncidentFor = (type) => priorIncidents
+        .filter((incident) => incident.groupId === group.id && incident.serviceKey === member.key && incident.type === type)
+        .reduce((latest, incident) => !latest || Date.parse(incident.at || incident.openedAt || 0) >= Date.parse(latest.at || latest.openedAt || 0) ? incident : latest, null);
+      const openFor = (type) => {
+        const latest = latestIncidentFor(type);
+        return latest?.state === "open" ? latest : null;
+      };
       const checks = [];
       if (result.health?.state === "unhealthy" || result.health?.state === "timeout") {
         checks.push({ type: "health", severity: "critical", message: result.name + " health check " + result.health.state + (result.health.status ? " (HTTP " + result.health.status + ")" : "") });
@@ -282,12 +309,15 @@ async function runUserMonitoring(user, options = {}) {
       if (!result.suspended && latency != null && latency >= config.monitor.thresholds.latencyMs) checks.push({ type: "latency", severity: "warning", message: result.name + " latency metric reached " + latency + (result.metrics["http-latency"].unit || "") });
 
       const activeTypes = new Set(checks.map((item) => item.type));
-      for (const incident of priorIncidents.filter((item) => item.groupId === group.id && item.serviceKey === member.key && item.state === "open" && !activeTypes.has(item.type))) {
+      const priorTypes = new Set(priorIncidents.filter((item) => item.groupId === group.id && item.serviceKey === member.key).map((item) => item.type));
+      for (const type of priorTypes) {
+        const latest = latestIncidentFor(type);
+        if (latest?.state !== "open" || activeTypes.has(type)) continue;
         pendingIncidents.push({
           id: crypto.randomUUID(), groupId: group.id, groupName: group.name, serviceKey: member.key,
-          serviceName: result.name, type: incident.type, severity: incident.severity || "warning",
-          state: "resolved", message: result.name + " " + incident.type + " condition recovered.",
-          openedAt: incident.openedAt || incident.at, at: endTime
+          serviceName: result.name, type, severity: latest.severity || "warning",
+          state: "resolved", message: result.name + " " + type + " condition recovered.",
+          openedAt: latest.openedAt || latest.at, at: endTime
         });
       }
       for (const check of checks) {
