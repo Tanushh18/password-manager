@@ -61,7 +61,10 @@ const schema = new mongoose.Schema({
     // Project/infra tracker entries. Same shape and same end-to-end scheme as
     // `passwords` above — each entry is an opaque AES-256-GCM blob the server
     // cannot read.
-    projects: [entrySchema]
+    projects: [entrySchema],
+
+    // Render dashboard connections; API keys are encrypted using the account data key.
+    renderAccounts: [entrySchema]
 }, { timestamps: true });
 
 
