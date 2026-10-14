@@ -168,3 +168,16 @@ export const checkHealth = () => instance.get("/health", { withCredentials: fals
 export const errorMessage = (err, fallback = "Something went wrong. Please try again.") =>
     err?.response?.data?.error ||
     (!err?.response ? "We can't reach the vault right now. The free server may be waking up — try again in a moment." : fallback);
+
+/* ── Render dashboard (all requests use Stashr's authenticated session) ── */
+export const getRenderAccounts = () => instance.get("/render/accounts").then((r) => r.data);
+export const connectRenderAccount = (data) => instance.post("/render/accounts", data).then((r) => r.data);
+export const deleteRenderAccount = (id) => instance.delete("/render/accounts/" + encodeURIComponent(id)).then((r) => r.data);
+export const getRenderServices = (accountId) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/services").then((r) => r.data);
+export const getRenderLogs = (accountId, params) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/logs?" + new URLSearchParams(params).toString()).then((r) => r.data);
+export const getRenderEnvVars = (accountId, serviceId) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/services/" + encodeURIComponent(serviceId) + "/env-vars").then((r) => r.data);
+export const updateRenderEnvVar = (accountId, serviceId, key, value) => instance.put("/render/accounts/" + encodeURIComponent(accountId) + "/services/" + encodeURIComponent(serviceId) + "/env-vars/" + encodeURIComponent(key), { value }).then((r) => r.data);
+export const deleteRenderEnvVar = (accountId, serviceId, key) => instance.delete("/render/accounts/" + encodeURIComponent(accountId) + "/services/" + encodeURIComponent(serviceId) + "/env-vars/" + encodeURIComponent(key)).then((r) => r.data);
+export const getRenderDeploys = (accountId, serviceId) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/services/" + encodeURIComponent(serviceId) + "/deploys").then((r) => r.data);
+export const triggerRenderDeploy = (accountId, serviceId, clearCache = false) => instance.post("/render/accounts/" + encodeURIComponent(accountId) + "/services/" + encodeURIComponent(serviceId) + "/deploys", { clearCache }).then((r) => r.data);
+export const restartRenderService = (accountId, serviceId) => instance.post("/render/accounts/" + encodeURIComponent(accountId) + "/services/" + encodeURIComponent(serviceId) + "/restart").then((r) => r.data);
