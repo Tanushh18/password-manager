@@ -125,10 +125,14 @@ router.put("/render/ops/config", async (req, res) => {
     const previous = await renderOps.readConfig(req.rootUser);
     const normalized = renderOps.normalizeConfig(req.body, previous);
     const allowedAccounts = new Set((req.rootUser.renderAccounts || []).filter((entry) => entry.enc === "udk").map((entry) => String(entry._id)));
-    normalized.groups = normalized.groups.map((group) => ({
-      ...group,
-      serviceKeys: group.serviceKeys.filter((key) => allowedAccounts.has(key.slice(0, key.indexOf(":"))))
-    })).filter((group) => group.serviceKeys.length >= 2);
+    normalized.groups = normalized.groups.map((group) => {
+      const serviceKeys = group.serviceKeys.filter((key) => allowedAccounts.has(key.slice(0, key.indexOf(":"))));
+      return {
+        ...group,
+        serviceKeys,
+        dependencies: (group.dependencies || []).filter((edge) => serviceKeys.includes(edge.from) && serviceKeys.includes(edge.to))
+      };
+    }).filter((group) => group.serviceKeys.length >= 2);
     const saved = await renderOps.saveConfig(req.rootUser, normalized);
     await recordAudit(req, "monitoring_config_updated", "", "", {
       groups: saved.groups.length, monitoringEnabled: saved.monitor.enabled,
@@ -227,7 +231,9 @@ router.get("/render/ops/report", async (req, res) => {
       }));
       report.incidents.forEach((incident) => rows.push(["incident", incident.at, incident.groupName, incident.serviceName, incident.type, "", "", incident.severity, incident.state, incident.message]));
       const csv = rows.map((row) => row.map((value) => {
-        const valueText = String(value ?? "");
+        let valueText = String(value ?? "");
+        // Prevent spreadsheet formula injection when exported names/log text are opened in Excel.
+        if (/^[\\s]*[=+@-]/.test(valueText)) valueText = "'" + valueText;
         return /[",\r\n]/.test(valueText) ? '"' + valueText.replace(/"/g, '""') + '"' : valueText;
       }).join(",")).join("\r\n");
       res.set("Content-Type", "text/csv; charset=utf-8");
