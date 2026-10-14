@@ -23,7 +23,14 @@ const normalizeServices = (payload) => (Array.isArray(payload) ? payload : [])
   .map((entry) => entry?.service || entry)
   .filter((s) => s?.id)
   .map((s) => ({ ...s, ownerId: s.ownerId || s.owner?.id }));
-const normalizeList = (payload, key) => Array.isArray(payload) ? payload.map((x) => x?.[key] || x).filter(Boolean) : [];
+const normalizeList = (payload, key) => {
+  const plural = key === "envVar" ? "envVars" : key + "s";
+  const rows = Array.isArray(payload) ? payload
+    : Array.isArray(payload?.[plural]) ? payload[plural]
+    : Array.isArray(payload?.[key]) ? payload[key]
+    : Array.isArray(payload?.data) ? payload.data : [];
+  return rows.map((x) => x?.[key] || x).filter(Boolean);
+};
 const initials = (value) => String(value || "R").split(/[\s-_]+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join("").toUpperCase();
 const timeAgo = (value) => {
   if (!value) return "—";
