@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useShortcuts from "../../hooks/useShortcuts";
 import Reveal from "../../Components/Reveal/Reveal";
 import ProjectCard from "../../Components/Project/ProjectCard";
 import ProjectImportModal from "../../Components/Project/ProjectImportModal";
 import GithubConnectModal from "../../Components/Project/GithubConnectModal";
-import { getGithubAccounts } from "../../api/client";
+import { getGithubAccounts, getProjectStatuses } from "../../api/client";
 import { TreeLeaf } from "../../Components/Project/ProjectTree";
 import { Globe, Plus, Search, Grid, Alert, Upload } from "../../Components/Icons/Icons";
 import { useVault } from "../../state/vault";
@@ -18,7 +18,7 @@ import "./Projects.css";
 const STATUSES = ["planning", "in_progress", "deployed", "broken", "paused", "archived"];
 
 export default function Projects() {
-  const { projects, projectsBroken, importProjects, prefs } = useVault();
+  const { projects, projectsBroken, importProjects, prefs, refreshProfile } = useVault();
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("__all");
@@ -26,7 +26,20 @@ export default function Projects() {
   const [importing, setImporting] = useState(false);
   const [githubOpen, setGithubOpen] = useState(false);
   const [githubAccounts, setGithubAccounts] = useState(null);
+  const refreshRef = useRef(refreshProfile);
+  refreshRef.current = refreshProfile;
+  const [statuses, setStatuses] = useState({}); // projectId -> live status (auto-loaded, no buttons)
   useEffect(() => { getGithubAccounts().then((r) => setGithubAccounts(r.accounts || [])).catch(() => setGithubAccounts(null)); }, []);
+  // Health, drift and auto-linking are computed server-side; the list just reads them when it opens.
+  useEffect(() => {
+    let live = true;
+    getProjectStatuses().then((data) => {
+      if (!live) return;
+      setStatuses(Object.fromEntries((data.statuses || []).map((st) => [st.projectId, st])));
+      if (data.linkedNow?.length) void refreshRef.current?.();
+    }).catch(() => { /* badges are optional */ });
+    return () => { live = false; };
+  }, []);
   const navigate = useNavigate();
   const searchRef = useShortcuts(() => navigate("/projects/new"));
 
@@ -156,7 +169,7 @@ export default function Projects() {
             {searching ? <h2 className="proj-values__title proj-list__title">Projects</h2> : null}
             <div className="vault__grid">
               {visible.map((project) => (
-                <ProjectCard key={project.id} project={project} />
+                <ProjectCard key={project.id} project={project} status={statuses[String(project.id)]} />
               ))}
             </div>
           </>

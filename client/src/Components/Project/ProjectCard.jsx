@@ -4,6 +4,7 @@ import { Globe, Pencil, Arrow } from "../Icons/Icons";
 import { STATUS_LABEL } from "../../lib/projectItems";
 import { flattenProject } from "../../lib/projectTree";
 import ProjectTree from "./ProjectTree";
+import { HealthBadge } from "./ProjectStatus";
 
 export const STATUS_BADGE = {
   planning: "badge--muted",
@@ -14,7 +15,7 @@ export const STATUS_BADGE = {
   archived: "badge--muted",
 };
 
-export default function ProjectCard({ project, style }) {
+export default function ProjectCard({ project, style, status }) {
   const [open, setOpen] = useState(false);
   const fields = flattenProject(project).length;
   const envCount = (project.envVars || []).length;
@@ -37,6 +38,8 @@ export default function ProjectCard({ project, style }) {
 
       <div className="vault-card__badges">
         <span className={`badge ${STATUS_BADGE[project.status] || "badge--muted"}`}>{STATUS_LABEL[project.status] || project.status}</span>
+        <HealthBadge status={status} />
+        {status?.drift?.behindBy > 0 ? <span className="badge badge--warn" title="Commits on the branch that are not deployed yet">{status.drift.behindBy} undeployed</span> : null}
         {dbCount ? <span className="badge badge--muted">{dbCount} database{dbCount === 1 ? "" : "s"}</span> : null}
         {envCount ? <span className="badge badge--muted">{envCount} env var{envCount === 1 ? "" : "s"}</span> : null}
       </div>

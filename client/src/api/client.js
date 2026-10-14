@@ -202,6 +202,11 @@ export const createRenderDbExport = (accountId, postgresId) => instance.post(`/r
 
 export const syncProjectRenderEnv = (projectId, options = {}) => instance.post("/render/project-sync/" + encodeURIComponent(projectId), options, { timeout: 60000 }).then((r) => r.data);
 
+/* Automatic upkeep: live project health/drift (auto-links to Render first) and Servers-tab sync. */
+export const getProjectStatuses = ({ id, refresh } = {}) => instance.get("/render/projects/status", { params: { ...(id ? { id } : {}), ...(refresh ? { refresh: 1 } : {}) }, timeout: 60000 }).then((r) => r.data);
+export const getRegistrySync = () => instance.get("/render/registry-sync", { timeout: 60000 }).then((r) => r.data);
+export const setRegistryAutoSync = (app, autoSync) => instance.put("/render/registry-sync/" + encodeURIComponent(app), { autoSync }).then((r) => r.data);
+
 /* GitHub connections for the Projects page (tokens stay encrypted server-side). */
 export const getGithubAccounts = () => instance.get("/github/accounts").then((r) => r.data);
 export const connectGithubAccount = (data) => instance.post("/github/accounts", data).then((r) => r.data);

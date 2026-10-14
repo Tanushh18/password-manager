@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import ProjectTree from "../../Components/Project/ProjectTree";
 import GithubPanel from "../../Components/Project/GithubPanel";
+import ProjectStatus from "../../Components/Project/ProjectStatus";
 import RenderEnvSync from "../../Components/Project/RenderEnvSync";
 import GithubConnectModal from "../../Components/Project/GithubConnectModal";
 import { STATUS_BADGE } from "../../Components/Project/ProjectCard";
@@ -44,6 +45,8 @@ export default function ProjectDetail() {
         </header>
 
         {project.description ? <p className="proj-detail__desc">{project.description}</p> : null}
+
+        <ProjectStatus project={project} />
 
         {project.repoUrl ? <GithubPanel repoUrl={project.repoUrl} refreshKey={githubKey} onConnect={() => setGithubOpen(true)} /> : null}
 

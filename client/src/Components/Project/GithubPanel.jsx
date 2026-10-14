@@ -20,7 +20,9 @@ export default function GithubPanel({ repoUrl, onConnect, refreshKey }) {
     setState((old) => (old.status === "ready" ? { ...old, refreshing: true } : { status: "loading" }));
     try {
       const data = await getGithubRepo(repoUrl, refresh);
-      setState(data.connected === false ? { status: "disconnected" } : { status: "ready", data });
+      if (data?.connected === false) setState({ status: "disconnected" });
+      else if (!data?.repo) setState({ status: "error", message: "GitHub returned an unexpected response." });
+      else setState({ status: "ready", data });
     } catch (e) {
       setState({ status: "error", message: e?.response?.data?.error || "Could not load GitHub details.", code: e?.response?.status });
     }

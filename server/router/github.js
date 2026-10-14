@@ -3,7 +3,8 @@ const mongoose = require("mongoose");
 const User = require("../models/schema");
 const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
-const { parseGithubRepo, orderAccounts, shapeRepoDetails, githubError } = require("../utils/github");
+const { parseGithubRepo, shapeRepoDetails } = require("../utils/github");
+const { githubGet, loadGithubAccounts, resolveRepo } = require("../utils/githubClient");
 
 /*
  * GitHub connection for the Projects page. Tokens are stored like Render API keys: sealed with the
@@ -11,7 +12,6 @@ const { parseGithubRepo, orderAccounts, shapeRepoDetails, githubError } = requir
  * made, and only to api.github.com. Details are fetched per project, on demand.
  */
 const router = express.Router();
-const GITHUB_API = "https://api.github.com";
 const MAX_ACCOUNTS = 5;
 const CACHE_TTL_MS = 60 * 1000;
 const CACHE_MAX = 200;
@@ -20,33 +20,12 @@ const cache = new Map();
 
 const text = (value, max) => (typeof value === "string" ? value.trim().slice(0, max) : "");
 
-async function githubGet(token, path) {
-  try {
-    const response = await fetch(GITHUB_API + path, {
-      headers: {
-        Authorization: "Bearer " + token, Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "Stashr-Projects"
-      },
-      signal: AbortSignal.timeout(15000)
-    });
-    const body = await response.json().catch(() => null);
-    return { ok: response.ok, status: response.status, body, headers: Object.fromEntries(response.headers) };
-  } catch (error) {
-    const timeout = error.name === "TimeoutError" || error.name === "AbortError";
-    return { ok: false, status: timeout ? 504 : 502, body: null, headers: {}, network: true };
-  }
-}
-
 function publicAccount(entry, fields) {
   return { id: String(entry._id), name: fields.name, login: fields.login, connectedAt: fields.connectedAt };
 }
 
 async function savedAccounts(req) {
-  const dataKey = await req.rootUser.getDataKey();
-  return (req.rootUser.githubAccounts || []).map((entry) => {
-    const fields = entry.enc === "udk" ? User.publicEntry(entry, dataKey) : null;
-    return fields && fields.token ? { id: String(entry._id), entry, dataKey, name: fields.name, login: fields.login, token: fields.token, connectedAt: fields.connectedAt } : null;
-  }).filter(Boolean);
+  return loadGithubAccounts(req.rootUser, await req.rootUser.getDataKey());
 }
 
 router.use("/github", authenticate, limiter);
@@ -104,19 +83,9 @@ router.get("/github/repo", async (req, res) => {
   const hit = cache.get(key);
   if (hit && req.query.refresh !== "1" && Date.now() - hit.at < CACHE_TTL_MS) return res.json({ ...hit.data, cached: true });
 
-  const base = "/repos/" + encodeURIComponent(target.owner) + "/" + encodeURIComponent(target.repo);
-  let repo = null, used = null, failure = null, invalid = 0;
-  for (const account of orderAccounts(accounts, target.owner)) {
-    const result = await githubGet(account.token, base);
-    if (result.ok) { repo = result.body; used = account; break; }
-    if (result.status === 401) invalid += 1;
-    // Prefer the most informative failure: a 404/403 beats a transient error.
-    if (!failure || result.status === 404 || result.status === 403) failure = githubError(result.network ? 502 : result.status, result.headers);
-  }
-  if (!repo) {
-    const error = invalid === accounts.length ? githubError(401) : failure || githubError(502);
-    return res.status(error.status).json({ error: error.message });
-  }
+  const resolved = await resolveRepo(accounts, target);
+  if (resolved.error) return res.status(resolved.error.status).json({ error: resolved.error.message });
+  const { repo, used, base } = resolved;
 
   const branch = encodeURIComponent(repo.default_branch || "");
   const [commits, pulls, runs] = await Promise.all([

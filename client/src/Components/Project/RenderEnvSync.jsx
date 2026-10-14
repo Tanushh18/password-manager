@@ -52,15 +52,15 @@ export default function RenderEnvSync({ project }) {
     const service = services.find((s) => s.id === serviceId);
     if (!service) return;
     setBusy("link"); setError("");
-    try { await updateProject(project.id, { renderAccountId: accountId, renderServiceId: service.id, renderServiceName: service.name || service.id }); toast.success("Linked to " + (service.name || service.id) + "."); }
+    try { await updateProject(project.id, { renderAccountId: accountId, renderServiceId: service.id, renderServiceName: service.name || service.id, renderAutoLinked: "" }); toast.success("Linked to " + (service.name || service.id) + "."); }
     catch (e) { setError(errorOf(e, "Could not save the link.")); }
     finally { setBusy(""); }
   };
 
   const unlink = async () => {
-    if (!window.confirm("Unlink this project from Render? Variables already saved here are kept.")) return;
+    if (!window.confirm("Unlink this project from Render? Variables already saved here are kept, and it will not be linked automatically again.")) return;
     setBusy("unlink");
-    try { await updateProject(project.id, { renderAccountId: "", renderServiceId: "", renderServiceName: "", renderAutoSync: "" }); setPreview(null); setServiceId(""); toast.success("Unlinked."); }
+    try { await updateProject(project.id, { renderAccountId: "", renderServiceId: "", renderServiceName: "", renderAutoSync: "", renderAutoLinked: "off" }); setPreview(null); setServiceId(""); toast.success("Unlinked."); }
     catch (e) { setError(errorOf(e, "Could not unlink.")); }
     finally { setBusy(""); }
   };
@@ -127,7 +127,7 @@ export default function RenderEnvSync({ project }) {
       ) : (
         <>
           <div className="vault-card__badges">
-            <span className="badge badge--ok">Linked</span>
+            <span className="badge badge--ok">{project.renderAutoLinked === "yes" ? "Linked automatically" : "Linked"}</span>
             <span className="badge badge--muted">{project.renderServiceName || project.renderServiceId}</span>
             {accountName ? <span className="badge badge--muted">{accountName}</span> : null}
             <span className="badge badge--muted">Synced {project.renderSyncedAt ? ago(project.renderSyncedAt) : "never"}</span>

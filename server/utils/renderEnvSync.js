@@ -53,10 +53,14 @@ async function syncProjectEnv(user, projectId, { apply = false, resolveConflicts
   STRIP.forEach((key) => delete next[key]);
   next.envVars = merged.envVars;
   next.renderSyncedAt = now.toISOString();
+  const sealed = User.sealEntry(dataKey, next);
   await User.updateOne(
     { _id: user._id, "projects._id": entry._id },
-    { $set: { "projects.$.enc": "udk", "projects.$.data": User.sealEntry(dataKey, next), "projects.$.updatedAt": now } }
+    { $set: { "projects.$.enc": "udk", "projects.$.data": sealed, "projects.$.updatedAt": now } }
   );
+  // Keep the in-memory document current so later steps in the same request see the saved state.
+  entry.enc = "udk";
+  entry.data = sealed;
   return { ...summary, applied: true, syncedAt: next.renderSyncedAt };
 }
 

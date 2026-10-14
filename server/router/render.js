@@ -3,6 +3,9 @@ const mongoose = require("mongoose");
 const renderOps = require("../utils/renderOps");
 const { fetchAllPages } = require("../utils/renderPaging");
 const { syncProjectEnv, runAllEnvSync } = require("../utils/renderEnvSync");
+const { getProjectStatuses, runAllAutoLink } = require("../utils/projectStatus");
+const { buildRegistrySync, setAutoSync, runAllRegistrySync } = require("../utils/registrySyncIO");
+const { isAdminUser } = require("./registry");
 const { checkServiceDeletion, parseBulkTargets, mapWithConcurrency } = require("../utils/renderGuards");
 const User = require("../models/schema");
 const authenticate = require("../middlewares/authenticate");
@@ -108,10 +111,13 @@ router.post("/render/ops/tick", apiLimiter, async (req, res) => {
   if (!renderOps.verifySecret(candidate, expected)) return res.status(expected ? 401 : 503).json({ error: expected ? "Invalid scheduler credential." : "Persistent monitoring scheduler is not configured." });
   try {
     const summary = await renderOps.runAllEnabledMonitoring();
-    let envSync = null;
-    try { envSync = await runAllEnvSync(); } catch { envSync = { error: true }; }
+    // Each upkeep step is isolated: one failing never blocks the others.
+    const step = async (fn) => { try { return await fn(); } catch { return { error: true }; } };
+    const autoLink = await step(runAllAutoLink);
+    const envSync = await step(runAllEnvSync);
+    const registrySync = await step(runAllRegistrySync);
     res.set("Cache-Control", "no-store");
-    return res.json({ ok: true, ...summary, envSync, completedAt: new Date().toISOString() });
+    return res.json({ ok: true, ...summary, autoLink, envSync, registrySync, completedAt: new Date().toISOString() });
   } catch {
     return res.status(500).json({ error: "Monitoring tick failed. Check server logs without logging secrets." });
   }
@@ -626,6 +632,33 @@ router.post("/render/accounts/:accountId/services/:serviceId/deploys/:deployId/c
 /* Bulk delete: one request, many services (possibly across accounts). Every service is re-read from
    Render and skipped unless it is currently suspended, so active services can never be removed here. */
 /* One-way sync of a linked Render service's env vars into a project (preview with apply=false). Names only in the response. */
+/* Live status for every project (or one): auto-links to Render, then deploy drift, CI and a health score. */
+router.get("/render/projects/status", async (req, res) => {
+  const only = typeof req.query.id === "string" && mongoose.isValidObjectId(req.query.id) ? req.query.id : "";
+  try {
+    const data = await getProjectStatuses(req.rootUser, { only, refresh: req.query.refresh === "1" });
+    res.set("Cache-Control", "no-store");
+    return res.json(data);
+  } catch { return res.status(500).json({ error: "Could not compute project status." }); }
+});
+
+/* Servers tab sync (admin only): each registry URL matched to its Render service, plus suggestions. */
+router.get("/render/registry-sync", async (req, res) => {
+  if (!isAdminUser(req.rootUser)) return res.status(403).json({ error: "Not allowed." });
+  try { res.set("Cache-Control", "no-store"); return res.json(await buildRegistrySync(req.rootUser)); }
+  catch { return res.status(500).json({ error: "Could not load Render sync for the server list." }); }
+});
+
+router.put("/render/registry-sync/:app", async (req, res) => {
+  if (!isAdminUser(req.rootUser)) return res.status(403).json({ error: "Not allowed." });
+  if (typeof req.body?.autoSync !== "boolean") return res.status(400).json({ error: "autoSync must be true or false." });
+  try {
+    const doc = await setAutoSync(String(req.params.app || "").toLowerCase(), req.body.autoSync, req.rootUser.email);
+    if (!doc) return res.status(404).json({ error: "Unknown app." });
+    return res.json({ app: doc.app, autoSync: doc.autoSync !== false });
+  } catch { return res.status(500).json({ error: "Could not change auto-sync." }); }
+});
+
 router.post("/render/project-sync/:projectId", async (req, res) => {
   try {
     const result = await syncProjectEnv(req.rootUser, req.params.projectId, { apply: req.body?.apply === true, resolveConflicts: req.body?.resolveConflicts === true });

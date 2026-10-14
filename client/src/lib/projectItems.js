@@ -50,6 +50,7 @@ export const emptyProject = () => ({
   renderServiceName: "",
   renderSyncedAt: "",
   renderAutoSync: "", // "on" | ""
+  renderAutoLinked: "", // "yes" = linked automatically | "off" = you unlinked it, so it is never auto-linked again
 
   lastDeployedAt: "",
   notes: "",

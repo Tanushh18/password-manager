@@ -69,6 +69,23 @@ function shapeRepoDetails({ repo, commits, pulls, runs }) {
   };
 }
 
+/**
+ * GitHub compare of `deployedSha...branch`. `behindBy` is how many commits on the branch have not been
+ * deployed yet (compare.ahead_by, since the deployed commit is the base). Null if the payload is unusable.
+ */
+function shapeCompare(compare, branch) {
+  if (!compare || typeof compare !== "object") return null;
+  const known = ["ahead", "identical", "behind", "diverged"];
+  return {
+    status: known.includes(compare.status) ? compare.status : "unknown",
+    behindBy: Math.max(0, Number(compare.ahead_by) || 0),
+    branch: branch || null,
+    commits: (Array.isArray(compare.commits) ? compare.commits : []).slice(-5).reverse().map((c) => ({
+      sha: String(c.sha || "").slice(0, 7), message: firstLine(c.commit?.message), at: c.commit?.author?.date || null, url: c.html_url || null
+    }))
+  };
+}
+
 /** Maps a GitHub failure to a status/message that is safe and useful to show to the user. */
 function githubError(status, headers = {}) {
   const remaining = headers["x-ratelimit-remaining"];
@@ -79,4 +96,4 @@ function githubError(status, headers = {}) {
   return { status: 502, message: "GitHub returned an unexpected error." };
 }
 
-module.exports = { parseGithubRepo, orderAccounts, ciSummary, shapeRepoDetails, githubError };
+module.exports = { parseGithubRepo, orderAccounts, ciSummary, shapeRepoDetails, shapeCompare, githubError };

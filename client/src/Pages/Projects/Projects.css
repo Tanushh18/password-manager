@@ -125,3 +125,8 @@
 .gh-sync__warn { color: var(--warn, #d4a72c); }
 .gh-panel select.input { width: auto; min-width: 190px; max-width: 100%; }
 .gh-sync > strong { display: inline-flex; align-items: center; gap: .35rem; }
+.gh-reasons { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; }
+.gh-reasons li { font-size: .82rem; padding-left: .9rem; position: relative; color: var(--heading-2); }
+.gh-reasons li::before { content: ""; position: absolute; left: 0; top: .5em; width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); }
+.gh-reasons .is-critical::before { background: var(--danger); }
+.gh-reasons .is-warn::before { background: var(--accent-3, #d4a72c); }
