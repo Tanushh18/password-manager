@@ -12,6 +12,7 @@ const app = require("../app");
 const User = require("../models/schema");
 const totp = require("../utils/totp");
 const { encrypt } = require("../models/EncDecManager");
+const renderOps = require("../utils/renderOps");
 
 let mongo;
 beforeAll(async () =>
@@ -442,6 +443,29 @@ describe("server registry", () =>
 
 describe("Render API proxy", () =>
 {
+    test("normalizes monitoring limits, service groups, dependencies and manual budgets", () =>
+    {
+        const config = renderOps.normalizeConfig({
+            groups: [{
+                id: "deal-radar", name: "Deal Radar",
+                serviceKeys: ["account1:srv-one", "account1:srv-two"],
+                dependencies: [{ from: "account1:srv-one", to: "account1:srv-two" }, { from: "account1:srv-one", to: "not-in-group" }],
+                serviceCostEstimates: { "account1:srv-one": 12.345, "not-in-group": 99 },
+                monthlyBudgetUsd: 25
+            }],
+            monitor: { enabled: true, intervalMinutes: 99, thresholds: { cpu: 1000, memory: -5, latencyMs: 100000 } }
+        });
+        expect(config.groups).toHaveLength(1);
+        expect(config.groups[0].dependencies).toHaveLength(1);
+        expect(config.groups[0].serviceCostEstimates["account1:srv-one"]).toBe(12.35);
+        expect(config.groups[0].serviceCostEstimates["not-in-group"]).toBeUndefined();
+        expect(config.groups[0].monthlyBudgetUsd).toBe(25);
+        expect(config.monitor.intervalMinutes).toBe(5);
+        expect(config.monitor.thresholds.cpu).toBe(100);
+        expect(config.monitor.thresholds.memory).toBe(1);
+        expect(config.monitor.thresholds.latencyMs).toBe(60000);
+    });
+
     test("validates API keys against the canonical Render v1 endpoint without exposing the key", async () =>
     {
         await register();
