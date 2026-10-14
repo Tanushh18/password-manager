@@ -130,7 +130,8 @@ router.put("/render/ops/config", async (req, res) => {
       return {
         ...group,
         serviceKeys,
-        dependencies: (group.dependencies || []).filter((edge) => serviceKeys.includes(edge.from) && serviceKeys.includes(edge.to))
+        dependencies: (group.dependencies || []).filter((edge) => serviceKeys.includes(edge.from) && serviceKeys.includes(edge.to)),
+        serviceCostEstimates: Object.fromEntries(Object.entries(group.serviceCostEstimates || {}).filter(([key]) => serviceKeys.includes(key)))
       };
     }).filter((group) => group.serviceKeys.length >= 2);
     const saved = await renderOps.saveConfig(req.rootUser, normalized);
@@ -248,10 +249,10 @@ router.get("/render/ops/report", async (req, res) => {
     const report = {
       generatedAt: new Date().toISOString(),
       monitoringEnabled: Boolean(config.monitor?.enabled),
-      groups: (config.groups || []).map((group) => ({ id: group.id, name: group.name, serviceCount: group.serviceKeys.length, dependencies: group.dependencies || [] })),
+      groups: (config.groups || []).map((group) => ({ id: group.id, name: group.name, serviceCount: group.serviceKeys.length, dependencies: group.dependencies || [], serviceCostEstimates: group.serviceCostEstimates || {}, estimatedMonthlyCostUsd: Object.values(group.serviceCostEstimates || {}).reduce((sum, value) => sum + Number(value || 0), 0), monthlyBudgetUsd: group.monthlyBudgetUsd || 0 })),
       history: history.map((item) => ({
         sampledAt: item.sampledAt, groupId: item.groupId, groupName: item.groupName,
-        combined: item.combined || {}, services: (item.services || []).map((service) => ({
+        combined: item.combined || {}, estimatedMonthlyCostUsd: item.estimatedMonthlyCostUsd || 0, monthlyBudgetUsd: item.monthlyBudgetUsd || 0, services: (item.services || []).map((service) => ({
           name: service.name, serviceId: service.serviceId, health: service.health?.state || "unknown",
           metrics: service.metrics || {}, suspended: Boolean(service.suspended)
         }))
