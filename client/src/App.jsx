@@ -13,6 +13,7 @@ import ProjectDetail from "./Pages/Projects/ProjectDetail";
 import ProjectForm from "./Pages/Projects/ProjectForm";
 import Settings from "./Pages/Settings/Settings";
 import Servers from "./Pages/Servers/Servers";
+import RenderDashboard from "./Pages/Render/RenderDashboard";
 import Privacy from "./Pages/Privacy/Privacy";
 import Logout from "./Pages/Logout/Logout";
 import Navbar from "./Components/Navbar/Navbar";
@@ -83,6 +84,7 @@ export default function App() {
           <Route path="/projects/:id/edit" element={<RequireVault><ProjectForm /></RequireVault>} />
           <Route path="/settings" element={<RequireVault><Settings /></RequireVault>} />
           <Route path="/servers" element={<RequireVault><RequireAdmin><Servers /></RequireAdmin></RequireVault>} />
+          <Route path="/render" element={<RequireVault><RenderDashboard /></RequireVault>} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/logout" element={<Logout />} />
           <Route path="*" element={<Navigate to="/" replace />} />
