@@ -639,26 +639,74 @@ export default function RenderDashboard() {
     catch { /* error already shown */ }
   };
 
+  const waitForServiceReady = async (service, deployId = "", timeoutMs = 300000) => {
+    const startedAt = Date.now();
+    const terminalFailure = new Set(["build_failed", "update_failed", "canceled", "cancelled", "deactivated"]);
+    while (Date.now() - startedAt < timeoutMs) {
+      await new Promise((resolve) => window.setTimeout(resolve, 10000));
+      if (deployId) {
+        const response = await getRenderDeploys(service.accountId, service.id);
+        const deployments = normalizeList(response, "deploy");
+        const deploy = deployments.find((item) => item.id === deployId) || null;
+        if (!deploy) continue;
+        const status = String(deploy.status || "").toLowerCase();
+        if (terminalFailure.has(status)) return { ok: false, message: "Deployment ended with status " + status + "." };
+        if (status !== "live") continue;
+      }
+      try {
+        const health = await checkRenderHealth(service.accountId, service.id);
+        if (health.state === "healthy") return { ok: true, health: health.state };
+        if (health.state === "unhealthy" || health.state === "timeout") return { ok: false, message: "Health probe returned " + health.state + "." };
+        if (deployId && (health.state === "unsupported" || health.state === "unknown")) return { ok: true, health: "not-probeable" };
+      } catch (e) {
+        if (deployId && e?.response?.status >= 400 && e?.response?.status < 500) return { ok: false, message: "Health verification failed: " + (e?.response?.data?.error || "request rejected") };
+      }
+    }
+    return { ok: false, message: "Timed out waiting for the service to become ready. Remaining group actions were stopped." };
+  };
+
   const runBulkAction = async (action) => {
     if (!selectedGroup || !groupServices.length) return;
     const targets = groupServices.filter((service) => action !== "restart" || serviceKind(service) !== "Cron job");
-    const label = action === "deploy" ? "deploy latest code to" : "restart";
-    if (!window.confirm("Sequentially " + label + " " + targets.length + " service(s) in '" + selectedGroup.name + "'? This can cause temporary interruptions.")) return;
+    const label = action === "deploy" ? "deploy and wait for readiness on" : "restart and verify health for";
+    if (!window.confirm("Sequentially " + label + " " + targets.length + " service(s) in '" + selectedGroup.name + "'? The next service will wait for the current one to become ready. If readiness fails or times out, remaining actions stop.")) return;
     setBulkBusy(true);
     const outcomes = [];
     try {
       for (const service of targets) {
         try {
-          if (action === "deploy") await triggerRenderDeploy(service.accountId, service.id, false);
-          else await restartRenderService(service.accountId, service.id);
-          outcomes.push({ name: service.name, ok: true });
-        } catch (e) { outcomes.push({ name: service.name, ok: false, error: e?.response?.data?.error || "Request failed" }); }
+          if (action === "deploy") {
+            const started = Date.now();
+            const response = await triggerRenderDeploy(service.accountId, service.id, false);
+            let deployId = response?.deploy?.id || response?.id || response?.deployId || "";
+            if (!deployId) {
+              const current = normalizeList(await getRenderDeploys(service.accountId, service.id), "deploy");
+              deployId = current.find((item) => Date.parse(item.createdAt || 0) >= started - 5000)?.id || "";
+            }
+            if (!deployId) {
+              outcomes.push({ name: service.name, ok: false, error: "Deploy was requested, but its ID could not be verified. Stopped before the next service." });
+              break;
+            }
+            const readiness = await waitForServiceReady(service, deployId, 5 * 60 * 1000);
+            outcomes.push({ name: service.name, ok: readiness.ok, note: readiness.health === "not-probeable" ? "Render reports live; no supported public health probe." : "", error: readiness.ok ? "" : readiness.message });
+            if (!readiness.ok) break;
+          } else {
+            await restartRenderService(service.accountId, service.id);
+            const readiness = await waitForServiceReady(service, "", 90 * 1000);
+            outcomes.push({ name: service.name, ok: readiness.ok, note: readiness.health === "not-probeable" ? "No supported public health probe." : "", error: readiness.ok ? "" : readiness.message });
+            if (!readiness.ok) break;
+          }
+        } catch (e) {
+          outcomes.push({ name: service.name, ok: false, error: e?.response?.data?.error || "Request failed. Remaining group actions were stopped." });
+          break;
+        }
       }
       await loadAccounts(true);
       await loadAudit();
       const failed = outcomes.filter((item) => !item.ok);
-      if (failed.length) toast.error("Completed with " + failed.length + " failure(s): " + failed.map((item) => item.name).join(", "));
-      else toast.success("All " + outcomes.length + " " + (action === "deploy" ? "deploys" : "restarts") + " requested.");
+      const notRun = Math.max(0, targets.length - outcomes.length);
+      if (failed.length) toast.error(outcomes.filter((item) => !item.ok).map((item) => item.name + ": " + item.error).join(" · ") + (notRun ? " · " + notRun + " later service(s) not started" : ""));
+      else toast.success("Completed " + outcomes.length + " sequential action(s)." + (notRun ? " " + notRun + " later service(s) were not started." : ""));
     } finally { setBulkBusy(false); }
   };
 
