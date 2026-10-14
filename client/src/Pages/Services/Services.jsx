@@ -3,16 +3,18 @@ import { toast } from "react-toastify";
 import { getLiveDashboard, saveUsageSettings } from "../../api/client";
 import { Skeleton, Empty } from "../Render/RenderUi";
 import { timeAgo, errorMessage } from "../Render/renderUtils";
-import { formatAmount, forecastText, summarize, projectSummary, metricRows, STATUS_LABEL } from "./servicesUtils";
+import { formatAmount, forecastText, summarize, projectSummary, metricRows, accountRows, STATUS_LABEL } from "./servicesUtils";
 import "../Render/RenderDashboard.css";
 import "./Services.css";
 
 const STATE_TEXT = {
-  "no-credentials": "Usage keys not found in env",
-  "no-reader": "No usage API — check console",
+  "no-credentials": "Keys needed to read usage aren’t set on this service",
+  "no-reader": "No usage API",
   disabled: "Tracking off",
   error: "Couldn’t read usage"
 };
+
+const detailText = (m) => m.label.replace(/ this month$/i, "") + " " + formatAmount(m.used, m.unit);
 
 function Status({ status }) {
   const s = status || "unknown";
@@ -77,6 +79,12 @@ function Overview({ data, onOpen }) {
 
 /* ---------------------------------------------------------------- Project detail */
 
+const varGroups = (project) => [
+  ...project.services.map((svc) => ({ label: svc.label, vars: svc.vars })),
+  { label: "Other / unrecognised", vars: project.otherVars || [] },
+  { label: "App config", vars: project.internalVars || [] }
+].filter((g) => g.vars.length);
+
 function ProjectDetail({ project, onToggle }) {
   const s = projectSummary(project);
   const withData = project.services.filter((svc) => svc.state === "ok" && metricRows(svc).length);
@@ -112,13 +120,13 @@ function ProjectDetail({ project, onToggle }) {
         {withData.length === 0 ? <p className="sv-empty">No provider usage could be read for this project yet.</p> : (
           <div className="sv-tablewrap">
             <table className="sv-table">
-              <thead><tr><th>Metric</th><th>Usage</th><th>Used</th><th>Limit</th><th>Left</th><th>Outlook</th><th>Status</th></tr></thead>
+              <thead><tr><th>Account / metric</th><th>Usage</th><th>Used</th><th>Limit</th><th>Left</th><th>Outlook</th><th>Status</th></tr></thead>
               {withData.map((svc) => (
                 <tbody key={svc.key}>
                   <tr className="sv-group">
                     <th colSpan={7}>
                       <div className="sv-groupline">
-                        <span><strong>{svc.label}</strong><em>{svc.category}</em>{svc.reports[0]?.plan && <small>{svc.reports[0].plan}</small>}</span>
+                        <span><strong>{svc.label}</strong><em>{svc.category}</em>{svc.reports.length > 1 && <small>{svc.reports.length} accounts</small>}</span>
                         <span className="sv-actions">
                           {svc.console && <a href={svc.console} target="_blank" rel="noopener noreferrer">Console ↗</a>}
                           <label className="rd-check"><input type="checkbox" checked onChange={() => onToggle(project.id + "|" + svc.key, true)} /> Track</label>
@@ -126,37 +134,48 @@ function ProjectDetail({ project, onToggle }) {
                       </div>
                     </th>
                   </tr>
-                  {metricRows(svc).map((m) => (
-                    <tr key={m.report + m.key} title={forecastText(m)}>
-                      <td>{m.label}{m.multi && <small className="sv-sub">{m.report}</small>}</td>
-                      <td>{m.kind === "balance" ? <span className="sv-dim">balance</span> : <UsageBar m={m} />}</td>
-                      <td className="sv-num">{m.kind === "balance" ? "—" : formatAmount(m.used, m.unit)}</td>
-                      <td className="sv-num">{m.limit != null ? formatAmount(m.limit, m.unit) + (m.limitAssumed ? "*" : "") : "—"}</td>
-                      <td className="sv-num">{formatAmount(m.remaining, m.unit)}</td>
-                      <td>{shortForecast(m)}{m.projectedAtReset != null && m.limit != null && <small className="sv-sub">≈ {formatAmount(m.projectedAtReset, m.unit)} at reset</small>}</td>
-                      <td><Status status={m.status} /></td>
+                  {accountRows(svc).map((acct) => (acct.headline.length ? acct.headline : [null]).map((m, i) => (
+                    <tr key={acct.label + (m ? m.key : "none")} title={m ? forecastText(m) : ""}>
+                      <td>
+                        {i === 0 && <strong className="sv-acct">{acct.label}{acct.plan && <small> · {acct.plan}</small>}</strong>}
+                        {m && <span className="sv-metricname">{m.label}</span>}
+                        {i === 0 && acct.details.length > 0 && <small className="sv-sub">{acct.details.map(detailText).join(" · ")}</small>}
+                      </td>
+                      {m ? <>
+                        <td>{m.kind === "balance" ? <span className="sv-dim">balance</span> : <UsageBar m={m} />}</td>
+                        <td className="sv-num">{m.kind === "balance" ? "—" : formatAmount(m.used, m.unit)}</td>
+                        <td className="sv-num">{m.limit != null ? formatAmount(m.limit, m.unit) + (m.limitAssumed ? "*" : "") : "—"}</td>
+                        <td className="sv-num">{formatAmount(m.remaining, m.unit)}</td>
+                        <td>{shortForecast(m)}{m.projectedAtReset != null && m.limit != null && <small className="sv-sub">≈ {formatAmount(m.projectedAtReset, m.unit)} at reset</small>}</td>
+                        <td><Status status={m.status} /></td>
+                      </> : <td colSpan={6} className="sv-dim">No limit reported by the provider</td>}
                     </tr>
-                  ))}
+                  )))}
                 </tbody>
               ))}
             </table>
           </div>
         )}
+        {withData.some((svc) => svc.key === "cloudinary") && <p className="rd-note">Cloudinary’s free plan is one pool of 25 credits a month per account; storage, bandwidth and transformations all draw from it.</p>}
         {withData.some((svc) => metricRows(svc).some((m) => m.limitAssumed)) && <p className="rd-note">* Limit from your settings, not reported by the provider.</p>}
       </section>
 
       {without.length > 0 && (
         <section className="sv-panel">
-          <header className="sv-panel__head"><h2>Other connected services</h2><span className="sv-dim">Used by this project, no usage figures available</span></header>
+          <header className="sv-panel__head"><h2>Other connected services</h2><span className="sv-dim">Used by this project; usage can’t be read automatically</span></header>
           <div className="sv-tablewrap">
             <table className="sv-table">
-              <thead><tr><th>Service</th><th>Category</th><th>Limits set in env</th><th>Usage</th><th /></tr></thead>
+              <thead><tr><th>Service</th><th>Category</th><th>Limits set in env</th><th>Usage / where to check</th><th /></tr></thead>
               <tbody>{without.map((svc) => (
                 <tr key={svc.key}>
                   <td><strong>{svc.label}</strong></td>
                   <td>{svc.category}</td>
                   <td>{svc.configuredLimits.length ? svc.configuredLimits.map((l) => <code key={l.name} className="sv-tag">{l.name} = {l.value}{l.period ? " / " + l.period : ""}</code>) : <span className="sv-dim">—</span>}</td>
-                  <td><span className="sv-dim" title={svc.error?.message || ""}>{STATE_TEXT[svc.state] || "—"}</span></td>
+                  <td>
+                    <span className={svc.state === "error" ? "sv-err" : "sv-dim"}>{STATE_TEXT[svc.state] || "—"}{svc.state === "error" && svc.error?.detail ? ": " + svc.error.detail : ""}</span>
+                    {svc.state === "error" && (svc.error?.hint || svc.error?.message) && <small className="sv-sub">{svc.error.hint || svc.error.message}</small>}
+                    {svc.state === "no-reader" && svc.usageHint && <small className="sv-sub">{svc.usageHint}</small>}
+                  </td>
                   <td className="sv-right">
                     {svc.console && <a href={svc.console} target="_blank" rel="noopener noreferrer">Console ↗</a>}
                     {svc.hasCredentials && <label className="rd-check"><input type="checkbox" checked={svc.state !== "disabled"} onChange={() => onToggle(project.id + "|" + svc.key, svc.state !== "disabled")} /> Track</label>}
@@ -168,17 +187,21 @@ function ProjectDetail({ project, onToggle }) {
         </section>
       )}
 
+      {(project.otherVars || []).length > 0 && (
+        <div className="rd-alert"><span aria-hidden="true">i</span><div>{project.otherVars.length} variable(s) don’t match a known provider: <span className="sv-mono">{project.otherVars.map((v) => v.name).join(", ")}</span>. They’re listed under “Other / unrecognised” below.</div></div>
+      )}
+
       <section className="sv-panel">
         <header className="sv-panel__head">
           <h2>Environment variables</h2>
-          <button type="button" className="rd-btn rd-btn--quiet" aria-expanded={openVars} onClick={() => setOpenVars((v) => !v)}>{openVars ? "Hide" : "Show"} ({project.services.reduce((n, svc) => n + svc.vars.length, 0)})</button>
+          <button type="button" className="rd-btn rd-btn--quiet" aria-expanded={openVars} onClick={() => setOpenVars((v) => !v)}>{openVars ? "Hide" : "Show"} all ({varGroups(project).reduce((n, g) => n + g.vars.length, 0)})</button>
         </header>
         {openVars && (
           <div className="sv-tablewrap">
             <table className="sv-table sv-table--compact">
-              <thead><tr><th>Service</th><th>Variable</th><th>Value</th></tr></thead>
-              <tbody>{project.services.flatMap((svc) => svc.vars.map((v, i) => (
-                <tr key={svc.key + v.name}><td>{i === 0 ? <strong>{svc.label}</strong> : ""}</td><td><code>{v.name}</code></td>
+              <thead><tr><th>Group</th><th>Variable</th><th>Value</th></tr></thead>
+              <tbody>{varGroups(project).flatMap((g) => g.vars.map((v, i) => (
+                <tr key={g.label + v.name}><td>{i === 0 ? <strong>{g.label}</strong> : ""}</td><td><code>{v.name}</code></td>
                   <td className={v.display == null ? "sv-dim" : "sv-mono"}>{!v.set ? "empty" : v.display != null ? v.display : "•••••• hidden"}</td></tr>
               )))}</tbody>
             </table>

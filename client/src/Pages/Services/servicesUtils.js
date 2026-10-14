@@ -50,6 +50,7 @@ export function projectSummary(project) {
   for (const s of project.services || []) {
     if (s.state === "error") issues += 1;
     for (const r of s.reports || []) for (const m of r.metrics) {
+      if (m.limit == null && m.kind !== "balance") continue;
       metrics += 1;
       if (m.percent != null && (!worst || RANK[m.status] > RANK[worst.status] || (RANK[m.status] === RANK[worst.status] && m.percent > worst.percent))) worst = { ...m, service: s.label };
     }
@@ -58,7 +59,19 @@ export function projectSummary(project) {
   return { status, worst, metrics, issues, services: (project.services || []).length };
 }
 
-/** Flattens a service's reports into table rows (one per metric). */
+/**
+ * One row per provider account: the metric that has a limit (or a balance) is the headline; figures without a limit
+ * become a compact detail line under it instead of rows full of "no limit" dashes.
+ */
+export function accountRows(svc) {
+  return (svc.reports || []).map((r) => {
+    const headline = r.metrics.filter((m) => m.limit != null || m.kind === "balance");
+    const details = r.metrics.filter((m) => !headline.includes(m));
+    return { label: r.label, plan: r.plan, notes: r.notes || [], headline, details };
+  });
+}
+
+/** Flattens a service's reports into metrics (used by summaries). */
 export function metricRows(svc) {
   const rows = [];
   for (const r of svc.reports || []) for (const m of r.metrics) rows.push({ ...m, report: r.label, plan: r.plan, multi: (svc.reports || []).length > 1 });

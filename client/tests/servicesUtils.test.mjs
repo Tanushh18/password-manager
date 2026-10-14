@@ -26,11 +26,18 @@ test("summarize counts statuses and finds the soonest exhaustion", () => {
 test("projectSummary picks the worst metric and counts errors", async () => {
   const { projectSummary } = await import("../src/Pages/Services/servicesUtils.js");
   const p = { services: [
-    { label: "Mongo", state: "ok", reports: [{ metrics: [{ status: "ok", percent: 40 }, { status: "warn", percent: 85 }] }] },
+    { label: "Mongo", state: "ok", reports: [{ metrics: [{ status: "ok", percent: 40, limit: 10 }, { status: "warn", percent: 85, limit: 10 }] }] },
     { label: "Brevo", state: "error", reports: [] }] };
   const s = projectSummary(p);
   assert.equal(s.status, "warn");
   assert.equal(s.worst.service, "Mongo");
   assert.equal(s.issues, 1);
   assert.equal(projectSummary({ services: [] }).status, "unknown");
+});
+
+test("accountRows splits headline metrics from detail figures", async () => {
+  const { accountRows } = await import("../src/Pages/Services/servicesUtils.js");
+  const rows = accountRows({ reports: [{ label: "acct", metrics: [{ key: "credits", limit: 25, used: 1 }, { key: "storage", used: 5 }, { key: "bal", kind: "balance", remaining: 3 }] }] });
+  assert.deepEqual(rows[0].headline.map((m) => m.key), ["credits", "bal"]);
+  assert.deepEqual(rows[0].details.map((m) => m.key), ["storage"]);
 });

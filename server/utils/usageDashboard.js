@@ -12,6 +12,26 @@ const HISTORY_MAX = 600;                   // snapshots kept per user
 const SNAPSHOT_MIN_GAP_MS = 55 * 60 * 1000; // at most one snapshot an hour
 const providerCache = new Map();
 
+/* Where to see usage for providers that have no usage API Stashr can call with an app key. */
+const USAGE_HINT = {
+  groq: "Groq has no usage API. Requests, tokens and rate limits per model are in the Groq console under Settings → Limits / Usage.",
+  firebase: "Firebase usage (reads, writes, FCM sends) is in the Firebase console → Usage and billing.",
+  redis: "Upstash shows commands and storage per database in its console; its REST token can’t read account usage.",
+  livekit: "LiveKit Cloud shows participant minutes and bandwidth in the project dashboard → Usage.",
+  cartesia: "Cartesia shows credits used in its dashboard → Usage.",
+  sms: "Check the SMS gateway’s own dashboard for remaining balance and daily sends.",
+  openai: "OpenAI usage needs an admin key; see platform.openai.com/usage.",
+  anthropic: "See console.anthropic.com → Usage.",
+  gemini: "See Google AI Studio → API keys → usage, or Google Cloud console quotas.",
+  telegram: "Telegram bots have no usage quota to track.",
+  email: "Check your mail provider’s dashboard for sending limits.",
+  payments: "Payment providers don’t have usage limits to track.",
+  github: "GitHub token rate limits reset hourly; nothing to track here.",
+  render: "Render platform keys — see the Render page.",
+  google: "See Google Cloud console → APIs & Services → Quotas.",
+  sentry: "See Sentry → Settings → Subscription → Usage."
+};
+
 const fingerprint = (key, creds) => key + ":" + crypto.createHash("sha256").update(JSON.stringify(creds)).digest("hex").slice(0, 24);
 const limitPeriod = (name) => (/(^|_)(RPD|DAILY|PER_DAY|DAY)(_|$)/i.test(name) ? "day" : /(^|_)(RPM|PER_MINUTE|MINUTE)(_|$)/i.test(name) ? "minute" : /MONTH/i.test(name) ? "month" : "");
 
@@ -51,6 +71,7 @@ function runProvider(providers, svc, settings, nowMs) {
   const hit = providerCache.get(fp);
   if (hit && nowMs - hit.at < PROVIDER_TTL_MS) return hit.promise;
   const promise = providers[svc.key].run(svc.credentials, { settings }).catch(() => ({ ok: false, code: "unavailable", error: "Reading usage failed." }));
+  promise.then((r) => { if (!r.ok) providerCache.delete(fp); });
   providerCache.set(fp, { at: nowMs, promise });
   return promise;
 }
@@ -72,7 +93,7 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
     const items = [];
     for (const svc of detected.services) {
       const disabled = Boolean(settings.disabled?.[service.id + "|" + svc.key]);
-      const entry = { ...publicService(svc), usage: null, reports: [], state: "no-credentials", error: null };
+      const entry = { ...publicService(svc), usage: null, reports: [], state: "no-credentials", error: null, usageHint: USAGE_HINT[svc.key] || "" };
       entry.configuredLimits = svc.configuredLimits.map((l) => ({ ...l, period: limitPeriod(l.name) }));
       if (disabled) entry.state = "disabled";
       else if (svc.hasCredentials && providers[svc.key]) {
@@ -88,14 +109,14 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
               return { ...m, ...projectMetric(m, seriesFor(history, hkey), now) };
             })
           }));
-        } else { entry.state = "error"; entry.error = { code: res.code, message: res.error }; }
-      } else if (svc.hasCredentials) entry.state = "no-reader";
+        } else { entry.state = "error"; entry.error = { code: res.code, message: res.error, detail: res.detail || "", hint: res.hint || "" }; }
+      } else if (!providers[svc.key]) entry.state = "no-reader";
       items.push(entry);
     }
     out.push({
       id: service.id, name: service.name, type: service.type, plan: service.plan, url: service.url, dashboardUrl: service.dashboardUrl,
       accountId: service.accountId, accountName: accountName(service.accountId), repo: service.repo,
-      envReadFailed: envError, services: items, internal: detected.internal.length, otherVars: detected.other
+      envReadFailed: envError, services: items, internalVars: detected.internal, otherVars: detected.other
     });
   });
   out.sort((a, b) => a.name.localeCompare(b.name));

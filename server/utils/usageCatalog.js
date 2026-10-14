@@ -65,6 +65,11 @@ const PROVIDERS = [
   { key: "payments", label: "Payments", category: "APIs", vars: /^(STRIPE|RAZORPAY|CASHFREE|PAYPAL)[A-Z0-9_]*$/i },
   { key: "sentry", label: "Sentry", category: "Monitoring", vars: /^SENTRY[A-Z0-9_]*$/i },
   { key: "affiliate", label: "Affiliate / data APIs", category: "APIs", vars: /^(CUELINK|BUYHATKE|GNEWS|LOCATIONIQ|AFFILIATE)[A-Z0-9_]*$/i },
+  { key: "aws", label: "AWS / S3", category: "Media", vars: /^(AWS|S3|R2)_[A-Z0-9_]+$/i },
+  { key: "whatsapp", label: "WhatsApp", category: "Messaging", vars: /^(WHATSAPP|WA|META_WA|INTERAKT|GUPSHUP)_[A-Z0-9_]+$/i },
+  { key: "elevenlabs", label: "ElevenLabs", category: "Voice / speech", vars: /^(ELEVENLABS|ELEVEN)_[A-Z0-9_]+$/i },
+  { key: "maps", label: "Maps (Google Maps / Mapbox)", category: "APIs", vars: /^((REACT_APP|EXPO_PUBLIC|VITE|NEXT_PUBLIC)_)?(GOOGLE_MAPS|MAPS|MAPBOX)[A-Z0-9_]*$/i },
+  { key: "analytics", label: "Analytics (PostHog / Mixpanel / GA)", category: "Monitoring", vars: /^((REACT_APP|EXPO_PUBLIC|VITE|NEXT_PUBLIC)_)?(POSTHOG|MIXPANEL|GA_|GA4|AMPLITUDE)[A-Z0-9_]*$/i },
   { key: "github", label: "GitHub", category: "DevOps", vars: /^GITHUB[A-Z0-9_]*$/i },
   { key: "render", label: "Render (platform)", category: "DevOps", vars: /^RENDER[A-Z0-9_]*$/i },
   { key: "expo", label: "Expo / EAS", category: "DevOps", vars: /^(EXPO|EAS|OTA)[A-Z0-9_]*$/i }

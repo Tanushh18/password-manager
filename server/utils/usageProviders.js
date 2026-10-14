@@ -14,9 +14,22 @@ const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 const num = (v) => { const n = typeof v === "string" ? Number(v) : v; return isNum(n) ? n : null; };
 
 const fail = (code, error) => ({ ok: false, code, error });
-const httpError = (status) => (status === 401 || status === 403 ? fail("auth", "The provider rejected this key (it may be revoked or lack permission).")
-  : status === 429 ? fail("rate-limit", "The provider is rate limiting usage requests. It will retry on the next refresh.")
-  : fail("unavailable", "The provider could not be reached (HTTP " + status + ")."));
+/** The provider's own error text (never our request or its credentials), trimmed for display. */
+function providerMessage(body) {
+  const raw = typeof body?.message === "string" ? body.message : typeof body?.error?.message === "string" ? body.error.message : typeof body?.error === "string" ? body.error : typeof body?.err_msg === "string" ? body.err_msg : "";
+  return raw.replace(/[A-Za-z0-9_-]{24,}/g, "…").replace(/\s+/g, " ").trim().slice(0, 200);
+}
+
+const httpError = (status, body, hint = "") => {
+  const said = providerMessage(body);
+  const base = status === 401 || status === 403 ? fail("auth", "The provider rejected this key (it may be revoked or lack permission).")
+    : status === 429 ? fail("rate-limit", "The provider is rate limiting usage requests. It will retry on the next refresh.")
+    : status === 0 ? fail("unavailable", "The provider could not be reached.")
+    : fail("unavailable", "The provider returned an error (HTTP " + status + ").");
+  if (said) base.detail = said;
+  if (hint) base.hint = hint;
+  return base;
+};
 
 /** Hosts we refuse to connect to: loopback, private ranges and single-label internal names. */
 function isPrivateHost(host) {
@@ -89,7 +102,7 @@ function makeProviders({ fetchImpl = globalThis.fetch, MongoClient, now = () => 
         let firstError = null;
         for (const set of sets) {
           const res = await getJson("https://api.cloudinary.com/v1_1/" + encodeURIComponent(set.cloudName) + "/usage", { Authorization: basic(set.apiKey, set.apiSecret) });
-          if (!res.ok) { firstError = firstError || httpError(res.status); continue; }
+          if (!res.ok) { firstError = firstError || httpError(res.status, res.body); continue; }
           const b = res.body || {};
           const period = monthPeriod(now());
           const metrics = [];
@@ -107,7 +120,10 @@ function makeProviders({ fetchImpl = globalThis.fetch, MongoClient, now = () => 
     brevo: {
       async run({ apiKey }) {
         const res = await getJson("https://api.brevo.com/v3/account", { "api-key": apiKey });
-        if (!res.ok) return httpError(res.status);
+        if (!res.ok) {
+          const ipBlocked = /ip/i.test(providerMessage(res.body)) && res.status === 401;
+          return httpError(res.status, res.body, ipBlocked ? "Brevo blocks API calls from unknown IP addresses. In Brevo open Settings → Security → Authorised IPs and either add Render's outbound IPs (Render service → Connect → Outbound) or turn off IP blocking." : "");
+        }
         const plans = Array.isArray(res.body?.plan) ? res.body.plan : [];
         const mail = plans.find((p) => p && p.creditsType !== "sms") || plans[0];
         const metrics = [];
@@ -123,7 +139,7 @@ function makeProviders({ fetchImpl = globalThis.fetch, MongoClient, now = () => 
     twilio: {
       async run({ accountSid, user, pass }) {
         const res = await getJson("https://api.twilio.com/2010-04-01/Accounts/" + encodeURIComponent(accountSid) + "/Balance.json", { Authorization: basic(user, pass) });
-        if (!res.ok) return httpError(res.status);
+        if (!res.ok) return httpError(res.status, res.body);
         const balance = num(res.body?.balance);
         const metrics = balance == null ? [] : [{ key: "balance", label: "Account balance", remaining: balance, unit: String(res.body?.currency || "USD"), kind: "balance" }];
         return { ok: true, reports: [{ label: "Twilio", plan: null, metrics, notes: [] }] };
@@ -134,11 +150,11 @@ function makeProviders({ fetchImpl = globalThis.fetch, MongoClient, now = () => 
       async run({ apiKey }) {
         const headers = { Authorization: "Token " + apiKey };
         const projects = await getJson("https://api.deepgram.com/v1/projects", headers);
-        if (!projects.ok) return httpError(projects.status);
+        if (!projects.ok) return httpError(projects.status, projects.body);
         const project = (projects.body?.projects || [])[0];
         if (!project?.project_id) return { ok: true, reports: [{ label: "Deepgram", plan: null, metrics: [], notes: ["No project found for this key."] }] };
         const balances = await getJson("https://api.deepgram.com/v1/projects/" + encodeURIComponent(project.project_id) + "/balances", headers);
-        if (!balances.ok) return httpError(balances.status);
+        if (!balances.ok) return httpError(balances.status, balances.body);
         const metrics = (balances.body?.balances || []).filter((b) => num(b.amount) != null).map((b, i) => ({ key: "balance" + (i ? "-" + i : ""), label: "Credit balance", remaining: num(b.amount), unit: String(b.units || "usd").toUpperCase(), kind: "balance" }));
         return { ok: true, reports: [{ label: project.name || "Deepgram", plan: null, metrics, notes: [] }] };
       }

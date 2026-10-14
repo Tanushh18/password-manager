@@ -99,3 +99,7 @@
   .sv-stats > div:nth-child(3) { border-left: 0; }
   .sv-stats > div:nth-child(n+3) { border-top: 1px solid var(--line); }
 }
+.sv-acct { display: block; font-size: .8rem; }
+.sv-acct small { font-weight: 400; color: var(--text-muted); }
+.sv-metricname { display: block; }
+.sv-err { color: var(--danger, #dc2626); font-size: .8rem; }
