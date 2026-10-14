@@ -192,3 +192,5 @@ export const restoreRenderSnapshot = (accountId, serviceId, snapshotId) => insta
 export const getRenderAudit = (limit = 50) => instance.get("/render/audit?limit=" + encodeURIComponent(limit)).then((r) => r.data);
 export const getRenderEnvGroups = (accountId) => instance.get(`/render/accounts/${encodeURIComponent(accountId)}/env-groups`).then((r) => r.data);
 
+
+export const getRenderMetrics = (accountId, serviceId, metric, startTime) => instance.get(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/metrics`, { params: { metric, startTime, resolutionSeconds: 60 } }).then((r) => r.data);
