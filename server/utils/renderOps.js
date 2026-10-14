@@ -225,6 +225,10 @@ async function runUserMonitoring(user, options = {}) {
   const serviceCache = new Map();
   const observedServices = new Map();
   let remainingServiceBudget = MAX_MONITORED_SERVICES_PER_USER;
+  const configuredGroups = (config.groups || []).slice(0, MAX_GROUPS);
+  const rotationInterval = (Number(config.monitor?.intervalMinutes) || 5) * 60 * 1000;
+  const rotation = configuredGroups.length ? Math.floor(now / rotationInterval) % configuredGroups.length : 0;
+  const groupsToSample = [...configuredGroups.slice(rotation), ...configuredGroups.slice(0, rotation)];
   async function resolveService(key) {
     if (serviceCache.has(key)) return serviceCache.get(key);
     const split = key.indexOf(":");
@@ -242,7 +246,7 @@ async function runUserMonitoring(user, options = {}) {
     return { key, accountId, serviceId, apiKey: account.apiKey, accountName: account.name || "Render account" };
   }
 
-  for (const group of (config.groups || []).slice(0, MAX_GROUPS)) {
+  for (const group of groupsToSample) {
     const members = [];
     for (const key of (group.serviceKeys || []).slice(0, MAX_SERVICES_PER_GROUP)) {
       if (remainingServiceBudget <= 0 && !observedServices.has(key)) continue;
