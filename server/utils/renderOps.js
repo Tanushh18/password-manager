@@ -9,7 +9,7 @@ const METRICS = {
 };
 const MAX_GROUPS = 10;
 const MAX_SERVICES_PER_GROUP = 10;
-const MAX_MONITORED_SERVICES_PER_USER = 20;
+const MAX_MONITORED_SERVICES_PER_USER = 15;
 const HISTORY_LIMIT = 200;
 const INCIDENT_LIMIT = 200;
 const TICK_WINDOW_MS = 10 * 60 * 1000;
@@ -270,6 +270,20 @@ async function runUserMonitoring(user, options = {}) {
         result.name = member.serviceId;
         result.error = "Could not retrieve service status from Render.";
       }
+      try {
+        const deployPayload = await renderRequest(member.apiKey, "/v1/services/" + encodeURIComponent(member.serviceId) + "/deploys?limit=5");
+        const deployList = Array.isArray(deployPayload) ? deployPayload : Array.isArray(deployPayload?.deploys) ? deployPayload.deploys : [];
+        const latest = deployList.map((item) => item?.deploy || item).filter(Boolean)
+          .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0))[0];
+        result.latestDeploy = latest ? {
+          id: String(latest.id || "").slice(0, 160),
+          status: String(latest.status || "unknown").slice(0, 60),
+          createdAt: latest.createdAt || null,
+          commitMessage: String(latest.commit?.message || "").slice(0, 240)
+        } : null;
+      } catch {
+        result.latestDeploy = { status: "unavailable", createdAt: null };
+      }
 
       const metricsToFetch = Object.keys(METRICS);
       for (const metric of metricsToFetch) {
@@ -300,6 +314,10 @@ async function runUserMonitoring(user, options = {}) {
       const checks = [];
       if (result.health?.state === "unhealthy" || result.health?.state === "timeout") {
         checks.push({ type: "health", severity: "critical", message: result.name + " health check " + result.health.state + (result.health.status ? " (HTTP " + result.health.status + ")" : "") });
+      }
+      const deployStatus = String(result.latestDeploy?.status || "").toLowerCase();
+      if (["build_failed", "update_failed", "pre_deploy_failed"].includes(deployStatus)) {
+        checks.push({ type: "deploy_failure", severity: "critical", message: result.name + " latest deployment failed (" + deployStatus + ")." });
       }
       const cpu = result.metrics.cpu?.current;
       const memory = result.metrics.memory?.current;
