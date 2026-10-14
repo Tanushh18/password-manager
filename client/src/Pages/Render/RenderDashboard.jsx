@@ -372,7 +372,7 @@ export default function RenderDashboard() {
             onOpenService={(s) => setSelectedKey(serviceKey(s))} onRefreshServices={() => loadAccounts({ quiet: true })} onAudit={loadAudit} onGoServices={() => go("services")} />
         )}
 
-        {view === "incidents" && <IncidentsView ops={ops} onSample={() => void ops.sampleNow()} />}
+        {view === "incidents" && <IncidentsView ops={ops} onSample={() => void ops.sampleNow()} askConfirm={ask} />}
 
         {view === "settings" && (
           <div className="rd-stack">

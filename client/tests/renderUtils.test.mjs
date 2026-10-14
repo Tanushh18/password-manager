@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   serviceKind, normalizeServices, normalizeList, timeAgo, normalizeMetricPoints, sumMetricPoints,
   downsample, diagnoseLogText, openIncidents, summarizeFleet, serviceState, sortServices, paginate,
-  filterServices, safeUrl, isErrorLog, rangeStart, initials
+  filterServices, safeUrl, isErrorLog, rangeStart, initials, remediationFor
 } from "../src/Pages/Render/renderUtils.js";
 
 const svc = (id, extra = {}) => ({ id, accountId: "a1", accountName: "Prod", name: id, type: "web_service", ...extra });
@@ -142,4 +142,15 @@ test("rangeStart and initials", () => {
   assert.equal(rangeStart("bogus", now), "2026-01-01T23:00:00.000Z");
   assert.equal(initials("deal radar"), "DR");
   assert.equal(initials(""), "R");
+});
+
+test("remediationFor maps incident types to safe actions", () => {
+  const base = { state: "open", serviceKey: "a1:srv-9" };
+  assert.deepEqual(remediationFor({ ...base, type: "health" }).action, "restart");
+  assert.equal(remediationFor({ ...base, type: "memory" }).action, "restart");
+  assert.equal(remediationFor({ ...base, type: "deploy_failure" }).action, "deploy");
+  assert.deepEqual(remediationFor({ ...base, type: "health" }).target, { accountId: "a1", id: "srv-9" });
+  assert.equal(remediationFor({ ...base, type: "budget" }), null);
+  assert.equal(remediationFor({ ...base, state: "resolved", type: "health" }), null);
+  assert.equal(remediationFor({ state: "open", type: "health" }), null);
 });

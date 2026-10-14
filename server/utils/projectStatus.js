@@ -25,7 +25,7 @@ const flatService = (s, account) => ({
   id: s.id, name: String(s.name || s.id), type: s.type || "", repo: s.repo || "", branch: s.branch || "",
   suspended: s.suspended === "suspended", url: s.serviceDetails?.url || "", region: s.serviceDetails?.region || "",
   plan: s.serviceDetails?.plan || s.serviceDetails?.buildPlan || "", dashboardUrl: s.dashboardUrl || "",
-  accountId: account.id, accountName: account.name
+  accountId: account.id, accountName: account.name, createdAt: s.createdAt || ""
 });
 
 /** Every service in every connected Render account (cached briefly). Failed accounts are skipped, not fatal. */

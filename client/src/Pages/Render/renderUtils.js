@@ -231,3 +231,17 @@ export const writeStored = (key, value) => {
 };
 
 export const errorMessage = (e, fallback) => e?.response?.data?.error || fallback;
+
+/** What can safely be done about an open incident. Returns null when there is nothing to automate (e.g. budget alerts). */
+export function remediationFor(incident) {
+  if (!incident || incident.state !== "open") return null;
+  const [accountId, ...rest] = String(incident.serviceKey || "").split(":");
+  const serviceId = rest.join(":");
+  if (!accountId || !serviceId) return null;
+  const type = String(incident.type || "").toLowerCase();
+  const target = { accountId, id: serviceId };
+  if (type === "deploy_failure") return { action: "deploy", label: "Redeploy", target, confirm: "Trigger a new deploy of the latest commit? If the build failed because of a code error it will fail again until the code is fixed." };
+  if (type === "health") return { action: "restart", label: "Restart", target, confirm: "Restart this service to recover it? It will be briefly unavailable." };
+  if (/cpu|memory|latency/.test(type)) return { action: "restart", label: "Restart", target, confirm: "Restart this service to clear the resource pressure? If it comes back, the app needs optimising or a larger plan." };
+  return null;
+}

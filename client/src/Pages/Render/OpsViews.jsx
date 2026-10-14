@@ -8,7 +8,7 @@ import { Kpi, Section, Skeleton, Empty, LineChart } from "./RenderUi";
 import { usePolling } from "./renderHooks";
 import {
   serviceKind, serviceKey, normalizeList, sumMetricPoints, peakOf, rangeStart, timeAgo, formatNumber, formatDateTime,
-  formatTime, isErrorLog, errorMessage, METRIC_OPTIONS, RANGE_OPTIONS
+  formatTime, isErrorLog, errorMessage, remediationFor, METRIC_OPTIONS, RANGE_OPTIONS
 } from "./renderUtils";
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -327,8 +327,26 @@ export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, 
 
 /* ====================================================================== Incidents */
 
-export function IncidentsView({ ops, onSample }) {
+export function IncidentsView({ ops, onSample, askConfirm }) {
   const { incidents, openIncidents, loading, running } = ops;
+  const [fixing, setFixing] = useState("");
+  const fix = async (incident) => {
+    const plan = remediationFor(incident);
+    if (!plan || fixing) return;
+    const ok = await askConfirm({ title: plan.label + " " + (incident.serviceName || "service") + "?", message: plan.confirm, confirmLabel: plan.label, danger: false });
+    if (!ok) return;
+    setFixing(incident.id);
+    try {
+      if (plan.action === "deploy") await triggerRenderDeploy(plan.target.accountId, plan.target.id, false);
+      else await restartRenderService(plan.target.accountId, plan.target.id);
+      toast.info(plan.label + " requested. Waiting for the service to recover…");
+      const result = await waitForServiceReady(plan.target, { timeoutMs: plan.action === "deploy" ? 300000 : 90000, shouldStop: () => false });
+      if (result.ok) toast.success((incident.serviceName || "Service") + " is healthy again.");
+      else toast.error(result.message || "The service has not recovered yet.");
+      onSample();
+    } catch (e) { toast.error(errorMessage(e, "Could not run the fix.")); }
+    finally { setFixing(""); }
+  };
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   // An "open" event is only still open if nothing later resolved it.
@@ -356,6 +374,7 @@ export function IncidentsView({ ops, onSample }) {
             <li key={i.id || i._id || index} className={"rd-incident " + (isActive(i) ? "is-open" : "is-resolved")}>
               <span className="rd-incident__mark" aria-hidden="true">{isActive(i) ? "!" : "✓"}</span>
               <div><strong>{i.message || i.type}</strong><small>{i.groupName || "Group"} · {i.serviceName || "Service"} · {i.at ? formatDateTime(i.at) : "—"}</small></div>
+              {isActive(i) && remediationFor(i) && <button type="button" className="rd-btn rd-btn--primary" disabled={Boolean(fixing)} onClick={() => void fix(i)}>{fixing === i.id ? "Fixing…" : "Fix · " + remediationFor(i).label}</button>}
               {i.severity && <span className={"rd-sev is-" + i.severity}>{i.severity}</span>}
               <span className="rd-incident__state">{i.state === "open" && !isActive(i) ? "superseded" : i.state || "event"}</span>
             </li>

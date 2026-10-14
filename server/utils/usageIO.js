@@ -1,0 +1,83 @@
+const User = require("../models/schema");
+const renderOps = require("./renderOps");
+const { loadRenderServices } = require("./projectStatus");
+const { buildLiveDashboard, appendSnapshot } = require("./usageDashboard");
+const { makeProviders } = require("./usageProviders");
+
+const DEFAULTS = { enabled: false, mongoLimitMb: 512, disabled: {} };
+let providers = null;
+const getProviders = () => {
+  if (!providers) {
+    let MongoClient = null;
+    try { ({ MongoClient } = require("mongodb")); } catch { /* driver unavailable: Mongo usage is skipped */ }
+    providers = makeProviders({ MongoClient });
+  }
+  return providers;
+};
+
+function readEntry(user, field, dataKey, fallback) {
+  const entry = (user[field] || [])[0];
+  if (!entry || entry.enc !== "udk") return fallback;
+  try { return User.publicEntry(entry, dataKey) || fallback; } catch { return fallback; }
+}
+
+async function writeEntry(user, field, dataKey, value) {
+  const data = User.sealEntry(dataKey, value);
+  if ((user[field] || []).length) {
+    await User.updateOne({ _id: user._id }, { $set: { [field + ".0.enc"]: "udk", [field + ".0.data"]: data, [field + ".0.updatedAt"]: new Date() } });
+  } else {
+    await User.updateOne({ _id: user._id }, { $push: { [field]: { enc: "udk", data, createdAt: new Date(), updatedAt: new Date() } } });
+  }
+}
+
+const normalizeSettings = (input = {}, prev = DEFAULTS) => {
+  const mb = Number(input.mongoLimitMb);
+  const disabled = {};
+  const src = input.disabled && typeof input.disabled === "object" ? input.disabled : prev.disabled || {};
+  for (const [k, v] of Object.entries(src)) if (v === true && /^[A-Za-z0-9_|-]{1,200}$/.test(k)) disabled[k] = true;
+  return {
+    enabled: input.enabled === undefined ? Boolean(prev.enabled) : input.enabled === true,
+    mongoLimitMb: Number.isFinite(mb) && mb >= 1 && mb <= 1048576 ? Math.round(mb) : prev.mongoLimitMb || 512,
+    disabled
+  };
+};
+
+const readSettings = (user, dataKey) => normalizeSettings(readEntry(user, "usageSettings", dataKey, DEFAULTS), DEFAULTS);
+async function saveSettings(user, dataKey, input) {
+  const next = normalizeSettings(input, readSettings(user, dataKey));
+  await writeEntry(user, "usageSettings", dataKey, next);
+  return next;
+}
+
+/** Computes the dashboard for one user and records a history snapshot. Returns { enabled:false } until the user consents. */
+async function runUsage(user, dataKey, { refresh = false, record = true } = {}) {
+  const settings = readSettings(user, dataKey);
+  if (!settings.enabled) return { enabled: false, settings };
+  const { services, accounts } = await loadRenderServices(user, dataKey, { refresh });
+  const request = (accountId, path) => renderOps.renderRequest(accounts.get(accountId).apiKey, path);
+  const history = readEntry(user, "usageHistory", dataKey, { snapshots: [] }).snapshots || [];
+  const data = await buildLiveDashboard({ services, accounts, request, providers: getProviders(), settings, history, refresh });
+  if (record) {
+    const next = appendSnapshot(history, data.snapshotValues);
+    if (next.length !== history.length) await writeEntry(user, "usageHistory", dataKey, { snapshots: next });
+  }
+  const { snapshotValues, ...publicData } = data;
+  return { enabled: true, settings, historyPoints: history.length, ...publicData };
+}
+
+/** Scheduler hook: keeps history growing so projections work without anyone opening the page. */
+async function runAllUsage() {
+  const users = await User.find({ "usageSettings.0": { $exists: true }, "renderAccounts.0": { $exists: true } }).limit(1000);
+  let users_ = 0;
+  for (const user of users) {
+    try {
+      const dataKey = await user.getDataKey();
+      if (!readSettings(user, dataKey).enabled) continue;
+      await runUsage(user, dataKey);
+      users_ += 1;
+    } catch { /* one user failing must not stop the others */ }
+  }
+  return { users: users_ };
+}
+
+module.exports = { runUsage, runAllUsage, readSettings, saveSettings, normalizeSettings };

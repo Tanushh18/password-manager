@@ -77,7 +77,11 @@ const schema = new mongoose.Schema({
     // are sealed with the user's data key before persistence.
     renderOps: [entrySchema],
     renderMetricHistory: [entrySchema],
-    renderIncidents: [entrySchema]
+    renderIncidents: [entrySchema],
+
+    // Live-services dashboard: sealed settings (consent, limits, per-service switches) and a bounded usage history.
+    usageSettings: [entrySchema],
+    usageHistory: [entrySchema]
 }, { timestamps: true });
 
 

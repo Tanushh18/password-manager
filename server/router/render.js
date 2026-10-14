@@ -4,6 +4,7 @@ const renderOps = require("../utils/renderOps");
 const { fetchAllPages } = require("../utils/renderPaging");
 const { syncProjectEnv, runAllEnvSync } = require("../utils/renderEnvSync");
 const { getProjectStatuses, runAllAutoLink } = require("../utils/projectStatus");
+const { runUsage, runAllUsage, readSettings, saveSettings } = require("../utils/usageIO");
 const { pushProjectEnv } = require("../utils/renderEnvPush");
 const { provision } = require("../utils/provision");
 const { validateProvisionInput } = require("../utils/provisionInput");
@@ -120,8 +121,9 @@ router.post("/render/ops/tick", apiLimiter, async (req, res) => {
     const autoLink = await step(runAllAutoLink);
     const envSync = await step(runAllEnvSync);
     const registrySync = await step(runAllRegistrySync);
+    const usage = await step(runAllUsage);
     res.set("Cache-Control", "no-store");
-    return res.json({ ok: true, ...summary, autoLink, envSync, registrySync, completedAt: new Date().toISOString() });
+    return res.json({ ok: true, ...summary, autoLink, envSync, registrySync, usage, completedAt: new Date().toISOString() });
   } catch {
     return res.status(500).json({ error: "Monitoring tick failed. Check server logs without logging secrets." });
   }
@@ -644,6 +646,26 @@ router.get("/render/projects/status", async (req, res) => {
     res.set("Cache-Control", "no-store");
     return res.json(data);
   } catch { return res.status(500).json({ error: "Could not compute project status." }); }
+});
+
+/* Live-services usage dashboard: only running Render services, with provider usage, limits and projections. */
+router.get("/render/live-dashboard", async (req, res) => {
+  try {
+    const dataKey = await req.rootUser.getDataKey();
+    const data = await runUsage(req.rootUser, dataKey, { refresh: req.query.refresh === "1" });
+    res.set("Cache-Control", "no-store");
+    return res.json(data);
+  } catch { return res.status(500).json({ error: "Could not build the services dashboard." }); }
+});
+
+router.get("/render/usage-settings", async (req, res) => {
+  try { return res.json(readSettings(req.rootUser, await req.rootUser.getDataKey())); }
+  catch { return res.status(500).json({ error: "Could not read settings." }); }
+});
+
+router.put("/render/usage-settings", async (req, res) => {
+  try { return res.json(await saveSettings(req.rootUser, await req.rootUser.getDataKey(), req.body || {})); }
+  catch { return res.status(500).json({ error: "Could not save settings." }); }
 });
 
 /* Servers tab sync (admin only): each registry URL matched to its Render service, plus suggestions. */

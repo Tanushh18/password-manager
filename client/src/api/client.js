@@ -227,3 +227,8 @@ export const runRenderOpsNow = () => instance.post("/render/ops/run").then((r) =
 export const testRenderOpsNotification = () => instance.post("/render/ops/notify/test").then((r) => r.data);
 export const getRenderOpsReport = (format = "json") => instance.get("/render/ops/report", { params: { format }, responseType: format === "csv" ? "blob" : "json" }).then((r) => r.data);
 export const diagnoseRenderLogs = (serviceName, logs, allowExternalProcessing = false) => instance.post("/render/ops/diagnose", { serviceName, logs, allowExternalProcessing }).then((r) => r.data);
+
+/* Live-services usage dashboard (running Render services only; read-only provider checks). */
+export const getLiveDashboard = ({ refresh } = {}) => instance.get("/render/live-dashboard", { params: refresh ? { refresh: 1 } : {}, timeout: 90000 }).then((r) => r.data);
+export const getUsageSettings = () => instance.get("/render/usage-settings").then((r) => r.data);
+export const saveUsageSettings = (body) => instance.put("/render/usage-settings", body).then((r) => r.data);
