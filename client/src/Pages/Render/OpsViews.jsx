@@ -43,7 +43,7 @@ async function waitForServiceReady(service, { deployId = "", timeoutMs = 300000,
 /* ====================================================================== Monitoring */
 
 export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, askConfirm, onOpenService, onRefreshServices, onAudit, onGoServices }) {
-  const { groups, history, saving, running, monitor, persist, sampleNow } = ops;
+  const { groups, history, saving, running, persist, sampleNow } = ops;
   const group = groups.find((g) => g.id === selectedGroupId) || null;
   const members = useMemo(() => group ? group.serviceKeys.map((key) => services.find((s) => serviceKey(s) === key)).filter(Boolean) : [], [group, services]);
 

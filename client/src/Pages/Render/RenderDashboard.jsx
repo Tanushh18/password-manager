@@ -62,7 +62,7 @@ export default function RenderDashboard() {
       const result = await getRenderAccounts();
       const list = Array.isArray(result.accounts) ? result.accounts : [];
       const withServices = await Promise.all(list.map(async (a) => {
-        try { return { ...a, services: normalizeServices((await getRenderServices(a.id)).services) }; }
+        try { const data = await getRenderServices(a.id); return { ...a, services: normalizeServices(data.services), truncated: Boolean(data.truncated) }; }
         catch (e) { return { ...a, services: [], loadError: errorMessage(e, "Could not load services.") }; }
       }));
       setAccounts(withServices);
@@ -190,6 +190,7 @@ export default function RenderDashboard() {
     const items = [];
     ops.openIncidents.slice(0, 5).forEach((i) => items.push({ key: "i" + (i.id || i.serviceKey + i.type), tone: "danger", title: i.message || i.type, meta: (i.groupName || "Group") + " · " + (i.serviceName || "Service") + " · " + timeAgo(i.at), onClick: () => go("incidents") }));
     services.filter((s) => s.suspended === "suspended").slice(0, 5).forEach((s) => items.push({ key: "s" + serviceKey(s), tone: "warn", title: s.name + " is suspended", meta: s.accountName + " · " + serviceKind(s), onClick: () => setSelectedKey(serviceKey(s)) }));
+    accounts.filter((a) => a.truncated).forEach((a) => items.push({ key: "t" + a.id, tone: "warn", title: a.name + ": inventory is incomplete", meta: "This account has more services than Stashr can list at once.", onClick: () => go("settings") }));
     accounts.filter((a) => a.loadError).forEach((a) => items.push({ key: "a" + a.id, tone: "danger", title: a.name + ": " + a.loadError, meta: "Check the API key in Settings → Connections", onClick: () => go("settings") }));
     if (ops.loadError) items.push({ key: "ops", tone: "warn", title: "Persistent monitoring unavailable", meta: ops.loadError, onClick: () => void refreshOps() });
     return items;

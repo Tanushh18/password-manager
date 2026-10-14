@@ -1,0 +1,39 @@
+# Drives Stashr's background Render monitoring (sampling, incidents, Telegram alerts).
+# Needs two repository secrets (Settings > Secrets and variables > Actions):
+#   STASHR_API_URL              e.g. https://password-manager-server-xxdr.onrender.com
+#   RENDER_MONITOR_CRON_SECRET  the same value set on the API server
+# GitHub schedules are best-effort (about every 5 minutes, sometimes delayed). Without the
+# secrets this workflow does nothing, so it is safe to leave enabled.
+name: Monitor tick
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: monitor-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      API_URL: ${{ secrets.STASHR_API_URL }}
+      CRON_SECRET: ${{ secrets.RENDER_MONITOR_CRON_SECRET }}
+    steps:
+      - name: Call the monitoring tick endpoint
+        run: |
+          if [ -z "$API_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "STASHR_API_URL / RENDER_MONITOR_CRON_SECRET not set; skipping."
+            exit 0
+          fi
+          # The free Render tier can take ~1 minute to wake up, hence the long timeout and retries.
+          curl --silent --show-error --fail-with-body \
+            --retry 3 --retry-delay 20 --retry-all-errors \
+            --max-time 120 \
+            -X POST "${API_URL%/}/render/ops/tick" \
+            -H "Authorization: Bearer ${CRON_SECRET}"

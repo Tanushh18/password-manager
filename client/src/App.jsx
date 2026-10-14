@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -13,7 +13,8 @@ import ProjectDetail from "./Pages/Projects/ProjectDetail";
 import ProjectForm from "./Pages/Projects/ProjectForm";
 import Settings from "./Pages/Settings/Settings";
 import Servers from "./Pages/Servers/Servers";
-import RenderDashboard from "./Pages/Render/RenderDashboard";
+// Loaded on demand: the dashboard is large and only needed on /render.
+const RenderDashboard = lazy(() => import("./Pages/Render/RenderDashboard"));
 import Privacy from "./Pages/Privacy/Privacy";
 import Logout from "./Pages/Logout/Logout";
 import Navbar from "./Components/Navbar/Navbar";
@@ -84,7 +85,7 @@ export default function App() {
           <Route path="/projects/:id/edit" element={<RequireVault><ProjectForm /></RequireVault>} />
           <Route path="/settings" element={<RequireVault><Settings /></RequireVault>} />
           <Route path="/servers" element={<RequireVault><RequireAdmin><Servers /></RequireAdmin></RequireVault>} />
-          <Route path="/render" element={<RequireVault><RenderDashboard /></RequireVault>} />
+          <Route path="/render" element={<RequireVault><Suspense fallback={<Splash />}><RenderDashboard /></Suspense></RequireVault>} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/logout" element={<Logout />} />
           <Route path="*" element={<Navigate to="/" replace />} />

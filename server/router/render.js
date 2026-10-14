@@ -1,6 +1,7 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const renderOps = require("../utils/renderOps");
+const { fetchAllPages } = require("../utils/renderPaging");
 const User = require("../models/schema");
 const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
@@ -86,6 +87,11 @@ function sendUpstreamError(res, error) {
   }
   return res.status(502).json({ error: "Could not reach Render API. Please retry in a moment." });
 }
+
+/** Every page of a Render list endpoint (bounded). `truncated` is true only if the page cap was hit. */
+const listAll = (apiKey, path, options) => fetchAllPages((next) => renderRequest(apiKey, next), path, options);
+const unwrap = (rows, kind) => rows.map((item) => item?.[kind] || item).filter(Boolean);
+const TRUNCATED_MESSAGE = "This resource has more entries than Stashr can safely load at once, so the operation was cancelled.";
 
 const safeId = (value) => /^[A-Za-z0-9_-]{1,160}$/.test(String(value || ""));
 const servicePath = (serviceId, suffix = "") => "/v1/services/" + encodeURIComponent(serviceId) + suffix;
@@ -313,7 +319,7 @@ router.post("/render/accounts", async (req, res) => {
   }
   try {
     // Validate the credential before saving it. The key is never returned in this response.
-    const payload = await renderRequest(apiKey, "/v1/services?limit=100");
+    const listing = await listAll(apiKey, "/v1/services");
     const dataKey = await req.rootUser.getDataKey();
     const now = new Date();
     const entry = {
@@ -326,7 +332,8 @@ router.post("/render/accounts", async (req, res) => {
     await User.updateOne({ _id: req.rootUser._id }, { $push: { renderAccounts: entry } });
     return res.status(201).json({
       account: publicAccount(entry, dataKey),
-      services: Array.isArray(payload) ? payload.map((item) => item?.service || item).filter(Boolean) : []
+      services: unwrap(listing.items, "service"),
+      truncated: listing.truncated
     });
   } catch (error) {
     return sendUpstreamError(res, error);
@@ -351,12 +358,12 @@ router.get("/render/accounts/:accountId/services", async (req, res) => {
   const saved = await getAccount(req, res);
   if (!saved) return;
   try {
-    const payload = await renderRequest(saved.account.apiKey, "/v1/services?limit=100");
+    const listing = await listAll(saved.account.apiKey, "/v1/services");
     await User.updateOne(
       { _id: req.rootUser._id, "renderAccounts._id": saved.entry._id },
       { $set: { "renderAccounts.$.updatedAt": new Date() } }
     );
-    return res.json({ services: Array.isArray(payload) ? payload.map((item) => item?.service || item).filter(Boolean) : [] });
+    return res.json({ services: unwrap(listing.items, "service"), truncated: listing.truncated });
   } catch (error) { return sendUpstreamError(res, error); }
 });
 
@@ -385,9 +392,9 @@ router.get("/render/accounts/:accountId/services/:serviceId/env-vars", async (re
   if (!saved) return;
   if (!safeId(req.params.serviceId)) return res.status(400).json({ error: "Invalid service ID." });
   try {
-    const result = await renderRequest(saved.account.apiKey, servicePath(req.params.serviceId, "/env-vars?limit=100"));
+    const listing = await listAll(saved.account.apiKey, servicePath(req.params.serviceId, "/env-vars"));
     res.set("Cache-Control", "no-store");
-    return res.json(result);
+    return res.json({ envVars: unwrap(listing.items, "envVar"), truncated: listing.truncated });
   } catch (error) { return sendUpstreamError(res, error); }
 });
 
@@ -549,7 +556,8 @@ router.get("/render/accounts/:accountId/env-groups", async (req, res) => {
   const saved = await getAccount(req, res);
   if (!saved) return;
   try {
-    return res.json(await renderRequest(saved.account.apiKey, "/v1/env-groups?limit=100"));
+    const listing = await listAll(saved.account.apiKey, "/v1/env-groups");
+    return res.json({ envGroups: unwrap(listing.items, "envGroup"), truncated: listing.truncated });
   } catch (error) { return sendUpstreamError(res, error); }
 });
 
@@ -646,13 +654,13 @@ router.post("/render/accounts/:accountId/services/:serviceId/snapshots", async (
   const serviceId = req.params.serviceId;
   if (!safeId(serviceId)) return res.status(400).json({ error: "Invalid service ID." });
   try {
-    const [servicePayload, envPayload] = await Promise.all([
+    const [servicePayload, listing] = await Promise.all([
       renderRequest(saved.account.apiKey, servicePath(serviceId)),
-      renderRequest(saved.account.apiKey, servicePath(serviceId, "/env-vars?limit=100"))
+      listAll(saved.account.apiKey, servicePath(serviceId, "/env-vars"))
     ]);
+    if (listing.truncated) return res.status(422).json({ error: TRUNCATED_MESSAGE });
     const service = servicePayload?.service || servicePayload;
-    const variables = (Array.isArray(envPayload) ? envPayload : Array.isArray(envPayload?.envVars) ? envPayload.envVars : Array.isArray(envPayload?.envVars?.envVars) ? envPayload.envVars.envVars : [])
-      .map((item) => item?.envVar || item).filter((item) => item && typeof item.key === "string")
+    const variables = unwrap(listing.items, "envVar").filter((item) => typeof item.key === "string")
       .map((item) => ({ key: item.key, value: typeof item.value === "string" ? item.value : "" }));
     const snapshots = Array.isArray(saved.account.snapshots) ? saved.account.snapshots.slice(-19) : [];
     const snapshot = { id: new mongoose.Types.ObjectId().toString(), serviceId, serviceName: service?.name || serviceId, createdAt: new Date().toISOString(), variables };
@@ -674,9 +682,10 @@ router.post("/render/accounts/:accountId/services/:serviceId/snapshots/:snapshot
   const snapshot = (saved.account.snapshots || []).find((s) => s.id === snapshotId && s.serviceId === serviceId);
   if (!snapshot) return res.status(404).json({ error: "Environment snapshot not found." });
   try {
-    const currentPayload = await renderRequest(saved.account.apiKey, servicePath(serviceId, "/env-vars?limit=100"));
-    const current = (Array.isArray(currentPayload) ? currentPayload : Array.isArray(currentPayload?.envVars) ? currentPayload.envVars : Array.isArray(currentPayload?.envVars?.envVars) ? currentPayload.envVars.envVars : [])
-      .map((item) => item?.envVar || item).filter((item) => item && typeof item.key === "string");
+    const listing = await listAll(saved.account.apiKey, servicePath(serviceId, "/env-vars"));
+    // Restore deletes variables missing from the snapshot, so never act on a partial listing.
+    if (listing.truncated) return res.status(422).json({ error: TRUNCATED_MESSAGE });
+    const current = unwrap(listing.items, "envVar").filter((item) => typeof item.key === "string");
     const wanted = new Map(snapshot.variables.map((item) => [item.key, item.value]));
     const existing = new Set(current.map((item) => item.key));
     for (const variable of snapshot.variables) {

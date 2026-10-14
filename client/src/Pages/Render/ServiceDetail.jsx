@@ -168,7 +168,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
       setEnvVars(normalizeList(result, "envVar").map((v) => ({ key: v.key || "", value: v.value || "", originalValue: v.value || "", isNew: false })).filter((v) => v.key));
     } catch (e) { fail(e, "Could not load environment variables."); }
     finally { setEnvBusy(false); }
-  }, [ref.accountId, ref.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ref.accountId, ref.id]);
 
   const loadEnvGroups = useCallback(async () => {
     try {
@@ -263,7 +263,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
     try { setDeploys(normalizeList(await getRenderDeploys(ref.accountId, ref.id), "deploy")); }
     catch (e) { fail(e, "Could not load deployment history."); }
     finally { setDeployBusy(false); }
-  }, [ref.accountId, ref.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ref.accountId, ref.id]);
 
   const deploy = async (clearCache) => {
     const ok = await askConfirm({ title: clearCache ? "Deploy with cache cleared?" : "Deploy latest commit?", message: (clearCache ? "Trigger a new deploy of " : "Trigger a deploy of the latest commit for ") + service.name + (clearCache ? " with the build cache cleared." : "."), confirmLabel: "Deploy" });
@@ -325,7 +325,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
     try { const result = await getRenderDbExports(ref.accountId, ref.id); setDbExports(Array.isArray(result.exports) ? result.exports : []); }
     catch (e) { fail(e, "Could not load database exports."); }
     finally { setDbBusy(false); }
-  }, [ref.accountId, ref.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ref.accountId, ref.id]);
 
   const createDbExport = async () => {
     const ok = await askConfirm({ title: "Start database export?", message: "Start a PostgreSQL export for " + service.name + "? The export may contain sensitive production data. Protect any downloaded file.", confirmLabel: "Start export" });
