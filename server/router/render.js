@@ -253,8 +253,8 @@ router.get("/render/ops/report", async (req, res) => {
       history: history.map((item) => ({
         sampledAt: item.sampledAt, groupId: item.groupId, groupName: item.groupName,
         combined: item.combined || {}, estimatedMonthlyCostUsd: item.estimatedMonthlyCostUsd || 0, monthlyBudgetUsd: item.monthlyBudgetUsd || 0, costCoverageCount: item.costCoverageCount || 0, costCoverageComplete: Boolean(item.costCoverageComplete), services: (item.services || []).map((service) => ({
-          name: service.name, serviceId: service.serviceId, health: service.health?.state || "unknown",
-          metrics: service.metrics || {}, suspended: Boolean(service.suspended)
+          name: service.name, serviceId: service.serviceId, type: service.type || "unknown", health: service.health?.state || "unknown",
+          metrics: service.metrics || {}, suspended: Boolean(service.suspended), latestDeploy: service.latestDeploy || null, latestManualExport: service.latestManualExport || null
         }))
       })),
       incidents: incidents.map((item) => ({
@@ -272,6 +272,7 @@ router.get("/render/ops/report", async (req, res) => {
           value.current == null ? "" : value.current, value.unit || "", "", "", ""
         ]));
         rows.push(["health", sample.sampledAt, sample.groupName, service.name, "", "", "", "", service.health, ""]);
+        if (service.latestManualExport) rows.push(["database_export", service.latestManualExport.createdAt || sample.sampledAt, sample.groupName, service.name, "manual_export", "", "", "", service.latestManualExport.status || "unknown", service.latestManualExport.id || ""]);
       }));
       report.incidents.forEach((incident) => rows.push(["incident", incident.at, incident.groupName, incident.serviceName, incident.type, "", "", incident.severity, incident.state, incident.message]));
       const csv = rows.map((row) => row.map((value) => {
