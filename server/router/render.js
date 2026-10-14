@@ -198,9 +198,11 @@ router.put("/render/accounts/:accountId/services/:serviceId/env-vars/:key", asyn
     return res.status(400).json({ error: "Invalid environment variable key or value." });
   }
   try {
-    return res.json(await renderRequest(saved.account.apiKey, servicePath(serviceId, "/env-vars/" + encodeURIComponent(key)), {
+    const result = await renderRequest(saved.account.apiKey, servicePath(serviceId, "/env-vars/" + encodeURIComponent(key)), {
       method: "PUT", body: { value: req.body.value }
-    }));
+    });
+    await recordAudit(req, "env_var_updated", saved.entry._id, serviceId, { key });
+    return res.json(result);
   } catch (error) { return sendUpstreamError(res, error); }
 });
 
@@ -210,7 +212,9 @@ router.delete("/render/accounts/:accountId/services/:serviceId/env-vars/:key", a
   const { serviceId, key } = req.params;
   if (!safeId(serviceId) || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return res.status(400).json({ error: "Invalid environment variable key." });
   try {
-    return res.json(await renderRequest(saved.account.apiKey, servicePath(serviceId, "/env-vars/" + encodeURIComponent(key)), { method: "DELETE" }));
+    const result = await renderRequest(saved.account.apiKey, servicePath(serviceId, "/env-vars/" + encodeURIComponent(key)), { method: "DELETE" });
+    await recordAudit(req, "env_var_deleted", saved.entry._id, serviceId, { key });
+    return res.json(result);
   } catch (error) { return sendUpstreamError(res, error); }
 });
 
@@ -229,10 +233,12 @@ router.post("/render/accounts/:accountId/services/:serviceId/deploys", async (re
   if (!safeId(req.params.serviceId)) return res.status(400).json({ error: "Invalid service ID." });
   const clearCache = req.body.clearCache === true;
   try {
-    return res.status(201).json(await renderRequest(saved.account.apiKey, servicePath(req.params.serviceId, "/deploys"), {
+    const result = await renderRequest(saved.account.apiKey, servicePath(req.params.serviceId, "/deploys"), {
       method: "POST",
       body: { clearCache: clearCache ? "clear" : "do_not_clear", deployMode: "build_and_deploy" }
-    }));
+    });
+    await recordAudit(req, "deploy_triggered", saved.entry._id, req.params.serviceId, { clearCache });
+    return res.status(201).json(result);
   } catch (error) { return sendUpstreamError(res, error); }
 });
 
@@ -241,7 +247,9 @@ router.post("/render/accounts/:accountId/services/:serviceId/restart", async (re
   if (!saved) return;
   if (!safeId(req.params.serviceId)) return res.status(400).json({ error: "Invalid service ID." });
   try {
-    return res.json(await renderRequest(saved.account.apiKey, servicePath(req.params.serviceId, "/restart"), { method: "POST" }));
+    const result = await renderRequest(saved.account.apiKey, servicePath(req.params.serviceId, "/restart"), { method: "POST" });
+    await recordAudit(req, "service_restart", saved.entry._id, req.params.serviceId);
+    return res.json(result);
   } catch (error) { return sendUpstreamError(res, error); }
 });
 
