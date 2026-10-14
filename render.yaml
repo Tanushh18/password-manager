@@ -25,3 +25,7 @@ services:
       # Comma separated client URLs allowed by CORS, e.g. https://my-client.onrender.com
       - key: CLIENT_ORIGINS
         sync: false
+      # Generate a long random secret. A trusted scheduler must POST to
+      # /render/ops/tick with Authorization: Bearer <this secret>.
+      - key: RENDER_MONITOR_CRON_SECRET
+        sync: false
