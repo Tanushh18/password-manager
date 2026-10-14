@@ -1,9 +1,11 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useShortcuts from "../../hooks/useShortcuts";
 import Reveal from "../../Components/Reveal/Reveal";
 import ProjectCard from "../../Components/Project/ProjectCard";
 import ProjectImportModal from "../../Components/Project/ProjectImportModal";
+import GithubConnectModal from "../../Components/Project/GithubConnectModal";
+import { getGithubAccounts } from "../../api/client";
 import { TreeLeaf } from "../../Components/Project/ProjectTree";
 import { Globe, Plus, Search, Grid, Alert, Upload } from "../../Components/Icons/Icons";
 import { useVault } from "../../state/vault";
@@ -22,6 +24,9 @@ export default function Projects() {
   const [status, setStatus] = useState("__all");
   const [view, setView] = useState("all"); // all | values | projects (while searching)
   const [importing, setImporting] = useState(false);
+  const [githubOpen, setGithubOpen] = useState(false);
+  const [githubAccounts, setGithubAccounts] = useState(null);
+  useEffect(() => { getGithubAccounts().then((r) => setGithubAccounts(r.accounts || [])).catch(() => setGithubAccounts(null)); }, []);
   const navigate = useNavigate();
   const searchRef = useShortcuts(() => navigate("/projects/new"));
 
@@ -77,6 +82,9 @@ export default function Projects() {
             </Link>
             <button className="btn btn--ghost" onClick={() => setImporting(true)}>
               <Upload size={15} /> Import
+            </button>
+            <button className="btn btn--ghost" onClick={() => setGithubOpen(true)} title="Connect a GitHub token to fetch commits, pull requests and CI for each project">
+              GitHub{githubAccounts ? <span className={"badge " + (githubAccounts.length ? "badge--ok" : "badge--muted")} style={{ marginLeft: 6 }}>{githubAccounts.length ? githubAccounts.length + " connected" : "not connected"}</span> : null}
             </button>
           </div>
         </div>
@@ -155,6 +163,7 @@ export default function Projects() {
         ) : null}
       </div>
 
+      <GithubConnectModal open={githubOpen} onClose={() => setGithubOpen(false)} onChange={setGithubAccounts} />
       <ProjectImportModal open={importing} onClose={() => setImporting(false)} onImport={importProjects} />
     </div>
   );

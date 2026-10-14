@@ -92,3 +92,29 @@
 .proj-optional[open] > summary::before { content: "−"; }
 .proj-optional[open] > summary { margin-bottom: 0.7rem; }
 .proj-optional > summary:hover { color: var(--accent); }
+
+/* ── GitHub integration ── */
+.gh-accounts { list-style: none; margin: 0 0 1rem; padding: 0; display: grid; gap: .5rem; }
+.gh-accounts li { display: flex; align-items: center; gap: .7rem; padding: .6rem .75rem; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+.gh-accounts li > div { flex: 1; min-width: 0; display: grid; }
+.gh-accounts strong { color: var(--heading); font-size: .88rem; overflow-wrap: anywhere; }
+.gh-accounts small { color: var(--text-muted); font-size: .72rem; }
+.gh-accounts__dot { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(var(--ok-rgb), .16); color: var(--ok); }
+.gh-form { display: grid; gap: .8rem; }
+.gh-help { margin-top: 1rem; color: var(--text-muted); font-size: .8rem; }
+.gh-help summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.gh-help ol { margin: .6rem 0 .4rem 1.1rem; display: grid; gap: .3rem; line-height: 1.5; }
+.gh-panel { display: grid; gap: .8rem; margin-bottom: 1rem; padding: 1.1rem 1.25rem; }
+.gh-panel__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.gh-panel__title { margin: 0; font-size: 1rem; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.gh-panel__repo { font-weight: 600; font-size: .9rem; display: inline-flex; align-items: center; gap: .3rem; }
+.gh-panel__sub { margin: 0 0 .5rem; font-size: .82rem; color: var(--heading-2); display: flex; align-items: center; gap: .4rem; }
+.gh-panel__row { display: flex; gap: .5rem; flex-wrap: wrap; }
+.gh-panel__cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem; }
+.gh-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.gh-list li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .1rem .6rem; align-items: baseline; padding-bottom: .5rem; border-bottom: 1px solid var(--line); }
+.gh-list li:last-child { border-bottom: 0; padding-bottom: 0; }
+.gh-list code { font-family: var(--font-mono); font-size: .74rem; color: var(--accent); }
+.gh-list span { color: var(--heading-2); font-size: .82rem; overflow-wrap: anywhere; }
+.gh-list small { grid-column: 2; color: var(--text-muted); font-size: .72rem; }
+@media (max-width: 720px) { .gh-panel__cols { grid-template-columns: 1fr; } }

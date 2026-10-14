@@ -200,6 +200,12 @@ export const getRenderMetrics = (accountId, serviceId, metric, startTime) => ins
 export const getRenderDbExports = (accountId, postgresId) => instance.get(`/render/accounts/${encodeURIComponent(accountId)}/postgres/${encodeURIComponent(postgresId)}/exports`).then((r) => r.data);
 export const createRenderDbExport = (accountId, postgresId) => instance.post(`/render/accounts/${encodeURIComponent(accountId)}/postgres/${encodeURIComponent(postgresId)}/exports`).then((r) => r.data);
 
+/* GitHub connections for the Projects page (tokens stay encrypted server-side). */
+export const getGithubAccounts = () => instance.get("/github/accounts").then((r) => r.data);
+export const connectGithubAccount = (data) => instance.post("/github/accounts", data).then((r) => r.data);
+export const deleteGithubAccount = (id) => instance.delete("/github/accounts/" + encodeURIComponent(id)).then((r) => r.data);
+export const getGithubRepo = (url, refresh = false) => instance.get("/github/repo", { params: { url, ...(refresh ? { refresh: 1 } : {}) } }).then((r) => r.data);
+
 /* Persistent Render operations: all credentials remain encrypted server-side. */
 export const getRenderOpsConfig = () => instance.get("/render/ops/config").then((r) => r.data);
 export const saveRenderOpsConfig = (config) => instance.put("/render/ops/config", config).then((r) => r.data);

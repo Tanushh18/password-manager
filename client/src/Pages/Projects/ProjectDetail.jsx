@@ -1,6 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import ProjectTree from "../../Components/Project/ProjectTree";
+import GithubPanel from "../../Components/Project/GithubPanel";
+import GithubConnectModal from "../../Components/Project/GithubConnectModal";
 import { STATUS_BADGE } from "../../Components/Project/ProjectCard";
 import { Arrow, Globe, Pencil } from "../../Components/Icons/Icons";
 import { STATUS_LABEL } from "../../lib/projectItems";
@@ -12,6 +14,8 @@ import "./Projects.css";
 export default function ProjectDetail() {
   const { id } = useParams();
   const { projects } = useVault();
+  const [githubOpen, setGithubOpen] = useState(false);
+  const [githubKey, setGithubKey] = useState(0);
   const project = projects.find((p) => String(p.id) === id);
   if (!project) return <Navigate to="/projects" replace />;
 
@@ -40,10 +44,13 @@ export default function ProjectDetail() {
 
         {project.description ? <p className="proj-detail__desc">{project.description}</p> : null}
 
+        {project.repoUrl ? <GithubPanel repoUrl={project.repoUrl} refreshKey={githubKey} onConnect={() => setGithubOpen(true)} /> : null}
+
         <section className="card proj-detail__tree">
           <ProjectTree key={project.id} project={project} expanded />
         </section>
       </div>
+      <GithubConnectModal open={githubOpen} onClose={() => setGithubOpen(false)} onChange={() => setGithubKey((k) => k + 1)} />
     </div>
   );
 }
