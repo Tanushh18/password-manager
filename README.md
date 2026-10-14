@@ -842,3 +842,20 @@ Stashr keeps the backend URL list for Stashr, Deal Radar and We Three. Sign in a
 Apps read `GET /registry/<stashr|dealradar|wethree>` on start, cache the answer on the device, and fall
 back to their built-in URLs if Stashr can't be reached. The registry holds URLs only, never secrets.
 `https://password-manager-server-xxdr.onrender.com` is the fixed address the other apps ask, so keep it alive.
+
+## Render Control Center
+
+The authenticated web app includes a Render service dashboard at **`/render`**. It supports multiple Render accounts, service inventory and filtering, recent logs, environment-variable viewing/editing, deployment history, deploys, cache-cleared deploys, and supported-service restarts.
+
+Render API requests go through the existing authenticated Stashr API (`server/router/render.js`), not directly from the browser to `api.render.com`, so the browser does not need cross-origin access to the Render API. Every request requires a valid Stashr session and is rate-limited.
+
+### Render API-key handling
+
+- Add a connection from the **Render** navigation item in the signed-in web app.
+- The backend validates the key against Render before saving it.
+- Keys are stored as encrypted Render connection records in the existing MongoDB user document, using Stashr's account data-key encryption helper. The key is never returned in the connection-list API response.
+- The backend decrypts a saved key only to make the requested upstream Render API call. Do not log request authorization headers or secret values.
+- Removing a connection deletes its saved record. Rotate a key in Render and reconnect if it may have been exposed.
+- This is encrypted-at-rest storage, not a zero-knowledge design for Render keys: the backend must access the key to proxy requests to Render. Protect the Stashr server, `CRYPTO_SECRET_KEY`, `SECRET_KEY`, database credentials, and administrator account.
+
+The Render dashboard uses the existing Stashr MongoDB connection; **no database file or separate database attachment is needed**. Ensure the deployed web client origin is allowed by `CLIENT_ORIGINS` in the backend configuration if it is not already listed.
