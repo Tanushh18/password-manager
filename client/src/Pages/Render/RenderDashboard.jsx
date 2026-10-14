@@ -472,7 +472,7 @@ export default function RenderDashboard() {
       const payload = {
         groups: overrides.groups ?? serviceGroups,
         monitor: overrides.monitor ?? monitorSettings,
-        notifications: {
+        notifications: overrides.notifications ?? {
           telegramBotToken: telegramBotToken.trim(),
           telegramChatId: telegramChatId.trim(),
           ...(clearTelegram ? { clearTelegramToken: true, clearTelegramChatId: true } : {})
@@ -609,13 +609,10 @@ export default function RenderDashboard() {
           return { key: service.accountId + ":" + service.id, name: service.name, keys: [], error: "Could not read variable names" };
         }
       }));
-      const common = results.filter((item) => !item.error).reduce((set, item, index) => {
-        const next = new Set(item.keys);
-        return index === 0 ? next : new Set([...set].filter((key) => next.has(key)));
-      }, new Set());
+      const allKeys = [...new Set(results.flatMap((item) => item.keys))].sort();
       setEnvDrift(results.map((item) => ({
         ...item,
-        missing: item.error ? [] : [...common].filter((key) => !item.keys.includes(key))
+        missing: item.error ? [] : allKeys.filter((key) => !item.keys.includes(key))
       })));
       toast.info("Compared environment variable names only. Values were not compared or saved.");
     } finally { setDriftBusy(false); }
@@ -879,7 +876,7 @@ export default function RenderDashboard() {
                 <div className="rd-ops-setting-row rd-ops-telegram">
                   <label>Telegram bot token<input type="password" autoComplete="new-password" placeholder={opsConfig?.notifications?.telegramConfigured ? "Token saved securely (enter to rotate)" : "Paste bot token from BotFather"} value={telegramBotToken} onChange={(e) => setTelegramBotToken(e.target.value)} /></label>
                   <label>Telegram chat ID<input autoComplete="off" placeholder="Chat or group ID" value={telegramChatId} onChange={(e) => setTelegramChatId(e.target.value)} /></label>
-                  <div className="rd-ops-channel-actions"><small>{opsConfig?.notifications?.telegramConfigured ? "Telegram configured" : "Telegram not configured"}</small><button className="rd-btn rd-btn--quiet" disabled={opsSaving} onClick={() => void testTelegram()}>Test Telegram</button>{opsConfig?.notifications?.telegramConfigured && <button className="rd-btn rd-btn--quiet" disabled={opsSaving} onClick={async () => { setClearTelegram(true); setTelegramBotToken(""); setTelegramChatId(""); try { await persistOpsConfig(); } catch {} }}>Remove channel</button>}</div>
+                  <div className="rd-ops-channel-actions"><small>{opsConfig?.notifications?.telegramConfigured ? "Telegram configured" : "Telegram not configured"}</small><button className="rd-btn rd-btn--quiet" disabled={opsSaving} onClick={() => void testTelegram()}>Test Telegram</button>{opsConfig?.notifications?.telegramConfigured && <button className="rd-btn rd-btn--quiet" disabled={opsSaving} onClick={async () => { try { await persistOpsConfig({ notifications: { clearTelegramToken: true, clearTelegramChatId: true, telegramBotToken: "", telegramChatId: "" } }); setTelegramBotToken(""); setTelegramChatId(""); } catch {} }}>Remove channel</button>}</div>
                 </div>
                 <div className="rd-ops-footer">
                   <span className={opsConfig?.schedulerConfigured ? "rd-scheduler-ready" : "rd-scheduler-missing"}>{opsConfig?.schedulerConfigured ? "Scheduler secret configured" : "Scheduler secret missing on API"}</span>
