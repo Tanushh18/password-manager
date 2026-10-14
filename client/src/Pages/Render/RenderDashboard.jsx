@@ -657,7 +657,7 @@ export default function RenderDashboard() {
         const health = await checkRenderHealth(service.accountId, service.id);
         if (health.state === "healthy") return { ok: true, health: health.state };
         if (health.state === "unhealthy" || health.state === "timeout") return { ok: false, message: "Health probe returned " + health.state + "." };
-        if (deployId && (health.state === "unsupported" || health.state === "unknown")) return { ok: true, health: "not-probeable" };
+        if (health.state === "unsupported" || health.state === "unknown") return { ok: true, health: "not-probeable" };
       } catch (e) {
         if (deployId && e?.response?.status >= 400 && e?.response?.status < 500) return { ok: false, message: "Health verification failed: " + (e?.response?.data?.error || "request rejected") };
       }
