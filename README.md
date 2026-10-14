@@ -859,3 +859,16 @@ Render API requests go through the existing authenticated Stashr API (`server/ro
 - This is encrypted-at-rest storage, not a zero-knowledge design for Render keys: the backend must access the key to proxy requests to Render. Protect the Stashr server, `CRYPTO_SECRET_KEY`, `SECRET_KEY`, database credentials, and administrator account.
 
 The Render dashboard uses the existing Stashr MongoDB connection; **no database file or separate database attachment is needed**. Ensure the deployed web client origin is allowed by `CLIENT_ORIGINS` in the backend configuration if it is not already listed.
+
+
+### Render Operations Center additions
+
+The Render page also includes:
+- **Health probes:** checks the Render-provided `*.onrender.com` HTTPS URL with an 8-second timeout; browser notifications are opt-in and run only while the page is open.
+- **Deployment recovery:** cancel an in-progress deployment, roll back to a selected live deployment, and suspend/resume supported services. Rollbacks do not turn off autodeploys.
+- **Encrypted environment snapshots:** snapshots are stored inside the encrypted Render connection record, limited to the most recent 20 per account; restoring a snapshot updates its variables and removes variables absent from that snapshot. Review the confirmation carefully.
+- **Operations audit trail:** keeps a bounded encrypted audit history for actions; secret values are not recorded.
+- **Log diagnostics:** rule-based suggestions identify common error signatures; these are heuristics, not a substitute for inspecting the full logs.
+- **Favorites and command shortcut:** favorite services are saved in this browser; `Ctrl/⌘+K` focuses service search.
+
+Monitoring and browser notifications are **not background uptime monitoring**: they run while the Render page is open. Usage metrics, actual billing, provider-level database backup/restore, environment-group editing, persistent server-side scheduled automation, and a hosted AI model are not represented as complete by this UI. Render capabilities and permissions vary by service and API key. The health probe intentionally refuses custom domains and only requests Render's own HTTPS service hostname to reduce SSRF risk.
