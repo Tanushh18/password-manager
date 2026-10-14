@@ -195,7 +195,7 @@ export default function RenderDashboard() {
       setOpsIncidents(Array.isArray(incidentResult.incidents) ? incidentResult.incidents : []);
       if (!remoteGroups.length && localGroups.length) {
         const saved = await saveRenderOpsConfig({ ...config, groups: localGroups });
-        setOpsConfig(saved.config || config);
+        setOpsConfig({ ...(saved.config || config), schedulerConfigured: Boolean(saved.schedulerConfigured), aiDiagnosisAvailable: Boolean(saved.aiDiagnosisAvailable) });
         setServiceGroups(saved.config?.groups || localGroups);
       }
     } catch (e) {
@@ -238,6 +238,12 @@ export default function RenderDashboard() {
   }), [services, query, accountFilter, typeFilter, favoriteOnly, favorites, hideSuspended]);
 
   const selectedGroup = serviceGroups.find((group) => group.id === selectedGroupId) || null;
+  const currentOpenIncidents = useMemo(() => {
+    const latest = new Map();
+    [...opsIncidents].sort((a, b) => Date.parse(a.at || a.openedAt || 0) - Date.parse(b.at || b.openedAt || 0))
+      .forEach((incident) => latest.set([incident.groupId, incident.serviceKey, incident.type].join(":"), incident));
+    return [...latest.values()].filter((incident) => incident.state === "open");
+  }, [opsIncidents]);
   const groupServices = selectedGroup
     ? selectedGroup.serviceKeys.map((key) => services.find((service) => service.accountId + ":" + service.id === key)).filter(Boolean)
     : [];
@@ -921,7 +927,7 @@ export default function RenderDashboard() {
               </div>
               <div className="rd-ops-kpis">
                 <article><small>Saved server groups</small><strong>{serviceGroups.length}</strong></article>
-                <article><small>Open incidents</small><strong>{opsIncidents.filter((item) => item.state === "open").length}</strong></article>
+                <article><small>Open incidents</small><strong>{currentOpenIncidents.length}</strong></article>
                 <article><small>Stored samples</small><strong>{opsHistory.length}</strong></article>
                 <article><small>Last recorded sample</small><strong>{opsHistory.length ? timeAgo(opsHistory[opsHistory.length - 1].sampledAt) : "—"}</strong></article>
               </div>
