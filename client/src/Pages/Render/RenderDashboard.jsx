@@ -49,6 +49,17 @@ const normalizeMetricPoints = (payload) => {
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
     .slice(-36);
 };
+const sumMetricPoints = (payload) => {
+  const totals = new Map();
+  normalizeMetricPoints(payload).forEach((point) => {
+    const timestamp = new Date(point.timestamp).toISOString();
+    const value = Number(point.value);
+    if (!Number.isFinite(value)) return;
+    const current = totals.get(timestamp);
+    totals.set(timestamp, { timestamp, value: (current?.value || 0) + value, unit: point.unit || current?.unit || "" });
+  });
+  return [...totals.values()].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).slice(-36);
+};
 
 export default function RenderDashboard() {
   const [accounts, setAccounts] = useState([]);
@@ -96,6 +107,19 @@ export default function RenderDashboard() {
   const [dbBusy, setDbBusy] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   const [favoriteOnly, setFavoriteOnly] = useState(false);
+  const [hideSuspended, setHideSuspended] = useState(false);
+  const [checkedServices, setCheckedServices] = useState([]);
+  const [serviceGroups, setServiceGroups] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("stashr_render_service_groups") || "[]"); } catch { return []; }
+  });
+  const [selectedGroupId, setSelectedGroupId] = useState("");
+  const [groupMetricType, setGroupMetricType] = useState("cpu");
+  const [groupMetrics, setGroupMetrics] = useState(null);
+  const [groupHistory, setGroupHistory] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("stashr_render_group_history") || "[]"); } catch { return []; }
+  });
+  const [groupMetricBusy, setGroupMetricBusy] = useState(false);
+  const [groupMonitoring, setGroupMonitoring] = useState(false);
   const [favorites, setFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem("stashr_render_favorites") || "[]"); } catch { return []; }
   });
@@ -152,13 +176,23 @@ export default function RenderDashboard() {
     try { localStorage.setItem("stashr_render_favorites", JSON.stringify(favorites)); } catch { /* optional preference */ }
   }, [favorites]);
 
+  useEffect(() => {
+    try { localStorage.setItem("stashr_render_service_groups", JSON.stringify(serviceGroups)); } catch { /* browser storage is optional */ }
+  }, [serviceGroups]);
+
   const filtered = useMemo(() => services.filter((s) => {
     const haystack = [s.name, s.type, s.serviceDetails?.region, s.accountName, s.branch].join(" ").toLowerCase();
     return haystack.includes(query.toLowerCase())
       && (!favoriteOnly || favorites.includes(s.accountId + ":" + s.id))
       && (accountFilter === "all" || s.accountId === accountFilter)
-      && (typeFilter === "all" || serviceKind(s) === typeFilter);
-  }), [services, query, accountFilter, typeFilter, favoriteOnly, favorites]);
+      && (typeFilter === "all" || serviceKind(s) === typeFilter)
+      && (!hideSuspended || s.suspended !== "suspended");
+  }), [services, query, accountFilter, typeFilter, favoriteOnly, favorites, hideSuspended]);
+
+  const selectedGroup = serviceGroups.find((group) => group.id === selectedGroupId) || null;
+  const groupServices = selectedGroup
+    ? selectedGroup.serviceKeys.map((key) => services.find((service) => service.accountId + ":" + service.id === key)).filter(Boolean)
+    : [];
 
   const selectedAccount = selected ? accounts.find((a) => a.id === selected.accountId) : null;
 
@@ -330,6 +364,87 @@ export default function RenderDashboard() {
       setMetricsPayload(null);
       setError(e?.response?.data?.error || "Metrics are not available for this service or plan.");
     } finally { setMetricsBusy(false); }
+  };
+
+  const loadGroupMetrics = useCallback(async (groupId = selectedGroupId, metric = groupMetricType, quiet = false) => {
+    const group = serviceGroups.find((item) => item.id === groupId);
+    if (!group) return;
+    const members = group.serviceKeys.map((key) => services.find((service) => service.accountId + ":" + service.id === key)).filter(Boolean);
+    if (!members.length) {
+      setGroupMetrics({ services: [], combinedPoints: [], checkedAt: new Date().toISOString() });
+      return;
+    }
+    if (!quiet) setGroupMetricBusy(true);
+    const startTime = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    try {
+      const results = await Promise.all(members.map(async (service) => {
+        try {
+          const payload = await getRenderMetrics(service.accountId, service.id, metric, startTime);
+          const points = sumMetricPoints(payload);
+          const peak = points.reduce((best, point) => !best || point.value > best.value ? point : best, null);
+          return { key: service.accountId + ":" + service.id, name: service.name, accountName: service.accountName,
+            points, current: points.length ? points[points.length - 1].value : null,
+            peak: peak?.value ?? null, peakAt: peak?.timestamp || null, unit: points[points.length - 1]?.unit || "",
+            error: points.length ? "" : "No metric points returned" };
+        } catch (e) {
+          return { key: service.accountId + ":" + service.id, name: service.name, accountName: service.accountName, points: [], current: null, peak: null, peakAt: null, unit: "", error: e?.response?.data?.error || "Metrics unavailable" };
+        }
+      }));
+      const combined = new Map();
+      results.forEach((service) => service.points.forEach((point) => {
+        const existing = combined.get(point.timestamp);
+        combined.set(point.timestamp, { timestamp: point.timestamp, value: (existing?.value || 0) + point.value, unit: point.unit || existing?.unit || "" });
+      }));
+      const combinedPoints = [...combined.values()].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).slice(-36);
+      const snapshot = { groupId, metric, services: results, combinedPoints, checkedAt: new Date().toISOString() };
+      setGroupMetrics(snapshot);
+      try {
+        const historyKey = "stashr_render_group_history";
+        const history = JSON.parse(localStorage.getItem(historyKey) || "[]");
+        const latest = combinedPoints[combinedPoints.length - 1];
+        if (latest) {
+          history.push({ groupId, metric, timestamp: snapshot.checkedAt, value: latest.value, unit: latest.unit || "" });
+          const retainedHistory = history.filter((entry) => Date.now() - new Date(entry.timestamp).getTime() < 7 * 24 * 60 * 60 * 1000).slice(-2016);
+          localStorage.setItem(historyKey, JSON.stringify(retainedHistory));
+          setGroupHistory(retainedHistory);
+        }
+      } catch { /* optional local monitoring history */ }
+    } finally { if (!quiet) setGroupMetricBusy(false); }
+  }, [serviceGroups, services, selectedGroupId, groupMetricType]);
+
+  useEffect(() => {
+    if (!groupMonitoring || !selectedGroupId) return undefined;
+    void loadGroupMetrics(selectedGroupId, groupMetricType, true);
+    const timer = window.setInterval(() => { void loadGroupMetrics(selectedGroupId, groupMetricType, true); }, 5 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [groupMonitoring, selectedGroupId, groupMetricType, loadGroupMetrics]);
+
+  const saveServiceGroup = () => {
+    const keys = [...new Set(checkedServices)].filter((key) => services.some((service) => service.accountId + ":" + service.id === key));
+    if (keys.length < 2) { toast.info("Select at least two services to create a group."); return; }
+    const name = window.prompt("Name this server group (for example, Deal Radar):");
+    if (!name || !name.trim()) return;
+    const group = { id: "group-" + Date.now().toString(36), name: name.trim().slice(0, 60), serviceKeys: keys };
+    setServiceGroups((old) => [...old, group]);
+    setSelectedGroupId(group.id);
+    setCheckedServices([]);
+    setGroupMetrics(null);
+    setGroupMonitoring(false);
+    toast.success("Server group saved in this browser.");
+  };
+
+  const deleteServiceGroup = () => {
+    if (!selectedGroup) return;
+    if (!window.confirm("Delete the local group '" + selectedGroup.name + "'? This will not affect any Render services.")) return;
+    setServiceGroups((old) => old.filter((group) => group.id !== selectedGroup.id));
+    setSelectedGroupId("");
+    setGroupMetrics(null);
+    setGroupMonitoring(false);
+  };
+
+  const toggleServiceSelection = (service) => {
+    const key = service.accountId + ":" + service.id;
+    setCheckedServices((old) => old.includes(key) ? old.filter((item) => item !== key) : [...old, key]);
   };
 
   const runHealthCheck = async (service = selected, quiet = false) => {
@@ -509,12 +624,31 @@ export default function RenderDashboard() {
               <label className="rd-search"><span>⌕</span><input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search services, regions, branches… (Ctrl/⌘ K)" /><button onClick={() => setQuery("")} aria-label="Clear search">×</button></label>
               <select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)} aria-label="Filter by account"><option value="all">All accounts</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
               <button className={"rd-btn rd-btn--quiet" + (favoriteOnly ? " is-active" : "")} onClick={() => setFavoriteOnly((v) => !v)}>{favoriteOnly ? "★ Favorites" : "☆ Favorites"}</button><select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} aria-label="Filter by service type"><option value="all">All types</option>{["Web service", "Static site", "Private service", "Cron job", "Background worker", "PostgreSQL"].map((t) => <option key={t}>{t}</option>)}</select>
+              <label className="rd-hide-suspended"><input type="checkbox" checked={hideSuspended} onChange={(e) => setHideSuspended(e.target.checked)} /> Hide suspended</label>
+              <button className="rd-btn rd-btn--quiet" disabled={checkedServices.length < 2} onClick={saveServiceGroup}>＋ Group selected ({checkedServices.length})</button>
             </div>
-            <div className="rd-table-wrap"><table className="rd-table"><thead><tr><th>Service</th><th>Account</th><th>Type</th><th>Region</th><th>Status</th><th /></tr></thead><tbody>
-              {filtered.map((s) => <tr key={s.accountId + s.id} onClick={() => openService(s)}><td><div className="rd-service-cell"><span className="rd-service-icon">{serviceKind(s) === "PostgreSQL" ? "▤" : "▣"}</span><div><strong>{s.name}</strong><small>{s.id.slice(0, 15)}{s.branch ? " · " + s.branch : ""}</small></div></div></td><td><span className="rd-account-chip">{initials(s.accountName)} {s.accountName}</span></td><td>{serviceKind(s)}</td><td>{s.serviceDetails?.region || "—"}</td><td><span className={"rd-status " + (s.suspended === "suspended" ? "is-suspended" : "is-live")}><i />{s.suspended === "suspended" ? "Suspended" : "Not suspended"}</span></td><td><button className="rd-open" onClick={(e) => { e.stopPropagation(); toggleFavorite(s); }} aria-label={"Favorite " + s.name} title="Toggle favorite">{favorites.includes(s.accountId + ":" + s.id) ? "★" : "☆"}</button><button className="rd-open" onClick={(e) => { e.stopPropagation(); openService(s); }} aria-label={"Open " + s.name}>↗</button></td></tr>)}
-              {!filtered.length && <tr><td colSpan="6"><div className="rd-empty"><span>▣</span><h3>{loading ? "Loading your services…" : services.length ? "No matching services" : "Your control center is ready"}</h3><p>{loading ? "Fetching your connected Render accounts." : services.length ? "Try changing your search or filters." : "Connect a Render API key to get started. The key is stored encrypted in your Stashr account."}</p>{!loading && !services.length && <button className="rd-btn rd-btn--primary" onClick={() => setModal(true)}>＋ Connect your first account</button>}</div></td></tr>}
+            <div className="rd-table-wrap"><table className="rd-table"><thead><tr><th>Select</th><th>Service</th><th>Account</th><th>Type</th><th>Region</th><th>Status</th><th /></tr></thead><tbody>
+              {filtered.map((s) => <tr key={s.accountId + s.id} onClick={() => openService(s)}><td><input className="rd-service-check" type="checkbox" checked={checkedServices.includes(s.accountId + ":" + s.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggleServiceSelection(s)} aria-label={"Select " + s.name + " for a group"} /></td><td><div className="rd-service-cell"><span className="rd-service-icon">{serviceKind(s) === "PostgreSQL" ? "▤" : "▣"}</span><div><strong>{s.name}</strong><small>{s.id.slice(0, 15)}{s.branch ? " · " + s.branch : ""}</small></div></div></td><td><span className="rd-account-chip">{initials(s.accountName)} {s.accountName}</span></td><td>{serviceKind(s)}</td><td>{s.serviceDetails?.region || "—"}</td><td><span className={"rd-status " + (s.suspended === "suspended" ? "is-suspended" : "is-live")}><i />{s.suspended === "suspended" ? "Suspended" : "Not suspended"}</span></td><td><button className="rd-open" onClick={(e) => { e.stopPropagation(); toggleFavorite(s); }} aria-label={"Favorite " + s.name} title="Toggle favorite">{favorites.includes(s.accountId + ":" + s.id) ? "★" : "☆"}</button><button className="rd-open" onClick={(e) => { e.stopPropagation(); openService(s); }} aria-label={"Open " + s.name}>↗</button></td></tr>)}
+              {!filtered.length && <tr><td colSpan="7"><div className="rd-empty"><span>▣</span><h3>{loading ? "Loading your services…" : services.length ? "No matching services" : "Your control center is ready"}</h3><p>{loading ? "Fetching your connected Render accounts." : services.length ? "Try changing your search or filters." : "Connect a Render API key to get started. The key is stored encrypted in your Stashr account."}</p>{!loading && !services.length && <button className="rd-btn rd-btn--primary" onClick={() => setModal(true)}>＋ Connect your first account</button>}</div></td></tr>}
             </tbody></table></div>
             <div className="rd-table-foot">Showing <b>{filtered.length}</b> of <b>{services.length}</b> services <span>•</span> {lastSync ? "Synced " + timeAgo(lastSync.toISOString()) : "Not synced yet"}</div>
+            <section className="rd-group-panel">
+              <div className="rd-group-heading"><div><h3>Multi-server monitoring</h3><p>Group services that work together—such as Deal Radar's fetcher, validator and user server.</p></div>
+                <select value={selectedGroupId} onChange={(e) => { setSelectedGroupId(e.target.value); setGroupMetrics(null); setGroupMonitoring(false); }} aria-label="Select a server group"><option value="">Choose a saved group</option>{serviceGroups.map((group) => <option key={group.id} value={group.id}>{group.name} ({group.serviceKeys.length})</option>)}</select>
+              </div>
+              {selectedGroup ? <>
+                <div className="rd-group-actions"><span>{groupServices.length} of {selectedGroup.serviceKeys.length} services currently available</span><button className="rd-btn rd-btn--quiet" onClick={() => { setGroupMonitoring((active) => !active); if (!groupMonitoring) void loadGroupMetrics(selectedGroup.id, groupMetricType); }}>{groupMonitoring ? "■ Stop monitoring" : "▶ Start monitoring"}</button><button className="rd-btn rd-btn--quiet" onClick={() => void loadGroupMetrics(selectedGroup.id, groupMetricType)}>↻ Sample now</button><button className="rd-btn rd-btn--quiet" onClick={deleteServiceGroup}>Delete group</button></div>
+                <div className="rd-group-actions"><label>Metric <select value={groupMetricType} onChange={(e) => { setGroupMetricType(e.target.value); setGroupMetrics(null); }}>{[["cpu","CPU usage"],["memory","Memory usage"],["http-requests","HTTP requests"],["http-latency","HTTP latency"],["bandwidth","Bandwidth"],["instance-count","Instance count"]].map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><small>{groupMonitoring ? "Auto-sampling every 5 minutes while this page is open." : "Samples are fetched on demand; auto-monitoring only runs while this dashboard stays open."}</small></div>
+                {groupMetricBusy && <div className="rd-loading">Sampling group metrics…</div>}
+                {groupMetrics && <>
+                  <div className="rd-group-kpis"><article><small>Latest combined value</small><strong>{groupMetrics.combinedPoints.length ? groupMetrics.combinedPoints[groupMetrics.combinedPoints.length - 1].value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"} <em>{groupMetrics.combinedPoints[groupMetrics.combinedPoints.length - 1]?.unit || ""}</em></strong></article><article><small>Peak in returned hour</small><strong>{groupMetrics.combinedPoints.length ? Math.max(...groupMetrics.combinedPoints.map((point) => point.value)).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}</strong></article><article><small>Peak time (1h)</small><strong>{groupMetrics.combinedPoints.length ? new Date(groupMetrics.combinedPoints.reduce((best, point) => point.value > best.value ? point : best, groupMetrics.combinedPoints[0]).timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</strong></article><article><small>Saved peak (7d)</small><strong>{(() => { const entries = groupHistory.filter((entry) => entry.groupId === selectedGroup.id && entry.metric === groupMetricType); const peak = entries.reduce((best, entry) => !best || entry.value > best.value ? entry : best, null); return peak ? peak.value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"; })()}</strong><small>{(() => { const entries = groupHistory.filter((entry) => entry.groupId === selectedGroup.id && entry.metric === groupMetricType); const peak = entries.reduce((best, entry) => !best || entry.value > best.value ? entry : best, null); return peak ? new Date(peak.timestamp).toLocaleString() : "Builds up while monitoring is on"; })()}</small></article></div>
+                  {groupMetrics.combinedPoints.length ? <><div className="rd-metric-bars rd-group-bars" role="img" aria-label={"Combined " + groupMetricType + " across group services over the last hour"}>{groupMetrics.combinedPoints.map((point,index) => { const max = Math.max(1,...groupMetrics.combinedPoints.map((entry) => entry.value)); return <span key={point.timestamp + index} title={new Date(point.timestamp).toLocaleString() + ": " + point.value.toFixed(2) + " " + (point.unit || "")} style={{height:Math.max(4,point.value/max*82)+"px"}} />; })}</div><div className="rd-metric-axis"><span>{new Date(groupMetrics.combinedPoints[0].timestamp).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</span><span>{new Date(groupMetrics.combinedPoints[groupMetrics.combinedPoints.length-1].timestamp).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</span></div></> : <p className="rd-metric-empty">No combined metric points returned. Render may not expose this metric for every service or plan.</p>}
+                  <div className="rd-table-wrap"><table className="rd-table rd-group-table"><thead><tr><th>Service</th><th>Account</th><th>Current</th><th>Peak (1h)</th><th>Peak time</th><th>Result</th><th /></tr></thead><tbody>{groupMetrics.services.map((item) => <tr key={item.key}><td>{item.name}</td><td>{item.accountName}</td><td>{item.current == null ? "—" : item.current.toLocaleString(undefined,{maximumFractionDigits:2}) + " " + item.unit}</td><td>{item.peak == null ? "—" : item.peak.toLocaleString(undefined,{maximumFractionDigits:2}) + " " + item.unit}</td><td>{item.peakAt ? new Date(item.peakAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}) : "—"}</td><td>{item.error || "Available"}</td><td><button className="rd-open" onClick={() => { const service = services.find((candidate) => candidate.accountId + ":" + candidate.id === item.key); if (service) openService(service); }}>Details ↗</button></td></tr>)}</tbody></table></div>
+                  <p className="rd-group-note">Combined values sum the metric points returned for each selected service; they are a comparison signal, not a single machine's CPU or memory percentage. Render's returned metric window is about one hour. Samples are also kept in this browser for up to 7 days while monitoring is used.</p>
+                  <small className="rd-group-synced">Last sampled {new Date(groupMetrics.checkedAt).toLocaleTimeString()}</small>
+                </>}
+              </> : <div className="rd-group-empty">{serviceGroups.length ? "Choose a group to view combined load and per-service peaks." : "Select at least two services in the table and choose “Group selected” to create your first server group."}</div>}
+            </section>
           </div>
 
           <aside className="rd-side">
