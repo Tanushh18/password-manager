@@ -252,7 +252,7 @@ router.get("/render/ops/report", async (req, res) => {
       groups: (config.groups || []).map((group) => ({ id: group.id, name: group.name, serviceCount: group.serviceKeys.length, dependencies: group.dependencies || [], serviceCostEstimates: group.serviceCostEstimates || {}, estimatedMonthlyCostUsd: Object.values(group.serviceCostEstimates || {}).reduce((sum, value) => sum + Number(value || 0), 0), monthlyBudgetUsd: group.monthlyBudgetUsd || 0 })),
       history: history.map((item) => ({
         sampledAt: item.sampledAt, groupId: item.groupId, groupName: item.groupName,
-        combined: item.combined || {}, estimatedMonthlyCostUsd: item.estimatedMonthlyCostUsd || 0, monthlyBudgetUsd: item.monthlyBudgetUsd || 0, services: (item.services || []).map((service) => ({
+        combined: item.combined || {}, estimatedMonthlyCostUsd: item.estimatedMonthlyCostUsd || 0, monthlyBudgetUsd: item.monthlyBudgetUsd || 0, costCoverageCount: item.costCoverageCount || 0, costCoverageComplete: Boolean(item.costCoverageComplete), services: (item.services || []).map((service) => ({
           name: service.name, serviceId: service.serviceId, health: service.health?.state || "unknown",
           metrics: service.metrics || {}, suspended: Boolean(service.suspended)
         }))
@@ -265,6 +265,7 @@ router.get("/render/ops/report", async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (String(req.query.format || "").toLowerCase() === "csv") {
       const rows = [["record_type","timestamp","group","service","metric","value","unit","severity","state","message"]];
+      report.groups.forEach((group) => rows.push(["cost_estimate", report.generatedAt, group.name, "", "monthly_estimate", group.estimatedMonthlyCostUsd, "USD", "", "", "budget=" + group.monthlyBudgetUsd + "; manual estimate"]));
       report.history.forEach((sample) => (sample.services || []).forEach((service) => {
         Object.entries(service.metrics || {}).forEach(([metric, value]) => rows.push([
           "metric", sample.sampledAt, sample.groupName, service.name, metric,
