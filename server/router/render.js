@@ -1,5 +1,6 @@
 const express = require("express");
 const mongoose = require("mongoose");
+const renderOps = require("../utils/renderOps");
 const User = require("../models/schema");
 const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
@@ -89,8 +90,155 @@ function sendUpstreamError(res, error) {
 const safeId = (value) => /^[A-Za-z0-9_-]{1,160}$/.test(String(value || ""));
 const servicePath = (serviceId, suffix = "") => "/v1/services/" + encodeURIComponent(serviceId) + suffix;
 
-/* All routes are protected by Stashr's existing authenticated session. */
+/* External scheduler endpoint. Set RENDER_MONITOR_CRON_SECRET and call this
+   endpoint from a trusted scheduler every 5 minutes. No user credentials are
+   accepted here; the shared secret is compared in constant time. */
+router.post("/render/ops/tick", apiLimiter, async (req, res) => {
+  const expected = process.env.RENDER_MONITOR_CRON_SECRET || "";
+  const authorization = String(req.get("authorization") || "");
+  const candidate = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  if (!renderOps.verifySecret(candidate, expected)) return res.status(expected ? 401 : 503).json({ error: expected ? "Invalid scheduler credential." : "Persistent monitoring scheduler is not configured." });
+  try {
+    const summary = await renderOps.runAllEnabledMonitoring();
+    res.set("Cache-Control", "no-store");
+    return res.json({ ok: true, ...summary, completedAt: new Date().toISOString() });
+  } catch {
+    return res.status(500).json({ error: "Monitoring tick failed. Check server logs without logging secrets." });
+  }
+});
+
+/* All user-facing Render operations use Stashr's authenticated session. */
 router.use("/render", authenticate, apiLimiter);
+
+router.get("/render/ops/config", async (req, res) => {
+  try {
+    const config = await renderOps.readConfig(req.rootUser);
+    res.set("Cache-Control", "no-store");
+    return res.json({ config: renderOps.publicConfig(config) });
+  } catch {
+    return res.status(500).json({ error: "Could not load monitoring configuration." });
+  }
+});
+
+router.put("/render/ops/config", async (req, res) => {
+  try {
+    const previous = await renderOps.readConfig(req.rootUser);
+    const normalized = renderOps.normalizeConfig(req.body, previous);
+    const allowedAccounts = new Set((req.rootUser.renderAccounts || []).filter((entry) => entry.enc === "udk").map((entry) => String(entry._id)));
+    normalized.groups = normalized.groups.map((group) => ({
+      ...group,
+      serviceKeys: group.serviceKeys.filter((key) => allowedAccounts.has(key.slice(0, key.indexOf(":"))))
+    })).filter((group) => group.serviceKeys.length >= 2);
+    const saved = await renderOps.saveConfig(req.rootUser, normalized);
+    await recordAudit(req, "monitoring_config_updated", "", "", {
+      groups: saved.groups.length, monitoringEnabled: saved.monitor.enabled,
+      telegramConfigured: Boolean(saved.notifications.telegramBotToken && saved.notifications.telegramChatId)
+    });
+    res.set("Cache-Control", "no-store");
+    return res.json({ config: renderOps.publicConfig(saved) });
+  } catch {
+    return res.status(500).json({ error: "Could not save monitoring configuration." });
+  }
+});
+
+router.get("/render/ops/history", async (req, res) => {
+  try {
+    const dataKey = await req.rootUser.getDataKey();
+    const limit = Math.max(1, Math.min(200, Number.parseInt(req.query.limit, 10) || 100));
+    const history = renderOps.encryptedList(req.rootUser, "renderMetricHistory", dataKey, limit);
+    res.set("Cache-Control", "no-store");
+    return res.json({ history });
+  } catch {
+    return res.status(500).json({ error: "Could not load monitoring history." });
+  }
+});
+
+router.get("/render/ops/incidents", async (req, res) => {
+  try {
+    const dataKey = await req.rootUser.getDataKey();
+    const limit = Math.max(1, Math.min(200, Number.parseInt(req.query.limit, 10) || 100));
+    const incidents = renderOps.encryptedList(req.rootUser, "renderIncidents", dataKey, limit).reverse();
+    res.set("Cache-Control", "no-store");
+    return res.json({ incidents });
+  } catch {
+    return res.status(500).json({ error: "Could not load incident history." });
+  }
+});
+
+router.post("/render/ops/run", async (req, res) => {
+  try {
+    const result = await renderOps.runUserMonitoring(req.rootUser, { force: true });
+    await recordAudit(req, "monitoring_run_manual", "", "", {
+      groupsChecked: result.groupsChecked || 0, incidentsOpened: result.incidentsOpened || 0
+    });
+    res.set("Cache-Control", "no-store");
+    return res.json(result);
+  } catch {
+    return res.status(502).json({ error: "Could not run a monitoring sample. Check connected Render credentials and service availability." });
+  }
+});
+
+router.post("/render/ops/notify/test", async (req, res) => {
+  try {
+    const config = await renderOps.readConfig(req.rootUser);
+    if (!config.notifications?.telegramBotToken || !config.notifications?.telegramChatId) {
+      return res.status(400).json({ error: "Configure a Telegram bot token and chat ID first." });
+    }
+    const result = await renderOps.sendTelegram(config, "Stashr Render monitoring test\nYour Telegram alert channel is configured.\nAt: " + new Date().toISOString());
+    if (!result.sent) return res.status(502).json({ error: "Telegram did not accept the test message. Check the bot token and chat ID." });
+    await recordAudit(req, "monitoring_notification_test", "", "", { channel: "telegram" });
+    return res.json({ ok: true, message: "Test notification sent." });
+  } catch {
+    return res.status(502).json({ error: "Could not send a Telegram test notification." });
+  }
+});
+
+router.get("/render/ops/report", async (req, res) => {
+  try {
+    const dataKey = await req.rootUser.getDataKey();
+    const history = renderOps.encryptedList(req.rootUser, "renderMetricHistory", dataKey, 200);
+    const incidents = renderOps.encryptedList(req.rootUser, "renderIncidents", dataKey, 200);
+    const config = await renderOps.readConfig(req.rootUser);
+    const report = {
+      generatedAt: new Date().toISOString(),
+      monitoringEnabled: Boolean(config.monitor?.enabled),
+      groups: (config.groups || []).map((group) => ({ id: group.id, name: group.name, serviceCount: group.serviceKeys.length, dependencies: group.dependencies || [] })),
+      history: history.map((item) => ({
+        sampledAt: item.sampledAt, groupId: item.groupId, groupName: item.groupName,
+        combined: item.combined || {}, services: (item.services || []).map((service) => ({
+          name: service.name, serviceId: service.serviceId, health: service.health?.state || "unknown",
+          metrics: service.metrics || {}, suspended: Boolean(service.suspended)
+        }))
+      })),
+      incidents: incidents.map((item) => ({
+        at: item.at, openedAt: item.openedAt, groupName: item.groupName, serviceName: item.serviceName,
+        type: item.type, severity: item.severity, state: item.state, message: item.message
+      }))
+    };
+    res.set("Cache-Control", "no-store");
+    if (String(req.query.format || "").toLowerCase() === "csv") {
+      const rows = [["record_type","timestamp","group","service","metric","value","unit","severity","state","message"]];
+      report.history.forEach((sample) => (sample.services || []).forEach((service) => {
+        Object.entries(service.metrics || {}).forEach(([metric, value]) => rows.push([
+          "metric", sample.sampledAt, sample.groupName, service.name, metric,
+          value.current == null ? "" : value.current, value.unit || "", "", "", ""
+        ]));
+        rows.push(["health", sample.sampledAt, sample.groupName, service.name, "", "", "", "", service.health, ""]);
+      }));
+      report.incidents.forEach((incident) => rows.push(["incident", incident.at, incident.groupName, incident.serviceName, incident.type, "", "", incident.severity, incident.state, incident.message]));
+      const csv = rows.map((row) => row.map((value) => {
+        const valueText = String(value ?? "");
+        return /[",\r\n]/.test(valueText) ? '"' + valueText.replace(/"/g, '""') + '"' : valueText;
+      }).join(",")).join("\r\n");
+      res.set("Content-Type", "text/csv; charset=utf-8");
+      res.set("Content-Disposition", 'attachment; filename="stashr-render-ops-report.csv"');
+      return res.send(csv);
+    }
+    return res.json(report);
+  } catch {
+    return res.status(500).json({ error: "Could not generate the monitoring report." });
+  }
+});
 
 router.get("/render/accounts", async (req, res) => {
   try {
