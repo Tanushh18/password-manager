@@ -292,6 +292,21 @@ async function runUserMonitoring(user, options = {}) {
       } catch {
         result.latestDeploy = { status: "unavailable", createdAt: null };
       }
+      if (String(result.type || "").toLowerCase().includes("postgres") || member.serviceId.startsWith("dpg-")) {
+        try {
+          const exportPayload = await renderRequest(member.apiKey, "/v1/postgres/" + encodeURIComponent(member.serviceId) + "/export");
+          const exportList = Array.isArray(exportPayload) ? exportPayload : Array.isArray(exportPayload?.exports) ? exportPayload.exports : [];
+          const latestExport = exportList.map((item) => item?.export || item).filter(Boolean)
+            .sort((a, b) => Date.parse(b.createdAt || b.created_at || 0) - Date.parse(a.createdAt || a.created_at || 0))[0];
+          result.latestManualExport = latestExport ? {
+            id: String(latestExport.id || "").slice(0, 160),
+            status: String(latestExport.status || "unknown").slice(0, 60),
+            createdAt: latestExport.createdAt || latestExport.created_at || null
+          } : null;
+        } catch {
+          result.latestManualExport = { status: "unavailable", createdAt: null };
+        }
+      }
 
       const metricsToFetch = Object.keys(METRICS);
       for (const metric of metricsToFetch) {
