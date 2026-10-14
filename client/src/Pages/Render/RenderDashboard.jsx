@@ -504,6 +504,8 @@ export default function RenderDashboard() {
   const saveServiceGroup = async () => {
     const keys = [...new Set(checkedServices)].filter((key) => services.some((service) => service.accountId + ":" + service.id === key));
     if (keys.length < 2) { toast.info("Select at least two services to create a group."); return; }
+    if (keys.length > 10) { toast.info("A group can contain up to 10 services. Select 10 or fewer."); return; }
+    if (serviceGroups.length >= 10) { toast.info("You can save up to 10 server groups."); return; }
     const name = window.prompt("Name this server group (for example, Deal Radar):");
     if (!name || !name.trim()) return;
     const group = { id: "group-" + Date.now().toString(36), name: name.trim().slice(0, 60), serviceKeys: keys, dependencies: [] };
@@ -955,7 +957,7 @@ export default function RenderDashboard() {
                 <article><small>Last recorded sample</small><strong>{opsHistory.length ? timeAgo(opsHistory[opsHistory.length - 1].sampledAt) : "—"}</strong></article>
               </div>
               <div className="rd-ops-config">
-                <div className="rd-ops-config-head"><div><h4>Monitoring & alert policy</h4><p>Settings are encrypted in your Stashr account. A trusted scheduler must call the backend tick endpoint for monitoring while the browser is closed.</p></div><button className="rd-btn rd-btn--primary" disabled={opsSaving} onClick={() => void persistOpsConfig()}>{opsSaving ? "Saving…" : "Save settings"}</button></div>
+                <div className="rd-ops-config-head"><div><h4>Monitoring & alert policy</h4><p>Settings are encrypted in your Stashr account. A trusted scheduler must call the backend tick endpoint for monitoring while the browser is closed. Sampling is bounded to 15 unique services per user tick to respect provider API limits.</p></div><button className="rd-btn rd-btn--primary" disabled={opsSaving} onClick={() => void persistOpsConfig()}>{opsSaving ? "Saving…" : "Save settings"}</button></div>
                 <div className="rd-ops-setting-row">
                   <label className="rd-toggle"><input type="checkbox" checked={monitorSettings.enabled} onChange={(e) => setMonitorSettings((old) => ({ ...old, enabled: e.target.checked }))} /> Enable persistent monitoring</label>
                   <label>Interval<select value={monitorSettings.intervalMinutes || 5} onChange={(e) => setMonitorSettings((old) => ({ ...old, intervalMinutes: Number(e.target.value) }))}><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option></select></label>
