@@ -111,6 +111,10 @@ export default function RenderDashboard() {
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
   const [lastSync, setLastSync] = useState(null);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [autoRefreshSeconds, setAutoRefreshSeconds] = useState(30);
+  const [lastAutoRefresh, setLastAutoRefresh] = useState(null);
+  const autoRefreshInFlight = useRef(false);
   const [healthResult, setHealthResult] = useState(null);
   const [healthBusy, setHealthBusy] = useState(false);
   const [snapshots, setSnapshots] = useState([]);
@@ -166,7 +170,7 @@ export default function RenderDashboard() {
 
   const loadAccounts = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
-    setError("");
+    if (!quiet) setError("");
     try {
       const result = await getRenderAccounts();
       const list = Array.isArray(result.accounts) ? result.accounts : [];
@@ -182,7 +186,7 @@ export default function RenderDashboard() {
       setServices(withServices.flatMap((a) => a.services.map((s) => ({ ...s, accountId: a.id, accountName: a.name }))));
       setLastSync(new Date());
     } catch (e) {
-      setError(e?.response?.data?.error || "Could not load Render connections. Sign in again if your Stashr session expired.");
+      if (!quiet) setError(e?.response?.data?.error || "Could not load Render connections. Sign in again if your Stashr session expired.");
     } finally {
       if (!quiet) setLoading(false);
     }
@@ -195,8 +199,8 @@ export default function RenderDashboard() {
     } catch { /* Audit history is supplemental; the dashboard remains usable. */ }
   }, []);
 
-  const refreshOpsData = useCallback(async () => {
-    setOpsLoading(true);
+  const refreshOpsData = useCallback(async (quiet = false) => {
+    if (!quiet) setOpsLoading(true);
     try {
       const [configResult, historyResult, incidentResult] = await Promise.all([
         getRenderOpsConfig(), getRenderOpsHistory(100), getRenderOpsIncidents(100)
@@ -211,14 +215,14 @@ export default function RenderDashboard() {
       setTelegramChatId(config.notifications?.telegramChatId || "");
       setOpsHistory(Array.isArray(historyResult.history) ? historyResult.history : []);
       setOpsIncidents(Array.isArray(incidentResult.incidents) ? incidentResult.incidents : []);
-      if (!remoteGroups.length && localGroups.length) {
+      if (!quiet && !remoteGroups.length && localGroups.length) {
         const saved = await saveRenderOpsConfig({ ...config, groups: localGroups });
         setOpsConfig({ ...(saved.config || config), schedulerConfigured: Boolean(saved.schedulerConfigured), aiDiagnosisAvailable: Boolean(saved.aiDiagnosisAvailable) });
         setServiceGroups(saved.config?.groups || localGroups);
       }
     } catch (e) {
-      setError(e?.response?.data?.error || "Could not load persistent monitoring. Check the Stashr API deployment.");
-    } finally { setOpsLoading(false); }
+      if (!quiet) setError(e?.response?.data?.error || "Could not load persistent monitoring. Check the Stashr API deployment.");
+    } finally { if (!quiet) setOpsLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -226,6 +230,32 @@ export default function RenderDashboard() {
     void loadAudit();
     void refreshOpsData();
   }, [loadAccounts, loadAudit, refreshOpsData]);
+
+  useEffect(() => {
+    if (!autoRefreshEnabled) return undefined;
+    const refreshLiveData = async () => {
+      if (document.visibilityState !== "visible" || autoRefreshInFlight.current) return;
+      autoRefreshInFlight.current = true;
+      try {
+        const tasks = [loadAccounts(true), loadAudit(), refreshOpsData(true)];
+        if (selectedGroupId) tasks.push(loadGroupMetrics(selectedGroupId, groupMetricType, true));
+        if (selected && tab === "deploys") tasks.push(loadDeployments(selected));
+        await Promise.allSettled(tasks);
+        setLastAutoRefresh(new Date());
+      } finally {
+        autoRefreshInFlight.current = false;
+      }
+    };
+    const timer = window.setInterval(() => { void refreshLiveData(); }, autoRefreshSeconds * 1000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void refreshLiveData();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [autoRefreshEnabled, autoRefreshSeconds, loadAccounts, loadAudit, refreshOpsData, selectedGroupId, groupMetricType, loadGroupMetrics, selected, tab]);
 
   useEffect(() => {
     const handler = (event) => {
@@ -448,7 +478,8 @@ export default function RenderDashboard() {
       return;
     }
     if (!quiet) setGroupMetricBusy(true);
-    const startTime = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const rangeMs = ({ "1h": 60 * 60 * 1000, "6h": 6 * 60 * 60 * 1000, "24h": 24 * 60 * 60 * 1000, "7d": 7 * 24 * 60 * 60 * 1000 })[groupMetricRange] || 60 * 60 * 1000;
+    const startTime = new Date(Date.now() - rangeMs).toISOString();
     try {
       const results = await Promise.all(members.map(async (service) => {
         try {
@@ -940,8 +971,11 @@ export default function RenderDashboard() {
             <p>Manage Render services, logs, environment variables and deployments from your Stashr vault.</p>
           </div>
           <div className="rd-heading-actions">
-            <button className="rd-btn rd-btn--quiet" onClick={refreshServices} disabled={refreshing || loading}>{refreshing ? "Refreshing…" : "↻ Refresh"}</button>
+            <label className="rd-auto-refresh-toggle" title="Automatically refresh services, incidents and the selected group graph while this tab is open"><input type="checkbox" checked={autoRefreshEnabled} onChange={(e) => setAutoRefreshEnabled(e.target.checked)} /><span className={autoRefreshEnabled ? "rd-live-dot is-live" : "rd-live-dot"} />Live refresh</label>
+            <select className="rd-auto-refresh-interval" value={autoRefreshSeconds} onChange={(e) => setAutoRefreshSeconds(Number(e.target.value))} aria-label="Auto-refresh interval" title="Choose how often Render data refreshes"><option value={15}>15 sec</option><option value={30}>30 sec</option><option value={60}>60 sec</option></select>
+            <button className="rd-btn rd-btn--quiet" onClick={refreshServices} disabled={refreshing || loading}>{refreshing ? "Refreshing…" : "↻ Refresh now"}</button>
             <button className="rd-btn rd-btn--primary" onClick={() => { setModal(true); setError(""); }}>＋ Connect account</button>
+            <small className="rd-auto-refresh-status">{autoRefreshEnabled ? `Auto-refresh on · ${lastAutoRefresh ? lastAutoRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "waiting for first update"}` : "Auto-refresh paused"}</small>
           </div>
         </header>
 
