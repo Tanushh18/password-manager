@@ -182,6 +182,48 @@ router.post("/render/ops/run", async (req, res) => {
   }
 });
 
+router.post("/render/ops/diagnose", async (req, res) => {
+  if (req.body?.allowExternalProcessing !== true) {
+    return res.status(400).json({ error: "Explicit consent is required before sending redacted logs to the optional AI provider." });
+  }
+  const apiKey = process.env.GROQ_API_KEY || "";
+  if (!apiKey) return res.status(503).json({ error: "AI diagnosis is not configured. Set GROQ_API_KEY on the server, or use the built-in rule-based diagnosis." });
+  const rawLogs = Array.isArray(req.body?.logs) ? req.body.logs.join("\n") : String(req.body?.logs || "");
+  if (!rawLogs.trim() || rawLogs.length > 20000) return res.status(400).json({ error: "Provide 1–20,000 characters of logs." });
+  const serviceName = String(req.body?.serviceName || "Render service").replace(/[\r\n]/g, " ").slice(0, 120);
+  const redacted = rawLogs
+    .replace(/\bBearer\s+[A-Za-z0-9._~-]+/gi, "Bearer [REDACTED]")
+    .replace(/\b(?:rnd_[A-Za-z0-9_-]+|sk-[A-Za-z0-9_-]+|gh[pousr]_[A-Za-z0-9_]+|xox[baprs]-[A-Za-z0-9-]+)\b/g, "[REDACTED_SECRET]")
+    .replace(/\b(password|token|secret|api[_-]?key|authorization)\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1=[REDACTED]")
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[REDACTED_EMAIL]")
+    .slice(0, 16000);
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: process.env.GROQ_MODEL || "openai/gpt-oss-120b",
+        temperature: 0.2,
+        max_tokens: 700,
+        messages: [
+          { role: "system", content: "You are a cautious SRE assistant. Diagnose only from the supplied redacted logs. Separate evidence from hypotheses, give the 3 most likely causes, safe verification steps, and rollback/mitigation advice. Never ask for secrets. State uncertainty and do not claim to have inspected infrastructure outside these logs." },
+          { role: "user", content: "Service: " + serviceName + "\nAnalyze these redacted Render logs. They may still contain sensitive operational context; do not repeat identifiers unnecessarily.\n\n" + redacted }
+        ]
+      }),
+      signal: AbortSignal.timeout(20000)
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return res.status(502).json({ error: "The AI provider rejected the request. Check provider quota/model configuration." });
+    const diagnosis = payload?.choices?.[0]?.message?.content;
+    if (typeof diagnosis !== "string" || !diagnosis.trim()) return res.status(502).json({ error: "The AI provider returned no diagnosis." });
+    await recordAudit(req, "ai_log_diagnosis", "", "", { serviceName, provider: "groq", redactedCharacters: redacted.length });
+    res.set("Cache-Control", "no-store");
+    return res.json({ diagnosis: diagnosis.slice(0, 12000), provider: "groq", model: process.env.GROQ_MODEL || "openai/gpt-oss-120b", redactedCharacters: redacted.length });
+  } catch {
+    return res.status(502).json({ error: "Could not reach the optional AI provider. Rule-based diagnosis remains available." });
+  }
+});
+
 router.post("/render/ops/notify/test", async (req, res) => {
   try {
     const config = await renderOps.readConfig(req.rootUser);
