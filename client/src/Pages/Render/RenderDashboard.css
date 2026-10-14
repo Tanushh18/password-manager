@@ -321,3 +321,20 @@
 
 .rd-log-diagnosis-actions { display:flex; flex-wrap:wrap; gap:.5rem; margin:.55rem 0; }
 @media (max-width:460px) { .rd-log-diagnosis-actions .rd-btn { flex:1; white-space:normal; } }
+
+.rd-cost-panel { border:1px solid var(--line); background:var(--surface); border-radius:var(--r-lg); padding:1rem; display:grid; gap:.8rem; }
+.rd-cost-panel h4 { color:var(--heading); margin:0; font-size:.9rem; }
+.rd-cost-panel .rd-section-head p { color:var(--text-muted); font-size:.75rem; line-height:1.5; margin:.3rem 0 0; }
+.rd-cost-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.65rem; }
+.rd-cost-summary article,.rd-cost-summary>label { border:1px solid var(--line); background:var(--bg); border-radius:var(--r-md); padding:.8rem .9rem; min-width:0; }
+.rd-cost-summary article small { display:block; color:var(--text-muted); font-size:.68rem; margin-bottom:.35rem; }
+.rd-cost-summary article strong { display:block; color:var(--heading); font-size:1.1rem; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.rd-cost-summary>label { display:grid; gap:.4rem; color:var(--heading-2); font-size:.73rem; }
+.rd-cost-summary input,.rd-cost-table input { width:100%; min-width:0; border:1px solid var(--line-strong); border-radius:var(--r-sm); background:var(--surface); color:var(--heading-2); padding:.55rem .65rem; font:inherit; font-size:.78rem; }
+.rd-cost-table { display:grid; gap:.4rem; }
+.rd-cost-table>label { display:flex; align-items:center; justify-content:space-between; gap:1rem; border-bottom:1px solid var(--line); padding:.55rem 0; }
+.rd-cost-table>label>span { display:grid; gap:.2rem; color:var(--heading-2); font-size:.77rem; }
+.rd-cost-table>label>span small { color:var(--text-muted); font-size:.68rem; }
+.rd-cost-table>label>div { display:flex; align-items:center; gap:.35rem; width:min(220px,45%); }
+.rd-cost-table>label>div>span { color:var(--text-muted); font-size:.8rem; }
+@media (max-width:650px) { .rd-cost-summary { grid-template-columns:1fr; } .rd-cost-table>label { align-items:flex-start; flex-direction:column; } .rd-cost-table>label>div { width:100%; } }
