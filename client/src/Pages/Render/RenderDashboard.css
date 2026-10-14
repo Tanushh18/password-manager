@@ -205,6 +205,7 @@
 .rd-detail__head p { margin: 0; overflow-wrap: anywhere; }
 .rd-detail__tools { display: flex; gap: .4rem; }
 .rd-detail__actions { display: flex; flex-wrap: wrap; gap: .5rem; padding: 1rem 0; }
+.rd-detail__delete { margin-left: auto; }
 .rd-tabs { display: flex; gap: .15rem; border-bottom: 1px solid var(--line); overflow-x: auto; margin-bottom: 1rem; }
 .rd-tabs button { display: inline-flex; align-items: center; gap: .4rem; flex-shrink: 0; padding: .65rem .9rem; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: transparent; color: var(--text-muted); font: inherit; font-size: .82rem; font-weight: 600; cursor: pointer; }
 .rd-tabs button:hover { color: var(--heading); }

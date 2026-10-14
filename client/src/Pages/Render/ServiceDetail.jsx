@@ -4,7 +4,7 @@ import {
   getRenderLogs, getRenderEnvVars, getRenderDeploys, getRenderMetrics, getRenderSnapshots, getRenderEnvGroups,
   getRenderDbExports, createRenderDbExport, createRenderSnapshot, restoreRenderSnapshot, updateRenderEnvVar,
   deleteRenderEnvVar, triggerRenderDeploy, restartRenderService, suspendRenderService, resumeRenderService,
-  rollbackRenderDeploy, cancelRenderDeploy, checkRenderHealth, diagnoseRenderLogs
+  rollbackRenderDeploy, cancelRenderDeploy, deleteRenderService, checkRenderHealth, diagnoseRenderLogs
 } from "../../api/client";
 import { Modal, StatePill, Skeleton, Empty, LineChart, Section } from "./RenderUi";
 import { usePolling, useRequestGate } from "./renderHooks";
@@ -301,6 +301,25 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
     finally { setBusy(false); }
   };
 
+  const deleteService = async () => {
+    const typed = await askConfirm({
+      title: "Delete " + service.name + " permanently?",
+      message: "This permanently deletes the suspended service from Render, including its deploy history, logs and direct environment variables. It cannot be undone. Take an environment snapshot first if you may need the variables. Type the service name to confirm.",
+      confirmLabel: "Delete service", danger: true,
+      input: { placeholder: service.name, label: "Service name", maxLength: 200, match: service.name }
+    });
+    if (typed !== service.name) return;
+    setBusy(true);
+    try {
+      await deleteRenderService(ref.accountId, ref.id, typed);
+      toast.success(service.name + " was deleted.");
+      onClose();
+      await onRefresh();
+      void onAudit();
+    } catch (e) { fail(e, "Could not delete this service."); }
+    finally { setBusy(false); }
+  };
+
   const cancelDeploy = async (d) => {
     const ok = await askConfirm({ title: "Cancel deployment?", message: "Cancel the in-progress deployment " + d.id + "?", confirmLabel: "Cancel deployment", danger: true });
     if (!ok) return;
@@ -385,6 +404,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
         <button type="button" className="rd-btn rd-btn--quiet" disabled={busy} onClick={() => void deploy(true)}>Deploy + clear cache</button>
         <button type="button" className="rd-btn rd-btn--quiet" disabled={busy || kind === "Cron job" || service.suspended === "suspended"} onClick={() => void restart()}>↻ Restart</button>
         <button type="button" className="rd-btn rd-btn--quiet" disabled={busy} onClick={() => void toggleSuspend()}>{service.suspended === "suspended" ? "▶ Resume" : "Ⅱ Suspend"}</button>
+        {service.suspended === "suspended" && <button type="button" className="rd-btn rd-btn--danger-quiet rd-detail__delete" disabled={busy} onClick={() => void deleteService()}>🗑 Delete service…</button>}
       </div>
 
       <div className="rd-tabs" role="tablist" aria-label="Service sections" onKeyDown={onTabKey}>

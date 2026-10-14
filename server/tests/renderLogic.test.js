@@ -2,6 +2,7 @@ const { describe, test } = require("node:test");
 const expect = require("./expect");
 const { fetchAllPages } = require("../utils/renderPaging");
 const { utilizationPercent, resourceChecks } = require("../utils/renderMetrics");
+const { checkServiceDeletion } = require("../utils/renderGuards");
 
 const rows = (from, to) => Array.from({ length: to - from }, (_, i) => ({ service: { id: "srv-" + (from + i) }, cursor: "c" + (from + i) }));
 const pagedRequest = (total, log = []) => async (path) =>
@@ -135,5 +136,38 @@ describe("Render resource alerts", () =>
     test("suspended services never alert", () =>
     {
         expect(resourceChecks({ ...sample({ memory: { current: 9e12 } }), suspended: true }, thresholds)).toHaveLength(0);
+    });
+});
+
+describe("Render service deletion guard", () =>
+{
+    const suspended = { id: "srv-1", name: "old-api", suspended: "suspended" };
+
+    test("allows a suspended service when the exact name is confirmed", () =>
+    {
+        expect(checkServiceDeletion(suspended, "old-api").ok).toBe(true);
+    });
+
+    test("refuses a service that is not suspended, even with the right name", () =>
+    {
+        const verdict = checkServiceDeletion({ ...suspended, suspended: "not_suspended" }, "old-api");
+        expect(verdict.ok).toBe(false);
+        expect(verdict.status).toBe(409);
+    });
+
+    test("refuses a missing or near-miss confirmation name", () =>
+    {
+        for (const typed of [undefined, null, "", "old-ap", "OLD-API", " old-api", 42])
+        {
+            const verdict = checkServiceDeletion(suspended, typed);
+            expect(verdict.ok).toBe(false);
+            expect(verdict.status).toBe(400);
+        }
+    });
+
+    test("refuses when Render returned no service", () =>
+    {
+        expect(checkServiceDeletion(null, "x").status).toBe(404);
+        expect(checkServiceDeletion({}, "x").status).toBe(404);
     });
 });

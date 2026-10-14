@@ -81,17 +81,17 @@ function ConfirmDialog({ title = "Please confirm", message, confirmLabel = "Conf
   const [value, setValue] = useState(input?.defaultValue || "");
   const submit = (event) => {
     event.preventDefault();
-    if (input) { if (!value.trim()) return; onSettle(value.trim()); } else onSettle(true);
+    if (input) { if (input.match != null ? value !== input.match : !value.trim()) return; onSettle(input.match != null ? value : value.trim()); } else onSettle(true);
   };
   return (
     <Modal labelledBy={id} onClose={() => onSettle(null)} className="rd-dialog--sm">
       <form onSubmit={submit}>
         <h2 id={id} className="rd-dialog__title">{title}</h2>
         <p className="rd-dialog__body">{message}</p>
-        {input && <input data-autofocus className="rd-field" value={value} onChange={(e) => setValue(e.target.value)} placeholder={input.placeholder} maxLength={input.maxLength || 60} aria-label={input.label || title} />}
+        {input && <input data-autofocus className="rd-field" value={value} onChange={(e) => setValue(e.target.value)} placeholder={input.placeholder} maxLength={input.maxLength || 60} autoComplete="off" spellCheck="false" aria-label={input.label || title} />}
         <div className="rd-dialog__actions">
           <button type="button" className="rd-btn rd-btn--quiet" onClick={() => onSettle(null)}>Cancel</button>
-          <button type="submit" data-autofocus={input ? undefined : true} className={"rd-btn " + (danger ? "rd-btn--danger" : "rd-btn--primary")} disabled={Boolean(input) && !value.trim()}>{confirmLabel}</button>
+          <button type="submit" data-autofocus={input ? undefined : true} className={"rd-btn " + (danger ? "rd-btn--danger" : "rd-btn--primary")} disabled={Boolean(input) && (input.match != null ? value !== input.match : !value.trim())}>{confirmLabel}</button>
         </div>
       </form>
     </Modal>

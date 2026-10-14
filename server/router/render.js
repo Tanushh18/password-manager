@@ -2,6 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const renderOps = require("../utils/renderOps");
 const { fetchAllPages } = require("../utils/renderPaging");
+const { checkServiceDeletion } = require("../utils/renderGuards");
 const User = require("../models/schema");
 const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
@@ -616,6 +617,23 @@ router.post("/render/accounts/:accountId/services/:serviceId/deploys/:deployId/c
     const result = await renderRequest(saved.account.apiKey, servicePath(serviceId, "/deploys/" + encodeURIComponent(deployId) + "/cancel"), { method: "POST" });
     await recordAudit(req, "cancel_deploy", saved.entry._id, serviceId, { deployId });
     return res.json(result);
+  } catch (error) { return sendUpstreamError(res, error); }
+});
+
+router.delete("/render/accounts/:accountId/services/:serviceId", async (req, res) => {
+  const saved = await getAccount(req, res);
+  if (!saved) return;
+  const serviceId = req.params.serviceId;
+  if (!safeId(serviceId)) return res.status(400).json({ error: "Invalid service ID." });
+  try {
+    // Re-read the live state from Render; never trust the client's idea of "suspended".
+    const payload = await renderRequest(saved.account.apiKey, servicePath(serviceId));
+    const service = payload?.service || payload;
+    const verdict = checkServiceDeletion(service, req.body?.confirmName);
+    if (!verdict.ok) return res.status(verdict.status).json({ error: verdict.error });
+    await renderRequest(saved.account.apiKey, servicePath(serviceId), { method: "DELETE" });
+    await recordAudit(req, "delete_service", saved.entry._id, serviceId, { serviceName: String(service.name || "").slice(0, 120) });
+    return res.json({ message: "Service deleted." });
   } catch (error) { return sendUpstreamError(res, error); }
 });
 
