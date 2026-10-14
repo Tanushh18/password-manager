@@ -645,6 +645,29 @@ export default function RenderDashboard() {
     catch { /* error already shown */ }
   };
 
+  const saveGroupBudget = async (rawValue) => {
+    if (!selectedGroup) return;
+    const value = rawValue.trim() === "" ? 0 : Number(rawValue);
+    if (!Number.isFinite(value) || value < 0 || value > 1000000) { toast.error("Enter a valid monthly budget in USD."); return; }
+    const nextGroups = serviceGroups.map((group) => group.id === selectedGroup.id ? { ...group, monthlyBudgetUsd: Math.round(value * 100) / 100 } : group);
+    try { await persistOpsConfig({ groups: nextGroups }); }
+    catch { /* error already shown */ }
+  };
+
+  const saveServiceCostEstimate = async (serviceKey, rawValue) => {
+    if (!selectedGroup) return;
+    const estimates = { ...(selectedGroup.serviceCostEstimates || {}) };
+    if (rawValue.trim() === "") delete estimates[serviceKey];
+    else {
+      const value = Number(rawValue);
+      if (!Number.isFinite(value) || value < 0 || value > 100000) { toast.error("Enter a valid monthly cost estimate in USD."); return; }
+      estimates[serviceKey] = Math.round(value * 100) / 100;
+    }
+    const nextGroups = serviceGroups.map((group) => group.id === selectedGroup.id ? { ...group, serviceCostEstimates: estimates } : group);
+    try { await persistOpsConfig({ groups: nextGroups }); }
+    catch { /* error already shown */ }
+  };
+
   const waitForServiceReady = async (service, deployId = "", timeoutMs = 300000) => {
     const startedAt = Date.now();
     const terminalFailure = new Set(["build_failed", "update_failed", "canceled", "cancelled", "deactivated"]);
@@ -972,6 +995,19 @@ export default function RenderDashboard() {
                     return <article key={edge.from + ">" + edge.to}><span>{from?.name || edge.from}</span><span aria-hidden="true">→</span><span>{to?.name || edge.to}</span><button className="rd-remove" aria-label="Remove dependency" onClick={() => void removeDependency(edge.from, edge.to)}>×</button></article>;
                   })}{!(selectedGroup.dependencies || []).length && <small>No dependencies mapped yet.</small>}</div>
                 </div>
+                <section className="rd-cost-panel">
+                  <div className="rd-section-head"><div><h4>Cost & budget guardrails</h4><p>Enter your own approximate monthly cost per service. These are estimates, not live Render billing data.</p></div></div>
+                  <div className="rd-cost-summary">
+                    <article><small>Configured monthly estimate</small><strong>$ {groupServices.reduce((sum, service) => sum + Number(selectedGroup.serviceCostEstimates?.[service.accountId + ":" + service.id] || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong><small>USD · manual inputs</small></article>
+                    <article><small>Monthly group budget</small><strong>{Number(selectedGroup.monthlyBudgetUsd || 0) > 0 ? "$" + Number(selectedGroup.monthlyBudgetUsd).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "Not set"}</strong><small>{Number(selectedGroup.monthlyBudgetUsd || 0) > 0 && Object.values(selectedGroup.serviceCostEstimates || {}).reduce((sum, value) => sum + Number(value || 0), 0) > Number(selectedGroup.monthlyBudgetUsd) ? "Above budget — incident on next sample" : "Budget alerts are evaluated on the next sample"}</small></article>
+                    <label>Monthly budget (USD)<input key={selectedGroup.id + "-budget"} type="number" min="0" max="1000000" step="0.01" defaultValue={selectedGroup.monthlyBudgetUsd || ""} placeholder="e.g. 25.00" onBlur={(e) => void saveGroupBudget(e.target.value)} /></label>
+                  </div>
+                  <div className="rd-cost-table">{groupServices.map((service) => {
+                    const key = service.accountId + ":" + service.id;
+                    return <label key={selectedGroup.id + "-" + key}><span>{service.name}<small>{service.serviceDetails?.plan || service.serviceDetails?.buildPlan || "Plan not provided"}</small></span><div><span>$</span><input type="number" min="0" max="100000" step="0.01" defaultValue={selectedGroup.serviceCostEstimates?.[key] ?? ""} placeholder="Monthly estimate" onBlur={(e) => void saveServiceCostEstimate(key, e.target.value)} /></div></label>;
+                  })}</div>
+                  <small className="rd-group-note">Budget alerts require monitoring samples. Stashr does not have a verified source for actual Render invoices or per-service billing totals, so estimates are user-entered and never presented as actual spend.</small>
+                </section>
                 {groupLogs.length > 0 && <section className="rd-unified-logs"><div className="rd-section-head"><div><h4>Unified application logs</h4><p>Last hour · latest 300 entries from up to 10 group services.</p></div><input className="rd-filter-input" placeholder="Search across services…" value={groupLogSearch} onChange={(e) => setGroupLogSearch(e.target.value)} /></div><div className="rd-logs">{groupLogs.filter((log) => (String(log.message || "").toLowerCase() + " " + log.serviceName.toLowerCase()).includes(groupLogSearch.toLowerCase())).map((log, index) => <div className="rd-log" key={log.serviceId + "-" + (log.id || index)}><time>{log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : "—"} · {log.serviceName}</time><code>{log.message || "(empty log entry)"}</code></div>)}</div></section>}
                 {envDrift.length > 0 && <section className="rd-drift-panel"><h4>Environment configuration drift</h4><p>Only variable names are compared; values are never shown or compared.</p><div className="rd-drift-grid">{envDrift.map((item) => <article key={item.key}><strong>{item.name}</strong><small>{item.error || item.keys.length + " variable names"}</small>{item.missing.length > 0 && <span>Missing: {item.missing.join(", ")}</span>}</article>)}</div></section>}
                 {groupMetricBusy && <div className="rd-loading">Sampling group metrics…</div>}
