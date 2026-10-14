@@ -368,12 +368,15 @@ async function runUserMonitoring(user, options = {}) {
         unit: available[0]?.unit || ""
       };
     }
-    const estimatedMonthlyCostUsd = Object.values(group.serviceCostEstimates || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+    const estimateEntries = Object.entries(group.serviceCostEstimates || {});
+    const estimatedMonthlyCostUsd = estimateEntries.reduce((sum, [, value]) => sum + Number(value || 0), 0);
+    const costCoverageCount = group.serviceKeys.filter((key) => Object.prototype.hasOwnProperty.call(group.serviceCostEstimates || {}, key)).length;
+    const costCoverageComplete = costCoverageCount === group.serviceKeys.length;
     const monthlyBudgetUsd = Number(group.monthlyBudgetUsd || 0);
     const latestBudgetIncident = priorIncidents
       .filter((incident) => incident.groupId === group.id && incident.serviceKey === "group-budget" && incident.type === "budget")
       .reduce((latest, incident) => !latest || Date.parse(incident.at || incident.openedAt || 0) >= Date.parse(latest.at || latest.openedAt || 0) ? incident : latest, null);
-    if (monthlyBudgetUsd > 0 && estimatedMonthlyCostUsd > monthlyBudgetUsd && latestBudgetIncident?.state !== "open") {
+    if (monthlyBudgetUsd > 0 && costCoverageComplete && estimatedMonthlyCostUsd > monthlyBudgetUsd && latestBudgetIncident?.state !== "open") {
       pendingIncidents.push({
         id: crypto.randomUUID(), groupId: group.id, groupName: group.name, serviceKey: "group-budget",
         serviceName: group.name, type: "budget", severity: "warning", state: "open",
@@ -381,18 +384,18 @@ async function runUserMonitoring(user, options = {}) {
         openedAt: endTime, at: endTime
       });
       incidentsOpened += 1;
-    } else if ((monthlyBudgetUsd <= 0 || estimatedMonthlyCostUsd <= monthlyBudgetUsd) && latestBudgetIncident?.state === "open") {
+    } else if ((!costCoverageComplete || monthlyBudgetUsd <= 0 || estimatedMonthlyCostUsd <= monthlyBudgetUsd) && latestBudgetIncident?.state === "open") {
       pendingIncidents.push({
         id: crypto.randomUUID(), groupId: group.id, groupName: group.name, serviceKey: "group-budget",
         serviceName: group.name, type: "budget", severity: "warning", state: "resolved",
-        message: "Manual monthly cost estimate is within the configured budget again.",
+        message: !costCoverageComplete ? "Budget alert paused because not every service has a cost estimate." : "Manual monthly cost estimate is within the configured budget again.",
         openedAt: latestBudgetIncident.openedAt || latestBudgetIncident.at, at: endTime
       });
     }
     pendingHistory.push({
       id: crypto.randomUUID(), groupId: group.id, groupName: group.name, sampledAt: endTime,
       services: groupResults, combined: metricTotals,
-      estimatedMonthlyCostUsd, monthlyBudgetUsd,
+      estimatedMonthlyCostUsd, monthlyBudgetUsd, costCoverageCount, costCoverageComplete,
       source: options.force ? "manual" : "scheduled"
     });
   }
