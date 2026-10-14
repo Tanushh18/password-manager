@@ -4,6 +4,10 @@ const renderOps = require("../utils/renderOps");
 const { fetchAllPages } = require("../utils/renderPaging");
 const { syncProjectEnv, runAllEnvSync } = require("../utils/renderEnvSync");
 const { getProjectStatuses, runAllAutoLink } = require("../utils/projectStatus");
+const { pushProjectEnv } = require("../utils/renderEnvPush");
+const { provision } = require("../utils/provision");
+const { validateProvisionInput } = require("../utils/provisionInput");
+const { githubSend, probeScopes, loadGithubAccounts } = require("../utils/githubClient");
 const { buildRegistrySync, setAutoSync, runAllRegistrySync } = require("../utils/registrySyncIO");
 const { isAdminUser } = require("./registry");
 const { checkServiceDeletion, parseBulkTargets, mapWithConcurrency } = require("../utils/renderGuards");
@@ -657,6 +661,67 @@ router.put("/render/registry-sync/:app", async (req, res) => {
     if (!doc) return res.status(404).json({ error: "Unknown app." });
     return res.json({ app: doc.app, autoSync: doc.autoSync !== false });
   } catch { return res.status(500).json({ error: "Could not change auto-sync." }); }
+});
+
+/* Push a project's variables to its linked Render service. Names you approve only; never deletes. */
+router.post("/render/project-push/:projectId", async (req, res) => {
+  const list = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string").slice(0, 200) : []);
+  try {
+    const result = await pushProjectEnv(req.rootUser, req.params.projectId, { apply: req.body?.apply === true, names: list(req.body?.names), overwrite: list(req.body?.overwrite), deploy: req.body?.deploy === true });
+    if (result.applied) await recordAudit(req, "project_env_push", "", "", { projectId: String(req.params.projectId), pushed: result.pushed.length, failed: result.failed.length, deployed: result.deployed });
+    res.set("Cache-Control", "no-store");
+    return res.json(result);
+  } catch (error) {
+    return res.status(Number.isInteger(error.status) ? error.status : 500).json({ error: Number.isInteger(error.status) ? error.message : "Could not push environment variables." });
+  }
+});
+
+/* Render workspaces of one connected account (for the create & deploy wizard). */
+router.get("/render/accounts/:accountId/owners", async (req, res) => {
+  const saved = await getAccount(req, res);
+  if (!saved) return;
+  try {
+    const rows = await renderRequest(saved.account.apiKey, "/v1/owners?limit=20");
+    const owners = (Array.isArray(rows) ? rows : []).map((o) => o?.owner || o).filter((o) => o?.id).map((o) => ({ id: o.id, name: String(o.name || o.id), type: o.type || "" }));
+    return res.json({ owners });
+  } catch (error) { return sendUpstreamError(res, error); }
+});
+
+/* One-click create & deploy: GitHub repo + starter files + FREE Render service + env vars + linked Stashr project. */
+const provisionLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 10, message: "Too many create requests. Please wait a few minutes." });
+router.post("/render/provision", provisionLimiter, async (req, res) => {
+  const parsed = validateProvisionInput(req.body);
+  if (!parsed.value) return res.status(400).json({ ok: false, error: parsed.error });
+  const input = parsed.value;
+  try {
+    const dataKey = await req.rootUser.getDataKey();
+    const accountEntry = mongoose.isValidObjectId(input.renderAccountId) ? (req.rootUser.renderAccounts || []).find((item) => String(item._id) === input.renderAccountId && item.enc === "udk") : null;
+    const renderAccount = accountEntry ? User.publicEntry(accountEntry, dataKey) : null;
+    if (!renderAccount?.apiKey) return res.status(400).json({ ok: false, error: "Choose a connected Render account." });
+    const githubAccount = loadGithubAccounts(req.rootUser, dataKey).find((a) => a.id === input.githubAccountId);
+    if (!githubAccount) return res.status(400).json({ ok: false, error: "Choose a connected GitHub account." });
+    const caps = await probeScopes(githubAccount.token);
+    if (!caps.valid) return res.status(400).json({ ok: false, error: "This GitHub token is no longer valid. Reconnect it in Projects → GitHub." });
+    if (!caps.write) return res.status(400).json({ ok: false, error: "This GitHub connection is read-only. Add a classic token with the “repo” scope to create repositories." });
+
+    const result = await provision({
+      input,
+      github: { login: githubAccount.login, send: (method, path, body) => githubSend(githubAccount.token, method, path, body) },
+      render: { request: (path, options = {}) => renderRequest(renderAccount.apiKey, path, options) },
+      ownerId: input.ownerId || undefined,
+      saveProject: async (fields) => {
+        const now = new Date();
+        const item = { _id: new mongoose.Types.ObjectId(), enc: "udk", data: User.sealEntry(dataKey, fields), createdAt: now, updatedAt: now };
+        await User.updateOne({ _id: req.rootUser._id }, { $push: { projects: item } });
+        return String(item._id);
+      },
+      audit: (details) => recordAudit(req, "project_created", input.renderAccountId, "", details)
+    });
+    res.set("Cache-Control", "no-store");
+    return res.status(result.ok ? 201 : 422).json(result);
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: "Could not create the project. Nothing was deleted; check GitHub and Render for anything already created." });
+  }
 });
 
 router.post("/render/project-sync/:projectId", async (req, res) => {

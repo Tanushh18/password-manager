@@ -4,7 +4,7 @@ const User = require("../models/schema");
 const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
 const { parseGithubRepo, shapeRepoDetails } = require("../utils/github");
-const { githubGet, loadGithubAccounts, resolveRepo } = require("../utils/githubClient");
+const { githubGet, loadGithubAccounts, resolveRepo, probeScopes } = require("../utils/githubClient");
 
 /*
  * GitHub connection for the Projects page. Tokens are stored like Render API keys: sealed with the
@@ -33,7 +33,12 @@ router.use("/github", authenticate, limiter);
 router.get("/github/accounts", async (req, res) => {
   try {
     res.set("Cache-Control", "no-store");
-    return res.json({ accounts: (await savedAccounts(req)).map((a) => ({ id: a.id, name: a.name, login: a.login, connectedAt: a.connectedAt })) });
+    // Capabilities are probed live (cached 5 min), so a token saved before this feature existed is recognised too.
+    const accounts = await Promise.all((await savedAccounts(req)).map(async (a) => {
+      const caps = await probeScopes(a.token);
+      return { id: a.id, name: a.name, login: a.login, connectedAt: a.connectedAt, valid: caps.valid, write: caps.write, workflow: caps.workflow, risky: caps.risky };
+    }));
+    return res.json({ accounts });
   } catch { return res.status(500).json({ error: "Could not load GitHub connections." }); }
 });
 
@@ -56,7 +61,8 @@ router.post("/github/accounts", async (req, res) => {
     const entry = { _id: new mongoose.Types.ObjectId(), enc: "udk", data: User.sealEntry(dataKey, fields), createdAt: now, updatedAt: now };
     await User.updateOne({ _id: req.rootUser._id }, { $push: { githubAccounts: entry } });
     cache.clear();
-    return res.status(201).json({ account: publicAccount(entry, fields) });
+    const caps = await probeScopes(token);
+    return res.status(201).json({ account: { ...publicAccount(entry, fields), valid: true, write: caps.write, workflow: caps.workflow, risky: caps.risky } });
   } catch { return res.status(500).json({ error: "Could not save this GitHub connection." }); }
 });
 

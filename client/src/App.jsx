@@ -11,6 +11,7 @@ import Vault from "./Pages/Passwords/Passwords";
 import Projects from "./Pages/Projects/Projects";
 import ProjectDetail from "./Pages/Projects/ProjectDetail";
 import ProjectForm from "./Pages/Projects/ProjectForm";
+import ProjectDeploy from "./Pages/Projects/ProjectDeploy";
 import Settings from "./Pages/Settings/Settings";
 import Servers from "./Pages/Servers/Servers";
 // Loaded on demand: the dashboard is large and only needed on /render.
@@ -81,6 +82,7 @@ export default function App() {
           <Route path="/passwords" element={<RequireVault><Vault /></RequireVault>} />
           <Route path="/projects" element={<RequireVault><Projects /></RequireVault>} />
           <Route path="/projects/new" element={<RequireVault><ProjectForm /></RequireVault>} />
+          <Route path="/projects/deploy" element={<RequireVault><ProjectDeploy /></RequireVault>} />
           <Route path="/projects/:id" element={<RequireVault><ProjectDetail /></RequireVault>} />
           <Route path="/projects/:id/edit" element={<RequireVault><ProjectForm /></RequireVault>} />
           <Route path="/settings" element={<RequireVault><Settings /></RequireVault>} />

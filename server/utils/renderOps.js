@@ -154,16 +154,21 @@ async function sendTelegram(config, message) {
   }
 }
 
-async function renderRequest(apiKey, path) {
+async function renderRequest(apiKey, path, options = {}) {
+  const headers = { Authorization: "Bearer " + apiKey, Accept: "application/json" };
+  if (options.body !== undefined) headers["Content-Type"] = "application/json";
   const response = await fetch("https://api.render.com" + path, {
-    headers: { Authorization: "Bearer " + apiKey, Accept: "application/json" },
-    signal: AbortSignal.timeout(12000)
+    method: options.method || "GET",
+    headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: AbortSignal.timeout(options.timeoutMs || 12000)
   });
   const raw = await response.text();
   let payload = null;
   try { payload = raw ? JSON.parse(raw) : null; } catch { payload = null; }
   if (!response.ok) {
-    const error = new Error("Render API request failed (" + response.status + ").");
+    const detail = typeof payload?.message === "string" ? payload.message.slice(0, 300) : "";
+    const error = new Error(detail || "Render API request failed (" + response.status + ").");
     error.status = response.status;
     throw error;
   }

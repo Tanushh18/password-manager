@@ -93,6 +93,9 @@ export default function Projects() {
             <Link className="btn btn--primary" to="/projects/new">
               <Plus size={15} /> New project <kbd className="kbd">N</kbd>
             </Link>
+            <Link className="btn btn--ghost" to="/projects/deploy" title="Create a GitHub repo and deploy it on Render's free plan in one step">
+              Create &amp; deploy
+            </Link>
             <button className="btn btn--ghost" onClick={() => setImporting(true)}>
               <Upload size={15} /> Import
             </button>

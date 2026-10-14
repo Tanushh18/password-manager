@@ -1,5 +1,7 @@
 /* Pure merge of a Render service's environment variables into a project's saved variables. No I/O. */
 
+const { hashValue } = require("./envHash");
+
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
@@ -36,18 +38,19 @@ function mergeRenderEnv(existing, renderVars, { resolveConflicts = false } = {})
     seen.add(name);
     const value = remote.get(name);
     const fromRender = item.source === "render" || item.source === "render-removed";
-    if (item.value === value) { item.source = "render"; summary.unchanged.push(name); }
-    else if (fromRender) { item.value = value; item.source = "render"; summary.updated.push(name); }
+    // renderHash records the value Render had when we last synced, so a later push can detect edits made in Render.
+    if (item.value === value) { item.source = "render"; item.renderHash = hashValue(value); summary.unchanged.push(name); }
+    else if (fromRender) { item.value = value; item.source = "render"; item.renderHash = hashValue(value); summary.updated.push(name); }
     else {
       summary.conflicts.push(name);
-      if (resolveConflicts) { item.value = value; item.source = "render"; summary.updated.push(name); }
+      if (resolveConflicts) { item.value = value; item.source = "render"; item.renderHash = hashValue(value); summary.updated.push(name); }
     }
     envVars.push(item);
   }
 
   for (const [name, value] of remote) {
     if (seen.has(name)) continue;
-    envVars.push({ name, value, purpose: "", source: "render" });
+    envVars.push({ name, value, purpose: "", source: "render", renderHash: hashValue(value) });
     summary.added.push(name);
   }
 

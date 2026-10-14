@@ -130,3 +130,26 @@
 .gh-reasons li::before { content: ""; position: absolute; left: 0; top: .5em; width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); }
 .gh-reasons .is-critical::before { background: var(--danger); }
 .gh-reasons .is-warn::before { background: var(--accent-3, #d4a72c); }
+.gh-caps { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .25rem; }
+
+/* Create & deploy wizard */
+.dp-form { display: grid; gap: 1.1rem; }
+.dp-section { display: grid; gap: .8rem; padding: 1.1rem 1.25rem; }
+.dp-section h2 { margin: 0; font-size: 1rem; }
+.dp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .8rem; }
+.dp-templates { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .6rem; }
+.dp-template { text-align: left; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); padding: .7rem .8rem; cursor: pointer; font: inherit; color: var(--heading-2); display: grid; gap: .2rem; }
+.dp-template strong { font-size: .86rem; }
+.dp-template small { color: var(--text-muted); font-size: .72rem; line-height: 1.4; }
+.dp-template[aria-pressed="true"] { border-color: var(--accent); background: rgba(var(--accent-rgb), .1); }
+.dp-env { display: grid; gap: .5rem; }
+.dp-env-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: .5rem; }
+.dp-free { display: flex; gap: .6rem; align-items: flex-start; padding: .7rem .85rem; border-radius: var(--r-md); background: rgba(var(--accent-rgb), .09); font-size: .8rem; line-height: 1.5; color: var(--heading-2); }
+.dp-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: .45rem; }
+.dp-steps li { display: flex; gap: .6rem; align-items: flex-start; font-size: .86rem; }
+.dp-steps .mark { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font-size: .75rem; font-weight: 800; flex-shrink: 0; background: var(--tint); }
+.dp-steps .is-done .mark { background: rgba(var(--ok-rgb), .18); color: var(--ok); }
+.dp-steps .is-failed .mark { background: rgba(var(--danger-rgb), .18); color: var(--danger); }
+.dp-code { position: relative; font-family: var(--font-mono); font-size: .78rem; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-md); padding: .8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dp-links { display: flex; flex-wrap: wrap; gap: .5rem; }
+@media (max-width: 640px) { .dp-env-row { grid-template-columns: 1fr; } }

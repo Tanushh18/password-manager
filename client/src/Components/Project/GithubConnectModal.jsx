@@ -57,7 +57,17 @@ export default function GithubConnectModal({ open, onClose, onChange }) {
             {accounts.map((a) => (
               <li key={a.id}>
                 <span className="gh-accounts__dot"><Check size={13} /></span>
-                <div><strong>{a.login}</strong><small>{a.name !== a.login ? a.name + " · " : ""}connected {a.connectedAt ? new Date(a.connectedAt).toLocaleDateString() : ""}</small></div>
+                <div>
+                  <strong>{a.login}</strong>
+                  <small>{a.name !== a.login ? a.name + " · " : ""}connected {a.connectedAt ? new Date(a.connectedAt).toLocaleDateString() : ""}</small>
+                  <span className="gh-caps">
+                    {a.valid === false ? <span className="badge badge--danger">Token invalid</span>
+                      : a.write ? <span className="badge badge--ok" title="Can create repositories and commit files">Can create repos</span>
+                      : <span className="badge badge--muted" title="Read-only: shows status, CI and drift, but cannot create repositories">Read-only</span>}
+                    {a.workflow ? <span className="badge badge--muted">Workflows</span> : null}
+                    {a.risky?.length ? <span className="badge badge--warn" title={"This token also carries: " + a.risky.join(", ") + ". Stashr does not need these. Consider replacing it with a token that only has repo."}>Extra permissions: {a.risky.join(", ")}</span> : null}
+                  </span>
+                </div>
                 <button type="button" className="icon-btn icon-btn--quiet" onClick={() => void remove(a)} aria-label={"Disconnect " + a.login}><Trash size={15} /></button>
               </li>
             ))}
@@ -80,9 +90,9 @@ export default function GithubConnectModal({ open, onClose, onChange }) {
             <li>Open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer noopener">GitHub → Settings → Fine-grained tokens → Generate</a>.</li>
             <li>Under <em>Repository access</em> choose the repos you track here (or all).</li>
             <li>Set <em>read-only</em> permissions: <strong>Metadata</strong>, <strong>Contents</strong>, <strong>Pull requests</strong> and <strong>Actions</strong>.</li>
-            <li>Generate, copy the token, paste it above. Stashr only ever reads — it never writes to GitHub.</li>
+            <li>Generate, copy the token, paste it above. A read-only token only reads — it never writes to GitHub.</li>
           </ol>
-          <p className="field__note">A classic token with the <code>repo</code> scope also works, but fine-grained read-only is safer.</p>
+          <p className="field__note"><strong>To create repositories from Stashr</strong> use a <a href="https://github.com/settings/tokens/new" target="_blank" rel="noreferrer noopener">classic token</a> with only the <code>repo</code> scope (add <code>workflow</code> only if you want GitHub Actions files). Leave <code>delete_repo</code> and the admin scopes off — Stashr never deletes repositories.</p>
         </details>
       </div>
     </Modal>

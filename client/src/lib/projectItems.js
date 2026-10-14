@@ -3,7 +3,7 @@
  * before upload, same as a password entry (see lib/items.js, state/vault.jsx).
  */
 export const emptyDatabase = () => ({ label: "", provider: "", type: "", accountEmail: "", notes: "" });
-export const emptyEnvVar = () => ({ name: "", value: "", purpose: "", source: "" }); // source: "" (manual) | "render" | "render-removed"
+export const emptyEnvVar = () => ({ name: "", value: "", purpose: "", source: "", renderHash: "" }); // source: "" (manual) | "render" | "render-removed"; renderHash = fingerprint of the value Render last had
 export const emptyExtraField = () => ({ label: "", value: "" });
 
 export const emptyProject = () => ({

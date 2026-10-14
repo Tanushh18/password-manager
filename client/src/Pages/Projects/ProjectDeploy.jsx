@@ -1,0 +1,262 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { toast } from "react-toastify";
+import Field from "../../Components/Field/Field";
+import GithubConnectModal from "../../Components/Project/GithubConnectModal";
+import { Arrow, Check, Copy, Plus, Trash, Alert } from "../../Components/Icons/Icons";
+import { useVault } from "../../state/vault";
+import { parseEnvBlock } from "../../lib/projectItems";
+import { getGithubAccounts, getRenderAccounts, getRenderOwners, provisionProject } from "../../api/client";
+import "../Passwords/Passwords.css";
+import "./Projects.css";
+
+const TEMPLATES = [
+  ["node", "Node.js (Express)", "Starter server with a /health check. Ready to deploy."],
+  ["python", "Python (FastAPI)", "Starter API with a /health check. Ready to deploy."],
+  ["static", "Static site", "A plain index.html, hosted for free."],
+  ["empty", "Empty repo", "Creates an empty repo and shows the git commands to push your own code."],
+  ["existing", "Existing repo", "Deploy a GitHub repository you already have."]
+];
+const RUNTIMES = {
+  node: { label: "Node.js", build: "npm install", start: "npm start" },
+  python: { label: "Python", build: "pip install -r requirements.txt", start: "uvicorn app.main:app --host 0.0.0.0 --port $PORT" },
+  docker: { label: "Docker", build: "", start: "" },
+  static: { label: "Static site", build: "", start: "" }
+};
+const REGIONS = ["singapore", "oregon", "ohio", "virginia", "frankfurt"];
+const slug = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[-._]+|[-._]+$/g, "").replace(/-{2,}/g, "-").slice(0, 60);
+const errorOf = (e, fallback) => e?.response?.data?.error || fallback;
+
+function Copyable({ text, label }) {
+  const copy = async () => { try { await navigator.clipboard.writeText(text); toast.success("Copied."); } catch { toast.error("Clipboard is not available."); } };
+  return <button type="button" className="btn btn--ghost btn--sm" onClick={() => void copy()} aria-label={"Copy " + label}><Copy size={13} /> {label}</button>;
+}
+
+/** Create a GitHub repo, deploy it on Render's FREE plan with env vars, and link a Stashr project — in one go. */
+export default function ProjectDeploy() {
+  const { refreshProfile } = useVault();
+  const [github, setGithub] = useState(null);
+  const [render, setRender] = useState(null);
+  const [owners, setOwners] = useState([]);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const [pasteText, setPasteText] = useState("");
+  const [form, setForm] = useState({
+    name: "", description: "", template: "node", existingRepoUrl: "", visibility: "private", githubAccountId: "", renderAccountId: "", ownerId: "",
+    region: "singapore", runtime: "node", buildCommand: RUNTIMES.node.build, startCommand: RUNTIMES.node.start, envVars: [], useExistingRepo: false
+  });
+  const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+
+  const loadGithub = () => getGithubAccounts().then((r) => setGithub(r.accounts || [])).catch(() => setGithub([]));
+  useEffect(() => { void loadGithub(); getRenderAccounts().then((r) => setRender(r.accounts || [])).catch(() => setRender([])); }, []);
+
+  const writable = useMemo(() => (github || []).filter((a) => a.valid !== false && a.write), [github]);
+  useEffect(() => { if (!form.githubAccountId && writable.length) set({ githubAccountId: writable[0].id }); }, [writable]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!form.renderAccountId && render?.length) set({ renderAccountId: render[0].id }); }, [render]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!form.renderAccountId) { setOwners([]); return undefined; }
+    let live = true;
+    getRenderOwners(form.renderAccountId).then((r) => { if (live) { setOwners(r.owners || []); set({ ownerId: r.owners?.length === 1 ? r.owners[0].id : "" }); } }).catch(() => { if (live) setOwners([]); });
+    return () => { live = false; };
+  }, [form.renderAccountId]);
+
+  const ownCode = form.template === "empty" || form.template === "existing";
+  const repoName = slug(form.name);
+  const ready = form.name.trim() && repoName && form.githubAccountId && form.renderAccountId && (form.template !== "existing" || form.existingRepoUrl.trim()) && (owners.length < 2 || form.ownerId);
+
+  const pickTemplate = (template) => set({ template, useExistingRepo: template === "existing" });
+  const pickRuntime = (runtime) => set({ runtime, buildCommand: RUNTIMES[runtime].build, startCommand: RUNTIMES[runtime].start });
+  const setEnv = (i, patch) => set({ envVars: form.envVars.map((row, idx) => (idx === i ? { ...row, ...patch } : row)) });
+  const applyPaste = () => {
+    const parsed = parseEnvBlock(pasteText);
+    if (!parsed.length) { toast.error("Couldn't find any KEY=VALUE lines in that."); return; }
+    const existing = new Set(form.envVars.map((v) => v.name));
+    set({ envVars: [...form.envVars, ...parsed.filter((p) => !existing.has(p.name)).map((p) => ({ name: p.name, value: p.value }))] });
+    setPasteText("");
+    toast.success(parsed.length + " variable" + (parsed.length === 1 ? "" : "s") + " added.");
+  };
+
+  const submit = async (event, overrides = {}) => {
+    event?.preventDefault();
+    if (!ready || busy) return;
+    setBusy(true); setError(""); setResult(null);
+    try {
+      const data = await provisionProject({ ...form, repoName, ...overrides });
+      setResult(data);
+      void refreshProfile();
+      toast.success(data.firstDeploy === "waiting-for-code" ? "Project created on the free plan. Push your code to deploy it." : "Project created and deploying on the free plan.");
+    } catch (e) {
+      const data = e?.response?.data;
+      if (data?.steps) setResult(data); else setError(errorOf(e, "Could not create the project."));
+    } finally { setBusy(false); }
+  };
+
+  /* ---------------- result screen ---------------- */
+  if (result) {
+    const ok = result.ok;
+    return (
+      <div className="vault page">
+        <div className="shell proj-shell">
+          <Link to="/projects" className="proj-back"><Arrow size={14} style={{ transform: "rotate(180deg)" }} /> All projects</Link>
+          <h1 className="vault__title">{ok ? "All set" : "Stopped part-way"}</h1>
+          <section className="card dp-section" aria-live="polite">
+            <ul className="dp-steps">
+              {result.steps.map((s) => (
+                <li key={s.step} className={"is-" + s.status}><span className="mark">{s.status === "done" ? "✓" : s.status === "failed" ? "✕" : "–"}</span><span>{s.detail}</span></li>
+              ))}
+              {!ok ? <li className="is-failed"><span className="mark">✕</span><span><strong>{result.error}</strong></span></li> : null}
+            </ul>
+            {!ok && result.repo ? <p className="field__note">Nothing was deleted. Your repository is still at <a href={result.repo.url} target="_blank" rel="noreferrer noopener">{result.repo.url}</a>.</p> : null}
+            {!ok && result.canReuseRepo ? (
+              <div className="gh-panel__row">
+                <button type="button" className="btn btn--primary btn--sm" disabled={busy} onClick={() => void submit(null, { useExistingRepo: true })}>{busy ? "Retrying…" : "Retry using the existing repository"}</button>
+                <button type="button" className="btn btn--ghost btn--sm" onClick={() => setResult(null)}>Change settings</button>
+              </div>
+            ) : !ok ? <div className="gh-panel__row"><button type="button" className="btn btn--ghost btn--sm" onClick={() => setResult(null)}>Back</button></div> : null}
+          </section>
+
+          {ok ? (
+            <>
+              <section className="card dp-section">
+                <h2>Your project</h2>
+                <div className="dp-links">
+                  <a className="btn btn--primary btn--sm" href={result.repo.url} target="_blank" rel="noreferrer noopener">Open repository ↗</a>
+                  {result.service.url ? <a className="btn btn--ghost btn--sm" href={result.service.url} target="_blank" rel="noreferrer noopener">Open live site ↗</a> : null}
+                  {result.service.dashboardUrl ? <a className="btn btn--ghost btn--sm" href={result.service.dashboardUrl} target="_blank" rel="noreferrer noopener">Open in Render ↗</a> : null}
+                  {result.projectId ? <Link className="btn btn--ghost btn--sm" to={"/projects/" + result.projectId}>Open project in Stashr</Link> : null}
+                </div>
+                <p className="field__note">
+                  {result.firstDeploy === "waiting-for-code"
+                    ? "Render is waiting for your code. The first git push below triggers the first deploy automatically."
+                    : "The first deploy is running on Render (free instances take a few minutes to build). Stashr will show its health on the project page."}
+                </p>
+              </section>
+
+              {result.firstDeploy === "waiting-for-code" || form.template === "empty" ? (
+                <section className="card dp-section">
+                  <h2>Push your code from the terminal</h2>
+                  <p className="field__note">Run these inside your project folder. Sign in to GitHub the way you normally do (<code>gh auth login</code>, a credential manager, or an SSH key) — Stashr never puts its token in the URL.</p>
+                  <pre className="dp-code">{result.repo.commands.join("\n")}</pre>
+                  <div className="gh-panel__row">
+                    <Copyable text={result.repo.commands.join("\n")} label="Copy commands" />
+                    <Copyable text={result.repo.https} label="Copy HTTPS URL" />
+                    <Copyable text={result.repo.ssh} label="Copy SSH URL" />
+                  </div>
+                </section>
+              ) : null}
+              <div className="gh-panel__row"><Link className="btn btn--ghost" to="/projects/deploy" onClick={() => { setResult(null); set({ name: "", description: "", envVars: [], existingRepoUrl: "" }); }}>Create another</Link></div>
+            </>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  /* ---------------- form ---------------- */
+  const noWrite = github && !writable.length;
+  return (
+    <div className="vault page">
+      <div className="shell proj-shell">
+        <Link to="/projects" className="proj-back"><Arrow size={14} style={{ transform: "rotate(180deg)" }} /> All projects</Link>
+        <h1 className="vault__title">Create &amp; deploy</h1>
+        <p className="vault__count">A new GitHub repository, a free Render service with your environment variables, and a linked Stashr project — in one step.</p>
+
+        <form className="dp-form" onSubmit={submit}>
+          <section className="card dp-section">
+            <h2>1 · Project</h2>
+            <div className="dp-grid">
+              <Field id="dp-name" label="Project name" placeholder="e.g. My Cool App" value={form.name} onChange={(e) => set({ name: e.target.value })} maxLength={80} autoComplete="off" hint={repoName ? "Repository: " + repoName : "Used for the repository and the Render service."} />
+              <Field id="dp-desc" label="Description (optional)" value={form.description} onChange={(e) => set({ description: e.target.value })} maxLength={300} autoComplete="off" />
+            </div>
+            <div className="dp-templates" role="group" aria-label="Template">
+              {TEMPLATES.map(([id, label, hint]) => (
+                <button key={id} type="button" className="dp-template" aria-pressed={form.template === id} onClick={() => pickTemplate(id)}><strong>{label}</strong><small>{hint}</small></button>
+              ))}
+            </div>
+            {form.template === "existing" ? <Field id="dp-existing" label="Existing repository URL" placeholder="https://github.com/you/your-repo" value={form.existingRepoUrl} onChange={(e) => set({ existingRepoUrl: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
+            {ownCode ? (
+              <div className="dp-grid">
+                <div className="field"><label className="field__label" htmlFor="dp-runtime">Runtime</label><select id="dp-runtime" className="input" value={form.runtime} onChange={(e) => pickRuntime(e.target.value)}>{Object.entries(RUNTIMES).map(([k, r]) => <option key={k} value={k}>{r.label}</option>)}</select></div>
+                {form.runtime !== "static" ? <Field id="dp-build" label="Build command" value={form.buildCommand} onChange={(e) => set({ buildCommand: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
+                {form.runtime !== "static" && form.runtime !== "docker" ? <Field id="dp-start" label="Start command" value={form.startCommand} onChange={(e) => set({ startCommand: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
+              </div>
+            ) : null}
+          </section>
+
+          <section className="card dp-section">
+            <h2>2 · GitHub</h2>
+            {noWrite ? (
+              <div className="notice notice--err" role="alert"><Alert size={15} /> No connected GitHub token can create repositories yet. Add a classic token with the <code>repo</code> scope.</div>
+            ) : null}
+            <div className="dp-grid">
+              <div className="field">
+                <label className="field__label" htmlFor="dp-gh">GitHub account</label>
+                <select id="dp-gh" className="input" value={form.githubAccountId} onChange={(e) => set({ githubAccountId: e.target.value })} disabled={!writable.length}>
+                  {!writable.length ? <option value="">{github ? "No write-capable token" : "Loading…"}</option> : null}
+                  {writable.map((a) => <option key={a.id} value={a.id}>{a.login}{a.name !== a.login ? " (" + a.name + ")" : ""}</option>)}
+                </select>
+              </div>
+              {form.template !== "existing" ? (
+                <div className="field">
+                  <span className="field__label">Visibility</span>
+                  <div className="dp-templates" role="group" aria-label="Repository visibility">
+                    {[["private", "Private"], ["public", "Public"]].map(([id, label]) => <button key={id} type="button" className="dp-template" aria-pressed={form.visibility === id} onClick={() => set({ visibility: id })}><strong>{label}</strong></button>)}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <div className="gh-panel__row"><button type="button" className="btn btn--ghost btn--sm" onClick={() => setConnectOpen(true)}>Manage GitHub tokens</button></div>
+            {form.visibility === "private" && form.template !== "existing" ? <p className="field__note">Private repositories need Render’s GitHub app installed for the repository (one-time, in Render). Public repositories deploy without it.</p> : null}
+          </section>
+
+          <section className="card dp-section">
+            <h2>3 · Render</h2>
+            <div className="dp-free"><Check size={16} /><span><strong>Free plan only.</strong> Stashr always creates the service on Render’s free plan; there is no option to choose a paid one. Free services sleep after about 15 minutes without traffic and wake on the next request.</span></div>
+            <div className="dp-grid">
+              <div className="field">
+                <label className="field__label" htmlFor="dp-render">Render account</label>
+                <select id="dp-render" className="input" value={form.renderAccountId} onChange={(e) => set({ renderAccountId: e.target.value, ownerId: "" })} disabled={!render?.length}>
+                  {!render?.length ? <option value="">{render ? "No Render account connected" : "Loading…"}</option> : null}
+                  {(render || []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                {render && !render.length ? <p className="field__note"><Link to="/render">Connect a Render account</Link> first.</p> : null}
+              </div>
+              {owners.length > 1 ? (
+                <div className="field"><label className="field__label" htmlFor="dp-owner">Workspace</label><select id="dp-owner" className="input" value={form.ownerId} onChange={(e) => set({ ownerId: e.target.value })}><option value="">Choose a workspace…</option>{owners.map((o) => <option key={o.id} value={o.id}>{o.name}{o.type ? " (" + o.type + ")" : ""}</option>)}</select></div>
+              ) : null}
+              {form.runtime !== "static" && form.template !== "static" ? (
+                <div className="field"><label className="field__label" htmlFor="dp-region">Region</label><select id="dp-region" className="input" value={form.region} onChange={(e) => set({ region: e.target.value })}>{REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}</select></div>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="card dp-section">
+            <h2>4 · Environment variables</h2>
+            <p className="field__note">Sent straight to Render and saved, encrypted, in the Stashr project.</p>
+            <div className="dp-env">
+              {form.envVars.map((row, i) => (
+                <div key={i} className="dp-env-row">
+                  <input className="input" placeholder="NAME" aria-label={"Variable name " + (i + 1)} value={row.name} onChange={(e) => setEnv(i, { name: e.target.value })} autoComplete="off" spellCheck="false" />
+                  <input className="input" type="password" placeholder="value" aria-label={"Value " + (i + 1)} value={row.value} onChange={(e) => setEnv(i, { value: e.target.value })} autoComplete="new-password" spellCheck="false" />
+                  <button type="button" className="icon-btn icon-btn--quiet" aria-label={"Remove variable " + (i + 1)} onClick={() => set({ envVars: form.envVars.filter((_, idx) => idx !== i) })}><Trash size={15} /></button>
+                </div>
+              ))}
+              <div className="gh-panel__row"><button type="button" className="btn btn--ghost btn--sm" onClick={() => set({ envVars: [...form.envVars, { name: "", value: "" }] })}><Plus size={13} /> Add variable</button></div>
+              <textarea className="input" rows={3} placeholder={"Or paste a .env file:\nAPI_KEY=abc123\nDATABASE_URL=postgres://…"} aria-label="Paste a .env file" value={pasteText} onChange={(e) => setPasteText(e.target.value)} spellCheck="false" />
+              {pasteText.trim() ? <div className="gh-panel__row"><button type="button" className="btn btn--ghost btn--sm" onClick={applyPaste}>Add pasted variables</button></div> : null}
+            </div>
+          </section>
+
+          {error ? <div className="notice notice--err" role="alert"><Alert size={15} /> {error}</div> : null}
+          <div className="gh-panel__row">
+            <button type="submit" className="btn btn--primary btn--lg" disabled={!ready || busy}>{busy ? <><span className="spinner" /> Creating… this can take up to a minute</> : "Create & deploy"}</button>
+            <Link to="/projects" className="btn btn--ghost btn--lg">Cancel</Link>
+          </div>
+        </form>
+      </div>
+      <GithubConnectModal open={connectOpen} onClose={() => setConnectOpen(false)} onChange={() => void loadGithub()} />
+    </div>
+  );
+}

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { Refresh, Check } from "../Icons/Icons";
 import { useVault } from "../../state/vault";
-import { getRenderAccounts, getRenderServices, syncProjectRenderEnv } from "../../api/client";
+import { getRenderAccounts, getRenderServices, syncProjectRenderEnv, pushProjectRenderEnv, triggerRenderDeploy } from "../../api/client";
 
 const ago = (value) => {
   const t = new Date(value).getTime();
@@ -27,6 +27,7 @@ export default function RenderEnvSync({ project }) {
   const [serviceId, setServiceId] = useState("");
   const [busy, setBusy] = useState("");
   const [preview, setPreview] = useState(null);
+  const [pushed, setPushed] = useState(null); // result of the last push to Render
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -94,6 +95,42 @@ export default function RenderEnvSync({ project }) {
     finally { setBusy(""); }
   };
 
+  /* Stashr -> Render: write the variables you changed here to the service. Only names you approve; nothing is deleted. */
+  const pushToRender = async () => {
+    setBusy("push"); setError(""); setPushed(null);
+    try {
+      const plan = await pushProjectRenderEnv(project.id, { apply: false });
+      const sendable = [...plan.create, ...plan.update];
+      if (!sendable.length && !plan.conflicts.length) { toast.info("Render already has all of this project's variables."); return; }
+      const lines = [];
+      if (plan.create.length) lines.push("Add to Render " + plan.create.length + ": " + list(plan.create));
+      if (plan.update.length) lines.push("Update on Render " + plan.update.length + ": " + list(plan.update));
+      if (plan.conflicts.length) lines.push(plan.conflicts.length + " changed in Render since your last sync (skipped unless you choose to overwrite): " + list(plan.conflicts));
+      if (plan.onlyInRender.length) lines.push(plan.onlyInRender.length + " exist only in Render (left untouched, never deleted)");
+      let overwrite = [];
+      if (sendable.length) {
+        if (!window.confirm("Push environment variables to " + (project.renderServiceName || "the Render service") + "?\n\n" + lines.join("\n") + "\n\nThis changes the live service's variables.")) return;
+      }
+      if (plan.conflicts.length && window.confirm("Overwrite the " + plan.conflicts.length + " variable" + (plan.conflicts.length === 1 ? "" : "s") + " that changed in Render with Stashr's value?\n\n" + list(plan.conflicts) + "\n\nOK = overwrite, Cancel = keep Render's.")) overwrite = plan.conflicts;
+      const names = [...sendable, ...overwrite];
+      if (!names.length) return;
+      const result = await pushProjectRenderEnv(project.id, { apply: true, names, overwrite });
+      setPushed(result);
+      await refreshProfile();
+      if (result.failed.length) toast.error(result.failed.length + " variable" + (result.failed.length === 1 ? "" : "s") + " could not be pushed.");
+      else toast.success("Pushed " + result.pushed.length + " variable" + (result.pushed.length === 1 ? "" : "s") + " to Render.");
+    } catch (e) { setError(errorOf(e, "Could not push to Render.")); }
+    finally { setBusy(""); }
+  };
+
+  const deployNow = async () => {
+    if (!window.confirm("Deploy " + (project.renderServiceName || "the service") + " now so the new variables take effect?")) return;
+    setBusy("deploy");
+    try { await triggerRenderDeploy(project.renderAccountId, project.renderServiceId, false); toast.success("Deployment started."); setPushed(null); }
+    catch (e) { setError(errorOf(e, "Could not start the deployment.")); }
+    finally { setBusy(""); }
+  };
+
   const toggleAuto = async (on) => {
     try { await updateProject(project.id, { renderAutoSync: on ? "on" : "" }); toast.success(on ? "Auto-sync on." : "Auto-sync off."); }
     catch (e) { setError(errorOf(e, "Could not change auto-sync.")); }
@@ -137,6 +174,7 @@ export default function RenderEnvSync({ project }) {
               {busy === "sync" ? <span className="spinner" /> : <Refresh size={13} />} {busy === "sync" ? "Syncing…" : "Sync now"}
             </button>
             <button type="button" className="btn btn--ghost btn--sm" disabled={Boolean(busy)} onClick={() => void check()}>{busy === "preview" ? "Checking…" : "Preview changes"}</button>
+            <button type="button" className="btn btn--ghost btn--sm" disabled={Boolean(busy)} onClick={() => void pushToRender()} title="Write the variables you changed in Stashr to the Render service">{busy === "push" ? "Pushing…" : "Push to Render"}</button>
             <label className="gh-auto"><input type="checkbox" checked={project.renderAutoSync === "on"} onChange={(e) => void toggleAuto(e.target.checked)} /> Keep updated automatically</label>
             <button type="button" className="btn btn--ghost btn--sm" disabled={Boolean(busy)} onClick={() => void unlink()}>Unlink</button>
           </div>
@@ -145,6 +183,18 @@ export default function RenderEnvSync({ project }) {
       )}
 
       {error ? <div className="notice notice--err" role="alert">{error}</div> : null}
+
+      {pushed ? (
+        <div className="gh-sync" aria-live="polite">
+          <strong><Check size={13} /> Pushed to Render</strong>
+          <ul>
+            <li>{pushed.pushed.length} variable{pushed.pushed.length === 1 ? "" : "s"} written{pushed.pushed.length ? ": " + list(pushed.pushed) : ""}</li>
+            {pushed.failed.length ? <li className="gh-sync__warn">{pushed.failed.length} failed: {pushed.failed.map((f) => f.name + " (" + f.error + ")").join(", ")}</li> : null}
+            {pushed.skippedConflicts.length ? <li className="gh-sync__warn">{pushed.skippedConflicts.length} skipped because Render has newer values: {list(pushed.skippedConflicts)}</li> : null}
+          </ul>
+          {pushed.pushed.length ? <div className="gh-panel__row"><button type="button" className="btn btn--primary btn--sm" disabled={Boolean(busy)} onClick={() => void deployNow()}>{busy === "deploy" ? "Deploying…" : "Deploy now to apply"}</button><span className="field__note">Variable changes may need a deploy to take effect.</span></div> : null}
+        </div>
+      ) : null}
 
       {preview ? (
         <div className="gh-sync" aria-live="polite">
