@@ -177,7 +177,7 @@ router.get("/render/accounts/:accountId/logs", async (req, res) => {
     limit: String(Math.max(1, Math.min(100, Number.parseInt(req.query.limit, 10) || 100))),
     type: ["app", "request", "build"].includes(String(req.query.type)) ? String(req.query.type) : "app"
   });
-  try { return res.json(await renderRequest(saved.account.apiKey, "/v1/logs?" + params.toString())); }
+  try { res.set("Cache-Control", "no-store"); return res.json(await renderRequest(saved.account.apiKey, "/v1/logs?" + params.toString())); }
   catch (error) { return sendUpstreamError(res, error); }
 });
 
@@ -186,7 +186,9 @@ router.get("/render/accounts/:accountId/services/:serviceId/env-vars", async (re
   if (!saved) return;
   if (!safeId(req.params.serviceId)) return res.status(400).json({ error: "Invalid service ID." });
   try {
-    return res.json(await renderRequest(saved.account.apiKey, servicePath(req.params.serviceId, "/env-vars?limit=100")));
+    const result = await renderRequest(saved.account.apiKey, servicePath(req.params.serviceId, "/env-vars?limit=100"));
+    res.set("Cache-Control", "no-store");
+    return res.json(result);
   } catch (error) { return sendUpstreamError(res, error); }
 });
 
@@ -299,6 +301,7 @@ router.get("/render/accounts/:accountId/postgres/:postgresId/exports", async (re
   if (!safeId(req.params.postgresId) || !String(req.params.postgresId).startsWith("dpg-")) return res.status(400).json({ error: "A valid Render Postgres ID is required." });
   try {
     const exports = await renderRequest(saved.account.apiKey, "/v1/postgres/" + encodeURIComponent(req.params.postgresId) + "/export");
+    res.set("Cache-Control", "no-store");
     return res.json({ exports: Array.isArray(exports) ? exports : [] });
   } catch (error) { return sendUpstreamError(res, error); }
 });
