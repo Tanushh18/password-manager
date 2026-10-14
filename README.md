@@ -864,16 +864,24 @@ The Render dashboard uses the existing Stashr MongoDB connection; **no database 
 ### Render Operations Center additions
 
 The Render page also includes:
-- **Health probes:** checks the Render-provided `*.onrender.com` HTTPS URL with an 8-second timeout; browser notifications are opt-in and run only while the page is open.
-- **Deployment recovery:** cancel an in-progress deployment, roll back to a selected live deployment, and suspend/resume supported services. Rollbacks do not turn off autodeploys.
-- **Encrypted environment snapshots:** snapshots are stored inside the encrypted Render connection record, limited to the most recent 20 per account; restoring a snapshot updates its variables and removes variables absent from that snapshot. Review the confirmation carefully.
-- **Operations audit trail:** keeps a bounded encrypted audit history for actions; secret values are not recorded.
-- **Log diagnostics:** rule-based suggestions identify common error signatures; these are heuristics, not a substitute for inspecting the full logs.
-- **Service metrics:** fetches available CPU, memory, HTTP latency/request, bandwidth, and instance-count series from Render for the last hour; access and data availability depend on Render service type and plan.
-- **Environment groups:** lists groups linked to a service and links to Render for edits; group editing is not performed here.
-- **PostgreSQL exports:** starts and lists Render Postgres exports with download links. Export files can contain sensitive production data. This dashboard does not restore an export; use Render’s supported recovery workflow for restoration.
-- **Favorites and command shortcut:** favorite services are saved in this browser; `Ctrl/⌘+K` focuses service search.
-- **Multi-server groups:** select services across connected Render accounts (for example, Deal Radar's fetcher, validator and user server) and save them as a browser-local group. Compare combined metric trends and per-service current/peak values and peak timestamps. Optional sampling repeats every five minutes while the dashboard is open; sampled peaks are retained in this browser for up to seven days. Combined values are sums of the selected service metric series, not host-level utilization.
-- **Suspended-service filter:** optionally hide suspended services from the inventory without changing their Render state.
+- **Encrypted Render connections and audit trail:** Render API keys, operations settings, metric samples and incidents are encrypted with the user's account data key. Secret values are not included in audit events or reports.
+- **Service health and resource metrics:** probes only Render-provided HTTPS `*.onrender.com` URLs and fetches CPU, memory, HTTP latency/request, bandwidth and instance-count series where supported by Render and the service plan.
+- **Deployment and recovery controls:** deploy, restart, cancel an in-progress deployment, roll back to a selected deployment, and suspend/resume supported services. Destructive operations require confirmation; rollback does not disable autodeploy.
+- **Encrypted environment snapshots and database exports:** snapshots are bounded per service/account; Postgres exports can be started and listed. Review restore/export confirmations carefully. Stashr does not restore a database export.
+- **Multi-server groups:** groups can span connected Render accounts, are persisted in the Stashr account, and can include a manually defined dependency map. The dependency map is documentation/visualization; it does not change service networking.
+- **Persistent monitoring:** the API scheduler endpoint samples health, CPU, memory and latency for enabled groups even when the dashboard is closed, when an external scheduler is configured. Sampling is bounded to 10 groups and 20 unique services per account tick; unavailable metrics are represented as unavailable, not zero. History and incident arrays are encrypted and bounded.
+- **Incident timeline and alerts:** threshold/health transitions are recorded as encrypted incident events. Telegram notifications can be configured in the UI; use the test action before relying on alerts. Notifications are sent on newly opened incidents, with recovery events recorded in the timeline.
+- **Unified logs and configuration drift:** query recent application logs across up to 10 services in a group and compare environment-variable names without comparing or revealing their values.
+- **Safe group actions:** sequential deploy and restart actions show a confirmation and report partial failures instead of pretending an entire batch succeeded.
+- **Reports and heuristics:** export bounded monitoring history and incidents as CSV or JSON. Existing log diagnostics use deterministic heuristics; they are suggestions, not an AI guarantee or a substitute for log review.
+- **Inventory filters:** search, account/type filters, favorites and the “Hide suspended” toggle help reduce clutter. Actual provider billing totals are not inferred from service plan labels because Render billing data is not exposed by this feature.
 
-Monitoring and browser notifications are **not background uptime monitoring**: they run while the Render page is open. Usage metrics, actual billing, provider-level database backup/restore, environment-group editing, persistent server-side scheduled automation, and a hosted AI model are not represented as complete by this UI. Render capabilities and permissions vary by service and API key. The health probe intentionally refuses custom domains and only requests Render's own HTTPS service hostname to reduce SSRF risk.
+#### Enable monitoring while the browser is closed
+
+1. In the Render dashboard for the Stashr API, add `RENDER_MONITOR_CRON_SECRET` with a long, random secret. Keep it out of source control and do not paste it into chat.
+2. Configure a trusted external scheduler (for example, cron-job.org) to send a **POST every 5 minutes** to `https://YOUR_STASHR_API_HOST/render/ops/tick` with header `Authorization: Bearer YOUR_SECRET`. Use your actual API host; the request body can be empty. The endpoint returns 503 if the secret is not configured and 401 for a wrong secret.
+3. In Stashr, connect the relevant Render accounts, create a group with at least two services, enable persistent monitoring, and save the settings. The worker honours each user's 5-, 10- or 15-minute interval even if the external scheduler ticks every 5 minutes.
+4. Optional: create a Telegram bot, enter its bot token and chat ID in the Operations Center, save, then use **Test Telegram**. Tokens are encrypted server-side and never returned by the configuration API.
+5. Use **Run sample now** to verify API credentials and metric availability, and export a CSV report to inspect stored samples and incidents.
+
+The scheduler secret only authorizes a monitoring tick; it does not expose user credentials. Protect the scheduler configuration and monitor its delivery history. A successful API response means the tick completed, not that every metric was available or every service was healthy. Render's API permissions, rate limits, service types and plan determine available data. The dashboard does not currently provide provider billing totals, AI-generated diagnoses, automated production database restores, or a guarantee of continuous uptime from Render itself.
