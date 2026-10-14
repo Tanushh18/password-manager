@@ -181,3 +181,14 @@ export const deleteRenderEnvVar = (accountId, serviceId, key) => instance.delete
 export const getRenderDeploys = (accountId, serviceId) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/services/" + encodeURIComponent(serviceId) + "/deploys").then((r) => r.data);
 export const triggerRenderDeploy = (accountId, serviceId, clearCache = false) => instance.post("/render/accounts/" + encodeURIComponent(accountId) + "/services/" + encodeURIComponent(serviceId) + "/deploys", { clearCache }).then((r) => r.data);
 export const restartRenderService = (accountId, serviceId) => instance.post("/render/accounts/" + encodeURIComponent(accountId) + "/services/" + encodeURIComponent(serviceId) + "/restart").then((r) => r.data);
+export const checkRenderHealth = (accountId, serviceId) => instance.get(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/health`).then((r) => r.data);
+export const suspendRenderService = (accountId, serviceId) => instance.post(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/suspend`).then((r) => r.data);
+export const resumeRenderService = (accountId, serviceId) => instance.post(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/resume`).then((r) => r.data);
+export const rollbackRenderDeploy = (accountId, serviceId, deployId) => instance.post(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/rollback`, { deployId }).then((r) => r.data);
+export const cancelRenderDeploy = (accountId, serviceId, deployId) => instance.post(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/deploys/${encodeURIComponent(deployId)}/cancel`).then((r) => r.data);
+export const createRenderSnapshot = (accountId, serviceId) => instance.post(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/snapshots`).then((r) => r.data);
+export const getRenderSnapshots = (accountId, serviceId) => instance.get(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/snapshots`).then((r) => r.data);
+export const restoreRenderSnapshot = (accountId, serviceId, snapshotId) => instance.post(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/snapshots/${encodeURIComponent(snapshotId)}/restore`).then((r) => r.data);
+export const getRenderAudit = (limit = 50) => instance.get("/render/audit?limit=" + encodeURIComponent(limit)).then((r) => r.data);
+export const getRenderEnvGroups = (accountId) => instance.get(`/render/accounts/${encodeURIComponent(accountId)}/env-groups`).then((r) => r.data);
+
