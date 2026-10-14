@@ -871,6 +871,7 @@ The Render page also includes:
 - **Log diagnostics:** rule-based suggestions identify common error signatures; these are heuristics, not a substitute for inspecting the full logs.
 - **Service metrics:** fetches available CPU, memory, HTTP latency/request, bandwidth, and instance-count series from Render for the last hour; access and data availability depend on Render service type and plan.
 - **Environment groups:** lists groups linked to a service and links to Render for edits; group editing is not performed here.
+- **PostgreSQL exports:** starts and lists Render Postgres exports with download links. Export files can contain sensitive production data. This dashboard does not restore an export; use Render’s supported recovery workflow for restoration.
 - **Favorites and command shortcut:** favorite services are saved in this browser; `Ctrl/⌘+K` focuses service search.
 
 Monitoring and browser notifications are **not background uptime monitoring**: they run while the Render page is open. Usage metrics, actual billing, provider-level database backup/restore, environment-group editing, persistent server-side scheduled automation, and a hosted AI model are not represented as complete by this UI. Render capabilities and permissions vary by service and API key. The health probe intentionally refuses custom domains and only requests Render's own HTTPS service hostname to reduce SSRF risk.
