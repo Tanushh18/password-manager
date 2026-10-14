@@ -139,7 +139,7 @@ router.put("/render/ops/config", async (req, res) => {
       telegramConfigured: Boolean(saved.notifications.telegramBotToken && saved.notifications.telegramChatId)
     });
     res.set("Cache-Control", "no-store");
-    return res.json({ config: renderOps.publicConfig(saved), schedulerConfigured: Boolean(process.env.RENDER_MONITOR_CRON_SECRET) });
+    return res.json({ config: renderOps.publicConfig(saved), schedulerConfigured: Boolean(process.env.RENDER_MONITOR_CRON_SECRET), aiDiagnosisAvailable: Boolean(process.env.GROQ_API_KEY) });
   } catch {
     return res.status(500).json({ error: "Could not save monitoring configuration." });
   }
