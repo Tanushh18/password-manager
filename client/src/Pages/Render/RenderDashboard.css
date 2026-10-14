@@ -193,3 +193,17 @@
 .rd-diagnosis { white-space:pre-wrap; overflow-wrap:anywhere; margin:.5rem 0 .8rem; padding:.85rem; border-radius:var(--r-md); border:1px solid rgba(var(--accent-rgb),.25); background:rgba(var(--accent-rgb),.06); color:var(--text); font:inherit; font-size:.8rem; line-height:1.6; }
 @media (max-width:850px) { .rd-health-card { grid-template-columns:minmax(0,1fr) auto; } .rd-health-card .rd-btn { width:100%; } }
 @media (max-width:520px) { .rd-health-card { grid-template-columns:1fr; } .rd-health-state { justify-self:start; } }
+
+.rd-metrics-card { margin:1rem 0; padding:1rem; border:1px solid var(--line); border-radius:var(--r-md); background:var(--surface); }
+.rd-metrics-card .rd-section-head { padding:0; margin-bottom:.8rem; }
+.rd-metrics-card .rd-section-head h3 { margin:0; color:var(--heading); font-size:.9rem; }
+.rd-metrics-card .rd-section-head p { margin:.25rem 0 0; color:var(--text-muted); font-size:.73rem; }
+.rd-metric-empty { color:var(--text-muted); font-size:.8rem; padding:.75rem 0; }
+.rd-metric-summary { display:flex; align-items:baseline; justify-content:space-between; gap:1rem; }
+.rd-metric-summary>strong { color:var(--heading); font-size:1.45rem; }
+.rd-metric-summary>strong small { color:var(--text-muted); font-size:.72rem; }
+.rd-metric-summary>span { color:var(--text-muted); font-size:.72rem; }
+.rd-metric-bars { display:flex; align-items:flex-end; gap:3px; min-height:86px; margin:.75rem 0 .3rem; padding:.3rem 0; border-bottom:1px solid var(--line); }
+.rd-metric-bars span { flex:1; min-width:2px; max-width:20px; border-radius:3px 3px 0 0; background:var(--accent); opacity:.82; transition:height .15s ease; }
+.rd-metric-bars span:hover { opacity:1; }
+.rd-metric-axis { display:flex; justify-content:space-between; color:var(--text-faint); font-size:.68rem; }
