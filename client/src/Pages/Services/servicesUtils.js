@@ -41,3 +41,26 @@ export function summarize(data) {
   }
   return { tracked, warn, critical, soonest };
 }
+
+const RANK = { critical: 3, warn: 2, ok: 1, unknown: 0 };
+
+/** Worst metric across a project's services, plus counts for the project list. */
+export function projectSummary(project) {
+  let worst = null, metrics = 0, issues = 0;
+  for (const s of project.services || []) {
+    if (s.state === "error") issues += 1;
+    for (const r of s.reports || []) for (const m of r.metrics) {
+      metrics += 1;
+      if (m.percent != null && (!worst || RANK[m.status] > RANK[worst.status] || (RANK[m.status] === RANK[worst.status] && m.percent > worst.percent))) worst = { ...m, service: s.label };
+    }
+  }
+  const status = worst ? worst.status : issues ? "warn" : "unknown";
+  return { status, worst, metrics, issues, services: (project.services || []).length };
+}
+
+/** Flattens a service's reports into table rows (one per metric). */
+export function metricRows(svc) {
+  const rows = [];
+  for (const r of svc.reports || []) for (const m of r.metrics) rows.push({ ...m, report: r.label, plan: r.plan, multi: (svc.reports || []).length > 1 });
+  return rows;
+}

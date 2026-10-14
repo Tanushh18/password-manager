@@ -22,3 +22,15 @@ test("summarize counts statuses and finds the soonest exhaustion", () => {
   const s = summarize(data);
   assert.deepEqual([s.tracked, s.warn, s.critical, s.soonest.label], [1, 1, 1, "B"]);
 });
+
+test("projectSummary picks the worst metric and counts errors", async () => {
+  const { projectSummary } = await import("../src/Pages/Services/servicesUtils.js");
+  const p = { services: [
+    { label: "Mongo", state: "ok", reports: [{ metrics: [{ status: "ok", percent: 40 }, { status: "warn", percent: 85 }] }] },
+    { label: "Brevo", state: "error", reports: [] }] };
+  const s = projectSummary(p);
+  assert.equal(s.status, "warn");
+  assert.equal(s.worst.service, "Mongo");
+  assert.equal(s.issues, 1);
+  assert.equal(projectSummary({ services: [] }).status, "unknown");
+});
