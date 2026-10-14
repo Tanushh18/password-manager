@@ -6,7 +6,10 @@ import {
   triggerRenderDeploy, updateRenderEnvVar, deleteRenderEnvVar,
   checkRenderHealth, suspendRenderService, resumeRenderService, rollbackRenderDeploy,
   cancelRenderDeploy, createRenderSnapshot, getRenderSnapshots, restoreRenderSnapshot,
-  getRenderAudit, getRenderMetrics, getRenderEnvGroups, getRenderDbExports, createRenderDbExport
+  getRenderAudit, getRenderMetrics, getRenderEnvGroups, getRenderDbExports, createRenderDbExport,
+  getRenderOpsConfig, saveRenderOpsConfig, getRenderOpsHistory, getRenderOpsIncidents,
+  runRenderOpsNow, testRenderOpsNotification, getRenderOpsReport,
+  getRenderLogs
 } from "../../api/client";
 import "./RenderDashboard.css";
 
@@ -120,6 +123,22 @@ export default function RenderDashboard() {
   });
   const [groupMetricBusy, setGroupMetricBusy] = useState(false);
   const [groupMonitoring, setGroupMonitoring] = useState(false);
+  const [opsConfig, setOpsConfig] = useState(null);
+  const [monitorSettings, setMonitorSettings] = useState({ enabled: false, intervalMinutes: 5, checkHealth: true, thresholds: { cpu: 85, memory: 90, latencyMs: 1500 } });
+  const [telegramBotToken, setTelegramBotToken] = useState("");
+  const [telegramChatId, setTelegramChatId] = useState("");
+  const [clearTelegram, setClearTelegram] = useState(false);
+  const [opsSaving, setOpsSaving] = useState(false);
+  const [opsRunning, setOpsRunning] = useState(false);
+  const [opsLoading, setOpsLoading] = useState(false);
+  const [opsHistory, setOpsHistory] = useState([]);
+  const [opsIncidents, setOpsIncidents] = useState([]);
+  const [groupLogs, setGroupLogs] = useState([]);
+  const [groupLogsBusy, setGroupLogsBusy] = useState(false);
+  const [groupLogSearch, setGroupLogSearch] = useState("");
+  const [dependencyFrom, setDependencyFrom] = useState("");
+  const [dependencyTo, setDependencyTo] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [favorites, setFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem("stashr_render_favorites") || "[]"); } catch { return []; }
   });
@@ -156,10 +175,37 @@ export default function RenderDashboard() {
     } catch { /* Audit history is supplemental; the dashboard remains usable. */ }
   }, []);
 
+  const refreshOpsData = useCallback(async () => {
+    setOpsLoading(true);
+    try {
+      const [configResult, historyResult, incidentResult] = await Promise.all([
+        getRenderOpsConfig(), getRenderOpsHistory(100), getRenderOpsIncidents(100)
+      ]);
+      const config = configResult.config || {};
+      const remoteGroups = Array.isArray(config.groups) ? config.groups : [];
+      const localGroups = (() => { try { return JSON.parse(localStorage.getItem("stashr_render_service_groups") || "[]"); } catch { return []; } })();
+      const groups = remoteGroups.length ? remoteGroups : localGroups;
+      setServiceGroups(groups);
+      setOpsConfig(config);
+      setMonitorSettings(config.monitor || { enabled: false, intervalMinutes: 5, checkHealth: true, thresholds: { cpu: 85, memory: 90, latencyMs: 1500 } });
+      setTelegramChatId(config.notifications?.telegramChatId || "");
+      setOpsHistory(Array.isArray(historyResult.history) ? historyResult.history : []);
+      setOpsIncidents(Array.isArray(incidentResult.incidents) ? incidentResult.incidents : []);
+      if (!remoteGroups.length && localGroups.length) {
+        const saved = await saveRenderOpsConfig({ ...config, groups: localGroups });
+        setOpsConfig(saved.config || config);
+        setServiceGroups(saved.config?.groups || localGroups);
+      }
+    } catch (e) {
+      setError(e?.response?.data?.error || "Could not load persistent monitoring. Check the Stashr API deployment.");
+    } finally { setOpsLoading(false); }
+  }, []);
+
   useEffect(() => {
     void loadAccounts();
     void loadAudit();
-  }, [loadAccounts, loadAudit]);
+    void refreshOpsData();
+  }, [loadAccounts, loadAudit, refreshOpsData]);
 
   useEffect(() => {
     const handler = (event) => {
@@ -419,27 +465,177 @@ export default function RenderDashboard() {
     return () => window.clearInterval(timer);
   }, [groupMonitoring, selectedGroupId, groupMetricType, loadGroupMetrics]);
 
-  const saveServiceGroup = () => {
+  const persistOpsConfig = async (overrides = {}) => {
+    setOpsSaving(true);
+    try {
+      const payload = {
+        groups: overrides.groups ?? serviceGroups,
+        monitor: overrides.monitor ?? monitorSettings,
+        notifications: {
+          telegramBotToken: telegramBotToken.trim(),
+          telegramChatId: telegramChatId.trim(),
+          ...(clearTelegram ? { clearTelegramToken: true, clearTelegramChatId: true } : {})
+        }
+      };
+      const result = await saveRenderOpsConfig(payload);
+      const config = result.config || {};
+      setOpsConfig(config);
+      setServiceGroups(config.groups || payload.groups);
+      setMonitorSettings(config.monitor || payload.monitor);
+      setClearTelegram(false);
+      setTelegramBotToken("");
+      try { localStorage.setItem("stashr_render_service_groups", JSON.stringify(config.groups || payload.groups)); } catch {}
+      toast.success("Monitoring settings saved securely.");
+      return config;
+    } catch (e) {
+      toast.error(e?.response?.data?.error || "Could not save monitoring settings.");
+      throw e;
+    } finally { setOpsSaving(false); }
+  };
+
+  const saveServiceGroup = async () => {
     const keys = [...new Set(checkedServices)].filter((key) => services.some((service) => service.accountId + ":" + service.id === key));
     if (keys.length < 2) { toast.info("Select at least two services to create a group."); return; }
     const name = window.prompt("Name this server group (for example, Deal Radar):");
     if (!name || !name.trim()) return;
-    const group = { id: "group-" + Date.now().toString(36), name: name.trim().slice(0, 60), serviceKeys: keys };
-    setServiceGroups((old) => [...old, group]);
-    setSelectedGroupId(group.id);
-    setCheckedServices([]);
-    setGroupMetrics(null);
-    setGroupMonitoring(false);
-    toast.success("Server group saved in this browser.");
+    const group = { id: "group-" + Date.now().toString(36), name: name.trim().slice(0, 60), serviceKeys: keys, dependencies: [] };
+    const nextGroups = [...serviceGroups, group];
+    try {
+      await persistOpsConfig({ groups: nextGroups });
+      setSelectedGroupId(group.id);
+      setCheckedServices([]);
+      setGroupMetrics(null);
+      setGroupMonitoring(false);
+    } catch { /* error already shown */ }
   };
 
-  const deleteServiceGroup = () => {
+  const deleteServiceGroup = async () => {
     if (!selectedGroup) return;
-    if (!window.confirm("Delete the local group '" + selectedGroup.name + "'? This will not affect any Render services.")) return;
-    setServiceGroups((old) => old.filter((group) => group.id !== selectedGroup.id));
-    setSelectedGroupId("");
-    setGroupMetrics(null);
-    setGroupMonitoring(false);
+    if (!window.confirm("Delete the group '" + selectedGroup.name + "'? This will not affect any Render services.")) return;
+    const nextGroups = serviceGroups.filter((group) => group.id !== selectedGroup.id);
+    try {
+      await persistOpsConfig({ groups: nextGroups });
+      setSelectedGroupId("");
+      setGroupMetrics(null);
+      setGroupMonitoring(false);
+      setGroupLogs([]);
+    } catch { /* error already shown */ }
+  };
+
+  const togglePersistentMonitoring = async () => {
+    const next = { ...monitorSettings, enabled: !monitorSettings.enabled };
+    setMonitorSettings(next);
+    try {
+      await persistOpsConfig({ monitor: next });
+      if (next.enabled) {
+        setGroupMonitoring(true);
+        toast.info("Persistent monitoring enabled. Configure the external scheduler to collect samples while the browser is closed.");
+      } else {
+        setGroupMonitoring(false);
+      }
+    } catch { setMonitorSettings(monitorSettings); }
+  };
+
+  const sampleMonitoringNow = async () => {
+    setOpsRunning(true);
+    try {
+      const result = await runRenderOpsNow();
+      toast.success("Monitoring sample complete: " + (result.groupsChecked || 0) + " group(s), " + (result.incidentsOpened || 0) + " new incident(s).");
+      await refreshOpsData();
+      if (selectedGroupId) void loadGroupMetrics(selectedGroupId, groupMetricType);
+    } catch (e) { toast.error(e?.response?.data?.error || "Could not sample monitoring data."); }
+    finally { setOpsRunning(false); }
+  };
+
+  const testTelegram = async () => {
+    try {
+      if (telegramBotToken.trim() || telegramChatId.trim()) await persistOpsConfig();
+      await testRenderOpsNotification();
+      toast.success("Telegram test message sent.");
+      await refreshOpsData();
+    } catch (e) { if (e?.response?.data?.error) toast.error(e.response.data.error); }
+  };
+
+  const exportOpsReport = async (format = "csv") => {
+    try {
+      const result = await getRenderOpsReport(format);
+      if (format === "csv") {
+        const url = URL.createObjectURL(result);
+        const link = document.createElement("a");
+        link.href = url; link.download = "stashr-render-ops-report.csv"; link.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a"); link.href = url; link.download = "stashr-render-ops-report.json"; link.click();
+        URL.revokeObjectURL(url);
+      }
+      toast.success("Report exported.");
+    } catch (e) { toast.error(e?.response?.data?.error || "Could not export report."); }
+  };
+
+  const loadGroupLogs = async () => {
+    if (!selectedGroup) return;
+    setGroupLogsBusy(true);
+    try {
+      const end = new Date();
+      const start = new Date(end.getTime() - 60 * 60 * 1000);
+      const results = await Promise.all(groupServices.slice(0, 10).map(async (service) => {
+        if (!service.ownerId) return [];
+        try {
+          const result = await getRenderLogs(service.accountId, {
+            ownerId: service.ownerId, resource: service.id, startTime: start.toISOString(),
+            endTime: end.toISOString(), direction: "backward", limit: "100", type: "app"
+          });
+          return (Array.isArray(result.logs) ? result.logs : []).map((log) => ({ ...log, serviceName: service.name, serviceId: service.id }));
+        } catch { return []; }
+      }));
+      setGroupLogs(results.flat().sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0)).slice(0, 300));
+      toast.info("Loaded recent logs from up to 10 group services.");
+    } finally { setGroupLogsBusy(false); }
+  };
+
+  const addDependency = async () => {
+    if (!selectedGroup || !dependencyFrom || !dependencyTo || dependencyFrom === dependencyTo) return;
+    const current = selectedGroup.dependencies || [];
+    if (current.some((edge) => edge.from === dependencyFrom && edge.to === dependencyTo)) return;
+    const nextGroups = serviceGroups.map((group) => group.id === selectedGroup.id
+      ? { ...group, dependencies: [...current, { from: dependencyFrom, to: dependencyTo }] }
+      : group);
+    try { await persistOpsConfig({ groups: nextGroups }); }
+    catch { /* error already shown */ }
+  };
+
+  const removeDependency = async (from, to) => {
+    if (!selectedGroup) return;
+    const nextGroups = serviceGroups.map((group) => group.id === selectedGroup.id
+      ? { ...group, dependencies: (group.dependencies || []).filter((edge) => edge.from !== from || edge.to !== to) }
+      : group);
+    try { await persistOpsConfig({ groups: nextGroups }); }
+    catch { /* error already shown */ }
+  };
+
+  const runBulkAction = async (action) => {
+    if (!selectedGroup || !groupServices.length) return;
+    const targets = groupServices.filter((service) => action !== "restart" || serviceKind(service) !== "Cron job");
+    const label = action === "deploy" ? "deploy latest code to" : "restart";
+    if (!window.confirm("Sequentially " + label + " " + targets.length + " service(s) in '" + selectedGroup.name + "'? This can cause temporary interruptions.")) return;
+    setBulkBusy(true);
+    const outcomes = [];
+    try {
+      for (const service of targets) {
+        try {
+          if (action === "deploy") await triggerRenderDeploy(service.accountId, service.id, false);
+          else await restartRenderService(service.accountId, service.id);
+          outcomes.push({ name: service.name, ok: true });
+        } catch (e) { outcomes.push({ name: service.name, ok: false, error: e?.response?.data?.error || "Request failed" }); }
+      }
+      await loadAccounts(true);
+      await loadAudit();
+      const failed = outcomes.filter((item) => !item.ok);
+      if (failed.length) toast.error("Completed with " + failed.length + " failure(s): " + failed.map((item) => item.name).join(", "));
+      else toast.success("All " + outcomes.length + " " + (action === "deploy" ? "deploys" : "restarts") + " requested.");
+    } finally { setBulkBusy(false); }
   };
 
   const toggleServiceSelection = (service) => {
