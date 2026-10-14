@@ -8,8 +8,7 @@ import {
   cancelRenderDeploy, createRenderSnapshot, getRenderSnapshots, restoreRenderSnapshot,
   getRenderAudit, getRenderMetrics, getRenderEnvGroups, getRenderDbExports, createRenderDbExport,
   getRenderOpsConfig, saveRenderOpsConfig, getRenderOpsHistory, getRenderOpsIncidents,
-  runRenderOpsNow, testRenderOpsNotification, getRenderOpsReport,
-  getRenderLogs
+  runRenderOpsNow, testRenderOpsNotification, getRenderOpsReport
 } from "../../api/client";
 import "./RenderDashboard.css";
 
@@ -139,6 +138,8 @@ export default function RenderDashboard() {
   const [dependencyFrom, setDependencyFrom] = useState("");
   const [dependencyTo, setDependencyTo] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [envDrift, setEnvDrift] = useState([]);
+  const [driftBusy, setDriftBusy] = useState(false);
   const [favorites, setFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem("stashr_render_favorites") || "[]"); } catch { return []; }
   });
@@ -186,7 +187,7 @@ export default function RenderDashboard() {
       const localGroups = (() => { try { return JSON.parse(localStorage.getItem("stashr_render_service_groups") || "[]"); } catch { return []; } })();
       const groups = remoteGroups.length ? remoteGroups : localGroups;
       setServiceGroups(groups);
-      setOpsConfig(config);
+      setOpsConfig({ ...config, schedulerConfigured: Boolean(configResult.schedulerConfigured) });
       setMonitorSettings(config.monitor || { enabled: false, intervalMinutes: 5, checkHealth: true, thresholds: { cpu: 85, memory: 90, latencyMs: 1500 } });
       setTelegramChatId(config.notifications?.telegramChatId || "");
       setOpsHistory(Array.isArray(historyResult.history) ? historyResult.history : []);
@@ -479,7 +480,7 @@ export default function RenderDashboard() {
       };
       const result = await saveRenderOpsConfig(payload);
       const config = result.config || {};
-      setOpsConfig(config);
+      setOpsConfig({ ...config, schedulerConfigured: Boolean(result.schedulerConfigured) });
       setServiceGroups(config.groups || payload.groups);
       setMonitorSettings(config.monitor || payload.monitor);
       setClearTelegram(false);
@@ -593,6 +594,31 @@ export default function RenderDashboard() {
       setGroupLogs(results.flat().sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0)).slice(0, 300));
       toast.info("Loaded recent logs from up to 10 group services.");
     } finally { setGroupLogsBusy(false); }
+  };
+
+  const compareEnvironmentKeys = async () => {
+    if (!selectedGroup) return;
+    setDriftBusy(true);
+    try {
+      const results = await Promise.all(groupServices.slice(0, 10).map(async (service) => {
+        try {
+          const result = await getRenderEnvVars(service.accountId, service.id);
+          const keys = [...new Set(normalizeList(result, "envVar").map((item) => String(item.key || "")).filter(Boolean))].sort();
+          return { key: service.accountId + ":" + service.id, name: service.name, keys };
+        } catch {
+          return { key: service.accountId + ":" + service.id, name: service.name, keys: [], error: "Could not read variable names" };
+        }
+      }));
+      const common = results.filter((item) => !item.error).reduce((set, item, index) => {
+        const next = new Set(item.keys);
+        return index === 0 ? next : new Set([...set].filter((key) => next.has(key)));
+      }, new Set());
+      setEnvDrift(results.map((item) => ({
+        ...item,
+        missing: item.error ? [] : [...common].filter((key) => !item.keys.includes(key))
+      })));
+      toast.info("Compared environment variable names only. Values were not compared or saved.");
+    } finally { setDriftBusy(false); }
   };
 
   const addDependency = async () => {
@@ -829,21 +855,68 @@ export default function RenderDashboard() {
             </tbody></table></div>
             <div className="rd-table-foot">Showing <b>{filtered.length}</b> of <b>{services.length}</b> services <span>•</span> {lastSync ? "Synced " + timeAgo(lastSync.toISOString()) : "Not synced yet"}</div>
             <section className="rd-group-panel">
-              <div className="rd-group-heading"><div><h3>Multi-server monitoring</h3><p>Group services that work together—such as Deal Radar's fetcher, validator and user server.</p></div>
-                <select value={selectedGroupId} onChange={(e) => { setSelectedGroupId(e.target.value); setGroupMetrics(null); setGroupMonitoring(false); }} aria-label="Select a server group"><option value="">Choose a saved group</option>{serviceGroups.map((group) => <option key={group.id} value={group.id}>{group.name} ({group.serviceKeys.length})</option>)}</select>
+              <div className="rd-group-heading"><div><h3>Operations center</h3><p>Persistent server-side monitoring, incident history, secure alert settings and group-level operations.</p></div>
+                <div className="rd-group-heading-actions"><span className={"rd-ops-status " + (monitorSettings.enabled ? "is-on" : "is-off")}>{monitorSettings.enabled ? "Monitoring enabled" : "Monitoring paused"}</span><button className="rd-btn rd-btn--quiet" onClick={() => void refreshOpsData()} disabled={opsLoading}>↻ Refresh</button></div>
+              </div>
+              <div className="rd-ops-kpis">
+                <article><small>Saved server groups</small><strong>{serviceGroups.length}</strong></article>
+                <article><small>Open incidents</small><strong>{opsIncidents.filter((item) => item.state === "open").length}</strong></article>
+                <article><small>Stored samples</small><strong>{opsHistory.length}</strong></article>
+                <article><small>Last recorded sample</small><strong>{opsHistory.length ? timeAgo(opsHistory[opsHistory.length - 1].sampledAt) : "—"}</strong></article>
+              </div>
+              <div className="rd-ops-config">
+                <div className="rd-ops-config-head"><div><h4>Monitoring & alert policy</h4><p>Settings are encrypted in your Stashr account. A trusted scheduler must call the backend tick endpoint for monitoring while the browser is closed.</p></div><button className="rd-btn rd-btn--primary" disabled={opsSaving} onClick={() => void persistOpsConfig()}>{opsSaving ? "Saving…" : "Save settings"}</button></div>
+                <div className="rd-ops-setting-row">
+                  <label className="rd-toggle"><input type="checkbox" checked={monitorSettings.enabled} onChange={(e) => setMonitorSettings((old) => ({ ...old, enabled: e.target.checked }))} /> Enable persistent monitoring</label>
+                  <label>Interval<select value={monitorSettings.intervalMinutes || 5} onChange={(e) => setMonitorSettings((old) => ({ ...old, intervalMinutes: Number(e.target.value) }))}><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option></select></label>
+                  <label className="rd-toggle"><input type="checkbox" checked={monitorSettings.checkHealth !== false} onChange={(e) => setMonitorSettings((old) => ({ ...old, checkHealth: e.target.checked }))} /> Probe service URLs</label>
+                </div>
+                <div className="rd-ops-setting-row rd-ops-thresholds">
+                  <label>CPU threshold (%)<input type="number" min="1" max="100" value={monitorSettings.thresholds?.cpu ?? 85} onChange={(e) => setMonitorSettings((old) => ({ ...old, thresholds: { ...old.thresholds, cpu: Number(e.target.value) } }))} /></label>
+                  <label>Memory threshold (%)<input type="number" min="1" max="100" value={monitorSettings.thresholds?.memory ?? 90} onChange={(e) => setMonitorSettings((old) => ({ ...old, thresholds: { ...old.thresholds, memory: Number(e.target.value) } }))} /></label>
+                  <label>Latency threshold (ms)<input type="number" min="100" max="60000" value={monitorSettings.thresholds?.latencyMs ?? 1500} onChange={(e) => setMonitorSettings((old) => ({ ...old, thresholds: { ...old.thresholds, latencyMs: Number(e.target.value) } }))} /></label>
+                </div>
+                <div className="rd-ops-setting-row rd-ops-telegram">
+                  <label>Telegram bot token<input type="password" autoComplete="new-password" placeholder={opsConfig?.notifications?.telegramConfigured ? "Token saved securely (enter to rotate)" : "Paste bot token from BotFather"} value={telegramBotToken} onChange={(e) => setTelegramBotToken(e.target.value)} /></label>
+                  <label>Telegram chat ID<input autoComplete="off" placeholder="Chat or group ID" value={telegramChatId} onChange={(e) => setTelegramChatId(e.target.value)} /></label>
+                  <div className="rd-ops-channel-actions"><small>{opsConfig?.notifications?.telegramConfigured ? "Telegram configured" : "Telegram not configured"}</small><button className="rd-btn rd-btn--quiet" disabled={opsSaving} onClick={() => void testTelegram()}>Test Telegram</button>{opsConfig?.notifications?.telegramConfigured && <button className="rd-btn rd-btn--quiet" disabled={opsSaving} onClick={async () => { setClearTelegram(true); setTelegramBotToken(""); setTelegramChatId(""); try { await persistOpsConfig(); } catch {} }}>Remove channel</button>}</div>
+                </div>
+                <div className="rd-ops-footer">
+                  <span className={opsConfig?.schedulerConfigured ? "rd-scheduler-ready" : "rd-scheduler-missing"}>{opsConfig?.schedulerConfigured ? "Scheduler secret configured" : "Scheduler secret missing on API"}</span>
+                  <small>Monitoring samples CPU, memory and HTTP latency where Render exposes them. Threshold alerts and health checks are best-effort; metrics unavailable from Render are shown as unavailable, not zero.</small>
+                  <button className="rd-btn rd-btn--quiet" disabled={opsRunning} onClick={() => void sampleMonitoringNow()}>{opsRunning ? "Sampling…" : "Run sample now"}</button>
+                  <button className="rd-btn rd-btn--quiet" onClick={() => void exportOpsReport("csv")}>Export CSV report</button>
+                  <button className="rd-btn rd-btn--quiet" onClick={() => void exportOpsReport("json")}>Export JSON</button>
+                </div>
+              </div>
+              <div className="rd-group-heading"><div><h3>Multi-server monitoring</h3><p>Select related Render services as a group—for example, Deal Radar's Fetcher, Validator and User servers.</p></div>
+                <select value={selectedGroupId} onChange={(e) => { setSelectedGroupId(e.target.value); setGroupMetrics(null); setGroupLogs([]); setEnvDrift([]); }} aria-label="Select a server group"><option value="">Choose a saved group</option>{serviceGroups.map((group) => <option key={group.id} value={group.id}>{group.name} ({group.serviceKeys.length})</option>)}</select>
               </div>
               {selectedGroup ? <>
-                <div className="rd-group-actions"><span>{groupServices.length} of {selectedGroup.serviceKeys.length} services currently available</span><button className="rd-btn rd-btn--quiet" onClick={() => { setGroupMonitoring((active) => !active); if (!groupMonitoring) void loadGroupMetrics(selectedGroup.id, groupMetricType); }}>{groupMonitoring ? "■ Stop monitoring" : "▶ Start monitoring"}</button><button className="rd-btn rd-btn--quiet" onClick={() => void loadGroupMetrics(selectedGroup.id, groupMetricType)}>↻ Sample now</button><button className="rd-btn rd-btn--quiet" onClick={deleteServiceGroup}>Delete group</button></div>
-                <div className="rd-group-actions"><label>Metric <select value={groupMetricType} onChange={(e) => { setGroupMetricType(e.target.value); setGroupMetrics(null); }}>{[["cpu","CPU usage"],["memory","Memory usage"],["http-requests","HTTP requests"],["http-latency","HTTP latency"],["bandwidth","Bandwidth"],["instance-count","Instance count"]].map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><small>{groupMonitoring ? "Auto-sampling every 5 minutes while this page is open." : "Samples are fetched on demand; auto-monitoring only runs while this dashboard stays open."}</small></div>
+                <div className="rd-group-actions"><span>{groupServices.length} of {selectedGroup.serviceKeys.length} services currently available</span><button className="rd-btn rd-btn--quiet" disabled={opsSaving} onClick={() => void togglePersistentMonitoring()}>{monitorSettings.enabled ? "■ Pause persistent monitoring" : "▶ Enable persistent monitoring"}</button><button className="rd-btn rd-btn--quiet" disabled={opsRunning} onClick={() => void sampleMonitoringNow()}>↻ Sample all groups</button><button className="rd-btn rd-btn--quiet" onClick={() => void loadGroupMetrics(selectedGroup.id, groupMetricType)}>Sample chart</button><button className="rd-btn rd-btn--quiet" onClick={() => void deleteServiceGroup()}>Delete group</button></div>
+                <div className="rd-group-actions"><label>Metric <select value={groupMetricType} onChange={(e) => { setGroupMetricType(e.target.value); setGroupMetrics(null); }}>{[["cpu","CPU usage"],["memory","Memory usage"],["http-latency","HTTP latency"],["http-requests","HTTP requests"],["bandwidth","Bandwidth"],["instance-count","Instance count"]].map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><small>Live chart uses Render's recent metrics. Persistent samples are retained on the server, even after the dashboard is closed, when a scheduler is configured.</small></div>
+                <div className="rd-group-actions rd-bulk-actions"><strong>Group actions</strong><button className="rd-btn rd-btn--quiet" disabled={bulkBusy || !groupServices.length} onClick={() => void runBulkAction("deploy")}>{bulkBusy ? "Working…" : "Sequential deploy"}</button><button className="rd-btn rd-btn--quiet" disabled={bulkBusy || !groupServices.length} onClick={() => void runBulkAction("restart")}>{bulkBusy ? "Working…" : "Sequential restart"}</button><button className="rd-btn rd-btn--quiet" disabled={groupLogsBusy} onClick={() => void loadGroupLogs()}>{groupLogsBusy ? "Loading logs…" : "Load unified logs"}</button><button className="rd-btn rd-btn--quiet" disabled={driftBusy} onClick={() => void compareEnvironmentKeys()}>{driftBusy ? "Comparing…" : "Compare env keys"}</button></div>
+                <div className="rd-dependency-editor">
+                  <div><h4>Service dependency map</h4><p>Declare operational dependencies so the group documents its request or job flow. These are informational and do not alter Render routing.</p></div>
+                  <div className="rd-dependency-add"><label>Upstream<select value={dependencyFrom} onChange={(e) => setDependencyFrom(e.target.value)}><option value="">Select service</option>{groupServices.map((service) => <option key={service.accountId + ":" + service.id} value={service.accountId + ":" + service.id}>{service.name}</option>)}</select></label><span>→</span><label>Downstream<select value={dependencyTo} onChange={(e) => setDependencyTo(e.target.value)}><option value="">Select service</option>{groupServices.map((service) => <option key={service.accountId + ":" + service.id} value={service.accountId + ":" + service.id}>{service.name}</option>)}</select></label><button className="rd-btn rd-btn--quiet" disabled={opsSaving || !dependencyFrom || !dependencyTo || dependencyFrom === dependencyTo} onClick={() => void addDependency()}>Add link</button></div>
+                  <div className="rd-dependency-map">{(selectedGroup.dependencies || []).map((edge) => {
+                    const from = groupServices.find((service) => service.accountId + ":" + service.id === edge.from);
+                    const to = groupServices.find((service) => service.accountId + ":" + service.id === edge.to);
+                    return <article key={edge.from + ">" + edge.to}><span>{from?.name || edge.from}</span><icon>→</icon><span>{to?.name || edge.to}</span><button className="rd-remove" aria-label="Remove dependency" onClick={() => void removeDependency(edge.from, edge.to)}>×</button></article>;
+                  })}{!(selectedGroup.dependencies || []).length && <small>No dependencies mapped yet.</small>}</div>
+                </div>
+                {groupLogs.length > 0 && <section className="rd-unified-logs"><div className="rd-section-head"><div><h4>Unified application logs</h4><p>Last hour · latest 300 entries from up to 10 group services.</p></div><input className="rd-filter-input" placeholder="Search across services…" value={groupLogSearch} onChange={(e) => setGroupLogSearch(e.target.value)} /></div><div className="rd-logs">{groupLogs.filter((log) => (String(log.message || "").toLowerCase() + " " + log.serviceName.toLowerCase()).includes(groupLogSearch.toLowerCase())).map((log, index) => <div className="rd-log" key={log.serviceId + "-" + (log.id || index)}><time>{log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : "—"} · {log.serviceName}</time><code>{log.message || "(empty log entry)"}</code></div>)}</div></section>}
+                {envDrift.length > 0 && <section className="rd-drift-panel"><h4>Environment configuration drift</h4><p>Only variable names are compared; values are never shown or compared.</p><div className="rd-drift-grid">{envDrift.map((item) => <article key={item.key}><strong>{item.name}</strong><small>{item.error || item.keys.length + " variable names"}</small>{item.missing.length > 0 && <span>Missing: {item.missing.join(", ")}</span>}</article>)}</div></section>}
                 {groupMetricBusy && <div className="rd-loading">Sampling group metrics…</div>}
                 {groupMetrics && <>
-                  <div className="rd-group-kpis"><article><small>Latest combined value</small><strong>{groupMetrics.combinedPoints.length ? groupMetrics.combinedPoints[groupMetrics.combinedPoints.length - 1].value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"} <em>{groupMetrics.combinedPoints[groupMetrics.combinedPoints.length - 1]?.unit || ""}</em></strong></article><article><small>Peak in returned hour</small><strong>{groupMetrics.combinedPoints.length ? Math.max(...groupMetrics.combinedPoints.map((point) => point.value)).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}</strong></article><article><small>Peak time (1h)</small><strong>{groupMetrics.combinedPoints.length ? new Date(groupMetrics.combinedPoints.reduce((best, point) => point.value > best.value ? point : best, groupMetrics.combinedPoints[0]).timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</strong></article><article><small>Saved peak (7d)</small><strong>{(() => { const entries = groupHistory.filter((entry) => entry.groupId === selectedGroup.id && entry.metric === groupMetricType); const peak = entries.reduce((best, entry) => !best || entry.value > best.value ? entry : best, null); return peak ? peak.value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"; })()}</strong><small>{(() => { const entries = groupHistory.filter((entry) => entry.groupId === selectedGroup.id && entry.metric === groupMetricType); const peak = entries.reduce((best, entry) => !best || entry.value > best.value ? entry : best, null); return peak ? new Date(peak.timestamp).toLocaleString() : "Builds up while monitoring is on"; })()}</small></article></div>
+                  <div className="rd-group-kpis"><article><small>Latest combined value</small><strong>{groupMetrics.combinedPoints.length ? groupMetrics.combinedPoints[groupMetrics.combinedPoints.length - 1].value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"} <em>{groupMetrics.combinedPoints[groupMetrics.combinedPoints.length - 1]?.unit || ""}</em></strong></article><article><small>Peak in returned hour</small><strong>{groupMetrics.combinedPoints.length ? Math.max(...groupMetrics.combinedPoints.map((point) => point.value)).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}</strong></article><article><small>Peak time (1h)</small><strong>{groupMetrics.combinedPoints.length ? new Date(groupMetrics.combinedPoints.reduce((best, point) => point.value > best.value ? point : best, groupMetrics.combinedPoints[0]).timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</strong></article><article><small>Saved peak (7d)</small><strong>{(() => { const entries = groupHistory.filter((entry) => entry.groupId === selectedGroup.id && entry.metric === groupMetricType); const peak = entries.reduce((best, entry) => !best || entry.value > best.value ? entry : best, null); return peak ? peak.value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"; })()}</strong><small>{(() => { const entries = groupHistory.filter((entry) => entry.groupId === selectedGroup.id && entry.metric === groupMetricType); const peak = entries.reduce((best, entry) => !best || entry.value > best.value ? entry : best, null); return peak ? new Date(peak.timestamp).toLocaleString() : "Use the stored history report for persistent samples"; })()}</small></article></div>
                   {groupMetrics.combinedPoints.length ? <><div className="rd-metric-bars rd-group-bars" role="img" aria-label={"Combined " + groupMetricType + " across group services over the last hour"}>{groupMetrics.combinedPoints.map((point,index) => { const max = Math.max(1,...groupMetrics.combinedPoints.map((entry) => entry.value)); return <span key={point.timestamp + index} title={new Date(point.timestamp).toLocaleString() + ": " + point.value.toFixed(2) + " " + (point.unit || "")} style={{height:Math.max(4,point.value/max*82)+"px"}} />; })}</div><div className="rd-metric-axis"><span>{new Date(groupMetrics.combinedPoints[0].timestamp).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</span><span>{new Date(groupMetrics.combinedPoints[groupMetrics.combinedPoints.length-1].timestamp).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</span></div></> : <p className="rd-metric-empty">No combined metric points returned. Render may not expose this metric for every service or plan.</p>}
                   <div className="rd-table-wrap"><table className="rd-table rd-group-table"><thead><tr><th>Service</th><th>Account</th><th>Current</th><th>Peak (1h)</th><th>Peak time</th><th>Result</th><th /></tr></thead><tbody>{groupMetrics.services.map((item) => <tr key={item.key}><td>{item.name}</td><td>{item.accountName}</td><td>{item.current == null ? "—" : item.current.toLocaleString(undefined,{maximumFractionDigits:2}) + " " + item.unit}</td><td>{item.peak == null ? "—" : item.peak.toLocaleString(undefined,{maximumFractionDigits:2}) + " " + item.unit}</td><td>{item.peakAt ? new Date(item.peakAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}) : "—"}</td><td>{item.error || "Available"}</td><td><button className="rd-open" onClick={() => { const service = services.find((candidate) => candidate.accountId + ":" + candidate.id === item.key); if (service) openService(service); }}>Details ↗</button></td></tr>)}</tbody></table></div>
-                  <p className="rd-group-note">Combined values sum the metric points returned for each selected service; they are a comparison signal, not a single machine's CPU or memory percentage. Render's returned metric window is about one hour. Samples are also kept in this browser for up to 7 days while monitoring is used.</p>
+                  <p className="rd-group-note">Combined values sum aligned metric samples; they are not a single host's CPU or memory percentage. Actual billing amounts are not exposed by this dashboard and are not inferred from plan names.</p>
                   <small className="rd-group-synced">Last sampled {new Date(groupMetrics.checkedAt).toLocaleTimeString()}</small>
                 </>}
-              </> : <div className="rd-group-empty">{serviceGroups.length ? "Choose a group to view combined load and per-service peaks." : "Select at least two services in the table and choose “Group selected” to create your first server group."}</div>}
+              </> : <div className="rd-group-empty">{serviceGroups.length ? "Choose a group to view metrics, incidents and operations." : "Select at least two services in the table and choose Group selected to create your first server group."}</div>}
+              <section className="rd-incident-panel"><div className="rd-section-head"><div><h4>Incident timeline</h4><p>Health and resource threshold transitions recorded by persistent monitoring.</p></div><button className="rd-btn rd-btn--quiet" onClick={() => void refreshOpsData()} disabled={opsLoading}>Refresh incidents</button></div><div className="rd-incident-list">{opsIncidents.slice(0, 30).map((incident, index) => <article key={incident.id || incident._id || index} className={"rd-incident " + (incident.state === "open" ? "is-open" : "is-resolved")}><span className="rd-incident-mark">{incident.state === "open" ? "!" : "✓"}</span><div><strong>{incident.message || incident.type}</strong><small>{incident.groupName || "Group"} · {incident.serviceName || "Service"} · {incident.at ? new Date(incident.at).toLocaleString() : "—"}</small></div><span className="rd-incident-state">{incident.state || "event"}</span></article>)}{!opsIncidents.length && <div className="rd-empty">No incidents recorded yet. Run a sample or enable monitoring after configuring a group.</div>}</div></section>
             </section>
           </div>
 
