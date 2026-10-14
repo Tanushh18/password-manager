@@ -114,7 +114,7 @@ router.get("/render/ops/config", async (req, res) => {
   try {
     const config = await renderOps.readConfig(req.rootUser);
     res.set("Cache-Control", "no-store");
-    return res.json({ config: renderOps.publicConfig(config) });
+    return res.json({ config: renderOps.publicConfig(config), schedulerConfigured: Boolean(process.env.RENDER_MONITOR_CRON_SECRET) });
   } catch {
     return res.status(500).json({ error: "Could not load monitoring configuration." });
   }
@@ -135,7 +135,7 @@ router.put("/render/ops/config", async (req, res) => {
       telegramConfigured: Boolean(saved.notifications.telegramBotToken && saved.notifications.telegramChatId)
     });
     res.set("Cache-Control", "no-store");
-    return res.json({ config: renderOps.publicConfig(saved) });
+    return res.json({ config: renderOps.publicConfig(saved), schedulerConfigured: Boolean(process.env.RENDER_MONITOR_CRON_SECRET) });
   } catch {
     return res.status(500).json({ error: "Could not save monitoring configuration." });
   }
