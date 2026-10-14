@@ -529,5 +529,15 @@ describe("Render API proxy", () =>
         expect(report.headers["content-type"]).toMatch(/text\/csv/);
         expect(report.text).toContain("record_type,timestamp,group,service");
     });
+
+    test("AI diagnosis requires authentication and explicit external-processing consent", async () =>
+    {
+        expect((await request(app).post("/render/ops/diagnose").send({ logs: "error", allowExternalProcessing: true })).status).toBe(401);
+        await register();
+        const token = (await login()).body.token;
+        const noConsent = await request(app).post("/render/ops/diagnose").set(auth(token)).send({ logs: "error", allowExternalProcessing: false });
+        expect(noConsent.status).toBe(400);
+        expect(noConsent.body.error).toMatch(/consent/i);
+    });
 });
 
