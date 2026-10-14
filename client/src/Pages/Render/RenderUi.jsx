@@ -76,7 +76,7 @@ export function useConfirm() {
   return [ask, dialog];
 }
 
-function ConfirmDialog({ title = "Please confirm", message, confirmLabel = "Confirm", danger = false, input = null, onSettle }) {
+function ConfirmDialog({ title = "Please confirm", message, confirmLabel = "Confirm", cancelLabel = "Cancel", danger = false, input = null, onSettle }) {
   const id = useId();
   const [value, setValue] = useState(input?.defaultValue || "");
   const submit = (event) => {
@@ -90,7 +90,7 @@ function ConfirmDialog({ title = "Please confirm", message, confirmLabel = "Conf
         <p className="rd-dialog__body">{message}</p>
         {input && <input data-autofocus className="rd-field" value={value} onChange={(e) => setValue(e.target.value)} placeholder={input.placeholder} maxLength={input.maxLength || 60} autoComplete="off" spellCheck="false" aria-label={input.label || title} />}
         <div className="rd-dialog__actions">
-          <button type="button" className="rd-btn rd-btn--quiet" onClick={() => onSettle(null)}>Cancel</button>
+          <button type="button" className="rd-btn rd-btn--quiet" onClick={() => onSettle(null)}>{cancelLabel}</button>
           <button type="submit" data-autofocus={input ? undefined : true} className={"rd-btn " + (danger ? "rd-btn--danger" : "rd-btn--primary")} disabled={Boolean(input) && (input.match != null ? value !== input.match : !value.trim())}>{confirmLabel}</button>
         </div>
       </form>

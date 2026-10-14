@@ -2,7 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const renderOps = require("../utils/renderOps");
 const { fetchAllPages } = require("../utils/renderPaging");
-const { checkServiceDeletion } = require("../utils/renderGuards");
+const { checkServiceDeletion, parseBulkTargets, mapWithConcurrency } = require("../utils/renderGuards");
 const User = require("../models/schema");
 const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
@@ -618,6 +618,42 @@ router.post("/render/accounts/:accountId/services/:serviceId/deploys/:deployId/c
     await recordAudit(req, "cancel_deploy", saved.entry._id, serviceId, { deployId });
     return res.json(result);
   } catch (error) { return sendUpstreamError(res, error); }
+});
+
+/* Bulk delete: one request, many services (possibly across accounts). Every service is re-read from
+   Render and skipped unless it is currently suspended, so active services can never be removed here. */
+router.post("/render/services/bulk-delete", async (req, res) => {
+  const parsed = parseBulkTargets(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  let dataKey;
+  try { dataKey = await req.rootUser.getDataKey(); }
+  catch { return res.status(500).json({ error: "Could not open the saved Render connections." }); }
+  const accounts = new Map();
+  const accountFor = (id) => {
+    if (!accounts.has(id)) {
+      const entry = mongoose.isValidObjectId(id) ? (req.rootUser.renderAccounts || []).find((item) => String(item._id) === id && item.enc === "udk") : null;
+      const fields = entry ? User.publicEntry(entry, dataKey) : null;
+      accounts.set(id, fields?.apiKey ? { entry, apiKey: fields.apiKey } : null);
+    }
+    return accounts.get(id);
+  };
+  const results = await mapWithConcurrency(parsed.targets, 4, async ({ accountId, serviceId }) => {
+    const account = accountFor(accountId);
+    if (!account) return { accountId, serviceId, ok: false, error: "Render account not found." };
+    try {
+      const payload = await renderRequest(account.apiKey, servicePath(serviceId));
+      const service = payload?.service || payload;
+      const verdict = checkServiceDeletion(service, null, { requireName: false });
+      if (!verdict.ok) return { accountId, serviceId, name: service?.name, ok: false, skipped: verdict.status === 409, error: verdict.error };
+      await renderRequest(account.apiKey, servicePath(serviceId), { method: "DELETE" });
+      await recordAudit(req, "delete_service", account.entry._id, serviceId, { serviceName: String(service.name || "").slice(0, 120), bulk: true });
+      return { accountId, serviceId, name: service.name, ok: true };
+    } catch (error) {
+      return { accountId, serviceId, ok: false, error: error?.status === 404 ? "Service no longer exists." : (error?.message || "Render API request failed.") };
+    }
+  });
+  const deleted = results.filter((item) => item.ok).length;
+  return res.json({ deleted, failed: results.length - deleted, results });
 });
 
 router.delete("/render/accounts/:accountId/services/:serviceId", async (req, res) => {

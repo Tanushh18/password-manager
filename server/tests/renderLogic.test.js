@@ -2,7 +2,7 @@ const { describe, test } = require("node:test");
 const expect = require("./expect");
 const { fetchAllPages } = require("../utils/renderPaging");
 const { utilizationPercent, resourceChecks } = require("../utils/renderMetrics");
-const { checkServiceDeletion } = require("../utils/renderGuards");
+const { checkServiceDeletion, parseBulkTargets, mapWithConcurrency } = require("../utils/renderGuards");
 
 const rows = (from, to) => Array.from({ length: to - from }, (_, i) => ({ service: { id: "srv-" + (from + i) }, cursor: "c" + (from + i) }));
 const pagedRequest = (total, log = []) => async (path) =>
@@ -169,5 +169,47 @@ describe("Render service deletion guard", () =>
     {
         expect(checkServiceDeletion(null, "x").status).toBe(404);
         expect(checkServiceDeletion({}, "x").status).toBe(404);
+    });
+});
+
+describe("Render bulk deletion", () =>
+{
+    test("bulk mode needs no typed name but still requires suspension", () =>
+    {
+        const opts = { requireName: false };
+        expect(checkServiceDeletion({ id: "s", name: "n", suspended: "suspended" }, undefined, opts).ok).toBe(true);
+        const active = checkServiceDeletion({ id: "s", name: "n", suspended: "not_suspended" }, undefined, opts);
+        expect(active.ok).toBe(false);
+        expect(active.status).toBe(409);
+    });
+
+    test("parseBulkTargets validates, de-duplicates and caps the selection", () =>
+    {
+        const ok = parseBulkTargets({ services: [{ accountId: "a1", serviceId: "srv-1" }, { accountId: "a1", serviceId: "srv-1" }, { accountId: "a2", serviceId: "srv-2" }] });
+        expect(ok.targets).toHaveLength(2);
+        expect(parseBulkTargets({}).error).toMatch(/at least one/);
+        expect(parseBulkTargets({ services: [] }).error).toMatch(/at least one/);
+        expect(parseBulkTargets({ services: [{ accountId: "a", serviceId: "../x" }] }).error).toMatch(/Invalid/);
+        expect(parseBulkTargets({ services: [{ accountId: "a" }] }).error).toMatch(/Invalid/);
+        const many = Array.from({ length: 21 }, (_, i) => ({ accountId: "a", serviceId: "srv-" + i }));
+        expect(parseBulkTargets({ services: many }).error).toMatch(/up to 20/);
+    });
+
+    test("mapWithConcurrency preserves order, bounds parallelism and isolates failures", async () =>
+    {
+        let active = 0, peak = 0;
+        const results = await mapWithConcurrency([1, 2, 3, 4, 5, 6, 7, 8], 3, async (n) =>
+        {
+            active += 1; peak = Math.max(peak, active);
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            active -= 1;
+            if (n === 4) throw new Error("boom");
+            return { ok: true, n };
+        });
+        expect(peak <= 3).toBe(true);
+        expect(results.map((r) => r.ok).join(",")).toBe("true,true,true,false,true,true,true,true");
+        expect(results[3].error).toBe("boom");
+        expect(results[7].n).toBe(8);
+        expect(await mapWithConcurrency([], 4, async () => 1)).toHaveLength(0);
     });
 });

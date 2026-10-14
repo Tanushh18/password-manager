@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { connectRenderAccount, deleteRenderAccount, getRenderAccounts, getRenderServices, getRenderAudit } from "../../api/client";
+import { connectRenderAccount, deleteRenderAccount, bulkDeleteRenderServices, getRenderAccounts, getRenderServices, getRenderAudit } from "../../api/client";
 import { Modal, StatePill, Skeleton, Empty, Kpi, Section, FleetBar, useConfirm } from "./RenderUi";
 import ServiceDetail from "./ServiceDetail";
 import { MonitoringView, IncidentsView, AlertPolicyView } from "./OpsViews";
@@ -49,6 +49,7 @@ export default function RenderDashboard() {
   const [showKey, setShowKey] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState("");
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const [selectedGroupId, setSelectedGroupId] = useState("");
   const [ask, confirmDialog] = useConfirm();
@@ -181,6 +182,31 @@ export default function RenderDashboard() {
     } catch { /* toast shown */ }
   };
 
+  const checkedSuspended = useMemo(() => services.filter((s) => checked.includes(serviceKey(s)) && s.suspended === "suspended"), [services, checked]);
+
+  const deleteSelectedSuspended = async () => {
+    const targets = checkedSuspended;
+    if (!targets.length) return;
+    const untouched = checked.length - targets.length;
+    const ok = await ask({
+      title: "Delete " + targets.length + " suspended service" + (targets.length === 1 ? "" : "s") + "?",
+      message: targets.map((s) => s.name).join(", ") + ". This permanently deletes them from Render, including deploy history, logs and environment variables, and cannot be undone." + (untouched ? " " + untouched + " selected service" + (untouched === 1 ? " is" : "s are") + " not suspended and will be left untouched." : ""),
+      confirmLabel: "Yes, delete", cancelLabel: "No", danger: true
+    });
+    if (!ok) return;
+    setBulkDeleting(true);
+    try {
+      const result = await bulkDeleteRenderServices(targets.map((s) => ({ accountId: s.accountId, serviceId: s.id })));
+      const done = new Set(result.results.filter((r) => r.ok).map((r) => r.accountId + ":" + r.serviceId));
+      const failures = result.results.filter((r) => !r.ok);
+      setChecked((old) => old.filter((k) => !done.has(k)));
+      if (done.size) toast.success("Deleted " + done.size + " service" + (done.size === 1 ? "" : "s") + ".");
+      if (failures.length) toast.error(failures.length + " not deleted: " + failures.slice(0, 3).map((f) => (f.name || f.serviceId) + " (" + f.error + ")").join("; ") + (failures.length > 3 ? "…" : ""), { autoClose: 10000 });
+      await Promise.all([loadAccounts({ quiet: true }), loadAudit(), refreshOps()]);
+    } catch (e) { toast.error(errorMessage(e, "Could not delete the selected services.")); }
+    finally { setBulkDeleting(false); }
+  };
+
   const copyToClipboard = async (text) => {
     try { await navigator.clipboard.writeText(text); toast.success("Copied."); } catch { toast.error("Clipboard is not available."); }
   };
@@ -288,6 +314,7 @@ export default function RenderDashboard() {
               <div className="rd-selectbar" role="region" aria-label="Selection actions">
                 <strong>{checked.length} selected</strong>
                 <button type="button" className="rd-btn rd-btn--primary" disabled={checked.length < 2} onClick={() => void createGroup()}>＋ Group selected</button>
+                <button type="button" className="rd-btn rd-btn--danger-quiet" disabled={!checkedSuspended.length || bulkDeleting} title={checkedSuspended.length ? "Permanently delete the selected suspended services" : "Select at least one suspended service"} onClick={() => void deleteSelectedSuspended()}>{bulkDeleting ? "Deleting…" : "🗑 Delete suspended (" + checkedSuspended.length + ")"}</button>
                 <button type="button" className="rd-btn rd-btn--link" onClick={() => setChecked([])}>Clear</button>
                 {checked.length < 2 && <small>Select at least 2 services to create a group.</small>}
               </div>

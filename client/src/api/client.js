@@ -183,6 +183,7 @@ export const triggerRenderDeploy = (accountId, serviceId, clearCache = false) =>
 export const restartRenderService = (accountId, serviceId) => instance.post("/render/accounts/" + encodeURIComponent(accountId) + "/services/" + encodeURIComponent(serviceId) + "/restart").then((r) => r.data);
 export const checkRenderHealth = (accountId, serviceId) => instance.get(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/health`).then((r) => r.data);
 export const deleteRenderService = (accountId, serviceId, confirmName) => instance.delete(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}`, { data: { confirmName } }).then((r) => r.data);
+export const bulkDeleteRenderServices = (services) => instance.post("/render/services/bulk-delete", { services }, { timeout: 120000 }).then((r) => r.data);
 export const suspendRenderService = (accountId, serviceId) => instance.post(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/suspend`).then((r) => r.data);
 export const resumeRenderService = (accountId, serviceId) => instance.post(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/resume`).then((r) => r.data);
 export const rollbackRenderDeploy = (accountId, serviceId, deployId) => instance.post(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/rollback`, { deployId }).then((r) => r.data);
