@@ -349,3 +349,43 @@
 .rd-db-export-list small { color:var(--text-muted); font-size:.7rem; }
 .rd-db-export-list article>span { color:var(--text-muted); font-size:.7rem; white-space:nowrap; }
 @media (max-width:560px) { .rd-db-export-panel { padding:.75rem; } .rd-db-export-list article { align-items:flex-start; flex-direction:column; gap:.4rem; } }
+
+
+/* Monitoring-first layout: keep the operations centre above the service inventory. */
+.rd-group-panel { margin: 0 0 1.25rem; }
+.rd-group-heading p, .rd-ops-config-head p { max-width: 70ch; line-height: 1.55; }
+.rd-group-actions { align-items: center; }
+.rd-group-actions button[title], .rd-ops-footer button[title] { cursor: help; }
+.rd-group-actions select { min-width: 150px; }
+.rd-group-actions small { color: var(--text-muted); line-height: 1.5; }
+.rd-line-chart-wrap { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg); padding: .7rem .75rem .55rem; margin: .75rem 0; }
+.rd-line-chart { width: 100%; overflow: hidden; }
+.rd-line-chart svg { display: block; width: 100%; min-height: 180px; overflow: visible; }
+.rd-chart-grid { stroke: var(--line); stroke-dasharray: 3 5; stroke-width: 1; }
+.rd-chart-label { fill: var(--text-muted); font-size: 11px; }
+.rd-line-legend { display: grid; grid-template-columns: repeat(auto-fit,minmax(190px,1fr)); gap: .45rem .8rem; margin-top: .45rem; }
+.rd-line-legend > div { display: grid; grid-template-columns: 10px minmax(0,1fr); gap: .12rem .45rem; align-items: center; min-width: 0; }
+.rd-line-legend i { grid-row: span 2; display: block; width: 9px; height: 9px; border-radius: 50%; }
+.rd-line-legend span { color: var(--heading-2); font-size: .74rem; font-weight: 650; overflow-wrap: anywhere; }
+.rd-line-legend small { color: var(--text-muted); font-size: .68rem; }
+.rd-chart-help { color: var(--text-muted); font-size: .7rem; line-height: 1.5; margin: .6rem 0 0; }
+.rd-group-error-summary { border: 1px solid var(--line); background: var(--surface); border-radius: var(--r-lg); padding: 1rem; margin-top: .8rem; }
+.rd-group-error-summary h4 { margin: 0; color: var(--heading); font-size: .9rem; }
+.rd-group-error-summary .rd-section-head p { margin: .25rem 0 0; color: var(--text-muted); font-size: .72rem; line-height: 1.5; }
+.rd-group-error-summary .rd-section-head > strong { color: var(--heading-2); background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: .35rem .65rem; font-size: .72rem; white-space: nowrap; }
+.rd-group-error-list { display: grid; gap: .45rem; }
+.rd-group-error-list article { border-left: 3px solid #df7777; border-radius: 0 var(--r-sm) var(--r-sm) 0; background: var(--bg); padding: .65rem .75rem; min-width: 0; }
+.rd-group-error-list time { display: block; color: var(--text-muted); font-size: .67rem; margin-bottom: .3rem; }
+.rd-group-error-list p { color: var(--heading-2); font-size: .75rem; line-height: 1.5; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.rd-group-panel .rd-ops-config { margin-bottom: .9rem; }
+.rd-group-panel .rd-ops-footer { gap: .55rem; }
+.rd-group-panel .rd-group-kpis article small { line-height: 1.4; }
+@media (max-width: 760px) {
+  .rd-line-chart-wrap { padding: .45rem; }
+  .rd-line-chart svg { min-height: 150px; }
+  .rd-line-legend { grid-template-columns: 1fr; }
+  .rd-group-actions { align-items: stretch; }
+  .rd-group-actions > button, .rd-group-actions > label { width: 100%; }
+  .rd-group-actions label { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .rd-group-actions label select { flex: 1; }
+}
