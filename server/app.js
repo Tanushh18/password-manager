@@ -9,6 +9,7 @@ const allowedOrigins = [
   'http://localhost:3000',
   'https://password-website.onrender.com',
   'https://stashr.ggnhome.com',
+  'https://stashr.tanush.qd.je',
   'chrome-extension://*'  // Allow Chrome extension
 ];
 
