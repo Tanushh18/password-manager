@@ -285,6 +285,35 @@ router.get("/render/audit", async (req, res) => {
   }
 });
 
+router.get("/render/accounts/:accountId/services/:serviceId/metrics", async (req, res) => {
+  const saved = await getAccount(req, res);
+  if (!saved) return;
+  const serviceId = req.params.serviceId;
+  if (!safeId(serviceId)) return res.status(400).json({ error: "Invalid service ID." });
+  const metrics = {
+    cpu: "cpu", memory: "memory", "cpu-limit": "cpu-limit", "memory-limit": "memory-limit",
+    "http-latency": "http-latency", "http-requests": "http-requests", bandwidth: "bandwidth",
+    "instance-count": "instance-count"
+  };
+  const metric = String(req.query.metric || "cpu");
+  if (!Object.prototype.hasOwnProperty.call(metrics, metric)) return res.status(400).json({ error: "Unsupported metric." });
+  const end = Date.now();
+  const requestedStart = Date.parse(String(req.query.startTime || ""));
+  const start = Number.isFinite(requestedStart) ? Math.max(end - 24 * 60 * 60 * 1000, requestedStart) : end - 60 * 60 * 1000;
+  const resolution = Math.max(30, Math.min(3600, Number.parseInt(req.query.resolutionSeconds, 10) || 60));
+  const params = new URLSearchParams({
+    resource: serviceId,
+    startTime: new Date(start).toISOString(),
+    endTime: new Date(end).toISOString(),
+    resolutionSeconds: String(resolution)
+  });
+  try {
+    const data = await renderRequest(saved.account.apiKey, "/v1/metrics/" + metrics[metric] + "?" + params.toString());
+    res.set("Cache-Control", "no-store");
+    return res.json({ metric, startTime: new Date(start).toISOString(), endTime: new Date(end).toISOString(), data });
+  } catch (error) { return sendUpstreamError(res, error); }
+});
+
 router.get("/render/accounts/:accountId/env-groups", async (req, res) => {
   const saved = await getAccount(req, res);
   if (!saved) return;
