@@ -206,3 +206,4 @@ export const getRenderOpsIncidents = (limit = 100) => instance.get("/render/ops/
 export const runRenderOpsNow = () => instance.post("/render/ops/run").then((r) => r.data);
 export const testRenderOpsNotification = () => instance.post("/render/ops/notify/test").then((r) => r.data);
 export const getRenderOpsReport = (format = "json") => instance.get("/render/ops/report", { params: { format }, responseType: format === "csv" ? "blob" : "json" }).then((r) => r.data);
+export const diagnoseRenderLogs = (serviceName, logs, allowExternalProcessing = false) => instance.post("/render/ops/diagnose", { serviceName, logs, allowExternalProcessing }).then((r) => r.data);
