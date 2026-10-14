@@ -1,6 +1,8 @@
 const crypto = require("crypto");
 const { detectServices, publicService } = require("./usageCatalog");
 const { projectMetric, seriesFor } = require("./usageProjection");
+const { repoKey } = require("./projectLink");
+const { parseGithubRepo } = require("./github");
 
 /*
  * Live-services dashboard: for every Render service that is running right now, read its env var NAMES/values
@@ -82,6 +84,13 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
   const candidates = services.filter((s) => !s.suspended);
   const liveFlags = await mapLimit(candidates, 4, async (s) => (await isLive(s, (path) => request(s.accountId, path))));
   const live = candidates.filter((_, i) => liveFlags[i]);
+  // Services deployed from the same GitHub repo are one project; its id is the smallest service id (stable).
+  const groupKey = (s) => repoKey(s.repo) || "id:" + s.id;
+  const groupIds = new Map();
+  for (const s of live) {
+    const k = groupKey(s);
+    if (!groupIds.has(k) || s.id < groupIds.get(k)) groupIds.set(k, s.id);
+  }
 
   const out = [];
   const values = {};
@@ -92,8 +101,9 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
     const detected = detectServices(env);
     const items = [];
     for (const svc of detected.services) {
-      const disabled = Boolean(settings.disabled?.[service.id + "|" + svc.key]);
-      const entry = { ...publicService(svc), usage: null, reports: [], state: "no-credentials", error: null, usageHint: USAGE_HINT[svc.key] || "" };
+      const groupId = groupIds.get(groupKey(service));
+      const disabled = Boolean(settings.disabled?.[groupId + "|" + svc.key] || settings.disabled?.[service.id + "|" + svc.key]);
+      const entry = { ...publicService(svc), fp: fingerprint(svc.key, svc.credentials), usage: null, reports: [], state: "no-credentials", error: null, usageHint: USAGE_HINT[svc.key] || "" };
       entry.configuredLimits = svc.configuredLimits.map((l) => ({ ...l, period: limitPeriod(l.name) }));
       if (disabled) entry.state = "disabled";
       else if (svc.hasCredentials && providers[svc.key]) {
@@ -119,9 +129,48 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
       envReadFailed: envError, services: items, internalVars: detected.internal, otherVars: detected.other
     });
   });
-  out.sort((a, b) => a.name.localeCompare(b.name));
+  out.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  const projects = mergeByRepo(out, (p) => groupIds.get(groupKey(p)));
 
-  return { generatedAt: new Date(now).toISOString(), liveCount: live.length, totalCount: services.length, projects: out, snapshotValues: values };
+  return { generatedAt: new Date(now).toISOString(), liveCount: live.length, projectCount: projects.length, totalCount: services.length, projects, snapshotValues: values };
+}
+
+const repoName = (url) => parseGithubRepo(url)?.repo || "";
+const unionVars = (a, b) => [...a, ...b.filter((v) => !a.some((x) => x.name === v.name))];
+
+/**
+ * One project per GitHub repo: services deployed from the same repo are merged. Each deployment is kept in
+ * `deployments`; detected providers are de-duplicated (same provider + same credentials = one entry).
+ */
+function mergeByRepo(entries, idOf) {
+  const groups = new Map();
+  for (const e of entries) {
+    const id = idOf(e);
+    const deployment = { id: e.id, name: e.name, type: e.type, plan: e.plan, url: e.url, dashboardUrl: e.dashboardUrl, accountId: e.accountId, accountName: e.accountName };
+    const g = groups.get(id);
+    if (!g) {
+      groups.set(id, { ...e, id, services: e.services.map((s) => ({ ...s })), deployments: [deployment] });
+      continue;
+    }
+    g.deployments.push(deployment);
+    g.envReadFailed = g.envReadFailed || e.envReadFailed;
+    g.internalVars = unionVars(g.internalVars, e.internalVars);
+    g.otherVars = unionVars(g.otherVars, e.otherVars);
+    for (const svc of e.services) {
+      const same = g.services.find((x) => x.key === svc.key);
+      if (!same) { g.services.push({ ...svc }); continue; }
+      if (same.fp === svc.fp) continue;
+      // Same provider, different credentials: keep every account's numbers under the one provider row.
+      same.vars = unionVars(same.vars || [], svc.vars || []);
+      same.reports = [...same.reports, ...svc.reports];
+      if (same.state !== "ok" && svc.state === "ok") { same.state = "ok"; same.error = null; }
+    }
+  }
+  return [...groups.values()].map((g) => {
+    if (g.deployments.length > 1) g.name = repoName(g.repo) || g.name;
+    g.services = g.services.map(({ fp, ...rest }) => rest);
+    return g;
+  }).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Adds the latest values to the bounded history, at most one snapshot per hour. */
@@ -134,4 +183,4 @@ function appendSnapshot(history, values, now = Date.now()) {
   return list.slice(-HISTORY_MAX);
 }
 
-module.exports = { buildLiveDashboard, appendSnapshot, limitPeriod, providerCache };
+module.exports = { buildLiveDashboard, mergeByRepo, appendSnapshot, limitPeriod, providerCache };

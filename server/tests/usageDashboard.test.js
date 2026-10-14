@@ -50,6 +50,27 @@ test("services can be switched off and configured limits carry their period", as
   expect(list.find((s) => s.key === "groq").configuredLimits[0].period).toBe("day");
 });
 
+test("services deployed from the same repo are merged into one project", async () => {
+  providerCache.clear();
+  let runs = 0;
+  const providers = { mongodb: { run: async () => { runs += 1; return { ok: true, reports: [{ label: "db", metrics: [] }] }; } } };
+  const repo = "https://github.com/Owner/Deal_Radar";
+  const data = await buildLiveDashboard({
+    services: [svc({ id: "srv-b", name: "dealradar-93do", repo }), svc({ id: "srv-a", name: "dealradar", repo: repo + ".git" }), svc({ id: "srv-c", name: "other", repo: "https://github.com/Owner/Other" })],
+    accounts, request: request([["MONGO_URI", "mongodb+srv://u:p@c.mongodb.net/app"]]), providers,
+    settings: { disabled: {} }, now: NOW
+  });
+  expect(data.projects.map((p) => p.name)).toEqual(["Deal_Radar", "other"]);
+  expect(data.projectCount).toBe(2);
+  expect(data.liveCount).toBe(3);
+  const merged = data.projects[0];
+  expect(merged.id).toBe("srv-a");
+  expect(merged.deployments.map((d) => d.id).sort()).toEqual(["srv-a", "srv-b"]);
+  expect(merged.services.filter((s) => s.key === "mongodb").length).toBe(1);
+  expect(JSON.stringify(data)).not.toContain('"fp"');
+  expect(runs).toBe(1);
+});
+
 test("snapshots are rate limited and bounded", () => {
   let h = appendSnapshot([], { a: 1 }, NOW);
   expect(h.length).toBe(1);

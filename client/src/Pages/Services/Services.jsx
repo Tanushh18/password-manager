@@ -46,7 +46,7 @@ function Overview({ data, onOpen }) {
   return (
     <div className="sv-stack">
       <div className="sv-stats">
-        <div><span>Live projects</span><b>{data.liveCount}</b><small>of {data.totalCount} Render services</small></div>
+        <div><span>Live projects</span><b>{data.projectCount ?? data.projects.length}</b><small>{data.liveCount} of {data.totalCount} Render services live</small></div>
         <div><span>Services tracked</span><b>{summary.tracked}</b><small>with live usage data</small></div>
         <div className={summary.critical ? "is-critical" : summary.warn ? "is-warn" : ""}><span>Needs attention</span><b>{summary.warn + summary.critical}</b><small>{summary.critical ? summary.critical + " almost out" : summary.warn ? summary.warn + " getting low" : "All within limits"}</small></div>
         <div><span>Soonest to run out</span><b>{summary.soonest ? new Date(summary.soonest.at).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "—"}</b><small>{summary.soonest ? summary.soonest.project + " · " + summary.soonest.label : "Nothing projected"}</small></div>
@@ -60,7 +60,7 @@ function Overview({ data, onOpen }) {
             <tbody>
               {rows.map(({ p, s }) => (
                 <tr key={p.id} tabIndex={0} onClick={() => onOpen(p.id)} onKeyDown={(e) => { if (e.key === "Enter") onOpen(p.id); }}>
-                  <td><strong>{p.name}</strong><small className="sv-sub">{p.url ? p.url.replace(/^https?:\/\//, "") : p.type}</small></td>
+                  <td><strong>{p.name}</strong><small className="sv-sub">{(p.deployments || []).length > 1 ? p.deployments.length + " deployments" : p.url ? p.url.replace(/^https?:\/\//, "") : p.type}</small></td>
                   <td>{p.accountName}</td>
                   <td>{s.services}</td>
                   <td>{s.worst ? <><UsageBar m={s.worst} /><small className="sv-sub">{s.worst.service} · {s.worst.label}</small></> : <span className="sv-dim">No limit data</span>}</td>
@@ -105,6 +105,26 @@ function ProjectDetail({ project, onToggle }) {
           {project.repo && <a className="rd-btn rd-btn--quiet" href={project.repo} target="_blank" rel="noopener noreferrer">GitHub ↗</a>}
         </div>
       </header>
+
+      {(project.deployments || []).length > 1 && (
+        <section className="sv-panel">
+          <header className="sv-panel__head"><h2>Deployments</h2><span className="sv-dim">Render services built from this repository</span></header>
+          <div className="sv-tablewrap">
+            <table className="sv-table sv-table--compact">
+              <thead><tr><th>Service</th><th>Account</th><th>Plan</th><th>URL</th><th /></tr></thead>
+              <tbody>{project.deployments.map((d) => (
+                <tr key={d.id}>
+                  <td><strong>{d.name}</strong></td>
+                  <td>{d.accountName}</td>
+                  <td>{d.plan}</td>
+                  <td>{d.url ? <a href={d.url} target="_blank" rel="noopener noreferrer">{d.url.replace(/^https?:\/\//, "")} ↗</a> : <span className="sv-dim">—</span>}</td>
+                  <td className="sv-right">{d.dashboardUrl && <a href={d.dashboardUrl} target="_blank" rel="noopener noreferrer">Render ↗</a>}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {project.envReadFailed && <div className="rd-alert rd-alert--error" role="alert"><span aria-hidden="true">!</span><div>Couldn’t read this service’s environment variables from Render.</div></div>}
 
