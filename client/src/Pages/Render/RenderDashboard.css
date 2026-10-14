@@ -229,7 +229,7 @@
 .rd-group-actions>span,.rd-group-actions small { color:var(--text-muted); font-size:.73rem; }
 .rd-group-actions>span { margin-right:auto; }
 .rd-group-actions label { display:flex; align-items:center; gap:.5rem; color:var(--heading-2); font-size:.77rem; }
-.rd-group-kpis { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.65rem; }
+.rd-group-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.65rem; }
 .rd-group-kpis article { border:1px solid var(--line); background:var(--bg); border-radius:var(--r-md); padding:.8rem .9rem; min-width:0; }
 .rd-group-kpis small { display:block; color:var(--text-muted); font-size:.68rem; margin-bottom:.4rem; }
 .rd-group-kpis strong { display:block; color:var(--heading); font-size:1.2rem; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
