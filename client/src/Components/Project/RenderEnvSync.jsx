@@ -109,12 +109,15 @@ export default function RenderEnvSync({ project }) {
       if (plan.onlyInRender.length) lines.push(plan.onlyInRender.length + " exist only in Render (left untouched, never deleted)");
       let overwrite = [];
       if (sendable.length) {
-        if (!window.confirm("Push environment variables to " + (project.renderServiceName || "the Render service") + "?\n\n" + lines.join("\n") + "\n\nThis changes the live service's variables.")) return;
+        const targets = (project.renderServiceName || "the Render service") + ((plan.alsoTo || []).length ? " and " + plan.alsoTo.length + " more deployment" + (plan.alsoTo.length === 1 ? "" : "s") + " of this repo (" + plan.alsoTo.join(", ") + ")" : "");
+        if (!window.confirm("Push environment variables to " + targets + "?\n\n" + lines.join("\n") + "\n\nThis changes the live service's variables.")) return;
       }
       if (plan.conflicts.length && window.confirm("Overwrite the " + plan.conflicts.length + " variable" + (plan.conflicts.length === 1 ? "" : "s") + " that changed in Render with Stashr's value?\n\n" + list(plan.conflicts) + "\n\nOK = overwrite, Cancel = keep Render's.")) overwrite = plan.conflicts;
       const names = [...sendable, ...overwrite];
       if (!names.length) return;
-      const result = await pushProjectRenderEnv(project.id, { apply: true, names, overwrite });
+      const many = (plan.alsoTo || []).length;
+      const deploy = window.confirm("Deploy now so the new values go live" + (many ? " on all " + (many + 1) + " services" : "") + "?\n\nOK = deploy now, Cancel = only save the variables.");
+      const result = await pushProjectRenderEnv(project.id, { apply: true, names, overwrite, deploy });
       setPushed(result);
       await refreshProfile();
       if (result.failed.length) toast.error(result.failed.length + " variable" + (result.failed.length === 1 ? "" : "s") + " could not be pushed.");
@@ -190,9 +193,11 @@ export default function RenderEnvSync({ project }) {
           <ul>
             <li>{pushed.pushed.length} variable{pushed.pushed.length === 1 ? "" : "s"} written{pushed.pushed.length ? ": " + list(pushed.pushed) : ""}</li>
             {pushed.failed.length ? <li className="gh-sync__warn">{pushed.failed.length} failed: {pushed.failed.map((f) => f.name + " (" + f.error + ")").join(", ")}</li> : null}
+            {(pushed.otherServices || []).map((o) => <li key={o.serviceId} className={o.error ? "gh-sync__warn" : ""}>{o.name || o.serviceId}: {o.pushed} written{o.deployed ? ", deploying" : ""}{o.error ? " (" + o.error + ")" : ""}</li>)}
+            {pushed.deployed ? <li>Deployment started on {project.renderServiceName || "the main service"}.</li> : null}
             {pushed.skippedConflicts.length ? <li className="gh-sync__warn">{pushed.skippedConflicts.length} skipped because Render has newer values: {list(pushed.skippedConflicts)}</li> : null}
           </ul>
-          {pushed.pushed.length ? <div className="gh-panel__row"><button type="button" className="btn btn--primary btn--sm" disabled={Boolean(busy)} onClick={() => void deployNow()}>{busy === "deploy" ? "Deploying…" : "Deploy now to apply"}</button><span className="field__note">Variable changes may need a deploy to take effect.</span></div> : null}
+          {pushed.pushed.length && !pushed.deployed ? <div className="gh-panel__row"><button type="button" className="btn btn--primary btn--sm" disabled={Boolean(busy)} onClick={() => void deployNow()}>{busy === "deploy" ? "Deploying…" : "Deploy now to apply"}</button><span className="field__note">Variable changes may need a deploy to take effect.</span></div> : null}
         </div>
       ) : null}
 

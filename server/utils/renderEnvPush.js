@@ -37,7 +37,8 @@ async function pushProjectEnv(user, projectId, { apply = false, names = [], over
 
   const remote = listing.items.map((item) => item?.envVar || item).filter((item) => item && typeof item.key === "string");
   const plan = diffEnvPush(fields.envVars, remote);
-  const preview = { create: plan.create, update: plan.update, conflicts: plan.conflicts, unchanged: plan.unchanged.length, onlyInRender: plan.onlyInRender, skippedEmpty: plan.skippedEmpty, applied: false };
+  const others = (Array.isArray(fields.renderServices) ? fields.renderServices : []).filter((s) => s && s.serviceId !== fields.renderServiceId && safeId(s.serviceId));
+  const preview = { alsoTo: others.map((s) => s.name || s.serviceId), create: plan.create, update: plan.update, conflicts: plan.conflicts, unchanged: plan.unchanged.length, onlyInRender: plan.onlyInRender, skippedEmpty: plan.skippedEmpty, applied: false };
   if (!apply) return preview;
 
   const pushes = selectPushes(plan, { names, overwrite });
@@ -67,7 +68,29 @@ async function pushProjectEnv(user, projectId, { apply = false, names = [], over
     try { await renderRequest(account.apiKey, servicePath + "/deploys", { method: "POST", body: { clearCache: "do_not_clear", deployMode: "build_and_deploy" } }); deployed = true; }
     catch { /* the variables are saved; the user can deploy manually */ }
   }
-  return { ...preview, applied: true, pushed: pushed.map((r) => r.name), failed, skippedConflicts: plan.conflicts.filter((n) => !overwrite.includes(n) || !names.includes(n)), deployed };
+
+  // A project merged from several deployments of the same repo: send the same variables to every other service too.
+  const otherServices = await mapWithConcurrency(others, 2, async (target) => {
+    const acc = target.accountId === fields.renderAccountId ? account : (() => {
+      const e = mongoose.isValidObjectId(target.accountId) ? (user.renderAccounts || []).find((item) => String(item._id) === String(target.accountId) && item.enc === "udk") : null;
+      return e ? User.publicEntry(e, dataKey) : null;
+    })();
+    if (!acc?.apiKey) return { serviceId: target.serviceId, name: target.name, pushed: 0, error: "Render account not connected." };
+    const path = "/v1/services/" + encodeURIComponent(target.serviceId);
+    let ok = 0, error = "";
+    for (const r of pushed) {
+      const push = pushes.find((p) => p.name === r.name);
+      try { await renderRequest(acc.apiKey, path + "/env-vars/" + encodeURIComponent(push.name), { method: "PUT", body: { value: push.value } }); ok += 1; }
+      catch (e) { error = e.status === 404 ? "Service no longer exists on Render." : (e.message || "Render refused a variable."); if (e.status === 404) break; }
+    }
+    let svcDeployed = false;
+    if (deploy && ok) {
+      try { await renderRequest(acc.apiKey, path + "/deploys", { method: "POST", body: { clearCache: "do_not_clear", deployMode: "build_and_deploy" } }); svcDeployed = true; }
+      catch { /* suspended services can't deploy; variables are still saved */ }
+    }
+    return { serviceId: target.serviceId, name: target.name, pushed: ok, error, deployed: svcDeployed };
+  });
+  return { ...preview, applied: true, pushed: pushed.map((r) => r.name), failed, skippedConflicts: plan.conflicts.filter((n) => !overwrite.includes(n) || !names.includes(n)), deployed, otherServices };
 }
 
 module.exports = { pushProjectEnv };

@@ -200,7 +200,7 @@ describe("project status and health", () =>
 
 describe("background auto-link pass", () =>
 {
-  test("links only users that have something to link, isolating failures", async () =>
+  test("checks every user (links follow Render), links what it can, isolating failures", async () =>
   {
     const needs = makeUser([project(1, { repoUrl: REPO })]);
     const done = makeUser([project(2, { repoUrl: REPO, renderAccountId: ID(9), renderServiceId: "srv-1" })]);
@@ -208,7 +208,7 @@ describe("background auto-link pass", () =>
     users = [needs, done, broken];
     const summary = await runAllAutoLink();
     expect(summary.projectsLinked).toBe(1);
-    expect(summary.usersChecked).toBe(1);
+    expect(summary.usersChecked).toBe(2);
     expect(summary.errors).toBe(1);
     expect(saves).toHaveLength(1);
   });

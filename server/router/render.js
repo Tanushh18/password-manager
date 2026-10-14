@@ -7,6 +7,8 @@ const { getProjectStatuses, runAllAutoLink } = require("../utils/projectStatus")
 const { runUsage, runAllUsage, readSettings, saveSettings } = require("../utils/usageIO");
 const { pushProjectEnv } = require("../utils/renderEnvPush");
 const { provision } = require("../utils/provision");
+const { groupKey, mergeProjects } = require("../utils/projectMerge");
+const { syncAllProjects } = require("../utils/projectSyncAll");
 const { validateProvisionInput } = require("../utils/provisionInput");
 const { githubSend, probeScopes, loadGithubAccounts } = require("../utils/githubClient");
 const { buildRegistrySync, setAutoSync, runAllRegistrySync } = require("../utils/registrySyncIO");
@@ -733,6 +735,15 @@ router.post("/render/provision", provisionLimiter, async (req, res) => {
       ownerId: input.ownerId || undefined,
       saveProject: async (fields) => {
         const now = new Date();
+        // Deploying a repo that already has a project adds the new service to that project instead of a duplicate.
+        const key = groupKey(fields);
+        const existing = (req.rootUser.projects || []).find((e) => e.enc === "udk" && groupKey(User.publicEntry(e, dataKey)) === key);
+        if (existing && key && !key.startsWith("name:")) {
+          const { fields: merged } = mergeProjects(User.publicEntry(existing, dataKey), [fields]);
+          for (const k of ["renderAccountId", "renderServiceId", "renderServiceName", "hostingServiceName", "liveUrl"]) if (fields[k]) merged[k] = fields[k];
+          await User.updateOne({ _id: req.rootUser._id, "projects._id": existing._id }, { $set: { "projects.$.data": User.sealEntry(dataKey, merged), "projects.$.updatedAt": now } });
+          return String(existing._id);
+        }
         const item = { _id: new mongoose.Types.ObjectId(), enc: "udk", data: User.sealEntry(dataKey, fields), createdAt: now, updatedAt: now };
         await User.updateOne({ _id: req.rootUser._id }, { $push: { projects: item } });
         return String(item._id);
@@ -743,6 +754,18 @@ router.post("/render/provision", provisionLimiter, async (req, res) => {
     return res.status(result.ok ? 201 : 422).json(result);
   } catch (error) {
     return res.status(500).json({ ok: false, error: "Could not create the project. Nothing was deleted; check GitHub and Render for anything already created." });
+  }
+});
+
+const syncAllLimiter = rateLimit({ windowMs: 60 * 1000, max: 6, message: "Please wait a moment before syncing again." });
+router.post("/render/projects/sync-all", syncAllLimiter, async (req, res) => {
+  try {
+    const summary = await syncAllProjects(req.rootUser);
+    await recordAudit(req, "projects_sync_all", "", "", { merged: summary.merged, created: summary.created.length, refreshed: summary.refreshed });
+    res.set("Cache-Control", "no-store");
+    return res.json({ ok: true, ...summary });
+  } catch (error) {
+    return res.status(Number.isInteger(error.status) ? error.status : 500).json({ error: Number.isInteger(error.status) ? error.message : "Could not sync projects with Render." });
   }
 });
 

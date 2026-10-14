@@ -5,7 +5,8 @@ import Reveal from "../../Components/Reveal/Reveal";
 import ProjectCard from "../../Components/Project/ProjectCard";
 import ProjectImportModal from "../../Components/Project/ProjectImportModal";
 import GithubConnectModal from "../../Components/Project/GithubConnectModal";
-import { getGithubAccounts, getProjectStatuses } from "../../api/client";
+import { toast } from "react-toastify";
+import { getGithubAccounts, getProjectStatuses, syncAllProjectsWithRender, mergeProjects } from "../../api/client";
 import { TreeLeaf } from "../../Components/Project/ProjectTree";
 import { Globe, Plus, Search, Grid, Alert, Upload } from "../../Components/Icons/Icons";
 import { useVault } from "../../state/vault";
@@ -40,6 +41,41 @@ export default function Projects() {
     }).catch(() => { /* badges are optional */ });
     return () => { live = false; };
   }, []);
+  const [syncing, setSyncing] = useState(false);
+  // Same GitHub repo = same app. Offer to merge (e.g. one repo deployed several times on Render).
+  const duplicates = useMemo(() => {
+    const key = (p) => { const m = String(p.repoUrl || "").match(/github\.com[/:]([^/]+)\/([^/#?]+?)(?:\.git)?\/?(?:[#?].*)?$/i); return m ? (m[1] + "/" + m[2]).toLowerCase() : ""; };
+    const groups = new Map();
+    for (const p of projects) { const k = key(p); if (!k) continue; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
+    return [...groups.entries()].filter(([, list]) => list.length > 1).map(([repo, list]) => ({ repo, list }));
+  }, [projects]);
+  const reloadStatuses = async () => {
+    const data = await getProjectStatuses({ refresh: true });
+    setStatuses(Object.fromEntries((data.statuses || []).map((st) => [st.projectId, st])));
+  };
+  const mergeGroup = async (group) => {
+    if (!window.confirm("Merge " + group.list.length + " projects for " + group.repo + " into one?\n\n" + group.list.map((p) => "• " + p.name).join("\n") + "\n\nThe one with the most details is kept; the others fill in anything it’s missing. Every linked Render service stays linked.")) return;
+    try {
+      const r = await mergeProjects(group.list.map((p) => String(p.id)));
+      await refreshProfile();
+      toast.success("Merged into one project." + (r.conflicts?.length ? " Kept the main project’s value for: " + r.conflicts.join(", ") : ""));
+      void reloadStatuses();
+    } catch (e) { toast.error(e?.response?.data?.error || "Could not merge."); }
+  };
+  const syncAll = async () => {
+    setSyncing(true);
+    try {
+      const r = await syncAllProjectsWithRender();
+      await refreshProfile();
+      const parts = [];
+      if (r.merged) parts.push(r.merged + " duplicate" + (r.merged === 1 ? "" : "s") + " merged");
+      if (r.created.length) parts.push(r.created.length + " new: " + r.created.join(", "));
+      if (r.refreshed) parts.push(r.refreshed + " link" + (r.refreshed === 1 ? "" : "s") + " updated");
+      toast.success(parts.length ? "Synced with Render — " + parts.join(" · ") : "Already in sync with Render.");
+      void reloadStatuses();
+    } catch (e) { toast.error(e?.response?.data?.error || "Could not sync with Render."); }
+    finally { setSyncing(false); }
+  };
   const navigate = useNavigate();
   const searchRef = useShortcuts(() => navigate("/projects/new"));
 
@@ -96,6 +132,9 @@ export default function Projects() {
             <Link className="btn btn--ghost" to="/projects/deploy" title="Create a GitHub repo and deploy it on Render's free plan in one step">
               Create &amp; deploy
             </Link>
+            <button className="btn btn--ghost" disabled={syncing} onClick={() => void syncAll()} title="Merge duplicates and add a project for every repo running on your connected Render accounts">
+              {syncing ? "Syncing…" : "Sync with Render"}
+            </button>
             <button className="btn btn--ghost" onClick={() => setImporting(true)}>
               <Upload size={15} /> Import
             </button>
@@ -104,6 +143,13 @@ export default function Projects() {
             </button>
           </div>
         </div>
+
+        {duplicates.map((group) => (
+          <div key={group.repo} className="notice vault__notice" role="status">
+            <Alert size={15} /> {group.list.length} projects use the same repo <strong>{group.repo}</strong> ({group.list.map((p) => p.name).join(", ")}).
+            <button type="button" className="btn btn--primary btn--sm" style={{ marginLeft: 8 }} onClick={() => void mergeGroup(group)}>Merge into one</button>
+          </div>
+        ))}
 
         <nav className="folders" aria-label="Filters">
           {searching ? (

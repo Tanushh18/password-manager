@@ -62,4 +62,37 @@ function linkPatch(project, service, accountName) {
   return patch;
 }
 
-module.exports = { matchService, linkPatch, repoKey };
+/**
+ * Keeps a linked project in step with Render. `services` is everything currently on Render; `listed` is the set
+ * of account ids whose service list loaded (services in other accounts are kept as they are, never dropped).
+ *   - renderServices becomes every service deployed from the project's repo, in every account
+ *   - a primary link to a deleted service moves to a running one from the same repo, or is cleared
+ * Returns the fields to change, or null when nothing changed.
+ */
+function refreshLinks(project, services, listed) {
+  const list = Array.isArray(services) ? services : [];
+  if (!(project?.renderAccountId && project?.renderServiceId)) return null; // linking itself stays with matchService
+  const known = (accountId) => listed.has(String(accountId));
+  const exists = (accountId, id) => list.some((s) => s.accountId === accountId && s.id === id);
+  const key = repoKey(project?.repoUrl);
+  const prev = Array.isArray(project?.renderServices) ? project.renderServices : [];
+  const fromRepo = key ? list.filter((s) => repoKey(s.repo) === key) : [];
+  const next = [
+    ...fromRepo.map((s) => ({ accountId: s.accountId, serviceId: s.id, name: s.name })),
+    ...prev.filter((s) => s && !known(s.accountId) && !fromRepo.some((f) => f.id === s.serviceId))
+  ];
+  const patch = {};
+  const linked = project?.renderAccountId && project?.renderServiceId;
+  if (linked && known(project.renderAccountId) && !exists(project.renderAccountId, project.renderServiceId)) {
+    const pick = fromRepo.find((s) => !s.suspended) || fromRepo[0];
+    Object.assign(patch, pick
+      ? { renderAccountId: pick.accountId, renderServiceId: pick.id, renderServiceName: pick.name }
+      : { renderAccountId: "", renderServiceId: "", renderServiceName: "" });
+  }
+  // Only projects with several deployments (now or before) carry the list; single-service projects stay as they were.
+  const shown = next.length > 1 || prev.length ? next : prev;
+  if (JSON.stringify(shown) !== JSON.stringify(prev)) patch.renderServices = shown;
+  return Object.keys(patch).length ? patch : null;
+}
+
+module.exports = { matchService, linkPatch, repoKey, refreshLinks };

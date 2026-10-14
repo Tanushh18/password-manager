@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const User = require("../models/schema");
 const authenticate = require("../middlewares/authenticate");
 const { serverError } = require("./helpers");
+const { pickPrimary, mergeProjects } = require("../utils/projectMerge");
 
 /*
  * Project/infra tracker. Same scheme as the password vault (see
@@ -101,6 +102,41 @@ router.delete("/projects/items/:id", authenticate, async (req, res) =>
     catch (error)
     {
         return serverError(res, "projects/items/:id delete", error);
+    }
+});
+
+/* Merges duplicate projects (e.g. one repo deployed several times) into one. Nothing is lost: the kept
+   project's values win, the others fill in gaps, and every linked Render service stays linked. */
+router.post("/projects/merge", authenticate, async (req, res) =>
+{
+    const ids = Array.isArray(req.body.ids) ? [...new Set(req.body.ids.map(String))] : [];
+    if (ids.length < 2 || ids.length > 20 || !ids.every((id) => mongoose.isValidObjectId(id))) return res.status(400).json({ error: "Choose at least two projects to merge." });
+    const keepId = req.body.keepId ? String(req.body.keepId) : "";
+    if (keepId && !ids.includes(keepId)) return res.status(400).json({ error: "The project to keep must be one of the merged projects." });
+
+    try
+    {
+        const dataKey = await req.rootUser.getDataKey();
+        const entries = ids.map((id) => (req.rootUser.projects || []).find((e) => String(e._id) === id));
+        if (entries.some((e) => !e)) return res.status(404).json({ error: "Could not find one of those projects." });
+        const projects = entries.map((e) => User.publicEntry(e, dataKey));
+        if (projects.some((p) => p.broken || p.enc === "e2e")) return res.status(422).json({ error: "One of those projects could not be decrypted." });
+
+        const primary = keepId ? projects.find((p) => String(p._id) === keepId) : pickPrimary(projects);
+        const others = projects.filter((p) => p !== primary);
+        const { fields, conflicts } = mergeProjects(primary, others);
+        const now = new Date();
+        const result = await User.updateOne(
+            { _id: req.rootUser._id, "projects._id": primary._id },
+            { $set: { "projects.$.enc": "udk", "projects.$.data": User.sealEntry(dataKey, fields), "projects.$.updatedAt": now } }
+        );
+        if (result.matchedCount === 0) return res.status(404).json({ error: "Could not find that project." });
+        await User.updateOne({ _id: req.rootUser._id }, { $pull: { projects: { _id: { $in: others.map((p) => p._id) } } } });
+        return res.status(200).json({ item: { ...fields, _id: String(primary._id), updatedAt: now }, removed: others.map((p) => String(p._id)), conflicts });
+    }
+    catch (error)
+    {
+        return serverError(res, "projects/merge", error);
     }
 });
 

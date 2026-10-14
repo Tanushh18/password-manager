@@ -80,6 +80,10 @@ export function normalizeProject(raw = {}) {
   next.extraFields = Array.isArray(raw.extraFields)
     ? raw.extraFields.map((f) => ({ ...emptyExtraField(), ...f })).filter((f) => f.label)
     : [];
+  // Every Render service deployed from this repo (kept in step with Render by the server).
+  if (Array.isArray(raw.renderServices) && raw.renderServices.length) {
+    next.renderServices = raw.renderServices.filter((s) => s && s.serviceId).map((s) => ({ accountId: String(s.accountId || ""), serviceId: String(s.serviceId), name: String(s.name || "") }));
+  }
   return next;
 }
 

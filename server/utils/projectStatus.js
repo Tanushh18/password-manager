@@ -2,7 +2,7 @@ const User = require("../models/schema");
 const renderOps = require("./renderOps");
 const { fetchAllPages } = require("./renderPaging");
 const { mapWithConcurrency } = require("./renderGuards");
-const { matchService, linkPatch } = require("./projectLink");
+const { matchService, linkPatch, refreshLinks } = require("./projectLink");
 const { projectHealth, openIncidentCount } = require("./projectHealth");
 const { parseGithubRepo, ciSummary, shapeCompare } = require("./github");
 const { githubGet, loadGithubAccounts, resolveRepo } = require("./githubClient");
@@ -40,14 +40,16 @@ async function loadRenderServices(user, dataKey, { refresh = false } = {}) {
     if (fields?.apiKey) accounts.set(String(entry._id), { id: String(entry._id), name: fields.name || "Render account", apiKey: fields.apiKey });
   }
   const services = [];
+  const listed = new Set();
   await mapWithConcurrency([...accounts.values()], 3, async (account) => {
     try {
       const listing = await fetchAllPages((path) => renderOps.renderRequest(account.apiKey, path), "/v1/services");
       for (const item of listing.items) { const s = item?.service || item; if (s?.id) services.push(flatService(s, account)); }
+      if (!listing.truncated) listed.add(account.id);
     } catch { /* one account failing must not hide the others */ }
     return null;
   });
-  const data = { services, accounts };
+  const data = { services, accounts, listed };
   servicesCache.set(key, { at: Date.now(), data });
   return data;
 }
@@ -67,13 +69,20 @@ async function saveProjectFields(user, dataKey, entry, fields) {
 const isLinked = (f) => Boolean(f.renderAccountId && f.renderServiceId);
 
 /** Auto-links every unlinked project it can match confidently, then pulls env vars for the new links. */
-async function ensureLinks(user, dataKey, services, accounts) {
+async function ensureLinks(user, dataKey, services, accounts, listed = new Set()) {
   const linkedNow = [];
   const ambiguous = new Map();
+  let refreshed = 0;
   for (const entry of user.projects || []) {
     if (entry.enc !== "udk") continue;
-    const fields = User.publicEntry(entry, dataKey);
-    if (fields.broken || isLinked(fields) || fields.renderAutoLinked === "off") continue;
+    let fields = User.publicEntry(entry, dataKey);
+    if (fields.broken) continue;
+    // Follow Render: drop deleted services, add new deployments of the same repo (any account).
+    const fresh = listed.size ? refreshLinks(fields, services, listed) : null;
+    if (fresh) {
+      try { await saveProjectFields(user, dataKey, entry, { ...fields, ...fresh }); fields = { ...fields, ...fresh }; refreshed += 1; } catch { /* retried next pass */ }
+    }
+    if (isLinked(fields) || fields.renderAutoLinked === "off") continue;
     const match = matchService(fields, services);
     if (match.ambiguous) { ambiguous.set(String(entry._id), match.ambiguous); continue; }
     if (!match.service) continue;
@@ -86,7 +95,7 @@ async function ensureLinks(user, dataKey, services, accounts) {
   for (const link of linkedNow) {
     try { await syncProjectEnv(user, link.projectId, { apply: true, resolveConflicts: false }); } catch { /* retried by the background pass */ }
   }
-  return { linkedNow, ambiguous };
+  return { linkedNow, ambiguous, refreshed };
 }
 
 async function latestDeploys(account, serviceId) {
@@ -148,9 +157,9 @@ async function getProjectStatuses(user, { only = "", refresh = false } = {}) {
   const hit = statusCache.get(cacheKey);
   if (hit && !refresh && Date.now() - hit.at < STATUS_TTL_MS) return hit.data;
 
-  const { services, accounts } = hasNoRenderAccounts(user) ? { services: [], accounts: new Map() } : await loadRenderServices(user, dataKey, { refresh });
-  const { linkedNow, ambiguous } = accounts.size ? await ensureLinks(user, dataKey, services, accounts) : { linkedNow: [], ambiguous: new Map() };
-  if (linkedNow.length) for (const key of [...statusCache.keys()]) if (key.startsWith(String(user._id) + ":")) statusCache.delete(key);
+  const { services, accounts, listed } = hasNoRenderAccounts(user) ? { services: [], accounts: new Map(), listed: new Set() } : await loadRenderServices(user, dataKey, { refresh });
+  const { linkedNow, ambiguous, refreshed } = accounts.size ? await ensureLinks(user, dataKey, services, accounts, listed) : { linkedNow: [], ambiguous: new Map(), refreshed: 0 };
+  if (linkedNow.length || refreshed) for (const key of [...statusCache.keys()]) if (key.startsWith(String(user._id) + ":")) statusCache.delete(key);
 
   const ctx = {
     services, accounts, github: loadGithubAccounts(user, dataKey),
@@ -162,7 +171,7 @@ async function getProjectStatuses(user, { only = "", refresh = false } = {}) {
     if (fields.broken) return null;
     return projectStatus(ctx, entry, fields, { ambiguous: ambiguous.get(String(entry._id)) });
   })).filter(Boolean);
-  const data = { statuses, linkedNow, checkedAt: new Date().toISOString() };
+  const data = { statuses, linkedNow, refreshed, checkedAt: new Date().toISOString() };
   statusCache.set(cacheKey, { at: Date.now(), data });
   return data;
 }
@@ -176,17 +185,12 @@ async function runAllAutoLink() {
   for (const user of users) {
     try {
       const dataKey = await user.getDataKey();
-      const unlinked = (user.projects || []).some((e) => {
-        if (e.enc !== "udk") return false;
-        const f = User.publicEntry(e, dataKey);
-        return !f.broken && !isLinked(f) && f.renderAutoLinked !== "off";
-      });
-      if (!unlinked) continue;
       summary.usersChecked += 1;
-      const { services, accounts } = await loadRenderServices(user, dataKey, { refresh: true });
-      const { linkedNow } = await ensureLinks(user, dataKey, services, accounts);
+      const { services, accounts, listed } = await loadRenderServices(user, dataKey, { refresh: true });
+      const { linkedNow, refreshed } = await ensureLinks(user, dataKey, services, accounts, listed);
       summary.projectsLinked += linkedNow.length;
-      if (linkedNow.length) statusCache.clear();
+      summary.linksRefreshed = (summary.linksRefreshed || 0) + refreshed;
+      if (linkedNow.length || refreshed) statusCache.clear();
     } catch { summary.errors += 1; }
   }
   return summary;
