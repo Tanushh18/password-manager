@@ -6,7 +6,7 @@ import {
   triggerRenderDeploy, updateRenderEnvVar, deleteRenderEnvVar,
   checkRenderHealth, suspendRenderService, resumeRenderService, rollbackRenderDeploy,
   cancelRenderDeploy, createRenderSnapshot, getRenderSnapshots, restoreRenderSnapshot,
-  getRenderAudit, getRenderMetrics, getRenderEnvGroups
+  getRenderAudit, getRenderMetrics, getRenderEnvGroups, getRenderDbExports, createRenderDbExport
 } from "../../api/client";
 import "./RenderDashboard.css";
 
@@ -41,7 +41,7 @@ const timeAgo = (value) => {
   if (mins < 1440) return Math.floor(mins / 60) + "h ago";
   return Math.floor(mins / 1440) + "d ago";
 };
-const dashboardUrl = (s) => s.dashboardUrl || "https://dashboard.render.com/web/" + s.id;
+const dashboardUrl = (s) => s.dashboardUrl || "https://dashboard.render.com";
 const normalizeMetricPoints = (payload) => {
   const series = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
   return series.flatMap((item) => Array.isArray(item?.values) ? item.values : [])
@@ -92,6 +92,8 @@ export default function RenderDashboard() {
   const [metricType, setMetricType] = useState("cpu");
   const [metricsPayload, setMetricsPayload] = useState(null);
   const [metricsBusy, setMetricsBusy] = useState(false);
+  const [dbExports, setDbExports] = useState([]);
+  const [dbBusy, setDbBusy] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [favorites, setFavorites] = useState(() => {
@@ -249,6 +251,7 @@ export default function RenderDashboard() {
     setTab(next); setError("");
     if (next === "logs") void loadLogs(selected, logType);
     if (next === "env") { void loadEnv(selected); void loadEnvGroups(selectedAccount); }
+    if (next === "database") void loadDatabaseExports(selected);
     if (next === "deploys") void loadDeployments(selected);
   };
 
@@ -367,6 +370,29 @@ export default function RenderDashboard() {
   const toggleFavorite = (service) => {
     const id = service.accountId + ":" + service.id;
     setFavorites((old) => old.includes(id) ? old.filter((x) => x !== id) : [...old, id]);
+  };
+
+  const loadDatabaseExports = async (service = selected) => {
+    if (!service || serviceKind(service) !== "PostgreSQL") return;
+    setDbBusy(true);
+    try {
+      const result = await getRenderDbExports(service.accountId, service.id);
+      setDbExports(Array.isArray(result.exports) ? result.exports : []);
+    } catch (e) { setError(e?.response?.data?.error || "Could not load database exports."); }
+    finally { setDbBusy(false); }
+  };
+
+  const createDatabaseExport = async () => {
+    if (!selected || serviceKind(selected) !== "PostgreSQL") return;
+    if (!window.confirm("Start a PostgreSQL export for " + selected.name + "? The export may contain sensitive production data. Protect any downloaded file.")) return;
+    setDbBusy(true);
+    try {
+      await createRenderDbExport(selected.accountId, selected.id);
+      await loadDatabaseExports(selected);
+      await loadAudit();
+      toast.success("Database export requested. Refresh the list shortly for its download link.");
+    } catch (e) { setError(e?.response?.data?.error || "Could not start database export."); }
+    finally { setDbBusy(false); }
   };
 
   const loadEnvGroups = async (account = selectedAccount) => {
@@ -511,7 +537,7 @@ export default function RenderDashboard() {
       {selected && selectedAccount && <div className="rd-backdrop rd-detail-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setSelected(null); }}><section className="rd-detail" role="dialog" aria-modal="true" aria-labelledby="rd-detail-title">
         <header className="rd-detail-head"><div><div className="rd-eyebrow"><span /> SERVICE CONTROL</div><h2 id="rd-detail-title">{selected.name}</h2><p>{selected.accountName} · {serviceKind(selected)} · {selected.id}</p></div><button className="rd-modal-close" onClick={() => setSelected(null)} aria-label="Close">×</button></header>
         <div className="rd-detail-actions"><a className="rd-btn rd-btn--quiet" href={dashboardUrl(selected)} target="_blank" rel="noreferrer">Open Render ↗</a><button className="rd-btn rd-btn--quiet" disabled={actionBusy} onClick={() => void toggleServiceState()}>{selected.suspended === "suspended" ? "▶ Resume" : "Ⅱ Suspend"}</button><button className="rd-btn rd-btn--quiet" disabled={actionBusy || serviceKind(selected) === "Cron job"} onClick={() => void restart()}>↻ Restart</button><button className="rd-btn rd-btn--primary" disabled={actionBusy} onClick={() => void deploy(false)}>Deploy latest</button><button className="rd-btn rd-btn--quiet" disabled={actionBusy} onClick={() => void deploy(true)}>Deploy + clear cache</button></div>
-        <nav className="rd-tabs"><button className={tab === "overview" ? "is-active" : ""} onClick={() => changeTab("overview")}>Overview</button><button className={tab === "logs" ? "is-active" : ""} onClick={() => changeTab("logs")}>Logs</button><button className={tab === "env" ? "is-active" : ""} onClick={() => changeTab("env")}>Environment</button><button className={tab === "deploys" ? "is-active" : ""} onClick={() => changeTab("deploys")}>Deployments</button></nav>
+        <nav className="rd-tabs"><button className={tab === "overview" ? "is-active" : ""} onClick={() => changeTab("overview")}>Overview</button><button className={tab === "logs" ? "is-active" : ""} onClick={() => changeTab("logs")}>Logs</button><button className={tab === "env" ? "is-active" : ""} onClick={() => changeTab("env")}>Environment</button><button className={tab === "deploys" ? "is-active" : ""} onClick={() => changeTab("deploys")}>Deployments</button>{serviceKind(selected) === "PostgreSQL" && <button className={tab === "database" ? "is-active" : ""} onClick={() => changeTab("database")}>Database</button>}</nav>
         {error && <div className="rd-alert rd-alert--error"><span>!</span><div>{error}</div><button onClick={() => setError("")}>×</button></div>}
         {tab === "overview" && <><section className="rd-metrics-card"><div className="rd-section-head"><div><h3>Resource & request metrics</h3><p>Recent one-hour data from Render; availability depends on service type and plan.</p></div><div className="rd-inline-tools"><select value={metricType} onChange={(e) => { setMetricType(e.target.value); void loadMetrics(selected, e.target.value); }} aria-label="Select metric"><option value="cpu">CPU usage</option><option value="memory">Memory usage</option><option value="http-latency">HTTP latency</option><option value="http-requests">HTTP requests</option><option value="bandwidth">Bandwidth</option><option value="instance-count">Instance count</option></select><button className="rd-icon-btn" disabled={metricsBusy} onClick={() => void loadMetrics(selected)}>↻</button></div></div>{!metricsPayload && !metricsBusy && <p className="rd-metric-empty">Select a metric to load the latest hour of data.</p>}{metricsBusy && <div className="rd-loading">Loading metrics…</div>}{metricsPayload && (() => { const points = normalizeMetricPoints(metricsPayload); const max = Math.max(1, ...points.map((p) => Number(p.value))); return points.length ? <><div className="rd-metric-summary"><strong>{Number(points[points.length - 1].value).toLocaleString(undefined, { maximumFractionDigits: 2 })} <small>{points[points.length - 1].unit || ""}</small></strong><span>{points.length} data points · peak {max.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div><div className="rd-metric-bars" role="img" aria-label={metricType + " values over the last hour"}>{points.map((point, index) => <span key={point.timestamp + "-" + index} title={new Date(point.timestamp).toLocaleTimeString() + ": " + point.value + " " + (point.unit || "")} style={{ height: Math.max(4, Number(point.value) / max * 76) + "px" }} />)}</div><div className="rd-metric-axis"><span>{new Date(points[0].timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span><span>{new Date(points[points.length - 1].timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div></> : <p className="rd-metric-empty">Render returned no metric points for this period.</p>; })()}</section><div className="rd-health-card"><div><strong>Live endpoint health</strong><p>{healthResult?.message || "Run a check against the service URL supplied by Render."}</p><small>{healthResult?.checkedAt ? "Checked " + new Date(healthResult.checkedAt).toLocaleTimeString() + (healthResult.latencyMs != null ? " · " + healthResult.latencyMs + " ms" : "") : "Not checked yet"}</small></div><span className={"rd-health-state " + (healthResult?.state || "unknown")}>{healthBusy ? "Checking…" : (healthResult?.state || "Unknown")}</span><button className="rd-btn rd-btn--quiet" disabled={healthBusy} onClick={() => void runHealthCheck(selected)}>Run check</button><button className="rd-btn rd-btn--quiet" onClick={() => void enableAlerts()}>{alertsEnabled ? "Alerts enabled" : "Enable alerts"}</button></div><div className="rd-detail-grid">{[["Service ID", selected.id], ["Region", selected.serviceDetails?.region || "Not provided"], ["Type", selected.type || "Unknown"], ["Last updated", timeAgo(selected.updatedAt)], ["Plan", selected.serviceDetails?.plan || selected.serviceDetails?.buildPlan || "—"], ["State", selected.suspended === "suspended" ? "Suspended" : "Not marked suspended"], ["Repository", selected.repo || "—"], ["Branch", selected.branch || "—"]].map(([label, value]) => <div key={label}><small>{label}</small><strong>{value}</strong></div>)}</div><p className="rd-detail-tip">“Not suspended” is not a live health guarantee. Health checks probe the Render-provided HTTPS URL. Browser alerts run only while this dashboard is open.</p><div className="rd-related"><strong>Related services</strong><div>{services.filter((s) => s.accountId === selected.accountId && s.id !== selected.id && ((s.repo && s.repo === selected.repo) || (s.branch && s.branch === selected.branch))).slice(0, 6).map((s) => <button key={s.id} onClick={() => openService(s)}>{s.name} <span>{serviceKind(s)}</span></button>)}{!services.some((s) => s.accountId === selected.accountId && s.id !== selected.id && ((s.repo && s.repo === selected.repo) || (s.branch && s.branch === selected.branch))) && <small>No related services detected from repository/branch metadata.</small>}</div></div></>}
         {tab === "logs" && <section className="rd-detail-section"><div className="rd-section-head"><div><h3>Recent logs</h3><p>Last hour · automatic refresh every 15 seconds</p></div><div className="rd-inline-tools"><select value={logType} onChange={(e) => { setLogType(e.target.value); void loadLogs(selected, e.target.value); }}><option value="app">Application</option><option value="request">Request</option><option value="build">Build</option></select><button className="rd-icon-btn" onClick={() => void loadLogs(selected, logType)}>↻</button></div></div><button className="rd-btn rd-btn--quiet rd-diagnose-btn" onClick={diagnoseLogs}>✦ Diagnose logs</button>{diagnosis && <pre className="rd-diagnosis">{diagnosis}</pre>}<input className="rd-filter-input" placeholder="Filter log messages…" value={logSearch} onChange={(e) => setLogSearch(e.target.value)} />{detailBusy ? <div className="rd-loading">Loading logs…</div> : <div className="rd-logs">{logs.filter((l) => String(l.message || "").toLowerCase().includes(logSearch.toLowerCase())).map((l, i) => <div className="rd-log" key={l.id || i}><time>{l.timestamp ? new Date(l.timestamp).toLocaleTimeString() : "—"}</time><code>{l.message || "(empty log entry)"}</code></div>)}{!logs.length && <div className="rd-empty">No logs returned for this period.</div>}</div>}</section>}
