@@ -64,7 +64,10 @@ const schema = new mongoose.Schema({
     projects: [entrySchema],
 
     // Render dashboard connections; API keys are encrypted using the account data key.
-    renderAccounts: [entrySchema]
+    renderAccounts: [entrySchema],
+
+    // Encrypted audit trail for Render operations; never stores environment-variable values.
+    renderAudit: [entrySchema]
 }, { timestamps: true });
 
 
