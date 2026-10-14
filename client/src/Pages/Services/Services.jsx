@@ -71,20 +71,6 @@ function Overview({ data, onOpen }) {
         </div>
       </section>
 
-      {data.workspaces.length > 0 && (
-        <section className="sv-panel">
-          <header className="sv-panel__head"><h2>Render free instance hours</h2><span className="sv-dim">Shared by every free service in a workspace · upper-bound estimate</span></header>
-          <div className="sv-tablewrap">
-            <table className="sv-table">
-              <thead><tr><th>Workspace</th><th>Free services</th><th>Usage</th><th>Used / limit</th><th>Outlook</th></tr></thead>
-              <tbody>{data.workspaces.map((w) => (
-                <tr key={w.accountId}><td><strong>{w.accountName}</strong></td><td>{w.liveServices}</td><td><UsageBar m={w.metric} /></td>
-                  <td>{formatAmount(w.metric.used, "hours")} / {formatAmount(w.metric.limit, "hours")}</td><td>{shortForecast(w.metric)}</td></tr>
-              ))}</tbody>
-            </table>
-          </div>
-        </section>
-      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 const test = require("node:test");
 const expect = require("./expect");
-const { buildLiveDashboard, appendSnapshot, instanceHours, limitPeriod, providerCache } = require("../utils/usageDashboard");
+const { buildLiveDashboard, appendSnapshot, limitPeriod, providerCache } = require("../utils/usageDashboard");
 
 const NOW = Date.parse("2026-10-14T12:00:00Z");
 const accounts = new Map([["a1", { id: "a1", name: "Main", apiKey: "k" }]]);
@@ -48,13 +48,6 @@ test("services can be switched off and configured limits carry their period", as
   const list = data.projects[0].services;
   expect(list.find((s) => s.key === "mongodb").state).toBe("disabled");
   expect(list.find((s) => s.key === "groq").configuredLimits[0].period).toBe("day");
-});
-
-test("instance hours estimate counts free running services only", () => {
-  const r = instanceHours([svc({}), svc({ id: "x", plan: "starter" })], NOW);
-  expect(r.counted).toBe(1);
-  expect(r.metric.limit).toBe(750);
-  expect(r.metric.used).toBe(13 * 24 + 12);
 });
 
 test("snapshots are rate limited and bounded", () => {

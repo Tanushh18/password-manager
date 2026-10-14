@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 const { detectServices, publicService } = require("./usageCatalog");
-const { projectMetric, seriesFor, monthPeriod } = require("./usageProjection");
+const { projectMetric, seriesFor } = require("./usageProjection");
 
 /*
  * Live-services dashboard: for every Render service that is running right now, read its env var NAMES/values
@@ -10,7 +10,6 @@ const { projectMetric, seriesFor, monthPeriod } = require("./usageProjection");
 const PROVIDER_TTL_MS = 10 * 60 * 1000;
 const HISTORY_MAX = 600;                   // snapshots kept per user
 const SNAPSHOT_MIN_GAP_MS = 55 * 60 * 1000; // at most one snapshot an hour
-const FREE_HOURS = 750;
 const providerCache = new Map();
 
 const fingerprint = (key, creds) => key + ":" + crypto.createHash("sha256").update(JSON.stringify(creds)).digest("hex").slice(0, 24);
@@ -54,23 +53,6 @@ function runProvider(providers, svc, settings, nowMs) {
   const promise = providers[svc.key].run(svc.credentials, { settings }).catch(() => ({ ok: false, code: "unavailable", error: "Reading usage failed." }));
   providerCache.set(fp, { at: nowMs, promise });
   return promise;
-}
-
-/** Estimated free instance hours for a workspace: an upper bound, since idle free services spin down. */
-function instanceHours(services, nowMs) {
-  const period = monthPeriod(new Date(nowMs));
-  const start = Date.parse(period.startsAt);
-  let hours = 0, counted = 0;
-  for (const s of services) {
-    if (s.type !== "web_service" && s.type !== "private_service" && s.type !== "background_worker") continue;
-    if (!/free/i.test(s.plan)) continue;
-    const from = Math.max(start, Date.parse(s.createdAt) || start);
-    hours += Math.max(0, (nowMs - from) / 3600000);
-    counted += 1;
-  }
-  if (!counted) return null;
-  const metric = { key: "instance-hours", label: "Free instance hours (upper bound)", used: Math.round(hours), limit: FREE_HOURS, unit: "hours", period, note: "Assumes services ran all month; idle free services spin down, so real usage is lower." };
-  return { counted, metric };
 }
 
 async function buildLiveDashboard({ services, accounts, request, providers, settings = {}, history = [], now = Date.now(), refresh = false }) {
@@ -118,13 +100,7 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
   });
   out.sort((a, b) => a.name.localeCompare(b.name));
 
-  const workspaces = [];
-  for (const [id, account] of accounts) {
-    const hours = instanceHours(live.filter((s) => s.accountId === id), now);
-    if (!hours) continue;
-    workspaces.push({ accountId: id, accountName: account.name, liveServices: hours.counted, metric: { ...hours.metric, ...projectMetric(hours.metric, [], now) } });
-  }
-  return { generatedAt: new Date(now).toISOString(), liveCount: live.length, totalCount: services.length, projects: out, workspaces, snapshotValues: values };
+  return { generatedAt: new Date(now).toISOString(), liveCount: live.length, totalCount: services.length, projects: out, snapshotValues: values };
 }
 
 /** Adds the latest values to the bounded history, at most one snapshot per hour. */
@@ -137,4 +113,4 @@ function appendSnapshot(history, values, now = Date.now()) {
   return list.slice(-HISTORY_MAX);
 }
 
-module.exports = { buildLiveDashboard, appendSnapshot, instanceHours, limitPeriod, providerCache };
+module.exports = { buildLiveDashboard, appendSnapshot, limitPeriod, providerCache };
