@@ -476,6 +476,6 @@ function verifySecret(candidate, expected) {
 
 module.exports = {
   defaultConfig, normalizeConfig, readConfig, saveConfig, publicConfig,
-  runUserMonitoring, runAllEnabledMonitoring, sendTelegram, encryptedList, verifySecret,
+  runUserMonitoring, runAllEnabledMonitoring, sendTelegram, encryptedList, verifySecret, renderRequest,
   HISTORY_LIMIT, INCIDENT_LIMIT
 };

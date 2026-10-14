@@ -81,7 +81,7 @@ export function projectTree(p = {}) {
     branch(
       "env",
       "Environment variables",
-      (p.envVars || []).map((v) => leaf(v.name || "(unnamed)", v.value, { secret: true, mono: true, hint: v.purpose || "" }))
+      (p.envVars || []).map((v) => leaf(v.name || "(unnamed)", v.value, { secret: true, mono: true, hint: [v.purpose, v.source === "render" ? "from Render" : v.source === "render-removed" ? "removed from Render" : ""].filter(Boolean).join(" · ") }))
     ),
     branch("custom", "Custom fields", (p.extraFields || []).map((f) => leaf(f.label, f.value))),
     branch("notes", "Notes", [leaf("Notes", p.notes)]),

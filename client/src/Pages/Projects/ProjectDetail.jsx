@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import ProjectTree from "../../Components/Project/ProjectTree";
 import GithubPanel from "../../Components/Project/GithubPanel";
+import RenderEnvSync from "../../Components/Project/RenderEnvSync";
 import GithubConnectModal from "../../Components/Project/GithubConnectModal";
 import { STATUS_BADGE } from "../../Components/Project/ProjectCard";
 import { Arrow, Globe, Pencil } from "../../Components/Icons/Icons";
@@ -45,6 +46,8 @@ export default function ProjectDetail() {
         {project.description ? <p className="proj-detail__desc">{project.description}</p> : null}
 
         {project.repoUrl ? <GithubPanel repoUrl={project.repoUrl} refreshKey={githubKey} onConnect={() => setGithubOpen(true)} /> : null}
+
+        <RenderEnvSync project={project} />
 
         <section className="card proj-detail__tree">
           <ProjectTree key={project.id} project={project} expanded />

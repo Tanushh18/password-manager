@@ -3,7 +3,7 @@
  * Encrypted as one blob on the device before upload, same as a password entry.
  */
 export const emptyDatabase = () => ({ label: "", provider: "", type: "", accountEmail: "", notes: "" });
-export const emptyEnvVar = () => ({ name: "", value: "", purpose: "" });
+export const emptyEnvVar = () => ({ name: "", value: "", purpose: "", source: "" }); // source: "" (manual) | "render" | "render-removed"
 export const emptyExtraField = () => ({ label: "", value: "" });
 
 export const emptyProject = () => ({
@@ -43,6 +43,13 @@ export const emptyProject = () => ({
 
   monitoringProvider: "",
   monitoringAccountEmail: "",
+
+  // Render link: variables are pulled one-way from this service into envVars (never written back).
+  renderAccountId: "",
+  renderServiceId: "",
+  renderServiceName: "",
+  renderSyncedAt: "",
+  renderAutoSync: "", // "on" | ""
 
   lastDeployedAt: "",
   notes: "",

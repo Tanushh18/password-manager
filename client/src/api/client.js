@@ -200,6 +200,8 @@ export const getRenderMetrics = (accountId, serviceId, metric, startTime) => ins
 export const getRenderDbExports = (accountId, postgresId) => instance.get(`/render/accounts/${encodeURIComponent(accountId)}/postgres/${encodeURIComponent(postgresId)}/exports`).then((r) => r.data);
 export const createRenderDbExport = (accountId, postgresId) => instance.post(`/render/accounts/${encodeURIComponent(accountId)}/postgres/${encodeURIComponent(postgresId)}/exports`).then((r) => r.data);
 
+export const syncProjectRenderEnv = (projectId, options = {}) => instance.post("/render/project-sync/" + encodeURIComponent(projectId), options, { timeout: 60000 }).then((r) => r.data);
+
 /* GitHub connections for the Projects page (tokens stay encrypted server-side). */
 export const getGithubAccounts = () => instance.get("/github/accounts").then((r) => r.data);
 export const connectGithubAccount = (data) => instance.post("/github/accounts", data).then((r) => r.data);

@@ -2,6 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const renderOps = require("../utils/renderOps");
 const { fetchAllPages } = require("../utils/renderPaging");
+const { syncProjectEnv, runAllEnvSync } = require("../utils/renderEnvSync");
 const { checkServiceDeletion, parseBulkTargets, mapWithConcurrency } = require("../utils/renderGuards");
 const User = require("../models/schema");
 const authenticate = require("../middlewares/authenticate");
@@ -107,8 +108,10 @@ router.post("/render/ops/tick", apiLimiter, async (req, res) => {
   if (!renderOps.verifySecret(candidate, expected)) return res.status(expected ? 401 : 503).json({ error: expected ? "Invalid scheduler credential." : "Persistent monitoring scheduler is not configured." });
   try {
     const summary = await renderOps.runAllEnabledMonitoring();
+    let envSync = null;
+    try { envSync = await runAllEnvSync(); } catch { envSync = { error: true }; }
     res.set("Cache-Control", "no-store");
-    return res.json({ ok: true, ...summary, completedAt: new Date().toISOString() });
+    return res.json({ ok: true, ...summary, envSync, completedAt: new Date().toISOString() });
   } catch {
     return res.status(500).json({ error: "Monitoring tick failed. Check server logs without logging secrets." });
   }
@@ -622,6 +625,18 @@ router.post("/render/accounts/:accountId/services/:serviceId/deploys/:deployId/c
 
 /* Bulk delete: one request, many services (possibly across accounts). Every service is re-read from
    Render and skipped unless it is currently suspended, so active services can never be removed here. */
+/* One-way sync of a linked Render service's env vars into a project (preview with apply=false). Names only in the response. */
+router.post("/render/project-sync/:projectId", async (req, res) => {
+  try {
+    const result = await syncProjectEnv(req.rootUser, req.params.projectId, { apply: req.body?.apply === true, resolveConflicts: req.body?.resolveConflicts === true });
+    if (result.applied) await recordAudit(req, "project_env_sync", "", "", { projectId: String(req.params.projectId), added: result.added.length, updated: result.updated.length, removed: result.removed.length, conflicts: result.conflicts.length });
+    res.set("Cache-Control", "no-store");
+    return res.json(result);
+  } catch (error) {
+    return res.status(Number.isInteger(error.status) ? error.status : 500).json({ error: Number.isInteger(error.status) ? error.message : "Could not sync environment variables." });
+  }
+});
+
 router.post("/render/services/bulk-delete", async (req, res) => {
   const parsed = parseBulkTargets(req.body);
   if (parsed.error) return res.status(400).json({ error: parsed.error });
