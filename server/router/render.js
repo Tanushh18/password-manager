@@ -5,7 +5,7 @@ const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
 
 const router = express.Router();
-const RENDER_API = "https://api.render.com/v1";
+const RENDER_API = "https://api.render.com";
 const MAX_ACCOUNTS = 10;
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 90, message: "Too many Render dashboard requests. Please slow down." });
 const text = (value, max = 200) => typeof value === "string" ? value.trim().slice(0, max) : "";
