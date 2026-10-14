@@ -36,6 +36,7 @@ function Navbar() {
         { to: "/", label: "Home" },
         { to: "/passwords", label: "Passwords" },
         { to: "/projects", label: "Projects" },
+        { to: "/render", label: "Render" },
         { to: "/settings", label: "Settings" },
         ...(profile?.isAdmin ? [{ to: "/servers", label: "Servers" }] : []),
         { to: "/logout", label: "Sign out" },
