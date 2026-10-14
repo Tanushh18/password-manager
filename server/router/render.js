@@ -304,8 +304,8 @@ router.get("/render/accounts/:accountId/services/:serviceId/health", async (req,
     if (!rawUrl) return res.status(200).json({ state: service?.suspended === "suspended" ? "suspended" : "unknown", checkedAt: new Date().toISOString(), message: "Render did not provide a public URL for this service." });
     let target;
     try { target = new URL(rawUrl); } catch { return res.status(200).json({ state: "unknown", checkedAt: new Date().toISOString(), message: "The service URL is invalid." }); }
-    if (target.protocol !== "https:" || target.username || target.password) {
-      return res.status(200).json({ state: "unsupported", checkedAt: new Date().toISOString(), message: "Only public HTTPS service URLs can be probed." });
+    if (target.protocol !== "https:" || target.username || target.password || !target.hostname.toLowerCase().endsWith(".onrender.com")) {
+      return res.status(200).json({ state: "unsupported", checkedAt: new Date().toISOString(), message: "Only Render-provided HTTPS service URLs on *.onrender.com can be probed." });
     }
     const controller = new AbortController();
     const started = Date.now();
