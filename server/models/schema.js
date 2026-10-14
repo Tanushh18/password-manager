@@ -67,7 +67,14 @@ const schema = new mongoose.Schema({
     renderAccounts: [entrySchema],
 
     // Encrypted audit trail for Render operations; never stores environment-variable values.
-    renderAudit: [entrySchema]
+    renderAudit: [entrySchema],
+
+    // Encrypted operational configuration and bounded monitoring history.
+    // Telegram credentials, group definitions, metric snapshots and incident details
+    // are sealed with the user's data key before persistence.
+    renderOps: [entrySchema],
+    renderMetricHistory: [entrySchema],
+    renderIncidents: [entrySchema]
 }, { timestamps: true });
 
 

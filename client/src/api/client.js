@@ -197,3 +197,13 @@ export const getRenderMetrics = (accountId, serviceId, metric, startTime) => ins
 
 export const getRenderDbExports = (accountId, postgresId) => instance.get(`/render/accounts/${encodeURIComponent(accountId)}/postgres/${encodeURIComponent(postgresId)}/exports`).then((r) => r.data);
 export const createRenderDbExport = (accountId, postgresId) => instance.post(`/render/accounts/${encodeURIComponent(accountId)}/postgres/${encodeURIComponent(postgresId)}/exports`).then((r) => r.data);
+
+/* Persistent Render operations: all credentials remain encrypted server-side. */
+export const getRenderOpsConfig = () => instance.get("/render/ops/config").then((r) => r.data);
+export const saveRenderOpsConfig = (config) => instance.put("/render/ops/config", config).then((r) => r.data);
+export const getRenderOpsHistory = (limit = 100) => instance.get("/render/ops/history", { params: { limit } }).then((r) => r.data);
+export const getRenderOpsIncidents = (limit = 100) => instance.get("/render/ops/incidents", { params: { limit } }).then((r) => r.data);
+export const runRenderOpsNow = () => instance.post("/render/ops/run").then((r) => r.data);
+export const testRenderOpsNotification = () => instance.post("/render/ops/notify/test").then((r) => r.data);
+export const getRenderOpsReport = (format = "json") => instance.get("/render/ops/report", { params: { format }, responseType: format === "csv" ? "blob" : "json" }).then((r) => r.data);
+export const diagnoseRenderLogs = (serviceName, logs, allowExternalProcessing = false) => instance.post("/render/ops/diagnose", { serviceName, logs, allowExternalProcessing }).then((r) => r.data);

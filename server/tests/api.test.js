@@ -12,6 +12,7 @@ const app = require("../app");
 const User = require("../models/schema");
 const totp = require("../utils/totp");
 const { encrypt } = require("../models/EncDecManager");
+const renderOps = require("../utils/renderOps");
 
 let mongo;
 beforeAll(async () =>
@@ -442,6 +443,29 @@ describe("server registry", () =>
 
 describe("Render API proxy", () =>
 {
+    test("normalizes monitoring limits, service groups, dependencies and manual budgets", () =>
+    {
+        const config = renderOps.normalizeConfig({
+            groups: [{
+                id: "deal-radar", name: "Deal Radar",
+                serviceKeys: ["account1:srv-one", "account1:srv-two"],
+                dependencies: [{ from: "account1:srv-one", to: "account1:srv-two" }, { from: "account1:srv-one", to: "not-in-group" }],
+                serviceCostEstimates: { "account1:srv-one": 12.345, "not-in-group": 99 },
+                monthlyBudgetUsd: 25
+            }],
+            monitor: { enabled: true, intervalMinutes: 99, thresholds: { cpu: 1000, memory: -5, latencyMs: 100000 } }
+        });
+        expect(config.groups).toHaveLength(1);
+        expect(config.groups[0].dependencies).toHaveLength(1);
+        expect(config.groups[0].serviceCostEstimates["account1:srv-one"]).toBe(12.35);
+        expect(config.groups[0].serviceCostEstimates["not-in-group"]).toBeUndefined();
+        expect(config.groups[0].monthlyBudgetUsd).toBe(25);
+        expect(config.monitor.intervalMinutes).toBe(5);
+        expect(config.monitor.thresholds.cpu).toBe(100);
+        expect(config.monitor.thresholds.memory).toBe(1);
+        expect(config.monitor.thresholds.latencyMs).toBe(60000);
+    });
+
     test("validates API keys against the canonical Render v1 endpoint without exposing the key", async () =>
     {
         await register();
@@ -472,6 +496,72 @@ describe("Render API proxy", () =>
     test("Render connection routes require authentication", async () =>
     {
         expect((await request(app).get("/render/accounts")).status).toBe(401);
+    });
+
+    test("persistent monitoring settings are encrypted and never return Telegram tokens", async () =>
+    {
+        await register();
+        const token = (await login()).body.token;
+        const saved = await request(app).put("/render/ops/config").set(auth(token)).send({
+            groups: [],
+            monitor: { enabled: true, intervalMinutes: 10, checkHealth: true, thresholds: { cpu: 80, memory: 88, latencyMs: 1200 } },
+            notifications: { telegramBotToken: "123456:telegram-secret", telegramChatId: "12345" }
+        });
+        expect(saved.status).toBe(200);
+        expect(saved.body.config.monitor.enabled).toBe(true);
+        expect(saved.body.config.monitor.intervalMinutes).toBe(10);
+        expect(saved.body.config.notifications.telegramConfigured).toBe(true);
+        expect(JSON.stringify(saved.body)).not.toContain("telegram-secret");
+
+        const user = await User.findOne({ email: "ana@example.com" }).lean();
+        expect(user.renderOps).toHaveLength(1);
+        expect(JSON.stringify(user.renderOps)).not.toContain("telegram-secret");
+
+        const loaded = await request(app).get("/render/ops/config").set(auth(token));
+        expect(loaded.status).toBe(200);
+        expect(loaded.body.config.notifications.telegramConfigured).toBe(true);
+        expect(JSON.stringify(loaded.body)).not.toContain("telegram-secret");
+    });
+
+    test("monitoring history and report endpoints require authentication", async () =>
+    {
+        expect((await request(app).get("/render/ops/history")).status).toBe(401);
+        expect((await request(app).get("/render/ops/incidents")).status).toBe(401);
+        expect((await request(app).get("/render/ops/report?format=csv")).status).toBe(401);
+    });
+
+    test("scheduler endpoint rejects missing or incorrect shared secrets", async () =>
+    {
+        const prior = process.env.RENDER_MONITOR_CRON_SECRET;
+        delete process.env.RENDER_MONITOR_CRON_SECRET;
+        try {
+            expect((await request(app).post("/render/ops/tick")).status).toBe(503);
+            process.env.RENDER_MONITOR_CRON_SECRET = "test-scheduler-secret";
+            expect((await request(app).post("/render/ops/tick").set("Authorization", "Bearer wrong-secret")).status).toBe(401);
+        } finally {
+            if (prior === undefined) delete process.env.RENDER_MONITOR_CRON_SECRET;
+            else process.env.RENDER_MONITOR_CRON_SECRET = prior;
+        }
+    });
+
+    test("authenticated report can be exported as CSV", async () =>
+    {
+        await register();
+        const token = (await login()).body.token;
+        const report = await request(app).get("/render/ops/report?format=csv").set(auth(token));
+        expect(report.status).toBe(200);
+        expect(report.headers["content-type"]).toMatch(/text\/csv/);
+        expect(report.text).toContain("record_type,timestamp,group,service");
+    });
+
+    test("AI diagnosis requires authentication and explicit external-processing consent", async () =>
+    {
+        expect((await request(app).post("/render/ops/diagnose").send({ logs: "error", allowExternalProcessing: true })).status).toBe(401);
+        await register();
+        const token = (await login()).body.token;
+        const noConsent = await request(app).post("/render/ops/diagnose").set(auth(token)).send({ logs: "error", allowExternalProcessing: false });
+        expect(noConsent.status).toBe(400);
+        expect(noConsent.body.error).toMatch(/consent/i);
     });
 });
 
