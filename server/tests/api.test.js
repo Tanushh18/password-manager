@@ -565,3 +565,18 @@ describe("Render API proxy", () =>
     });
 });
 
+
+
+describe("render ops utilisation", () => {
+    test("compares usage to the limit instead of raw bytes/cores", () => {
+        expect(renderOps.utilizationPercent(224686080, 536870912)).toBe(41.9);
+        expect(renderOps.utilizationPercent(0.34, 0.5)).toBe(68);
+        expect(renderOps.utilizationPercent(480000000, 536870912)).toBe(89.4);
+    });
+    test("returns null instead of guessing when the limit is missing", () => {
+        expect(renderOps.utilizationPercent(224686080, null)).toBeNull();
+        expect(renderOps.utilizationPercent(null, 100)).toBeNull();
+        expect(renderOps.utilizationPercent(5, 0)).toBeNull();
+        expect(renderOps.utilizationPercent("x", 100)).toBeNull();
+    });
+});

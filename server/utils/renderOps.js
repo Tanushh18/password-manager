@@ -5,8 +5,21 @@ const User = require("../models/schema");
 const METRICS = {
   cpu: "cpu",
   memory: "memory",
+  "cpu-limit": "cpu-limit",
+  "memory-limit": "memory-limit",
   "http-latency": "http-latency"
 };
+
+/**
+ * Render reports CPU in cores and memory in bytes, so thresholds expressed as a percentage must be
+ * compared against the matching limit metric. Returns null when either value is unavailable, so a
+ * missing limit never produces a false alert.
+ */
+function utilizationPercent(current, limit) {
+  const used = Number(current), cap = Number(limit);
+  if (current == null || limit == null || !Number.isFinite(used) || !Number.isFinite(cap) || cap <= 0) return null;
+  return Math.round(used / cap * 1000) / 10;
+}
 const MAX_GROUPS = 10;
 const MAX_SERVICES_PER_GROUP = 10;
 const MAX_MONITORED_SERVICES_PER_USER = 15;
@@ -346,11 +359,11 @@ async function runUserMonitoring(user, options = {}) {
       if (["build_failed", "update_failed", "pre_deploy_failed"].includes(deployStatus)) {
         checks.push({ type: "deploy_failure", severity: "critical", message: result.name + " latest deployment failed (" + deployStatus + ")." });
       }
-      const cpu = result.metrics.cpu?.current;
-      const memory = result.metrics.memory?.current;
+      const cpu = utilizationPercent(result.metrics.cpu?.current, result.metrics["cpu-limit"]?.current);
+      const memory = utilizationPercent(result.metrics.memory?.current, result.metrics["memory-limit"]?.current);
       const latency = result.metrics["http-latency"]?.current;
-      if (!result.suspended && cpu != null && cpu >= config.monitor.thresholds.cpu) checks.push({ type: "cpu", severity: "warning", message: result.name + " CPU metric reached " + cpu + (result.metrics.cpu.unit || "") });
-      if (!result.suspended && memory != null && memory >= config.monitor.thresholds.memory) checks.push({ type: "memory", severity: "warning", message: result.name + " memory metric reached " + memory + (result.metrics.memory.unit || "") });
+      if (!result.suspended && cpu != null && cpu >= config.monitor.thresholds.cpu) checks.push({ type: "cpu", severity: "warning", message: result.name + " CPU at " + cpu + "% of its limit (threshold " + config.monitor.thresholds.cpu + "%)" });
+      if (!result.suspended && memory != null && memory >= config.monitor.thresholds.memory) checks.push({ type: "memory", severity: "warning", message: result.name + " memory at " + memory + "% of its limit (threshold " + config.monitor.thresholds.memory + "%)" });
       if (!result.suspended && latency != null && latency >= config.monitor.thresholds.latencyMs) checks.push({ type: "latency", severity: "warning", message: result.name + " latency metric reached " + latency + (result.metrics["http-latency"].unit || "") });
 
       const activeTypes = new Set(checks.map((item) => item.type));
@@ -478,5 +491,5 @@ function verifySecret(candidate, expected) {
 module.exports = {
   defaultConfig, normalizeConfig, readConfig, saveConfig, publicConfig,
   runUserMonitoring, runAllEnabledMonitoring, sendTelegram, encryptedList, verifySecret,
-  HISTORY_LIMIT, INCIDENT_LIMIT
+  HISTORY_LIMIT, INCIDENT_LIMIT, utilizationPercent
 };
