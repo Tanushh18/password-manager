@@ -439,3 +439,39 @@ describe("server registry", () =>
         expect(all.body.apps.length).toBe(3);
     });
 });
+
+describe("Render API proxy", () =>
+{
+    test("validates API keys against the canonical Render v1 endpoint without exposing the key", async () =>
+    {
+        await register();
+        const token = (await login()).body.token;
+        const originalFetch = global.fetch;
+        let requestedUrl = "";
+
+        global.fetch = async (url) =>
+        {
+            requestedUrl = String(url);
+            return { ok: true, status: 200, text: async () => "[]" };
+        };
+
+        try
+        {
+            const res = await request(app).post("/render/accounts").set(auth(token))
+                .send({ name: "Test Render", apiKey: "rnd_test_secret" });
+            expect(res.status).toBe(201);
+            expect(requestedUrl).toBe("https://api.render.com/v1/services?limit=100");
+            expect(JSON.stringify(res.body)).not.toContain("rnd_test_secret");
+        }
+        finally
+        {
+            global.fetch = originalFetch;
+        }
+    });
+
+    test("Render connection routes require authentication", async () =>
+    {
+        expect((await request(app).get("/render/accounts")).status).toBe(401);
+    });
+});
+
