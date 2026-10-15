@@ -8,6 +8,8 @@
 - [ ] Services (usage) page: deleted services are gone (list is read live every minute now, no 2-min cache).
 - [ ] Render → Incidents: one row per outage, stale ones flagged ("Close it"), Resolve / Resolve all / Clear resolved work.
 - [ ] Whole app re-syncs on its own: Projects 2 min, Render 30 s, Services 1 min, Incidents 1 min, server tick every 5 min.
+- [ ] Render → Services: 🗑 on every row deletes a live or suspended service (type its name); "Delete selected" for several
+      (type DELETE when a live one is included). The group checkbox selects only the main server.
 - Known gaps: monitoring groups keep deleted services as members (only their incidents are auto-closed);
   GitHub forks are imported too (say if you want them skipped); "Sync now" does not merge duplicates (use the banner).
 

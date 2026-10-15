@@ -383,3 +383,4 @@
 .rd-inc__check { font-weight: 600; }
 .rd-inc__check.is-ok { color: var(--ok); }
 .rd-inc__check.is-bad { color: var(--danger); }
+.rd-icon-btn--danger:hover { color: var(--danger); border-color: rgba(var(--danger-rgb), .45); background: rgba(var(--danger-rgb), .08); }

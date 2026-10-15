@@ -302,16 +302,17 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
   };
 
   const deleteService = async () => {
+    const live = service.suspended !== "suspended";
     const typed = await askConfirm({
       title: "Delete " + service.name + " permanently?",
-      message: "This permanently deletes the suspended service from Render, including its deploy history, logs and direct environment variables. It cannot be undone. Take an environment snapshot first if you may need the variables. Type the service name to confirm.",
+      message: (live ? "⚠ This service is LIVE and will go offline immediately. " : "") + "This permanently deletes the " + (live ? "live" : "suspended") + " service from Render, including its deploy history, logs and direct environment variables. It cannot be undone. Take an environment snapshot first if you may need the variables. Type the service name to confirm.",
       confirmLabel: "Delete service", danger: true,
       input: { placeholder: service.name, label: "Service name", maxLength: 200, match: service.name }
     });
     if (typed !== service.name) return;
     setBusy(true);
     try {
-      await deleteRenderService(ref.accountId, ref.id, typed);
+      await deleteRenderService(ref.accountId, ref.id, typed, live);
       toast.success(service.name + " was deleted.");
       onClose();
       await onRefresh();
@@ -404,7 +405,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
         <button type="button" className="rd-btn rd-btn--quiet" disabled={busy} onClick={() => void deploy(true)}>Deploy + clear cache</button>
         <button type="button" className="rd-btn rd-btn--quiet" disabled={busy || kind === "Cron job" || service.suspended === "suspended"} onClick={() => void restart()}>↻ Restart</button>
         <button type="button" className="rd-btn rd-btn--quiet" disabled={busy} onClick={() => void toggleSuspend()}>{service.suspended === "suspended" ? "▶ Resume" : "Ⅱ Suspend"}</button>
-        {service.suspended === "suspended" && <button type="button" className="rd-btn rd-btn--danger-quiet rd-detail__delete" disabled={busy} onClick={() => void deleteService()}>🗑 Delete service…</button>}
+        <button type="button" className="rd-btn rd-btn--danger-quiet rd-detail__delete" disabled={busy} onClick={() => void deleteService()}>🗑 Delete service…</button>
       </div>
 
       <div className="rd-tabs" role="tablist" aria-label="Service sections" onKeyDown={onTabKey}>

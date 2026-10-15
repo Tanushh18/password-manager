@@ -213,3 +213,14 @@ describe("Render bulk deletion", () =>
         expect(await mapWithConcurrency([], 4, async () => 1)).toHaveLength(0);
     });
 });
+
+test("live services are deleted only with allowActive AND the exact current name; suspended ones keep working", () => {
+  const live = { id: "s", name: "api", suspended: "not_suspended" };
+  expect(checkServiceDeletion(live, "api").status).toBe(409);
+  expect(checkServiceDeletion(live, "api", { requireName: false }).status).toBe(409);
+  expect(checkServiceDeletion(live, "api", { allowActive: true }).ok).toBe(true);
+  expect(checkServiceDeletion(live, "", { requireName: false, allowActive: true }).status).toBe(400);
+  expect(checkServiceDeletion(live, "other", { requireName: false, allowActive: true }).status).toBe(400);
+  expect(checkServiceDeletion({ ...live, suspended: "suspended" }, "", { requireName: false }).ok).toBe(true);
+  expect(parseBulkTargets({ services: [{ accountId: "a", serviceId: "s", confirmName: "api" }] }).targets[0].confirmName).toBe("api");
+});

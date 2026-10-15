@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { connectRenderAccount, deleteRenderAccount, bulkDeleteRenderServices, getRenderAccounts, getRenderServices, getRenderAudit } from "../../api/client";
+import { connectRenderAccount, deleteRenderAccount, bulkDeleteRenderServices, deleteRenderService, getRenderAccounts, getRenderServices, getRenderAudit } from "../../api/client";
 import { Modal, StatePill, Skeleton, Empty, Kpi, Section, FleetBar, useConfirm } from "./RenderUi";
 import ServiceDetail from "./ServiceDetail";
 import { MonitoringView, IncidentsView, AlertPolicyView } from "./OpsViews";
@@ -155,9 +155,9 @@ export default function RenderDashboard() {
   const pageKeys = pageData.rows.flatMap((g) => g.members.map(serviceKey));
   const toggleOpen = (key) => setOpenGroups((old) => (old.includes(key) ? old.filter((k) => k !== key) : [...old, key]));
   const toggleGroupChecked = (group) => {
-    const keys = group.members.map(serviceKey);
-    const all = keys.every((k) => checked.includes(k));
-    setChecked((old) => (all ? old.filter((k) => !keys.includes(k)) : [...new Set([...old, ...keys])]));
+    // The group box selects the main server only; expand the app to pick any other server.
+    const key = serviceKey(group.main);
+    setChecked((old) => (old.includes(key) ? old.filter((k) => k !== key) : [...old, key]));
   };
   const allOnPage = pageKeys.length > 0 && pageKeys.every((k) => checked.includes(k));
   const toggleChecked = (key) => setChecked((old) => (old.includes(key) ? old.filter((k) => k !== key) : [...old, key]));
@@ -209,21 +209,25 @@ export default function RenderDashboard() {
     } catch { /* toast shown */ }
   };
 
-  const checkedSuspended = useMemo(() => services.filter((s) => checked.includes(serviceKey(s)) && s.suspended === "suspended"), [services, checked]);
+  const checkedServices = useMemo(() => services.filter((s) => checked.includes(serviceKey(s))), [services, checked]);
 
-  const deleteSelectedSuspended = async () => {
-    const targets = checkedSuspended;
+  /* Delete any selected services, live or suspended. Live ones need DELETE typed; the server re-checks every name. */
+  const deleteSelected = async () => {
+    const targets = checkedServices;
     if (!targets.length) return;
-    const untouched = checked.length - targets.length;
-    const ok = await ask({
-      title: "Delete " + targets.length + " suspended service" + (targets.length === 1 ? "" : "s") + "?",
-      message: targets.map((s) => s.name).join(", ") + ". This permanently deletes them from Render, including deploy history, logs and environment variables, and cannot be undone." + (untouched ? " " + untouched + " selected service" + (untouched === 1 ? " is" : "s are") + " not suspended and will be left untouched." : ""),
-      confirmLabel: "Yes, delete", cancelLabel: "No", danger: true
+    const live = targets.filter((s) => s.suspended !== "suspended");
+    const typed = await ask({
+      title: "Delete " + targets.length + " service" + (targets.length === 1 ? "" : "s") + " permanently?",
+      message: targets.map((s) => s.name + (s.suspended === "suspended" ? " (suspended)" : " (LIVE)")).join(", ") + ". "
+        + (live.length ? "⚠ " + live.length + " live service" + (live.length === 1 ? " goes" : "s go") + " offline immediately. " : "")
+        + "This permanently deletes them from Render, including deploy history, logs and environment variables, and cannot be undone." + (live.length ? " Type DELETE to confirm." : ""),
+      confirmLabel: "Yes, delete", cancelLabel: "No", danger: true,
+      ...(live.length ? { input: { placeholder: "DELETE", label: "Type DELETE", maxLength: 10, match: "DELETE" } } : {})
     });
-    if (!ok) return;
+    if (!typed) return;
     setBulkDeleting(true);
     try {
-      const result = await bulkDeleteRenderServices(targets.map((s) => ({ accountId: s.accountId, serviceId: s.id })));
+      const result = await bulkDeleteRenderServices(targets.map((s) => ({ accountId: s.accountId, serviceId: s.id, confirmName: s.name })), live.length > 0);
       const done = new Set(result.results.filter((r) => r.ok).map((r) => r.accountId + ":" + r.serviceId));
       const failures = result.results.filter((r) => !r.ok);
       setChecked((old) => old.filter((k) => !done.has(k)));
@@ -232,6 +236,23 @@ export default function RenderDashboard() {
       await Promise.all([loadAccounts({ quiet: true }), loadAudit(), refreshOps()]);
     } catch (e) { toast.error(errorMessage(e, "Could not delete the selected services.")); }
     finally { setBulkDeleting(false); }
+  };
+
+  /* Delete one service from its row: the exact name must be typed. */
+  const deleteOne = async (s) => {
+    const isLive = s.suspended !== "suspended";
+    const typed = await ask({
+      title: "Delete " + s.name + " permanently?",
+      message: (isLive ? "⚠ This service is LIVE and will go offline immediately. " : "") + "This permanently deletes it from Render, including deploy history, logs and environment variables, and cannot be undone. Type the service name to confirm.",
+      confirmLabel: "Delete service", danger: true, input: { placeholder: s.name, label: "Service name", maxLength: 200, match: s.name }
+    });
+    if (typed !== s.name) return;
+    try {
+      await deleteRenderService(s.accountId, s.id, typed, isLive);
+      toast.success(s.name + " was deleted.");
+      setChecked((old) => old.filter((k) => k !== serviceKey(s)));
+      await Promise.all([loadAccounts({ quiet: true }), loadAudit(), refreshOps()]);
+    } catch (e) { toast.error(errorMessage(e, "Could not delete this service.")); }
   };
 
   const copyToClipboard = async (text) => {
@@ -342,7 +363,7 @@ export default function RenderDashboard() {
               <div className="rd-selectbar" role="region" aria-label="Selection actions">
                 <strong>{checked.length} selected</strong>
                 <button type="button" className="rd-btn rd-btn--primary" disabled={checked.length < 2} onClick={() => void createGroup()}>＋ Group selected</button>
-                <button type="button" className="rd-btn rd-btn--danger-quiet" disabled={!checkedSuspended.length || bulkDeleting} title={checkedSuspended.length ? "Permanently delete the selected suspended services" : "Select at least one suspended service"} onClick={() => void deleteSelectedSuspended()}>{bulkDeleting ? "Deleting…" : "🗑 Delete suspended (" + checkedSuspended.length + ")"}</button>
+                <button type="button" className="rd-btn rd-btn--danger-quiet" disabled={bulkDeleting} title="Permanently delete the selected services (live or suspended)" onClick={() => void deleteSelected()}>{bulkDeleting ? "Deleting…" : "🗑 Delete selected (" + checkedServices.length + ")"}</button>
                 <button type="button" className="rd-btn rd-btn--link" onClick={() => setChecked([])}>Clear</button>
                 {checked.length < 2 && <small>Select at least 2 services to create a group.</small>}
               </div>
@@ -374,18 +395,18 @@ export default function RenderDashboard() {
                             <button type="button" className={"rd-icon-btn" + (fav ? " is-on" : "")} aria-pressed={fav} aria-label={(fav ? "Unfavorite " : "Favorite ") + s.name} onClick={() => toggleFavorite(s)}>{fav ? "★" : "☆"}</button>
                             <button type="button" className="rd-icon-btn" aria-label={"Copy ID of " + s.name} title="Copy service ID" onClick={() => void copyToClipboard(s.id)}>⧉</button>
                             <a className="rd-icon-btn" href={safeUrl(s.dashboardUrl)} target="_blank" rel="noreferrer noopener" aria-label={"Open " + s.name + " in Render"}>↗</a>
+                            <button type="button" className="rd-icon-btn rd-icon-btn--danger" aria-label={"Delete " + s.name} title={"Delete " + s.name + (s.suspended === "suspended" ? "" : " (live)")} onClick={() => void deleteOne(s)}>🗑</button>
                           </td>
                         </tr>
                       );
                     };
                     if (!multi) return serviceRow(group.main, false);
-                    const keys = group.members.map(serviceKey);
-                    const allChecked = keys.every((k) => checked.includes(k));
+                    const allChecked = checked.includes(serviceKey(group.main));
                     const worst = group.members.some((m) => serviceState(m, fleet.incidentKeys) === "incident") ? "incident" : group.active ? "active" : "suspended";
                     return (
                       <React.Fragment key={group.key}>
                         <tr className={"rd-row--group" + (open ? " is-open" : "") + (allChecked ? " is-checked" : "")} onClick={() => toggleOpen(group.key)}>
-                          <td className="rd-col-check" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={allChecked} onChange={() => toggleGroupChecked(group)} aria-label={"Select all " + group.members.length + " servers of " + group.name} /></td>
+                          <td className="rd-col-check" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={allChecked} onChange={() => toggleGroupChecked(group)} aria-label={"Select the main server of " + group.name + " (" + group.main.name + ")"} title={"Selects only the main server (" + group.main.name + "). Expand to pick others."} /></td>
                           <td>
                             <button type="button" className="rd-svc rd-svc--group" aria-expanded={open} onClick={(e) => { e.stopPropagation(); toggleOpen(group.key); }}>
                               <span className="rd-svc__icon rd-svc__chev" aria-hidden="true">{open ? "▾" : "▸"}</span>

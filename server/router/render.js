@@ -837,16 +837,17 @@ router.post("/render/services/bulk-delete", async (req, res) => {
     }
     return accounts.get(id);
   };
-  const results = await mapWithConcurrency(parsed.targets, 4, async ({ accountId, serviceId }) => {
+  const allowActive = req.body?.allowActive === true;
+  const results = await mapWithConcurrency(parsed.targets, 4, async ({ accountId, serviceId, confirmName }) => {
     const account = accountFor(accountId);
     if (!account) return { accountId, serviceId, ok: false, error: "Render account not found." };
     try {
       const payload = await renderRequest(account.apiKey, servicePath(serviceId));
       const service = payload?.service || payload;
-      const verdict = checkServiceDeletion(service, null, { requireName: false });
+      const verdict = checkServiceDeletion(service, confirmName, { requireName: false, allowActive });
       if (!verdict.ok) return { accountId, serviceId, name: service?.name, ok: false, skipped: verdict.status === 409, error: verdict.error };
       await renderRequest(account.apiKey, servicePath(serviceId), { method: "DELETE" });
-      await recordAudit(req, "delete_service", account.entry._id, serviceId, { serviceName: String(service.name || "").slice(0, 120), bulk: true });
+      await recordAudit(req, "delete_service", account.entry._id, serviceId, { serviceName: String(service.name || "").slice(0, 120), bulk: true, wasLive: service.suspended !== "suspended" });
       return { accountId, serviceId, name: service.name, ok: true };
     } catch (error) {
       return { accountId, serviceId, ok: false, error: error?.status === 404 ? "Service no longer exists." : (error?.message || "Render API request failed.") };
@@ -865,10 +866,10 @@ router.delete("/render/accounts/:accountId/services/:serviceId", async (req, res
     // Re-read the live state from Render; never trust the client's idea of "suspended".
     const payload = await renderRequest(saved.account.apiKey, servicePath(serviceId));
     const service = payload?.service || payload;
-    const verdict = checkServiceDeletion(service, req.body?.confirmName);
+    const verdict = checkServiceDeletion(service, req.body?.confirmName, { allowActive: req.body?.allowActive === true });
     if (!verdict.ok) return res.status(verdict.status).json({ error: verdict.error });
     await renderRequest(saved.account.apiKey, servicePath(serviceId), { method: "DELETE" });
-    await recordAudit(req, "delete_service", saved.entry._id, serviceId, { serviceName: String(service.name || "").slice(0, 120) });
+    await recordAudit(req, "delete_service", saved.entry._id, serviceId, { serviceName: String(service.name || "").slice(0, 120), wasLive: service.suspended !== "suspended" });
     return res.json({ message: "Service deleted." });
   } catch (error) { return sendUpstreamError(res, error); }
 });

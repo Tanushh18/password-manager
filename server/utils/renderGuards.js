@@ -1,13 +1,15 @@
 /**
  * Server-side preconditions for permanently deleting a Render service. The UI enforces the same
- * rules, but the API must not rely on it: only suspended services can be deleted. A single delete
- * additionally requires the exact service name; bulk delete (one explicit yes/no in the UI) passes
- * `{ requireName: false }` and relies on the suspended check alone.
+ * rules, but the API must not rely on it:
+ *   - a suspended service can be deleted after one explicit confirmation (the name is also required for a single delete)
+ *   - a LIVE service is only deleted when the request says `allowActive` AND carries the service's exact name,
+ *     checked against the name Render reports right now, so a stale or wrong selection can never delete it.
  */
-function checkServiceDeletion(service, confirmName, { requireName = true } = {}) {
+function checkServiceDeletion(service, confirmName, { requireName = true, allowActive = false } = {}) {
   if (!service || typeof service !== "object" || !service.id) return { ok: false, status: 404, error: "Service not found." };
-  if (service.suspended !== "suspended") return { ok: false, status: 409, error: "Only suspended services can be deleted from Stashr. Suspend the service first." };
-  if (requireName && (typeof confirmName !== "string" || confirmName !== service.name)) return { ok: false, status: 400, error: "Type the exact service name to confirm deletion." };
+  const live = service.suspended !== "suspended";
+  if (live && !allowActive) return { ok: false, status: 409, error: "This service is live. Confirm that you want to delete a live service, or suspend it first." };
+  if ((requireName || live) && (typeof confirmName !== "string" || confirmName !== service.name)) return { ok: false, status: 400, error: "Type the exact service name to confirm deletion." };
   return { ok: true };
 }
 
@@ -25,7 +27,7 @@ function parseBulkTargets(body, { max = 20 } = {}) {
     const key = accountId + ":" + serviceId;
     if (seen.has(key)) continue;
     seen.add(key);
-    targets.push({ accountId, serviceId });
+    targets.push({ accountId, serviceId, confirmName: typeof item?.confirmName === "string" ? item.confirmName.slice(0, 200) : "" });
   }
   return { targets };
 }
