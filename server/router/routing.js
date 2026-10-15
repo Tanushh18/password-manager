@@ -336,6 +336,7 @@ router.use(require("./render"));
 router.use(require("./github"));
 router.use(require("./account"));
 router.use(require("./extension"));
+router.use(require("./telegram"));
 router.use(registry);
 
 module.exports = router;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import QRCode from "qrcode";
@@ -46,6 +46,73 @@ function Row({ icon, label, hint, children, block }) {
       </div>
       {children ? <div className="srow__control">{children}</div> : null}
     </div>
+  );
+}
+
+/* Telegram bot: paste the token, press Start in the bot, done. */
+function TelegramBot() {
+  const [state, setState] = useState(null);
+  const [token, setToken] = useState("");
+  const [pin, setPin] = useState("");
+  const [busy, setBusy] = useState("");
+  const load = useCallback(async () => { try { setState(await api.getTelegram()); } catch { setState({ connected: false }); } }, []);
+  useEffect(() => { void load(); }, [load]);
+  // While waiting for "Start" in Telegram, check every few seconds.
+  useEffect(() => {
+    if (!state?.linkUrl || state.connected) return undefined;
+    const t = window.setInterval(() => { void load(); }, 4000);
+    return () => window.clearInterval(t);
+  }, [state?.linkUrl, state?.connected, load]);
+  const run = async (key, fn, ok) => {
+    setBusy(key);
+    try { const r = await fn(); if (r && typeof r === "object" && "connected" in r) setState(r); if (ok) toast.success(ok); }
+    catch (e) { toast.error(api.errorMessage(e, "That did not work.")); }
+    finally { setBusy(""); }
+  };
+  if (!state) return <Row label="Telegram bot" hint="Loading…" />;
+  if (!state.connected && !state.linkUrl) return (
+    <Row icon={<Alert size={15} />} label="Connect your Telegram bot" hint="Create a bot with @BotFather, paste its token here. You get server alerts, a status update every 10 minutes and answers to /status, /servers, /projects, /pass." block>
+      <form className="settings__inline" onSubmit={(e) => { e.preventDefault(); void run("connect", () => api.connectTelegram(token), "Bot connected — now press Start in Telegram."); }}>
+        <input className="input" type="password" autoComplete="off" placeholder="123456789:AA…" value={token} onChange={(e) => setToken(e.target.value)} aria-label="Bot token" />
+        <button className="btn btn--primary btn--sm" disabled={!token.trim() || Boolean(busy)}>{busy === "connect" ? "Connecting…" : "Connect"}</button>
+      </form>
+    </Row>
+  );
+  if (!state.connected) return (
+    <Row icon={<Alert size={15} />} label={"Last step: open @" + state.botUsername + " and press Start"} hint="This links the bot to your Telegram chat. Only that chat will ever be answered." block>
+      <div className="settings__inline">
+        <a className="btn btn--primary btn--sm" href={state.linkUrl} target="_blank" rel="noopener noreferrer">Open Telegram and press Start</a>
+        <span className="srow__hint">Waiting… this page updates by itself.</span>
+      </div>
+    </Row>
+  );
+  return (
+    <>
+      <Row icon={<Alert size={15} />} label={"Connected to @" + state.botUsername} hint={"Chat: " + (state.chatName || "you") + (state.lastDigestAt ? " · last update " + new Date(state.lastDigestAt).toLocaleTimeString() : "")}>
+        <div className="settings__inline">
+          <button type="button" className="btn btn--ghost btn--sm" disabled={Boolean(busy)} onClick={() => void run("test", api.testTelegramBot, "Status sent to Telegram.")}>Send status now</button>
+          <button type="button" className="btn btn--ghost btn--sm" disabled={Boolean(busy)} onClick={() => { if (window.confirm("Disconnect the Telegram bot? Alerts stop.")) void run("off", api.disconnectTelegram, "Disconnected."); }}>Disconnect</button>
+        </div>
+      </Row>
+      <Row label="Status update" hint="A short message: all OK, or what is wrong. OK updates arrive silently; problems ring.">
+        <div className="settings__inline">
+          <select className="input settings__select" value={state.digestMinutes} onChange={(e) => void run("d", () => api.saveTelegram({ digestMinutes: Number(e.target.value) }))}>
+            {[5, 10, 15, 30, 60].map((m) => <option key={m} value={m}>Every {m} min</option>)}
+            <option value={0}>Off</option>
+          </select>
+          <label className="srow__hint"><input type="checkbox" checked={state.digestQuietWhenOk} onChange={(e) => void run("q", () => api.saveTelegram({ digestQuietWhenOk: e.target.checked }))} /> Only when something is wrong</label>
+        </div>
+      </Row>
+      <Row label="Passwords over Telegram" hint="Off by default. When on, /pass name PIN returns a login; the reply and your PIN message are deleted after 60 seconds. Telegram chats are not end-to-end encrypted.">
+        <Toggle checked={state.passwordsAllowed} onChange={(v) => void run("p", () => api.saveTelegram({ passwordsAllowed: v }), v ? "Passwords on — keep your PIN private." : "Passwords off.")} label="" />
+      </Row>
+      <Row label={state.pinSet ? "Change PIN" : "Set a PIN (needed for passwords)"} hint="4 to 8 digits. 5 wrong tries lock passwords for 15 minutes.">
+        <form className="settings__inline" onSubmit={(e) => { e.preventDefault(); void run("pin", () => api.saveTelegram({ pin }), "PIN saved."); setPin(""); }}>
+          <input className="input" type="password" inputMode="numeric" pattern="[0-9]{4,8}" placeholder="••••" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))} aria-label="PIN" style={{ width: "7rem" }} />
+          <button className="btn btn--ghost btn--sm" disabled={pin.length < 4 || Boolean(busy)}>Save PIN</button>
+        </form>
+      </Row>
+    </>
   );
 }
 
@@ -473,6 +540,10 @@ export default function Settings() {
           <Row icon={<ShieldCheck size={15} />} label="Authenticator app" hint="Protects your account even if your password leaks." block>
             <TwoFactor />
           </Row>
+        </Group>
+
+        <Group title="Telegram">
+          <TelegramBot />
         </Group>
 
         <Group title="Security">

@@ -190,7 +190,7 @@ async function clearClosedIncidents(user) {
   return { removed: drop.length };
 }
 
-async function sendTelegram(config, message) {
+async function sendTelegram(config, message, { silent = false } = {}) {
   const token = config?.notifications?.telegramBotToken;
   const chatId = config?.notifications?.telegramChatId;
   if (!token || !chatId) return { sent: false, reason: "not_configured" };
@@ -198,7 +198,7 @@ async function sendTelegram(config, message) {
     const response = await fetch("https://api.telegram.org/bot" + token + "/sendMessage", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text: String(message).slice(0, 3500), disable_web_page_preview: true }),
+      body: JSON.stringify({ chat_id: chatId, text: String(message).slice(0, 3500), disable_web_page_preview: true, disable_notification: silent }),
       signal: AbortSignal.timeout(8000)
     });
     const result = await response.json().catch(() => ({}));
@@ -523,8 +523,13 @@ async function runUserMonitoring(user, options = {}) {
   await saveEncryptedList(user._id, "renderIncidents", sealMany(pendingIncidents), INCIDENT_LIMIT);
 
   const notifications = [];
-  for (const incident of pendingIncidents.filter((item) => item.state === "open")) {
-    const result = await sendTelegram(config, "🚨 Stashr Render alert\nProject: " + incident.groupName + "\nService: " + incident.serviceName + "\nSeverity: " + incident.severity.toUpperCase() + "\n" + incident.message + "\nAt: " + incident.at);
+  // Down -> alert with sound; recovered -> a quiet follow-up. Automatic clean-ups (deleted services) stay silent.
+  for (const incident of pendingIncidents.filter((item) => item.state === "open" || (item.state === "resolved" && item.resolvedBy !== "auto"))) {
+    const minutes = incident.state === "resolved" ? Math.max(1, Math.round((Date.parse(incident.at) - Date.parse(incident.openedAt || incident.at)) / 60000)) : 0;
+    const text = incident.state === "open"
+      ? "🚨 " + incident.serviceName + " — " + (incident.severity === "critical" ? "DOWN" : "warning") + "\n" + incident.message + "\nApp: " + incident.groupName + "\nAt: " + new Date(incident.at).toUTCString()
+      : "✅ " + incident.serviceName + " recovered after " + minutes + " min\nApp: " + incident.groupName;
+    const result = await sendTelegram(config, text, { silent: incident.state === "resolved" });
     notifications.push({ incidentId: incident.id, ...result });
   }
   return {

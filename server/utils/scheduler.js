@@ -5,6 +5,7 @@ const { runAllUsage } = require("./usageIO");
 const { runAllProjectSync } = require("./projectAutoSync");
 const { runAllRegistrySync } = require("./registrySyncIO");
 const { runAllPings } = require("./pings");
+const { runAllDigests } = require("./telegramBot");
 
 /*
  * Background upkeep: monitoring (incidents + alerts), project / link sync, env sync, server registry and usage.
@@ -27,7 +28,8 @@ async function runTick(source = "internal") {
     const envSync = await step(runAllEnvSync);
     const registrySync = await step(runAllRegistrySync);
     const usage = await step(runAllUsage);
-    last = { ok: true, source, startedAt, completedAt: new Date().toISOString(), ...monitoring, pings, autoLink, projectSync, envSync, registrySync, usage };
+    const telegram = await step(runAllDigests);
+    last = { ok: true, source, startedAt, completedAt: new Date().toISOString(), ...monitoring, pings, autoLink, projectSync, envSync, registrySync, usage, telegram };
     return last;
   })();
   try { return await running; } finally { running = null; }
