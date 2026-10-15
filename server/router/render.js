@@ -13,6 +13,7 @@ const { autoSyncProjects } = require("../utils/projectAutoSync");
 const { runTick, lastTick } = require("../utils/scheduler");
 const { runUserPings, pingResults, scanHealthRoutes } = require("../utils/pings");
 const { getProjectDeployments } = require("../utils/projectDeployments");
+const { findUrlReferences, replaceUrlReferences } = require("../utils/urlRefs");
 const { validateProvisionInput } = require("../utils/provisionInput");
 const { githubSend, probeScopes, loadGithubAccounts } = require("../utils/githubClient");
 const { buildRegistrySync, setAutoSync, runAllRegistrySync } = require("../utils/registrySyncIO");
@@ -491,6 +492,64 @@ router.delete("/render/accounts/:accountId/services/:serviceId/env-vars/:key", a
     await recordAudit(req, "env_var_deleted", saved.entry._id, serviceId, { key });
     return res.json(result);
   } catch (error) { return sendUpstreamError(res, error); }
+});
+
+/* Custom domains on a service (Render API). Adding one gives the DNS record to create; verify once DNS is set. */
+const DOMAIN_RE = /^(?=.{3,253}$)(?!-)[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63})+$/i;
+const shapeDomain = (d) => ({ id: String(d.id || ""), name: String(d.name || ""), domainType: d.domainType || "", verificationStatus: d.verificationStatus || "", redirectForName: d.redirectForName || "", createdAt: d.createdAt || null });
+router.get("/render/accounts/:accountId/services/:serviceId/custom-domains", async (req, res) => {
+  const saved = await getAccount(req, res);
+  if (!saved) return;
+  if (!safeId(req.params.serviceId)) return res.status(400).json({ error: "Invalid service ID." });
+  try {
+    const listing = await listAll(saved.account.apiKey, servicePath(req.params.serviceId, "/custom-domains"));
+    res.set("Cache-Control", "no-store");
+    return res.json({ domains: unwrap(listing.items, "customDomain").map(shapeDomain) });
+  } catch (error) { return sendUpstreamError(res, error); }
+});
+router.post("/render/accounts/:accountId/services/:serviceId/custom-domains", async (req, res) => {
+  const saved = await getAccount(req, res);
+  if (!saved) return;
+  const name = String(req.body?.name || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  if (!safeId(req.params.serviceId) || !DOMAIN_RE.test(name)) return res.status(400).json({ error: "Enter a domain like api.example.com." });
+  try {
+    const created = await renderRequest(saved.account.apiKey, servicePath(req.params.serviceId, "/custom-domains"), { method: "POST", body: { name } });
+    await recordAudit(req, "add_custom_domain", saved.entry._id, req.params.serviceId, { domain: name });
+    const list = Array.isArray(created) ? created : [created];
+    return res.status(201).json({ domains: list.map((d) => shapeDomain(d?.customDomain || d)) });
+  } catch (error) { return sendUpstreamError(res, error); }
+});
+router.post("/render/accounts/:accountId/services/:serviceId/custom-domains/:domain/verify", async (req, res) => {
+  const saved = await getAccount(req, res);
+  if (!saved) return;
+  if (!safeId(req.params.serviceId) || !DOMAIN_RE.test(req.params.domain)) return res.status(400).json({ error: "Invalid domain." });
+  try {
+    await renderRequest(saved.account.apiKey, servicePath(req.params.serviceId, "/custom-domains/" + encodeURIComponent(req.params.domain) + "/verify"), { method: "POST" });
+    return res.json({ message: "Verification requested." });
+  } catch (error) { return sendUpstreamError(res, error); }
+});
+router.delete("/render/accounts/:accountId/services/:serviceId/custom-domains/:domain", async (req, res) => {
+  const saved = await getAccount(req, res);
+  if (!saved) return;
+  if (!safeId(req.params.serviceId) || !DOMAIN_RE.test(req.params.domain)) return res.status(400).json({ error: "Invalid domain." });
+  try {
+    await renderRequest(saved.account.apiKey, servicePath(req.params.serviceId, "/custom-domains/" + encodeURIComponent(req.params.domain)), { method: "DELETE" });
+    await recordAudit(req, "remove_custom_domain", saved.entry._id, req.params.serviceId, { domain: req.params.domain });
+    return res.json({ message: "Domain removed." });
+  } catch (error) { return sendUpstreamError(res, error); }
+});
+
+/* Moving a backend: which env vars (any service, any account) still point at an address, and rewrite them. */
+router.post("/render/url-references", async (req, res) => {
+  try { res.set("Cache-Control", "no-store"); return res.json({ references: await findUrlReferences(req.rootUser, String(req.body?.fromUrl || "")) }); }
+  catch (error) { return res.status(Number.isInteger(error.status) ? error.status : 500).json({ error: Number.isInteger(error.status) ? error.message : "Could not scan the services." }); }
+});
+router.post("/render/url-replace", async (req, res) => {
+  try {
+    const result = await replaceUrlReferences(req.rootUser, { fromUrl: String(req.body?.fromUrl || ""), toUrl: String(req.body?.toUrl || ""), targets: Array.isArray(req.body?.targets) ? req.body.targets : [], deploy: req.body?.deploy === true });
+    await recordAudit(req, "url_replace", "", "", { changed: result.changed, services: result.results.length });
+    return res.json(result);
+  } catch (error) { return res.status(Number.isInteger(error.status) ? error.status : 500).json({ error: Number.isInteger(error.status) ? error.message : "Could not update the services." }); }
 });
 
 /* Render's own event log for a service: crashes (server_failed), restarts, deploys, suspend / resume. */

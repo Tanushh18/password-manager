@@ -460,3 +460,19 @@
 .rd-server__actions { padding-top: .5rem; padding-bottom: .6rem; border-top: 1px solid var(--line); background: rgba(127, 127, 127, .04); }
 .rd-extras { display: flex; align-items: center; gap: .4rem 1rem; flex-wrap: wrap; padding: .55rem .8rem; border: 1px dashed var(--line-strong); border-radius: var(--r-md); font-size: .8rem; }
 .rd-extras > span { font-weight: 700; color: var(--text-muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; }
+
+/* ════════ domains ════════ */
+.rd-domains { list-style: none; margin: 0 0 .8rem; padding: 0; display: grid; gap: .45rem; }
+.rd-domains li { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; padding: .6rem .75rem; border: 1px solid var(--line); border-radius: var(--r-md); }
+.rd-domains li.is-pending { border-left: 3px solid var(--rd-warn); }
+.rd-domains__name { flex: 1; min-width: 180px; font-weight: 700; }
+.rd-domains__name small { display: block; font-weight: 500; color: var(--text-muted); }
+.rd-domains__actions { display: flex; gap: .3rem; }
+.rd-dns { flex-basis: 100%; font-size: .76rem; color: var(--text-muted); }
+.rd-dns code { font-size: .74rem; padding: .05rem .3rem; border-radius: 4px; background: rgba(127, 127, 127, .12); }
+.rd-chip-ok, .rd-chip-warn { font-size: .7rem; font-weight: 700; padding: .12rem .5rem; border-radius: 999px; }
+.rd-chip-ok { background: rgba(var(--ok-rgb), .15); color: var(--ok); }
+.rd-chip-warn { background: rgba(var(--rd-warn-rgb), .18); color: var(--rd-warn); }
+.rd-appuse { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .6rem; padding: .7rem .8rem; border: 1px solid var(--line); border-radius: var(--r-md); margin-bottom: .5rem; }
+.rd-appuse small { display: block; color: var(--text-muted); font-size: .74rem; word-break: break-all; }
+.rd-appuse__actions { display: flex; flex-wrap: wrap; gap: .35rem; }

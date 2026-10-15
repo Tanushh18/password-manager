@@ -8,6 +8,7 @@ import {
 } from "../../api/client";
 import { Modal, StatePill, Skeleton, Empty, LineChart, Section } from "./RenderUi";
 import { usePolling, useRequestGate } from "./renderHooks";
+import DomainPanel from "./DomainPanel";
 import {
   serviceKind, serviceState, normalizeList, normalizeMetricPoints, timeAgo, formatDateTime, formatNumber,
   METRIC_OPTIONS, RANGE_OPTIONS, rangeStart, diagnoseLogText, isErrorLog, safeUrl, errorMessage
@@ -21,7 +22,7 @@ const IN_PROGRESS = ["created", "queued", "build_in_progress", "update_in_progre
 export default function ServiceDetail({ service, services, incidentKeys, opsConfig, askConfirm, isFavorite, onToggleFavorite, onClose, onOpenService, onRefresh, onAudit }) {
   const kind = serviceKind(service);
   const state = serviceState(service, incidentKeys);
-  const tabs = kind === "PostgreSQL" ? [...TABS, ["database", "Database"]] : TABS;
+  const tabs = kind === "PostgreSQL" ? [...TABS, ["database", "Database"]] : kind === "Web service" || kind === "Static site" ? [...TABS, ["domains", "Domains & URL"]] : TABS;
   const [tab, setTab] = useState("overview");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -506,6 +507,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
           </div>
         </Section>}
 
+        {tab === "domains" && <DomainPanel service={service} askConfirm={askConfirm} onAudit={onAudit} />}
         {tab === "deploys" && <Section title="Deployment history" subtitle="Most recent deployments for this service" actions={<button type="button" className="rd-icon-btn" aria-label="Refresh deployments" onClick={() => void loadDeploys()}>↻</button>}>
           {deployBusy && !deploys.length ? <Skeleton lines={5} height={36} /> : (
             <ol className="rd-deploys">

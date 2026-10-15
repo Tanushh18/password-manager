@@ -7,6 +7,13 @@
 - [ ] Monitoring: every app is a ready-made group; crashes / restarts / deploys from Render's event log; peaks.
 - [ ] Cron page: ping jobs, /health scan, "Add /health + merge" (opens a PR and merges it), Render cron jobs.
 
+- [ ] Service → "Domains & URL": add / verify / remove a custom domain; "Use … in web + app" updates the Stashr
+      server list (apps read it on start); "Frontends that have this address built in" rewrites env vars + redeploys.
+- [ ] Projects fill blank details on their own: databases (provider from the connection host), "Services used (auto)",
+      custom domain, DNS provider (from the domain's nameservers).
+- Only apps that read the Stashr server list follow a URL change instantly; a mobile app with the URL compiled
+  in needs a new build (or to read /registry/<app>).
+
 ## Site audit (15 Oct) — still open
 Render
 - [ ] Automatic monitoring groups are not shown in the Monitoring tab (no charts for them yet).

@@ -5,6 +5,20 @@ const { loadGithubAccounts } = require("./githubClient");
 const { listRepos } = require("./githubRepos");
 const { planAutoProjects } = require("./projectPlan");
 const { syncProjectEnv } = require("./renderEnvSync");
+const dns = require("dns").promises;
+const { deriveDetails, apexOf, hostOf } = require("./projectDerive");
+
+const nsCache = new Map(); // apex -> { at, ns }
+async function nameserversFor(host) {
+  const apex = apexOf(host);
+  if (!apex || /onrender\.com$/.test(apex)) return null;
+  const hit = nsCache.get(apex);
+  if (hit && Date.now() - hit.at < 6 * 3600 * 1000) return hit.ns;
+  const ns = await Promise.race([dns.resolveNs(apex).catch(() => []), new Promise((r) => setTimeout(() => r([]), 4000))]);
+  if (nsCache.size > 500) nsCache.clear();
+  nsCache.set(apex, { at: Date.now(), ns });
+  return ns;
+}
 
 /*
  * Keeps the Projects list in step with GitHub and Render, with no buttons:
@@ -82,6 +96,18 @@ async function run(userId) {
     summary.refreshed = refreshed + linkedNow.length;
     // New projects start with their Render variables already pulled in.
     for (const id of newlyLinked) { try { await syncProjectEnv(user, id, { apply: true, resolveConflicts: false }); } catch { /* retried by the background env sync */ } }
+  }
+  /* Fill blank details (databases, services used, custom domain, DNS provider) from what each project already has. */
+  summary.derived = 0;
+  for (const entry of (user.projects || []).filter((e) => e.enc === "udk").slice(0, 100)) {
+    try {
+      const fields = User.publicEntry(entry, dataKey);
+      if (fields.broken) continue;
+      const host = hostOf(fields.customDomain ? "https://" + fields.customDomain : fields.liveUrl);
+      const nameservers = !String(fields.dnsProvider || "").trim() && host ? await nameserversFor(host) : null;
+      const patch = deriveDetails(fields, { nameservers });
+      if (patch && await patchProject(user, dataKey, entry._id, patch)) summary.derived += 1;
+    } catch { /* one project never blocks the rest */ }
   }
   return summary;
 }

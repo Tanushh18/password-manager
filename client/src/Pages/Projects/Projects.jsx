@@ -74,7 +74,7 @@ export default function Projects() {
     try {
       const r = await autoSyncProjects(force);
       setSync(r); setSyncFailed(false);
-      const changed = (r.created?.length || 0) + (r.archived || 0) + (r.revived || 0) + (r.refreshed || 0);
+      const changed = (r.created?.length || 0) + (r.archived || 0) + (r.revived || 0) + (r.refreshed || 0) + (r.derived || 0);
       if (changed) { await refreshRef.current?.(); void reloadStatuses(); }
       if (!r.throttled && r.created?.length) toast.success(r.created.length + " project" + (r.created.length === 1 ? "" : "s") + " added from GitHub/Render" + (r.created.length <= 3 ? ": " + r.created.join(", ") : "") + ".");
       if (force && !changed) toast.success("Already up to date.");
