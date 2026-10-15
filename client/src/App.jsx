@@ -16,6 +16,7 @@ import Settings from "./Pages/Settings/Settings";
 import Servers from "./Pages/Servers/Servers";
 // Loaded on demand: the dashboard is large and only needed on /render.
 const Services = lazy(() => import("./Pages/Services/Services"));
+const Cron = lazy(() => import("./Pages/Cron/Cron"));
 const RenderDashboard = lazy(() => import("./Pages/Render/RenderDashboard"));
 import Privacy from "./Pages/Privacy/Privacy";
 import Logout from "./Pages/Logout/Logout";
@@ -89,6 +90,7 @@ export default function App() {
           <Route path="/settings" element={<RequireVault><Settings /></RequireVault>} />
           <Route path="/servers" element={<RequireVault><RequireAdmin><Servers /></RequireAdmin></RequireVault>} />
           <Route path="/services" element={<RequireVault><Suspense fallback={<Splash />}><Services /></Suspense></RequireVault>} />
+          <Route path="/cron" element={<RequireVault><Suspense fallback={<Splash />}><Cron /></Suspense></RequireVault>} />
           <Route path="/render" element={<RequireVault><Suspense fallback={<Splash />}><RenderDashboard /></Suspense></RequireVault>} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/logout" element={<Logout />} />

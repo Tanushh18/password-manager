@@ -2,14 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "react-toastify";
 import { Link } from "react-router-dom";
 import {
-  getRenderMetrics, getRenderLogs, getRenderEnvVars, getRenderDeploys, triggerRenderDeploy,
+  getRenderMetrics, getRenderLogs, getRenderEnvVars, getRenderDeploys, triggerRenderDeploy, getRenderEvents,
   restartRenderService, checkRenderHealth
 } from "../../api/client";
 import { Kpi, Section, Skeleton, Empty, LineChart } from "./RenderUi";
 import { usePolling } from "./renderHooks";
 import {
   serviceKind, serviceKey, normalizeList, sumMetricPoints, peakOf, rangeStart, timeAgo, formatNumber, formatDateTime,
-  formatTime, isErrorLog, errorMessage, remediationFor, incidentTypeLabel, formatDuration, METRIC_OPTIONS, RANGE_OPTIONS
+  formatTime, isErrorLog, errorMessage, remediationFor, incidentTypeLabel, formatDuration, formatMetric, groupServices, METRIC_OPTIONS, RANGE_OPTIONS
 } from "./renderUtils";
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -45,7 +45,11 @@ async function waitForServiceReady(service, { deployId = "", timeoutMs = 300000,
 
 export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, askConfirm, onOpenService, onRefreshServices, onAudit, onGoServices }) {
   const { groups, history, saving, running, persist, sampleNow } = ops;
-  const group = groups.find((g) => g.id === selectedGroupId) || null;
+  // Every app (servers from the same repo) is a ready-made group; your own groups come first.
+  const appGroups = useMemo(() => groupServices(services.filter((s) => s.suspended !== "suspended"))
+    .map((g) => ({ id: "app:" + g.key, name: g.name, serviceKeys: g.members.map(serviceKey), app: true })), [services]);
+  const group = groups.find((g) => g.id === selectedGroupId) || appGroups.find((g) => g.id === selectedGroupId) || null;
+  useEffect(() => { if (!selectedGroupId && appGroups.length) onSelectGroup(groups[0]?.id || appGroups[0].id); }, [selectedGroupId, appGroups, groups]); // eslint-disable-line react-hooks/exhaustive-deps
   const members = useMemo(() => group ? group.serviceKeys.map((key) => services.find((s) => serviceKey(s) === key)).filter(Boolean) : [], [group, services]);
 
   const [metric, setMetric] = useState("memory");
@@ -82,6 +86,24 @@ export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, 
   // Reload whenever the group, metric or range changes (fixes the original, which ignored the range).
   useEffect(() => { setSnapshot(null); if (group) void loadMetrics(); }, [group?.id, metric, range]); // eslint-disable-line react-hooks/exhaustive-deps
   usePolling(() => loadMetrics(true), 5 * 60 * 1000, Boolean(group) && live);
+
+  /* Extra tools are off by default to keep the page simple; switched on per browser. */
+  const EXTRAS = [["findings", "Logs & config compare"], ["deps", "Dependency map"], ["cost", "Cost & budget"], ["db", "Database exports"]];
+  const [extras, setExtras] = useState(() => { try { return JSON.parse(localStorage.getItem("stashr_monitor_extras") || "{}"); } catch { return {}; } });
+  const toggleExtra = (k) => setExtras((old) => { const next = { ...old, [k]: !old[k] }; try { localStorage.setItem("stashr_monitor_extras", JSON.stringify(next)); } catch { /* private mode */ } return next; });
+
+  /* Render's event log for every member: crashes, restarts, deploys (newest first). */
+  const [events, setEvents] = useState([]);
+  useEffect(() => {
+    let live = true;
+    setEvents([]);
+    if (!group || !members.length) return undefined;
+    Promise.all(members.slice(0, 10).map(async (s) => {
+      try { const r = await getRenderEvents(s.accountId, s.id, rangeStart(range)); return (r.events || []).map((e) => ({ ...e, serviceName: s.name, key: serviceKey(s) })); }
+      catch { return []; }
+    })).then((lists) => { if (live) setEvents(lists.flat().filter((e) => e.at && Date.parse(e.at) >= Date.parse(rangeStart(range))).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))); });
+    return () => { live = false; };
+  }, [group?.id, range, members.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const savedPeak = useMemo(() => {
     if (!group) return null;
@@ -230,8 +252,9 @@ export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, 
       <Section title="Server groups" subtitle="Compare related Render services side by side — for example a Fetcher, Validator and User server."
         actions={<>
           <select aria-label="Select a server group" value={selectedGroupId} onChange={(e) => onSelectGroup(e.target.value)}>
-            <option value="">{groups.length ? "Choose a saved group" : "No groups yet"}</option>
-            {groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.serviceKeys.length})</option>)}
+            <option value="">Choose an app or group</option>
+            {groups.length > 0 && <optgroup label="Your groups">{groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.serviceKeys.length})</option>)}</optgroup>}
+            <optgroup label="Apps (automatic)">{appGroups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.serviceKeys.length} server{g.serviceKeys.length === 1 ? "" : "s"})</option>)}</optgroup>
           </select>
           <button type="button" className="rd-btn rd-btn--quiet" onClick={onGoServices}>＋ New group</button>
         </>}>
@@ -243,28 +266,69 @@ export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, 
           <div className="rd-toolrow">
             <label className="rd-inline">Metric<select value={metric} onChange={(e) => setMetric(e.target.value)}>{METRIC_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
             <label className="rd-inline">Range<select value={range} onChange={(e) => setRange(e.target.value)}>{RANGE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
-            <label className="rd-check"><input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} /> Auto-refresh (5 min)</label>
+            <label className="rd-check" title="Re-reads this chart from Render every 5 minutes"><input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} /> Refresh chart every 5 min</label>
             <span className="rd-spacer" />
             <button type="button" className="rd-btn rd-btn--quiet" disabled={metricBusy} onClick={() => void loadMetrics()}>↻ Refresh</button>
-            <button type="button" className="rd-btn rd-btn--quiet" disabled={running} onClick={() => void sampleNow()}>{running ? "Sampling…" : "Sample all groups"}</button>
-            <button type="button" className="rd-btn rd-btn--danger-quiet" onClick={() => void deleteGroup()}>Delete group</button>
+            <button type="button" className="rd-btn rd-btn--quiet" disabled={running} onClick={() => void sampleNow()} title="Runs the monitor right now for every server: health check, last deploy and CPU / memory / latency. Problems open an incident. It also runs on its own every 5 minutes.">{running ? "Checking…" : "Check all servers now"}</button>
+            {!group.app && <button type="button" className="rd-btn rd-btn--danger-quiet" onClick={() => void deleteGroup()}>Delete group</button>}
           </div>
           <p className="rd-muted">{members.length} of {group.serviceKeys.length} services currently available{members.length < group.serviceKeys.length ? " — some members may belong to a disconnected account." : "."}</p>
 
-          {metricBusy && !snapshot ? <Skeleton lines={6} height={18} /> : snapshot && <>
-            <div className="rd-kpis">
-              <Kpi label="Latest combined (sum)" value={latest ? formatNumber(latest.value) + " " + (latest.unit || "") : "—"} />
-              <Kpi label="Peak in range" value={peak ? formatNumber(peak.value) : "—"} hint={peak ? "at " + formatTime(peak.timestamp) : undefined} />
-              <Kpi label="Saved peak (recorded)" value={savedPeak ? formatNumber(savedPeak.value) : "—"} hint={savedPeak ? formatDateTime(savedPeak.at) : "Needs the background scheduler"} />
-              <Kpi label="Last sampled" value={formatTime(snapshot.checkedAt)} />
-            </div>
-            <LineChart series={snapshot.services.map((s) => ({ key: s.key, name: s.name, points: s.points }))} metric={METRIC_OPTIONS.find(([v]) => v === metric)?.[1] || metric} />
-            <div className="rd-tablewrap"><table className="rd-table rd-table--compact">
-              <thead><tr><th scope="col">Service</th><th scope="col">Account</th><th scope="col">Current</th><th scope="col">Peak</th><th scope="col">Peak time</th><th scope="col">Result</th><th scope="col"><span className="rd-sr">Open</span></th></tr></thead>
-              <tbody>{snapshot.services.map((item) => <tr key={item.key}><td>{item.name}</td><td>{item.accountName}</td><td>{item.current == null ? "—" : formatNumber(item.current) + " " + item.unit}</td><td>{item.peak == null ? "—" : formatNumber(item.peak) + " " + item.unit}</td><td>{item.peakAt ? formatTime(item.peakAt) : "—"}</td><td className={item.error ? "rd-warn" : ""}>{item.error || "Available"}</td><td><button type="button" className="rd-btn rd-btn--quiet" onClick={() => { const s = services.find((c) => serviceKey(c) === item.key); if (s) onOpenService(s); }}>Details</button></td></tr>)}</tbody>
-            </table></div>
-            <p className="rd-note">Combined values sum aligned samples; they are not a single host’s CPU or memory percentage. Missing samples are shown as unavailable, never as zero.</p>
-          </>}
+          {metricBusy && !snapshot ? <Skeleton lines={6} height={18} /> : snapshot && (() => {
+            const fmt = (v, u) => formatMetric(v, u, metric);
+            const metricLabel = METRIC_OPTIONS.find(([v]) => v === metric)?.[1] || metric;
+            const withData = snapshot.services.filter((s) => s.points.length);
+            const busiest = withData.reduce((b, s) => (!b || (s.current ?? -1) > (b.current ?? -1) ? s : b), null);
+            const top = withData.reduce((b, s) => (!b || (s.peak ?? -1) > (b.peak ?? -1) ? s : b), null);
+            const crashes = events.filter((e) => e.type === "server_failed");
+            const restarts = events.filter((e) => e.type === "server_restarted");
+            const countFor = (list, key) => list.filter((e) => e.key === key).length;
+            const EVENT = {
+              server_failed: ["bad", "crashed"], server_restarted: ["mid", "restarted"], server_available: ["ok", "is back up"],
+              deploy_started: ["mid", "deploy started"], deploy_ended: ["ok", "deploy finished"], build_started: ["mid", "build started"], build_ended: ["ok", "build finished"],
+              service_suspended: ["mid", "was suspended"], service_resumed: ["ok", "was resumed"], suspended: ["mid", "was suspended"], resumed: ["ok", "was resumed"]
+            };
+            const describe = (e) => {
+              const [tone, text] = EVENT[e.type] || ["mid", e.type.replace(/_/g, " ")];
+              const failed = /fail|cancel/i.test(String(e.details?.status || ""));
+              return [failed ? "bad" : tone, text + (e.details?.status && /ended|finished/.test(text) ? " (" + String(e.details.status).replace(/_/g, " ") + ")" : "") + (e.details?.reason ? " — " + e.details.reason : "") + (e.details?.trigger ? " · by " + e.details.trigger.replace(/_/g, " ") : "")];
+            };
+            const timeline = [
+              ...events.map((e) => ({ at: e.at, who: e.serviceName, key: e.key, ...(([tone, text]) => ({ tone, text }))(describe(e)) })),
+              ...withData.filter((s) => s.peakAt).map((s) => ({ at: s.peakAt, who: s.name, key: s.key, tone: "peak", text: "peak " + metricLabel.toLowerCase() + ": " + fmt(s.peak, s.unit) }))
+            ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 60);
+            return <>
+              <div className="rd-kpis">
+                <Kpi label={"Busiest now · " + metricLabel} value={busiest ? fmt(busiest.current, busiest.unit) : "—"} hint={busiest ? busiest.name : "No data"} />
+                <Kpi label="Highest peak in range" value={top ? fmt(top.peak, top.unit) : "—"} hint={top ? top.name + " at " + formatTime(top.peakAt) : "No data"} />
+                <Kpi label="Crashes in range" value={crashes.length} tone={crashes.length ? "danger" : "ok"} hint={crashes.length ? crashes[0].serviceName + " · last " + timeAgo(crashes[0].at) : "None"} />
+                <Kpi label="Restarts in range" value={restarts.length} tone={restarts.length ? "warn" : undefined} hint={restarts.length ? restarts[0].serviceName + " · last " + timeAgo(restarts[0].at) : "None"} />
+              </div>
+              <div className="rd-monitor">
+                <div className="rd-monitor__chart">
+                  <h3 className="rd-monitor__title">{metricLabel} per server <small>red lines = crashes · hover for exact values</small></h3>
+                  <LineChart series={snapshot.services.map((s) => ({ key: s.key, name: s.name, points: s.points }))} metric={metricLabel} format={fmt}
+                    markers={Object.values(crashes.reduce((acc, e) => { const k = String(e.at).slice(0, 16); (acc[k] = acc[k] || { at: e.at, names: [] }).names.push(e.serviceName); return acc; }, {}))
+                      .map((m) => ({ at: m.at, label: m.names.length > 1 ? m.names.length + " crashed" : m.names[0], title: [...new Set(m.names)].join(", ") + " crashed at " + formatDateTime(m.at) }))} />
+                </div>
+                <div className="rd-monitor__log">
+                  <h3 className="rd-monitor__title">What happened <small>{RANGE_OPTIONS.find(([v]) => v === range)?.[1]}</small></h3>
+                  {timeline.length ? <ol className="rd-timeline">{timeline.map((t, i) => (
+                    <li key={i} className={"is-" + t.tone}><time title={formatDateTime(t.at)}>{formatTime(t.at)}</time><div><strong>{t.who}</strong> {t.text}<small>{timeAgo(t.at)}</small></div></li>
+                  ))}</ol> : <p className="rd-muted">Nothing recorded in this period: no crashes, restarts or deploys.</p>}
+                </div>
+              </div>
+              <div className="rd-tablewrap"><table className="rd-table rd-table--compact">
+                <thead><tr><th scope="col">Server</th><th scope="col">Account</th><th scope="col">Now</th><th scope="col">Peak</th><th scope="col">Peak at</th><th scope="col">Crashes</th><th scope="col">Restarts</th><th scope="col"><span className="rd-sr">Open</span></th></tr></thead>
+                <tbody>{snapshot.services.map((item) => <tr key={item.key}>
+                  <td><strong>{item.name}</strong>{item.error ? <small className="rd-warn" style={{ display: "block" }}>{item.error}</small> : null}</td><td>{item.accountName}</td>
+                  <td>{fmt(item.current, item.unit)}</td><td>{fmt(item.peak, item.unit)}</td><td>{item.peakAt ? formatDateTime(item.peakAt) : "—"}</td>
+                  <td className={countFor(crashes, item.key) ? "rd-warn" : ""}>{countFor(crashes, item.key)}</td><td>{countFor(restarts, item.key)}</td>
+                  <td><button type="button" className="rd-btn rd-btn--quiet" onClick={() => { const s = services.find((c) => serviceKey(c) === item.key); if (s) onOpenService(s); }}>Details</button></td>
+                </tr>)}</tbody>
+              </table></div>
+            </>;
+          })()}
         </>}
       </Section>
 
@@ -275,13 +339,19 @@ export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, 
             <button type="button" className="rd-btn rd-btn--quiet" disabled={runningBulk || !members.length} onClick={() => void runBulk("restart")}>Restart in order</button>
             {runningBulk && <button type="button" className="rd-btn rd-btn--danger-quiet" onClick={() => { stopRef.current = true; }}>■ Stop after current</button>}
             <span className="rd-spacer" />
-            <button type="button" className="rd-btn rd-btn--quiet" disabled={logsBusy} onClick={() => void loadGroupLogs()}>{logsBusy ? "Loading logs…" : "Find errors in logs"}</button>
-            <button type="button" className="rd-btn rd-btn--quiet" disabled={driftBusy} onClick={() => void compareConfig()}>{driftBusy ? "Comparing…" : "Compare configuration"}</button>
+            {extras.findings && <button type="button" className="rd-btn rd-btn--quiet" disabled={logsBusy} onClick={() => void loadGroupLogs()}>{logsBusy ? "Loading logs…" : "Find errors in logs"}</button>}
+            {extras.findings && <button type="button" className="rd-btn rd-btn--quiet" disabled={driftBusy} onClick={() => void compareConfig()}>{driftBusy ? "Comparing…" : "Compare configuration"}</button>}
           </div>
           {progress && <ol className="rd-progress" aria-live="polite">{progress.rows.map((r) => <li key={r.key} className={"is-" + r.status}><span className="rd-progress__mark" aria-hidden="true">{({ done: "✓", failed: "✕", running: "…", skipped: "–", pending: "·" })[r.status]}</span><div><strong>{r.name}</strong><small>{r.status}{r.note ? " — " + r.note : ""}</small></div></li>)}</ol>}
         </Section>
 
-        {(groupLogs.length > 0 || drift.length > 0) && <Section title="Findings" subtitle="Best-effort scan of the last hour of application logs and variable names. Missing data is not treated as healthy.">
+        <div className="rd-extras" role="group" aria-label="More tools">
+          <span>More tools</span>
+          {EXTRAS.filter(([k]) => !group.app || k === "findings" || k === "db").map(([k, label]) => <label key={k} className="rd-check"><input type="checkbox" checked={Boolean(extras[k])} onChange={() => toggleExtra(k)} /> {label}</label>)}
+          {group.app && <small className="rd-muted">Cost and dependency tools are available for groups you create.</small>}
+        </div>
+
+        {extras.findings && (groupLogs.length > 0 || drift.length > 0) && <Section title="Findings" subtitle="Best-effort scan of the last hour of application logs and variable names. Missing data is not treated as healthy.">
           {groupLogs.length > 0 && <>
             <div className="rd-toolrow"><strong>{errorLogs.length} error line(s) across {new Set(groupLogs.map((l) => l.serviceId)).size} service(s)</strong><span className="rd-spacer" /><input className="rd-field rd-field--inline" type="search" placeholder="Search all logs…" aria-label="Search group logs" value={logSearch} onChange={(e) => setLogSearch(e.target.value)} /></div>
             <div className="rd-logs" role="log" aria-label="Group logs">
@@ -291,7 +361,7 @@ export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, 
           {drift.length > 0 && <div className="rd-drift">{drift.map((item) => <article key={item.key}><strong>{item.name}</strong><small>{item.error || item.keys.length + " variable names"}</small>{item.missing.length > 0 ? <span className="rd-warn">Missing: {item.missing.join(", ")}</span> : !item.error && <span className="rd-ok">In sync</span>}</article>)}</div>}
         </Section>}
 
-        <Section title="Dependency map" subtitle="Document request or job flow. Informational only — this does not change Render routing.">
+        {extras.deps && !group.app && <Section title="Dependency map" subtitle="Document request or job flow. Informational only — this does not change Render routing.">
           <div className="rd-toolrow">
             <label className="rd-inline">Upstream<select value={from} onChange={(e) => setFrom(e.target.value)}><option value="">Select service</option>{members.map((s) => <option key={serviceKey(s)} value={serviceKey(s)}>{s.name}</option>)}</select></label>
             <span aria-hidden="true">→</span>
@@ -299,9 +369,9 @@ export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, 
             <button type="button" className="rd-btn rd-btn--quiet" disabled={saving || !from || !to || from === to} onClick={() => void addDependency()}>Add link</button>
           </div>
           <ul className="rd-edges">{(group.dependencies || []).map((edge) => <li key={edge.from + ">" + edge.to}><span>{members.find((s) => serviceKey(s) === edge.from)?.name || edge.from}</span><span aria-hidden="true">→</span><span>{members.find((s) => serviceKey(s) === edge.to)?.name || edge.to}</span><button type="button" className="rd-icon-btn rd-icon-btn--danger" aria-label="Remove dependency" onClick={() => void removeDependency(edge.from, edge.to)}>×</button></li>)}{!(group.dependencies || []).length && <li className="rd-muted">No dependencies mapped yet.</li>}</ul>
-        </Section>
+        </Section>}
 
-        <Section title="Cost & budget guardrails" subtitle="Enter your own approximate monthly cost per service. These are estimates, not live Render billing.">
+        {extras.cost && !group.app && <Section title="Cost & budget guardrails" subtitle="Enter your own approximate monthly cost per service. These are estimates, not live Render billing.">
           {(() => {
             const total = members.reduce((sum, s) => sum + Number(group.serviceCostEstimates?.[serviceKey(s)] || 0), 0);
             const budget = Number(group.monthlyBudgetUsd || 0);
@@ -316,9 +386,9 @@ export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, 
               <div className="rd-costrows">{members.map((s) => { const key = serviceKey(s); return <label key={group.id + key}><span>{s.name}<small>{s.serviceDetails?.plan || s.serviceDetails?.buildPlan || "Plan not provided"}</small></span><span className="rd-money"><i>$</i><input className="rd-field" type="number" min="0" max="100000" step="0.01" aria-label={"Monthly estimate for " + s.name} defaultValue={group.serviceCostEstimates?.[key] ?? ""} placeholder="0.00" onBlur={(e) => void saveEstimate(key, e.target.value)} /></span></label>; })}</div>
             </>;
           })()}
-        </Section>
+        </Section>}
 
-        {databases.length > 0 && <Section title="Database export freshness" subtitle="Latest manual export jobs returned by Render — not a view of automatic backups." actions={<button type="button" className="rd-btn rd-btn--quiet" disabled={running} onClick={() => void sampleNow()}>Refresh</button>}>
+        {extras.db && databases.length > 0 && <Section title="Database export freshness" subtitle="Latest manual export jobs returned by Render — not a view of automatic backups." actions={<button type="button" className="rd-btn rd-btn--quiet" disabled={running} onClick={() => void sampleNow()}>Refresh</button>}>
           <ul className="rd-edges">{databases.map((db) => <li key={db.key || db.serviceId}><span>{db.name || db.serviceId}</span><span className="rd-muted">{db.latestManualExport?.status === "unavailable" ? "Export history unavailable" : db.latestManualExport?.createdAt ? "Last manual export " + timeAgo(db.latestManualExport.createdAt) : "No manual export returned"}</span><span className="rd-muted">{db.latestManualExport?.status || "—"}</span></li>)}</ul>
         </Section>}
       </>}
@@ -447,7 +517,7 @@ export function IncidentsView({ ops, incidents, projectOf, onSample, askConfirm,
     <Section title="Incidents" subtitle="Each outage appears once, from the moment it opens until it is resolved. Stale ones are flagged so nothing is stuck open."
       actions={<>
         <button type="button" className="rd-btn rd-btn--quiet" onClick={() => void ops.exportReport("csv")} title="Download the incident log">⇩ Export</button>
-        <button type="button" className="rd-btn rd-btn--quiet" disabled={running} onClick={onSample}>{running ? "Checking…" : "↻ Re-sample monitoring"}</button>
+        <button type="button" className="rd-btn rd-btn--quiet" disabled={running} onClick={onSample} title="Runs the monitor right now for every server (health, deploys, CPU / memory / latency). New problems open incidents; recovered ones close.">{running ? "Checking…" : "↻ Check all servers now"}</button>
       </>}>
       <div className="rd-kpis">
         <Kpi label="Open now" value={open.length} tone={open.length ? "danger" : "ok"} hint={open.length ? "Needs attention" : "All clear"} />
@@ -460,6 +530,13 @@ export function IncidentsView({ ops, incidents, projectOf, onSample, askConfirm,
         <div className="rd-alert"><span aria-hidden="true">i</span><div>Incidents are recorded for <strong>server groups</strong>. Select two or more services in Services → “Group selected”, then turn monitoring on in Settings.{" "}
           {onGoMonitoring && <button type="button" className="rd-btn rd-btn--link" onClick={onGoMonitoring}>Open Monitoring</button>}</div></div>
       )}
+      {(() => {
+        const t = ops.status?.lastTick;
+        const age = t ? Date.now() - Date.parse(t.completedAt) : null;
+        if (!monitor?.enabled) return null;
+        if (!t) return <div className="rd-alert rd-alert--warn"><span aria-hidden="true">▲</span><div>The background monitor has not run since the server last started{ops.status?.serverStartedAt ? " (" + timeAgo(ops.status.serverStartedAt) + ")" : ""}. It starts about 90 seconds after start-up and then runs every 5 minutes. Use “Check all servers now” to run it at once.</div></div>;
+        return <div className={"rd-alert" + (age > 15 * 60000 ? " rd-alert--warn" : "")}><span aria-hidden="true">{age > 15 * 60000 ? "▲" : "✓"}</span><div>Monitor last ran {timeAgo(t.completedAt)} ({t.source === "external" ? "GitHub scheduler" : "server scheduler"}): checked {t.groupsChecked} app group{t.groupsChecked === 1 ? "" : "s"}, opened {t.incidentsOpened} new incident{t.incidentsOpened === 1 ? "" : "s"}.{age > 15 * 60000 ? " That is longer than usual — the server may have restarted or be asleep." : " Runs every 5 minutes."}</div></div>;
+      })()}
       {!noGroups && !monitor?.enabled && (
         <div className="rd-alert"><span aria-hidden="true">i</span><div>Monitoring is off, so no new incidents are being recorded. Turn it on in Settings → Alert policy.</div></div>
       )}

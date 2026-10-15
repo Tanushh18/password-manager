@@ -9,7 +9,9 @@ const { pushProjectEnv } = require("../utils/renderEnvPush");
 const { provision } = require("../utils/provision");
 const { groupKey, mergeProjects } = require("../utils/projectMerge");
 const { syncAllProjects } = require("../utils/projectSyncAll");
-const { autoSyncProjects, runAllProjectSync } = require("../utils/projectAutoSync");
+const { autoSyncProjects } = require("../utils/projectAutoSync");
+const { runTick, lastTick } = require("../utils/scheduler");
+const { runUserPings, pingResults, scanHealthRoutes } = require("../utils/pings");
 const { getProjectDeployments } = require("../utils/projectDeployments");
 const { validateProvisionInput } = require("../utils/provisionInput");
 const { githubSend, probeScopes, loadGithubAccounts } = require("../utils/githubClient");
@@ -119,16 +121,9 @@ router.post("/render/ops/tick", apiLimiter, async (req, res) => {
   const candidate = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
   if (!renderOps.verifySecret(candidate, expected)) return res.status(expected ? 401 : 503).json({ error: expected ? "Invalid scheduler credential." : "Persistent monitoring scheduler is not configured." });
   try {
-    const summary = await renderOps.runAllEnabledMonitoring();
-    // Each upkeep step is isolated: one failing never blocks the others.
-    const step = async (fn) => { try { return await fn(); } catch { return { error: true }; } };
-    const autoLink = await step(runAllAutoLink);
-    const projectSync = await step(runAllProjectSync);
-    const envSync = await step(runAllEnvSync);
-    const registrySync = await step(runAllRegistrySync);
-    const usage = await step(runAllUsage);
+    const summary = await runTick("external");
     res.set("Cache-Control", "no-store");
-    return res.json({ ok: true, ...summary, autoLink, projectSync, envSync, registrySync, usage, completedAt: new Date().toISOString() });
+    return res.json(summary);
   } catch {
     return res.status(500).json({ error: "Monitoring tick failed. Check server logs without logging secrets." });
   }
@@ -178,6 +173,27 @@ router.put("/render/ops/config", async (req, res) => {
   } catch {
     return res.status(500).json({ error: "Could not save monitoring configuration." });
   }
+});
+
+/* When the background upkeep last ran (no user data), so the UI can say whether monitoring is alive. */
+router.get("/render/ops/status", async (req, res) => {
+  const t = lastTick();
+  res.set("Cache-Control", "no-store");
+  return res.json({ lastTick: t ? { source: t.source, startedAt: t.startedAt, completedAt: t.completedAt, usersChecked: t.usersChecked || 0, groupsChecked: t.groupsChecked || 0, incidentsOpened: t.incidentsOpened || 0 } : null, schedulerEnabled: String(process.env.INTERNAL_SCHEDULER).toLowerCase() !== "false", serverStartedAt: new Date(Date.now() - process.uptime() * 1000).toISOString() });
+});
+
+/* Ping jobs (Stashr's cron): latest result per job, run all now, and a one-off /health scan of every server. */
+router.get("/render/ops/pings", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json({ results: pingResults(req.rootUser._id) });
+});
+router.post("/render/ops/pings/run", async (req, res) => {
+  try { const r = await runUserPings(req.rootUser, { force: true }); res.set("Cache-Control", "no-store"); return res.json({ ...r, results: pingResults(req.rootUser._id) }); }
+  catch { return res.status(500).json({ error: "Could not run the ping jobs." }); }
+});
+router.post("/render/ops/health-scan", async (req, res) => {
+  try { res.set("Cache-Control", "no-store"); return res.json({ services: await scanHealthRoutes(req.rootUser) }); }
+  catch { return res.status(500).json({ error: "Could not scan the servers." }); }
 });
 
 router.get("/render/ops/history", async (req, res) => {
@@ -474,6 +490,24 @@ router.delete("/render/accounts/:accountId/services/:serviceId/env-vars/:key", a
     const result = await renderRequest(saved.account.apiKey, servicePath(serviceId, "/env-vars/" + encodeURIComponent(key)), { method: "DELETE" });
     await recordAudit(req, "env_var_deleted", saved.entry._id, serviceId, { key });
     return res.json(result);
+  } catch (error) { return sendUpstreamError(res, error); }
+});
+
+/* Render's own event log for a service: crashes (server_failed), restarts, deploys, suspend / resume. */
+router.get("/render/accounts/:accountId/services/:serviceId/events", async (req, res) => {
+  const saved = await getAccount(req, res);
+  if (!saved) return;
+  if (!safeId(req.params.serviceId)) return res.status(400).json({ error: "Invalid service ID." });
+  try {
+    const params = new URLSearchParams({ limit: "100" });
+    if (typeof req.query.startTime === "string" && !Number.isNaN(Date.parse(req.query.startTime))) params.set("startTime", new Date(req.query.startTime).toISOString());
+    const rows = await renderRequest(saved.account.apiKey, servicePath(req.params.serviceId, "/events?" + params.toString()));
+    const events = (Array.isArray(rows) ? rows : []).map((r) => r?.event || r).filter((e) => e && e.type).map((e) => ({
+      id: String(e.id || ""), type: String(e.type), at: e.timestamp || e.createdAt || null,
+      details: { status: e.details?.status ?? null, reason: typeof e.details?.reason === "object" ? JSON.stringify(e.details.reason).slice(0, 200) : String(e.details?.reason || "").slice(0, 200), deployId: e.details?.deployId || "", trigger: typeof e.details?.trigger === "object" ? Object.keys(e.details.trigger)[0] || "" : String(e.details?.trigger || "") }
+    }));
+    res.set("Cache-Control", "no-store");
+    return res.json({ events });
   } catch (error) { return sendUpstreamError(res, error); }
 });
 

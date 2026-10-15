@@ -325,3 +325,49 @@ export function remediationFor(incident) {
   if (/cpu|memory|latency/.test(type)) return { action: "restart", label: "Restart", target, confirm: "Restart this service to clear the resource pressure? If it comes back, the app needs optimising or a larger plan." };
   return null;
 }
+
+/**
+ * Per-server time series from the monitoring history (no extra Render calls): Map(serviceKey -> { points, last }).
+ * points: [{ t, cpu (%), memory (%), latency (ms), health }], oldest first. CPU / memory are % of the plan limit.
+ */
+export function serviceSeries(history) {
+  const map = new Map();
+  const pct = (m, limit) => {
+    const v = Number(m?.current), l = Number(limit?.current);
+    return Number.isFinite(v) && Number.isFinite(l) && l > 0 ? Math.min(100, (v / l) * 100) : null;
+  };
+  const sorted = [...(history || [])].sort((a, b) => (Date.parse(a.sampledAt) || 0) - (Date.parse(b.sampledAt) || 0));
+  for (const sample of sorted) {
+    for (const r of sample.services || []) {
+      if (!r?.key) continue;
+      const m = r.metrics || {};
+      const point = {
+        t: sample.sampledAt, cpu: pct(m.cpu, m["cpu-limit"]), memory: pct(m.memory, m["memory-limit"]),
+        latency: Number.isFinite(Number(m["http-latency"]?.current)) && m["http-latency"]?.current != null ? Number(m["http-latency"].current) : (Number.isFinite(r.health?.latencyMs) ? r.health.latencyMs : null),
+        health: r.health?.state || "unknown"
+      };
+      if (!map.has(r.key)) map.set(r.key, { points: [], last: null });
+      const entry = map.get(r.key);
+      if (entry.points.length && entry.points[entry.points.length - 1].t === point.t) continue;
+      entry.points.push(point);
+      entry.last = { ...point, status: r.health?.status, deploy: r.latestDeploy || null, suspended: Boolean(r.suspended) };
+    }
+  }
+  for (const entry of map.values()) entry.points = entry.points.slice(-48);
+  return map;
+}
+
+/** Readable metric values: bytes -> MB / GB, CPU cores -> % of one CPU, ms stays ms. */
+export function formatMetric(value, unit = "", metric = "") {
+  const v = Number(value);
+  if (value == null || !Number.isFinite(v)) return "—";
+  const u = String(unit || "").toLowerCase(), m = String(metric || "").toLowerCase();
+  if (/byte/.test(u) || m === "memory" || m === "bandwidth") {
+    const mb = v / 1048576;
+    return mb >= 1024 ? (mb / 1024).toFixed(2) + " GB" : mb >= 10 ? Math.round(mb) + " MB" : mb.toFixed(1) + " MB";
+  }
+  if (/cpu|core/.test(u) || m === "cpu") return Math.round(v * 100) + "% CPU";
+  if (/ms|millisecond/.test(u) || m === "http-latency") return Math.round(v) + " ms";
+  if (m === "http-requests") return Math.round(v) + " req";
+  return formatNumber(v) + (unit ? " " + unit : "");
+}

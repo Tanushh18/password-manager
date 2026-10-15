@@ -6,6 +6,7 @@ dotenv.config({ quiet: true });
 const app = require("./app");
 const { connect } = require("./db/connection");
 const { startKeepAlive } = require("./utils/keepAlive");
+const { startScheduler } = require("./utils/scheduler");
 
 const PORT = process.env.PORT || 8000;
 
@@ -18,6 +19,9 @@ const server = app.listen(PORT, () =>
 
     // Self ping so free-tier hosting does not spin the instance down
     startKeepAlive();
+
+    // Monitoring, project/link sync and usage every few minutes, inside the server
+    startScheduler();
 });
 
 // KEEPING THE PROCESS ALIVE ON UNEXPECTED FAILURES

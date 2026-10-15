@@ -45,6 +45,23 @@ const defaultConfig = () => ({
   updatedAt: nowIso()
 });
 
+const PING_EVERY = [5, 10, 15, 30, 60];
+const MAX_PINGS = 60;
+/* Ping jobs ("cron"): GET <service url><path> every N minutes. Only Render-provided https *.onrender.com URLs. */
+function normalizePings(list) {
+  const out = [];
+  for (const p of list.slice(0, MAX_PINGS)) {
+    const key = String(p?.serviceKey || "");
+    if (!/^[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,160}$/.test(key) || out.some((x) => x.serviceKey === key)) continue;
+    let url;
+    try { url = new URL(String(p?.url || "")); } catch { continue; }
+    if (url.protocol !== "https:" || url.username || url.password || !url.hostname.toLowerCase().endsWith(".onrender.com")) continue;
+    const path = /^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{0,120}$/.test(String(p?.path || "")) ? String(p.path) : "/health";
+    out.push({ serviceKey: key, name: String(p?.name || "").slice(0, 120), url: url.origin, path, everyMinutes: PING_EVERY.includes(Number(p?.everyMinutes)) ? Number(p.everyMinutes) : 10, enabled: p?.enabled !== false });
+  }
+  return out;
+}
+
 function normalizeConfig(input, previous = defaultConfig()) {
   const source = input && typeof input === "object" ? input : {};
   const prior = previous && typeof previous === "object" ? previous : defaultConfig();
@@ -103,6 +120,7 @@ function normalizeConfig(input, previous = defaultConfig()) {
       }
     },
     notifications: { telegramBotToken, telegramChatId },
+    pings: Array.isArray(source.pings) ? normalizePings(source.pings) : prior.pings || [],
     updatedAt: nowIso()
   };
 }
@@ -254,7 +272,7 @@ async function listEveryService(user, dataKey) {
       if (listing.truncated) complete = false;
       for (const item of listing.items) {
         const s = item?.service || item;
-        if (s?.id) services.push({ id: s.id, name: s.name, repo: s.repo || "", suspended: s.suspended === "suspended", accountId: String(entry._id) });
+        if (s?.id) services.push({ id: s.id, name: s.name, repo: s.repo || "", suspended: s.suspended === "suspended", accountId: String(entry._id), url: s.serviceDetails?.url || "", rootDir: s.rootDir || "", type: s.type || "" });
       }
     } catch { complete = false; }
   }
@@ -535,6 +553,7 @@ function publicConfig(config) {
     version: config.version || 1,
     groups: config.groups || [],
     monitor: config.monitor || defaultConfig().monitor,
+    pings: config.pings || [],
     notifications: {
       telegramConfigured: Boolean(config.notifications?.telegramBotToken && config.notifications?.telegramChatId),
       telegramChatId: config.notifications?.telegramChatId || ""
@@ -552,6 +571,6 @@ function verifySecret(candidate, expected) {
 
 module.exports = {
   defaultConfig, normalizeConfig, readConfig, saveConfig, publicConfig,
-  runUserMonitoring, runAllEnabledMonitoring, resolveIncidents, clearClosedIncidents, sendTelegram, encryptedList, verifySecret, renderRequest,
+  runUserMonitoring, runAllEnabledMonitoring, listEveryService, normalizePings, resolveIncidents, clearClosedIncidents, sendTelegram, encryptedList, verifySecret, renderRequest,
   HISTORY_LIMIT, INCIDENT_LIMIT
 };

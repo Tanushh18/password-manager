@@ -3,9 +3,9 @@ import axios from "axios";
 // API servers, in order of preference. If one is down the client falls over
 // to the next. Override with REACT_APP_API_URLS (comma separated) at build time.
 // xxdr is the fixed address apps use to find the current server list (see "Server registry" below).
+// (…-8gvj was deleted on Render; it is no longer listed, and dead servers are skipped automatically anyway.)
 const DEFAULT_SERVERS = [
-    "https://password-manager-server-xxdr.onrender.com",
-    "https://password-manager-server-8gvj.onrender.com"
+    "https://password-manager-server-xxdr.onrender.com"
 ];
 
 const SERVERS = (import.meta.env.VITE_API_URLS || import.meta.env.REACT_APP_API_URLS || import.meta.env.REACT_APP_API_URL || "")
@@ -93,7 +93,17 @@ instance.interceptors.response.use(
     (error) =>
     {
         const config = error.config;
-        if (!config || !isServerDown(error) || SERVERS.length < 2) return Promise.reject(error);
+        if (!config || !isServerDown(error)) return Promise.reject(error);
+
+        // Render's free plan sleeps; waking takes up to a minute. Give the same server one long retry first.
+        const timedOut = error.code === "ECONNABORTED" || /timeout/i.test(String(error.message || ""));
+        if (timedOut && !config._woke)
+        {
+            config._woke = true;
+            config.timeout = Math.max(config.timeout || 0, 75000);
+            return instance(config);
+        }
+        if (SERVERS.length < 2) return Promise.reject(error);
 
         config._tried = (config._tried || 0) + 1;
         if (config._tried >= SERVERS.length) return Promise.reject(error);
@@ -127,7 +137,30 @@ export const refreshServers = async () =>
     }
     return null;
 };
-refreshServers();
+// A server Render no longer routes (deleted service) fails at once with no CORS headers; a sleeping one is just slow.
+// Drop the dead ones so a cold start never fails over to a server that does not exist.
+const pruneDeadServers = async () =>
+{
+    if (SERVERS.length < 2) return;
+    const dead = [];
+    await Promise.all(SERVERS.map(async (base) =>
+    {
+        const started = Date.now();
+        try
+        {
+            const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(90000) });
+            if (!res.ok && res.status === 404) dead.push(base);
+        }
+        catch (e) { if (Date.now() - started < 8000 && e?.name !== "TimeoutError") dead.push(base); }
+    }));
+    const alive = SERVERS.filter((u) => !dead.includes(u));
+    if (!alive.length || !dead.length) return;
+    const current = SERVERS[active];
+    SERVERS.splice(0, SERVERS.length, ...alive);
+    const i = SERVERS.indexOf(current);
+    setActive(i >= 0 ? i : 0);
+};
+refreshServers().finally(() => { pruneDeadServers().catch(() => {}); });
 
 /* ── Server registry (admin only) ── */
 export const getRegistry = () => instance.get("/registry");
@@ -229,6 +262,12 @@ export const getRenderOpsHistory = (limit = 100) => instance.get("/render/ops/hi
 export const getRenderOpsIncidents = (limit = 100) => instance.get("/render/ops/incidents", { params: { limit } }).then((r) => r.data);
 export const resolveRenderIncidents = (payload) => instance.post("/render/ops/incidents/resolve", payload).then((r) => r.data);
 export const clearRenderIncidents = () => instance.post("/render/ops/incidents/clear").then((r) => r.data);
+export const getRenderEvents = (accountId, serviceId, startTime) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/services/" + encodeURIComponent(serviceId) + "/events", { params: startTime ? { startTime } : {} }).then((r) => r.data);
+export const getRenderOpsStatus = () => instance.get("/render/ops/status").then((r) => r.data);
+export const getPingResults = () => instance.get("/render/ops/pings").then((r) => r.data);
+export const runPingsNow = () => instance.post("/render/ops/pings/run", {}, { timeout: 120000 }).then((r) => r.data);
+export const scanHealthRoutes = () => instance.post("/render/ops/health-scan", {}, { timeout: 180000 }).then((r) => r.data);
+export const addHealthRoute = (repoUrl, rootDir, merge = true) => instance.post("/github/health-route", { repoUrl, rootDir, merge }, { timeout: 120000 }).then((r) => r.data);
 export const runRenderOpsNow = () => instance.post("/render/ops/run").then((r) => r.data);
 export const testRenderOpsNotification = () => instance.post("/render/ops/notify/test").then((r) => r.data);
 export const getRenderOpsReport = (format = "json") => instance.get("/render/ops/report", { params: { format }, responseType: format === "csv" ? "blob" : "json" }).then((r) => r.data);

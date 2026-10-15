@@ -39,6 +39,7 @@ function Navbar() {
         { to: "/projects", label: "Projects" },
         { to: "/render", label: "Render" },
         { to: "/services", label: "Services" },
+        { to: "/cron", label: "Cron" },
         { to: "/settings", label: "Settings" },
         ...(profile?.isAdmin ? [{ to: "/servers", label: "Servers" }] : []),
         { to: "/logout", label: "Sign out" },

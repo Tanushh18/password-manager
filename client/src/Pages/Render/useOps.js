@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import {
   getRenderOpsConfig, saveRenderOpsConfig, getRenderOpsHistory, getRenderOpsIncidents,
-  runRenderOpsNow, testRenderOpsNotification, getRenderOpsReport, resolveRenderIncidents, clearRenderIncidents
+  runRenderOpsNow, testRenderOpsNotification, getRenderOpsReport, resolveRenderIncidents, clearRenderIncidents, getRenderOpsStatus
 } from "../../api/client";
 import { openIncidents, readStored, writeStored, errorMessage } from "./renderUtils";
 
@@ -24,11 +24,12 @@ export function useOps() {
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [status, setStatus] = useState(null); // when the background scheduler last ran
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [configResult, historyResult, incidentResult] = await Promise.all([getRenderOpsConfig(), getRenderOpsHistory(100), getRenderOpsIncidents(100)]);
+      const [configResult, historyResult, incidentResult] = await Promise.all([getRenderOpsConfig(), getRenderOpsHistory(200), getRenderOpsIncidents(200)]);
       const next = configResult.config || {};
       const remoteGroups = Array.isArray(next.groups) ? next.groups : [];
       const localGroups = readStored(GROUPS_KEY, []);
@@ -39,6 +40,7 @@ export function useOps() {
       setIncidents(Array.isArray(incidentResult.incidents) ? incidentResult.incidents : []);
       setGroups(remoteGroups.length ? remoteGroups : localGroups);
       setLoadError("");
+      getRenderOpsStatus().then(setStatus).catch(() => {});
       // One-time migration of groups that only exist in this browser.
       if (!remoteGroups.length && localGroups.length) {
         const saved = await saveRenderOpsConfig({ ...next, groups: localGroups });
@@ -52,6 +54,7 @@ export function useOps() {
 
   // Lightweight: only the incident log (used by the incidents page to stay live).
   const refreshIncidents = useCallback(async () => {
+    getRenderOpsStatus().then(setStatus).catch(() => {});
     try {
       const result = await getRenderOpsIncidents(200);
       setIncidents(Array.isArray(result.incidents) ? result.incidents : []);
@@ -138,7 +141,7 @@ export function useOps() {
 
   return {
     config, groups, monitor, setMonitor, telegramBotToken, setTelegramBotToken, telegramChatId, setTelegramChatId,
-    history, incidents, openIncidents: open, loading, saving, running, loadError,
+    history, incidents, openIncidents: open, status, loading, saving, running, loadError,
     refresh, refreshIncidents, resolveIncidents, clearHistory, persist, sampleNow, testTelegram, clearTelegram, exportReport
   };
 }

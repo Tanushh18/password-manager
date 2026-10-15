@@ -1,5 +1,12 @@
 # Next up (planned 15 Oct 2026)
 
+## Shipped 15 Oct (v2.1) — verify live
+- [ ] Server scheduler runs every 5 min (Cron page → "Background scheduler: Ran Xm ago"). GitHub's schedule only fired every 2–5 h.
+- [ ] Dead backup server …-8gvj (deleted on Render) — remove it from the Servers page registry too.
+- [ ] Render → Services: Board view (health, deploy, CPU/memory/latency graphs, actions), bulk Restart/Deploy/Suspend/Resume.
+- [ ] Monitoring: every app is a ready-made group; crashes / restarts / deploys from Render's event log; peaks.
+- [ ] Cron page: ping jobs, /health scan, "Add /health + merge" (opens a PR and merges it), Render cron jobs.
+
 ## Site audit (15 Oct) — still open
 Render
 - [ ] Automatic monitoring groups are not shown in the Monitoring tab (no charts for them yet).

@@ -1,14 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { connectRenderAccount, deleteRenderAccount, bulkDeleteRenderServices, deleteRenderService, getRenderAccounts, getRenderServices, getRenderAudit } from "../../api/client";
+import { connectRenderAccount, deleteRenderAccount, bulkDeleteRenderServices, deleteRenderService, restartRenderService, triggerRenderDeploy, suspendRenderService, resumeRenderService, getRenderAccounts, getRenderServices, getRenderAudit } from "../../api/client";
 import { Modal, StatePill, Skeleton, Empty, Kpi, Section, FleetBar, useConfirm } from "./RenderUi";
 import ServiceDetail from "./ServiceDetail";
+import ServerBoard from "./ServerBoard";
 import { MonitoringView, IncidentsView, AlertPolicyView } from "./OpsViews";
 import { usePolling } from "./renderHooks";
 import { useOps } from "./useOps";
 import {
   SERVICE_KINDS, serviceKind, serviceKey, serviceState, summarizeFleet, filterServices, sortServices, paginate, groupServices,
-  normalizeServices, buildIncidents, initials, timeAgo, formatDateTime, safeUrl, readStored, writeStored, errorMessage
+  normalizeServices, buildIncidents, serviceSeries, initials, timeAgo, formatDateTime, safeUrl, readStored, writeStored, errorMessage
 } from "./renderUtils";
 import "./RenderDashboard.css";
 import { Link } from "react-router-dom";
@@ -43,6 +44,9 @@ export default function RenderDashboard() {
   const [page, setPage] = useState(1);
   const [checked, setChecked] = useState([]);
   const [openGroups, setOpenGroups] = useState([]); // app keys whose server list is expanded
+  const [layout, setLayout] = useState(() => readStored("stashr_render_layout", "board")); // board | table
+  const [busyKey, setBusyKey] = useState("");
+  const [bulkBusy, setBulkBusy] = useState("");
   const [favorites, setFavorites] = useState(() => readStored(FAV_KEY, []));
   const searchRef = useRef(null);
 
@@ -96,6 +100,7 @@ export default function RenderDashboard() {
   usePolling(() => refreshOps(), 120000, view === "monitoring" || view === "settings");
   useEffect(() => { writeStored("stashr_render_auto_refresh", auto); }, [auto]);
   useEffect(() => { writeStored(FAV_KEY, favorites); }, [favorites]);
+  useEffect(() => { writeStored("stashr_render_layout", layout); }, [layout]);
 
   // A service deleted or suspended elsewhere must not linger in selections or open panels.
   useEffect(() => {
@@ -153,6 +158,7 @@ export default function RenderDashboard() {
     return sortServices(withState, sort.key, sort.dir);
   }, [services, query, accountFilter, typeFilter, stateFilter, hideSuspended, favoriteOnly, favorites, sort, fleet.incidentKeys]);
   const groups = useMemo(() => groupServices(filtered), [filtered]);
+  const series = useMemo(() => serviceSeries(ops.history), [ops.history]);
   const appCount = useMemo(() => groupServices(services).length, [services]);
   const pageData = paginate(groups, page, PAGE_SIZE);
   useEffect(() => { setPage(1); }, [query, accountFilter, typeFilter, stateFilter, hideSuspended, favoriteOnly]);
@@ -165,9 +171,10 @@ export default function RenderDashboard() {
   const pageKeys = pageData.rows.flatMap((g) => g.members.map(serviceKey));
   const toggleOpen = (key) => setOpenGroups((old) => (old.includes(key) ? old.filter((k) => k !== key) : [...old, key]));
   const toggleGroupChecked = (group) => {
-    // The group box selects the main server only; expand the app to pick any other server.
-    const key = serviceKey(group.main);
-    setChecked((old) => (old.includes(key) ? old.filter((k) => k !== key) : [...old, key]));
+    // The app box selects every server of the app (for a monitoring group or a bulk action); expand to pick single ones.
+    const keys = group.members.map(serviceKey);
+    const all = keys.every((k) => checked.includes(k));
+    setChecked((old) => (all ? old.filter((k) => !keys.includes(k)) : [...new Set([...old, ...keys])]));
   };
   const allOnPage = pageKeys.length > 0 && pageKeys.every((k) => checked.includes(k));
   const toggleChecked = (key) => setChecked((old) => (old.includes(key) ? old.filter((k) => k !== key) : [...old, key]));
@@ -246,6 +253,30 @@ export default function RenderDashboard() {
       await Promise.all([loadAccounts({ quiet: true }), loadAudit(), refreshOps()]);
     } catch (e) { toast.error(errorMessage(e, "Could not delete the selected services.")); }
     finally { setBulkDeleting(false); }
+  };
+
+  /* Restart / deploy / suspend / resume: one server, or every selected server. */
+  const ACTIONS = {
+    restart: { label: "Restart", run: (s) => restartRenderService(s.accountId, s.id), skip: (s) => s.suspended === "suspended", note: "Each restarts and is briefly unavailable." },
+    deploy: { label: "Deploy", run: (s) => triggerRenderDeploy(s.accountId, s.id, false), skip: () => false, note: "Each builds and deploys its latest commit." },
+    suspend: { label: "Suspend", run: (s) => suspendRenderService(s.accountId, s.id), skip: (s) => s.suspended === "suspended", note: "They stop serving traffic until resumed." },
+    resume: { label: "Resume", run: (s) => resumeRenderService(s.accountId, s.id), skip: (s) => s.suspended !== "suspended", note: "They start again (may trigger a deploy)." }
+  };
+  const runAction = async (kind, targets) => {
+    const action = ACTIONS[kind];
+    const list = targets.filter((s) => !action.skip(s));
+    if (!list.length) { toast.info("Nothing to " + action.label.toLowerCase() + " in this selection."); return; }
+    const ok = await ask({ title: action.label + " " + (list.length === 1 ? list[0].name : list.length + " servers") + "?", message: list.map((s) => s.name).join(", ") + ". " + action.note, confirmLabel: action.label, danger: kind === "suspend" });
+    if (!ok) return;
+    if (list.length === 1) setBusyKey(serviceKey(list[0])); else setBulkBusy(kind);
+    let done = 0; const failed = [];
+    for (const s of list) {
+      try { await action.run(s); done += 1; } catch (e) { failed.push(s.name + " (" + errorMessage(e, "failed") + ")"); }
+    }
+    setBusyKey(""); setBulkBusy("");
+    if (done) toast.success(action.label + " requested for " + done + " server" + (done === 1 ? "" : "s") + ".");
+    if (failed.length) toast.error("Not done: " + failed.slice(0, 3).join("; "), { autoClose: 10000 });
+    await Promise.all([loadAccounts({ quiet: true }), loadAudit()]);
   };
 
   /* Delete one service from its row: the exact name must be typed. */
@@ -368,16 +399,26 @@ export default function RenderDashboard() {
               <button type="button" className={"rd-btn rd-btn--quiet" + (favoriteOnly ? " is-active" : "")} aria-pressed={favoriteOnly} onClick={() => setFavoriteOnly((v) => !v)}>{favoriteOnly ? "★" : "☆"} Favorites</button>
               <label className="rd-check"><input type="checkbox" checked={hideSuspended} onChange={(e) => setHideSuspended(e.target.checked)} /> Hide suspended</label>
               {filtersActive && <button type="button" className="rd-btn rd-btn--link" onClick={clearFilters}>Clear filters</button>}
+              <span className="rd-layout-toggle" role="group" aria-label="Layout">{[["board", "▦ Board"], ["table", "☰ Table"]].map(([id, label]) => <button key={id} type="button" aria-pressed={layout === id} className={layout === id ? "is-active" : ""} onClick={() => setLayout(id)}>{label}</button>)}</span>
             </div>
             {checked.length > 0 && (
               <div className="rd-selectbar" role="region" aria-label="Selection actions">
                 <strong>{checked.length} selected</strong>
-                <button type="button" className="rd-btn rd-btn--primary" disabled={checked.length < 2} onClick={() => void createGroup()}>＋ Group selected</button>
+                {["restart", "deploy", "suspend", "resume"].map((k) => <button key={k} type="button" className="rd-btn rd-btn--quiet" disabled={Boolean(bulkBusy)} onClick={() => void runAction(k, checkedServices)}>{bulkBusy === k ? "Working…" : ACTIONS[k].label}</button>)}
+                <button type="button" className="rd-btn rd-btn--quiet" disabled={checked.length < 2} onClick={() => void createGroup()}>＋ Monitoring group</button>
                 <button type="button" className="rd-btn rd-btn--danger-quiet" disabled={bulkDeleting} title="Permanently delete the selected services (live or suspended)" onClick={() => void deleteSelected()}>{bulkDeleting ? "Deleting…" : "🗑 Delete selected (" + checkedServices.length + ")"}</button>
                 <button type="button" className="rd-btn rd-btn--link" onClick={() => setChecked([])}>Clear</button>
-                {checked.length < 2 && <small>Select at least 2 services to create a group.</small>}
+
               </div>
             )}
+            {layout === "board" && (loading ? <div className="rd-board"><Skeleton lines={4} height={120} /></div> : (
+              <ServerBoard groups={groups} incidentKeys={fleet.incidentKeys} series={series} checked={checked}
+                onToggle={toggleChecked} onToggleApp={(keys, all) => setChecked((old) => (all ? old.filter((k) => !keys.includes(k)) : [...new Set([...old, ...keys])]))}
+                projectCell={projectCell} onOpen={setSelectedKey} busy={busyKey}
+                onAction={(kind, s) => void runAction(kind, [s])} onDelete={(s) => void deleteOne(s)} />
+            ))}
+            {layout === "board" && !loading && !groups.length && <Empty icon="▣" title={services.length ? "No matching services" : "Your control center is ready"}>{services.length ? "Try changing your search or filters." : "Connect a Render API key to get started."}</Empty>}
+            {layout === "table" && <>
             <div className="rd-tablewrap">
               <table className="rd-table">
                 <thead><tr>
@@ -412,12 +453,12 @@ export default function RenderDashboard() {
                       );
                     };
                     if (!multi) return serviceRow(group.main, false);
-                    const allChecked = checked.includes(serviceKey(group.main));
+                    const allChecked = group.members.every((m) => checked.includes(serviceKey(m)));
                     const worst = group.members.some((m) => serviceState(m, fleet.incidentKeys) === "incident") ? "incident" : group.active ? "active" : "suspended";
                     return (
                       <React.Fragment key={group.key}>
                         <tr className={"rd-row--group" + (open ? " is-open" : "") + (allChecked ? " is-checked" : "")} onClick={() => toggleOpen(group.key)}>
-                          <td className="rd-col-check" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={allChecked} onChange={() => toggleGroupChecked(group)} aria-label={"Select the main server of " + group.name + " (" + group.main.name + ")"} title={"Selects only the main server (" + group.main.name + "). Expand to pick others."} /></td>
+                          <td className="rd-col-check" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={allChecked} onChange={() => toggleGroupChecked(group)} aria-label={"Select all " + group.members.length + " servers of " + group.name} title={"Selects all " + group.members.length + " servers of " + group.name + ". Expand to pick single ones."} /></td>
                           <td>
                             <button type="button" className="rd-svc rd-svc--group" aria-expanded={open} onClick={(e) => { e.stopPropagation(); toggleOpen(group.key); }}>
                               <span className="rd-svc__icon rd-svc__chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
@@ -457,6 +498,7 @@ export default function RenderDashboard() {
                 <button type="button" className="rd-btn rd-btn--quiet" disabled={pageData.page >= pageData.pages} onClick={() => setPage(pageData.page + 1)}>Next ›</button>
               </div>
             </footer>
+            </>}
           </Section>
         )}
 

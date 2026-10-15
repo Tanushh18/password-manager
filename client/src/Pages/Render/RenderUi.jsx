@@ -134,7 +134,8 @@ export function FleetBar({ counts }) {
 const SERIES_COLORS = ["#2bb3b1", "#6e9bff", "#e0a23b", "#c27be8", "#f0707a", "#4fc3d9", "#a9c24a", "#9d94ff"];
 
 /** Multi-series SVG line chart with a hover crosshair and an accessible data summary. */
-export function LineChart({ series, metric, height = 240 }) {
+export function LineChart({ series, metric, height = 240, format = null, markers = [] }) {
+  const fmt = (v, u) => (format ? format(v, u) : formatNumber(v) + (u ? " " + u : ""));
   const wrapRef = useRef(null);
   const [hover, setHover] = useState(null);
   const data = useMemo(() => (series || [])
@@ -172,12 +173,16 @@ export function LineChart({ series, metric, height = 240 }) {
         <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${metric} over time, ${data.length} series. Peak ${formatNumber(maxV)} ${unit}`}>
           {[0, 1, 2, 3].map((i) => {
             const v = high - (high - low) * i / 3, yy = T + PH * i / 3;
-            return <g key={i}><line x1={L} x2={W - R} y1={yy} y2={yy} className="rd-chart__grid" /><text x={L - 8} y={yy + 4} textAnchor="end" className="rd-chart__label">{formatNumber(v)}</text></g>;
+            return <g key={i}><line x1={L} x2={W - R} y1={yy} y2={yy} className="rd-chart__grid" /><text x={L - 8} y={yy + 4} textAnchor="end" className="rd-chart__label">{fmt(v, unit)}</text></g>;
           })}
           {data.map((s) => {
             const path = s.points.map((p, j) => `${j ? "L" : "M"}${x(p.t).toFixed(1)} ${y(p.v).toFixed(1)}`).join(" ");
             const peak = peakOf(s.points);
             return <g key={s.key || s.name}><path d={path} fill="none" stroke={s.color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" /><circle cx={x(peak.t)} cy={y(peak.v)} r="3.6" fill={s.color} /></g>;
+          })}
+          {(markers || []).filter((mk) => { const t = Date.parse(mk.at); return t >= minT && t <= maxT; }).map((mk, i) => {
+            const xx = x(Date.parse(mk.at));
+            return <g key={"mk" + i}><line x1={xx} x2={xx} y1={T} y2={T + PH} className="rd-chart__crash" /><text x={xx + 4} y={T + 12} className="rd-chart__crashlabel">⚠ {mk.label}</text><title>{mk.title || mk.label}</title></g>;
           })}
           {hover && <line x1={x(hover.t)} x2={x(hover.t)} y1={T} y2={T + PH} className="rd-chart__cursor" />}
           {hover && hover.rows.map((r) => <circle key={r.name} cx={x(r.point.t)} cy={y(r.point.v)} r="4" fill={r.color} stroke="var(--surface)" strokeWidth="2" />)}
@@ -187,16 +192,26 @@ export function LineChart({ series, metric, height = 240 }) {
         {hover && (
           <div className="rd-chart__tip" style={{ left: hover.leftPct > 62 ? "auto" : `calc(${hover.leftPct}% + 12px)`, right: hover.leftPct > 62 ? `calc(${100 - hover.leftPct}% + 12px)` : "auto" }}>
             <b>{formatDateTime(hover.t)}</b>
-            {hover.rows.map((r) => <span key={r.name}><i style={{ background: r.color }} />{r.name}<em>{formatNumber(r.point.v)} {r.point.unit || unit}</em></span>)}
+            {hover.rows.map((r) => <span key={r.name}><i style={{ background: r.color }} />{r.name}<em>{fmt(r.point.v, r.point.unit || unit)}</em></span>)}
           </div>
         )}
       </div>
       <ul className="rd-legend">
         {data.map((s) => {
           const peak = peakOf(s.points), last = s.points[s.points.length - 1];
-          return <li key={s.key || s.name}><i style={{ background: s.color }} /><span>{s.name}</span><small>Now {formatNumber(last.v)} · Peak {formatNumber(peak.v)} {peak.unit || unit} at {formatTime(peak.t)}</small></li>;
+          return <li key={s.key || s.name}><i style={{ background: s.color }} /><span>{s.name}</span><small>Now {fmt(last.v, last.unit || unit)} · Peak {fmt(peak.v, peak.unit || unit)} at {formatTime(peak.t)}</small></li>;
         })}
       </ul>
     </div>
   );
+}
+
+/** Tiny inline trend line (no axes) for a list of numbers; nulls are skipped. */
+export function Sparkline({ values, max = null, width = 120, height = 28, label }) {
+  const pts = (values || []).map((v, i) => [i, v]).filter(([, v]) => v != null && Number.isFinite(v));
+  if (pts.length < 2) return <span className="rd-spark rd-spark--empty" aria-label={(label || "Trend") + ": not enough data yet"}>no data yet</span>;
+  const top = max ?? Math.max(...pts.map(([, v]) => v), 1);
+  const n = (values || []).length - 1 || 1;
+  const d = pts.map(([i, v], k) => (k ? "L" : "M") + ((i / n) * (width - 2) + 1).toFixed(1) + " " + (height - 1 - (Math.min(v, top) / top) * (height - 2)).toFixed(1)).join(" ");
+  return <svg className="rd-spark" width={width} height={height} viewBox={"0 0 " + width + " " + height} role="img" aria-label={label}><path d={d} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" /></svg>;
 }
