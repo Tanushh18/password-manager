@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import * as api from "../api/client";
+import { bootVerdict, bootDelay } from "../lib/errors";
 import { normalizeItem } from "../lib/items";
 import { normalizeProject } from "../lib/projectItems";
 import { computeHealth } from "../lib/health";
@@ -21,7 +22,7 @@ import { pwnedCount } from "../lib/breach";
 
 const VaultContext = createContext(null);
 const PREFS_KEY = "aurelia_prefs";
-const DEFAULT_PREFS = { icons: false, autoLock: 15, searchValues: true };
+const DEFAULT_PREFS = { icons: false, searchValues: true };
 
 const readPrefs = () => {
   try {
@@ -32,9 +33,6 @@ const readPrefs = () => {
 };
 
 const SYNC_MS = 60 * 1000;            // passwords + projects re-read from the server while the tab is visible
-const ACTIVITY_KEY = "stashr_last_active"; // shared by every open tab, so activity anywhere keeps the session
-const readActivity = () => { try { return Number(localStorage.getItem(ACTIVITY_KEY)) || 0; } catch { return 0; } };
-const writeActivity = (t) => { try { localStorage.setItem(ACTIVITY_KEY, String(t)); } catch { /* private mode */ } };
 // Cheap fingerprint of the lists, so an unchanged background sync does not re-render everything.
 const signature = (list) => (list || []).map((e) => e._id + ":" + (e.updatedAt || "")).join("|");
 
@@ -73,15 +71,24 @@ export function VaultProvider({ children }) {
     return rest;
   }, []);
 
-  /* ── Boot ── */
+  /* ── Boot: a saved session is only dropped when the server says it is invalid (401). A sleeping server or a network
+        error says nothing about the session, so keep it and try again instead of showing the sign-in page. ── */
+  const [waking, setWaking] = useState(false);
   useEffect(() => {
-    let cancelled = false;
-    loadProfile()
-      .then(() => !cancelled && setStatus("ready"))
-      .catch(() => !cancelled && setStatus("signedOut"));
-    return () => {
-      cancelled = true;
+    let cancelled = false, timer = null, attempt = 0;
+    const run = () => {
+      loadProfile()
+        .then(() => { if (!cancelled) { setWaking(false); setStatus("ready"); } })
+        .catch((error) => {
+          if (cancelled) return;
+          if (bootVerdict(error, attempt) === "signedOut") { setWaking(false); setStatus("signedOut"); return; }
+          setWaking(true);
+          timer = window.setTimeout(run, bootDelay(attempt));
+          attempt += 1;
+        });
     };
+    run();
+    return () => { cancelled = true; window.clearTimeout(timer); };
   }, [loadProfile]);
 
   const clearVault = useCallback(() => {
@@ -151,23 +158,6 @@ export function VaultProvider({ children }) {
     return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("focus", sync); };
   }, [status, loadProfile, clearVault]);
 
-  /* ── Auto-lock after the inactivity chosen in Settings (0 = never). Background syncs do not count as activity. ── */
-  useEffect(() => {
-    const minutes = Number(prefs.autoLock) || 0;
-    if (status !== "ready" || minutes <= 0) return undefined;
-    let lastWrite = 0;
-    const touch = () => { const t = Date.now(); if (t - lastWrite > 10000) { lastWrite = t; writeActivity(t); } };
-    touch();
-    const events = ["pointerdown", "keydown", "mousemove", "scroll", "touchstart"];
-    events.forEach((e) => window.addEventListener(e, touch, { passive: true }));
-    const check = window.setInterval(() => {
-      if (Date.now() - readActivity() > minutes * 60000) {
-        toast.info("Locked after " + minutes + " minute" + (minutes === 1 ? "" : "s") + " of inactivity. Sign in again to continue.");
-        void logout();
-      }
-    }, 20000);
-    return () => { events.forEach((e) => window.removeEventListener(e, touch)); window.clearInterval(check); };
-  }, [status, prefs.autoLock, logout]);
 
   /* ── Items ── */
   const addItem = useCallback(async (fields) => {
@@ -317,7 +307,7 @@ export function VaultProvider({ children }) {
       importProjects,
     };
   }, [
-    status, profile, items, breaches, breachProgress, prefs, setPrefs, login, register, logout, lock,
+    status, waking, profile, items, breaches, breachProgress, prefs, setPrefs, login, register, logout, lock,
     addItem, updateItem, toggleFavorite, deleteItem, importItems, runBreachCheck, changePassword, refreshProfile,
     projects, addProject, updateProjectEntry, deleteProjectEntry, importProjects,
   ]);

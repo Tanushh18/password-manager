@@ -48,6 +48,13 @@ const readActive = () =>
     catch (e) { return 0; }
 };
 
+// The session cookie lives on the one server that signed you in. Remember it, so a failover to another server (which
+// has no cookie) is never mistaken for "you are signed out".
+const SESSION_SERVER_KEY = "pm_session_server";
+const readSessionServer = () => { try { return localStorage.getItem(SESSION_SERVER_KEY) || ""; } catch (e) { return ""; } };
+const writeSessionServer = (url) => { try { if (url) localStorage.setItem(SESSION_SERVER_KEY, url); else localStorage.removeItem(SESSION_SERVER_KEY); } catch (e) { /* private mode */ } };
+const isAuthUrl = (url) => /\/(login|register|authenticate|logout)$/.test(String(url || "").split("?")[0]);
+
 // Sticky: keep using the server that last worked (its login cookie lives there).
 let active = readActive();
 const setActive = (i) =>
@@ -88,11 +95,26 @@ instance.interceptors.response.use(
     {
         if (response.config._server !== undefined && response.config._server !== active)
             setActive(response.config._server);
+        // The server that just signed us in (or confirmed the session) is the one that holds the cookie.
+        if (/\/(login|authenticate)$/.test(String(response.config.url || "").split("?")[0]) && SERVERS[response.config._server])
+            writeSessionServer(SERVERS[response.config._server]);
+        if (/\/logout$/.test(String(response.config.url || "").split("?")[0])) writeSessionServer("");
         return response;
     },
     (error) =>
     {
         const config = error.config;
+        // A 401 from a server that never signed us in is not "signed out": ask the server that holds the session once.
+        if (config && error.response?.status === 401 && !config._sessionRetry && !/\/(login|register)$/.test(String(config.url || "").split("?")[0]))
+        {
+            const home = SERVERS.indexOf(readSessionServer());
+            if (home >= 0 && home !== config._server)
+            {
+                config._sessionRetry = true;
+                config._server = home;
+                return instance(config);
+            }
+        }
         if (!config || !isServerDown(error)) return Promise.reject(error);
 
         // Render's free plan sleeps; waking takes up to a minute. Give the same server one long retry first.

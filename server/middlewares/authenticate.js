@@ -43,8 +43,13 @@ const authenticate = async (req, res, next) =>
     }
     catch (error)
     {
+        // Only a token that is missing, malformed, expired or revoked means "not signed in". A database or network
+        // hiccup must not look like a sign-out (the client drops the session on a 401), so it is a retryable 503.
         // Never log the token or the signing secret.
-        return res.status(401).json({ error: "Unauthorised user." });
+        const badToken = error && (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError" || error.name === "NotBeforeError");
+        if (badToken) return res.status(401).json({ error: "Unauthorised user." });
+        res.set("Retry-After", "5");
+        return res.status(503).json({ error: "The server had a temporary problem. Your session is fine; try again in a moment." });
     }
 };
 

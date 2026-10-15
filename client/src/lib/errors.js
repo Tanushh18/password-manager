@@ -16,3 +16,17 @@ export const errorMessage = (err, fallback = "Something went wrong. Please try a
     if (status >= 500) return "The server ran into a problem (HTTP " + status + "). It may be waking up or restarting — try again in a minute.";
     return fallback;
 };
+
+const BOOT_RETRY_LIMIT = 20; // ~5 minutes of waiting for a sleeping server before giving up and showing the sign-in page
+
+/**
+ * What to do when checking the saved session at start-up fails. Only a 401 means "there is no valid session".
+ * A sleeping server, a network error or a 5xx says nothing about the session, so keep it and try again.
+ */
+export function bootVerdict(error, attempt = 0) {
+  if (error?.response?.status === 401) return "signedOut";
+  return attempt >= BOOT_RETRY_LIMIT ? "signedOut" : "retry";
+}
+
+export const bootDelay = (attempt) => Math.min(15000, 2000 + attempt * 2000);
+

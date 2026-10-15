@@ -124,7 +124,7 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
     for (const svc of detected.services) {
       const groupId = groupIds.get(groupKey(service));
       const disabled = Boolean(settings.disabled?.[groupId + "|" + svc.key] || settings.disabled?.[service.id + "|" + svc.key]);
-      const entry = { ...publicService(svc), fp: fingerprint(svc.key, svc.credentials), usage: null, reports: [], state: "no-credentials", error: null, usageHint: USAGE_HINT[svc.key] || "" };
+      const entry = { ...publicService(svc), fp: fingerprint(svc.key, svc.credentials), usage: null, reports: [], state: "no-credentials", error: null, usageHint: USAGE_HINT[svc.key] || (providers[svc.key] ? "" : "Stashr found this service from the app’s environment variables. It has no usage API that works with an app key, so check the provider’s own dashboard for usage and limits.") };
       entry.configuredLimits = svc.configuredLimits.map((l) => ({ ...l, period: limitPeriod(l.name) }));
       if (disabled) entry.state = "disabled";
       else if (svc.hasCredentials && providers[svc.key]) {

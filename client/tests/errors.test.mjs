@@ -20,3 +20,18 @@ test("status codes without a message are explained, never relabelled as a wrong 
   assert.match(errorMessage(http(404, "")), /HTTP 404/);
   assert.equal(errorMessage(http(400, ""), "That email and password don't match."), "That email and password don't match.");
 });
+
+import { bootVerdict, bootDelay } from "../src/lib/errors.js";
+
+test("start-up keeps the saved session unless the server says it is invalid", () => {
+  assert.equal(bootVerdict(http(401, { error: "Unauthorised user." })), "signedOut");
+  for (const e of [{ message: "Network Error" }, { code: "ECONNABORTED" }, http(502, ""), http(503, { error: "temporary" }), http(404, ""), http(429, "")]) assert.equal(bootVerdict(e, 0), "retry");
+  assert.equal(bootVerdict({ message: "Network Error" }, 19), "retry");
+  assert.equal(bootVerdict({ message: "Network Error" }, 20), "signedOut"); // gives up after a few minutes; the cookie is left alone
+});
+
+test("retry delays grow but stay short", () => {
+  assert.equal(bootDelay(0), 2000);
+  assert.equal(bootDelay(3), 8000);
+  assert.equal(bootDelay(50), 15000);
+});

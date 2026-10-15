@@ -6,7 +6,7 @@ import Field from "../../Components/Field/Field";
 import StrengthMeter from "../../Components/StrengthMeter/StrengthMeter";
 import ThemeToggle from "../../Components/ThemeToggle/ThemeToggle";
 import ImportModal from "../../Components/Item/ImportModal";
-import { ShieldCheck, LockLine, User, Globe, Timer, Download, Upload, Trash, Copy, Check, Logout, Arrow, Alert, KeyLine } from "../../Components/Icons/Icons";
+import { ShieldCheck, LockLine, User, Globe, Download, Upload, Trash, Copy, Check, Logout, Arrow, Alert, KeyLine } from "../../Components/Icons/Icons";
 import * as api from "../../api/client";
 import { exportBackup } from "../../lib/crypto";
 import { toCSV } from "../../lib/items";
@@ -547,16 +547,7 @@ export default function Settings() {
         </Group>
 
         <Group title="Security">
-          <Row icon={<Timer size={15} />} label="Auto-lock" hint="Lock the vault after this much inactivity.">
-            <select className="input settings__select" value={prefs.autoLock} onChange={(e) => setPrefs({ autoLock: Number(e.target.value) })}>
-              <option value={1}>1 minute</option>
-              <option value={5}>5 minutes</option>
-              <option value={15}>15 minutes</option>
-              <option value={60}>1 hour</option>
-              <option value={0}>Never</option>
-            </select>
-          </Row>
-          <Row icon={<LockLine size={15} />} label="Lock now" hint="Hide everything until you sign in again.">
+          <Row icon={<LockLine size={15} />} label="Lock now" hint="Sign out of this device now. You stay signed in otherwise, until you lock or sign out yourself.">
             <button type="button" className="btn btn--ghost btn--sm" onClick={lock}>Lock</button>
           </Row>
           <Row label="Show values in project search" hint="When off, matching secret values stay hidden (••••) until you tap the eye.">

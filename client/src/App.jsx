@@ -27,10 +27,12 @@ import Splash from "./Components/Splash/Splash";
 import { useVault } from "./state/vault";
 
 /* Routes that need an open vault. */
+const WAKING = { title: "Waking the server…", body: "Your sign-in is saved. Free servers sleep when idle and can take up to a minute to start." };
+
 function RequireVault({ children }) {
-  const { status } = useVault();
+  const { status, waking } = useVault();
   const location = useLocation();
-  if (status === "checking") return <Splash />;
+  if (status === "checking") return <Splash {...(waking ? WAKING : {})} />;
   if (status === "signedOut") return <Navigate to="/signin" replace state={{ from: location.pathname }} />;
   return children;
 }
@@ -43,8 +45,8 @@ function RequireAdmin({ children }) {
 
 /* Sign-in pages bounce away once there's a session. */
 function GuestOnly({ children }) {
-  const { status } = useVault();
-  if (status === "checking") return <Splash />;
+  const { status, waking } = useVault();
+  if (status === "checking") return <Splash {...(waking ? WAKING : {})} />;
   if (status === "ready") return <Navigate to="/passwords" replace />;
   return children;
 }

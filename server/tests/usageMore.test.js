@@ -69,6 +69,33 @@ describe("detecting every database by its connection string", () =>
     });
 });
 
+describe("the catalog recognises the services apps really use", () =>
+{
+    const NAMES = "MISTRAL_API_KEY PERPLEXITY_API_KEY DEEPSEEK_API_KEY OPENROUTER_API_KEY AZURE_OPENAI_API_KEY LEMON_SQUEEZY_API_KEY PADDLE_API_KEY PLAID_CLIENT_ID SLACK_BOT_TOKEN SLACK_WEBHOOK_URL DISCORD_TOKEN NOTION_API_KEY AIRTABLE_API_KEY SHOPIFY_API_KEY MUX_TOKEN_ID SANITY_PROJECT_ID CONTENTFUL_SPACE_ID STRAPI_TOKEN NEXTAUTH_SECRET NEXTAUTH_URL AUTH_SECRET KINDE_CLIENT_ID AZURE_STORAGE_CONNECTION_STRING GCS_BUCKET GOOGLE_CLOUD_PROJECT ONESIGNAL_APP_ID PUSHER_APP_ID ABLY_API_KEY STREAM_API_KEY AGORA_APP_ID DAILY_API_KEY ZOOM_CLIENT_ID DATADOG_API_KEY NEW_RELIC_LICENSE_KEY BUGSNAG_API_KEY ROLLBAR_ACCESS_TOKEN AXIOM_TOKEN INNGEST_EVENT_KEY TRIGGER_SECRET_KEY QSTASH_TOKEN VERCEL_TOKEN NETLIFY_AUTH_TOKEN GITLAB_TOKEN HASURA_GRAPHQL_ENDPOINT CONVEX_DEPLOYMENT NEO4J_URI CLICKHOUSE_URL QDRANT_URL WEAVIATE_URL LINEAR_API_KEY OPENWEATHER_API_KEY TMDB_API_KEY RECAPTCHA_SECRET_KEY TURNSTILE_SECRET_KEY UPLOADCARE_PUBLIC_KEY IMGIX_TOKEN MAILCHIMP_API_KEY".split(" ");
+
+    test("none of the common variables is left unrecognised", () =>
+    {
+        const r = detectServices(Object.fromEntries(NAMES.map((n) => [n, "x".repeat(24)])));
+        const found = new Set(r.services.flatMap((s) => s.vars.map((v) => v.name)));
+        expect(NAMES.filter((n) => !found.has(n))).toEqual([]);
+        expect(r.other).toHaveLength(0);
+    });
+
+    test("generic names are not stolen by a service (DAILY_LIMIT, STREAM_URL, MAKE_NOISE stay out)", () =>
+    {
+        const r = detectServices({ DAILY_LIMIT: "50", DAILY_BUDGET: "5", STREAM_BUFFER: "9", MAKEFLAGS: "-j", LOOPS: "3", TRIGGER_MODE: "cron", LINEAR_SCALE: "2", PORT: "10000" });
+        expect(r.services).toHaveLength(0);
+    });
+
+    test("a service with no usage reader still gets an honest note", () =>
+    {
+        const r = detectServices({ SLACK_BOT_TOKEN: "xoxb-" + "a".repeat(30) });
+        const slack = r.services[0];
+        expect(slack.key).toBe("slack");
+        expect(slack.hasCredentials).toBe(false);
+    });
+});
+
 describe("PostgreSQL usage", () =>
 {
     const fakePg = (behaviour = {}) => class {
