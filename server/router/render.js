@@ -208,7 +208,9 @@ router.post("/render/ops/incidents/resolve", async (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((v) => typeof v === "string" && v.length <= 80).slice(0, 200) : null;
   if (!ids && req.body?.all !== true) return res.status(400).json({ error: "Choose incidents to resolve." });
   try {
-    const result = await renderOps.resolveIncidents(req.rootUser, { ids });
+    const verified = req.body?.verified === true;
+    const reason = verified && typeof req.body?.reason === "string" ? req.body.reason.trim().slice(0, 200) : undefined;
+    const result = await renderOps.resolveIncidents(req.rootUser, { ids, ...(reason ? { reason } : {}), by: verified ? "check" : "manual" });
     await recordAudit(req, "incidents_resolved", "", "", { count: result.resolved });
     res.set("Cache-Control", "no-store");
     return res.json(result);

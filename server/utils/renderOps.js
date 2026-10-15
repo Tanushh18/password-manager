@@ -138,7 +138,7 @@ async function saveEncryptedList(userId, field, entries, limit) {
 }
 
 /** Manually closes open incidents (by event id, or all of them). Appends resolved events; history is kept. */
-async function resolveIncidents(user, { ids = null, reason = "Marked resolved manually." } = {}) {
+async function resolveIncidents(user, { ids = null, reason = "Marked resolved manually.", by = "manual" } = {}) {
   const dataKey = await user.getDataKey();
   const open = openEvents(encryptedList(user, "renderIncidents", dataKey, INCIDENT_LIMIT));
   const wanted = ids ? new Set(ids.map(String)) : null;
@@ -147,7 +147,7 @@ async function resolveIncidents(user, { ids = null, reason = "Marked resolved ma
   const at = nowIso();
   const docs = targets.map((e) => ({
     _id: new mongoose.Types.ObjectId(), enc: "udk",
-    data: User.sealEntry(dataKey, closingEvent(e, { id: crypto.randomUUID(), message: reason, by: "manual", at })),
+    data: User.sealEntry(dataKey, closingEvent(e, { id: crypto.randomUUID(), message: reason, by, at })),
     createdAt: new Date(), updatedAt: new Date()
   }));
   await saveEncryptedList(user._id, "renderIncidents", docs, INCIDENT_LIMIT);

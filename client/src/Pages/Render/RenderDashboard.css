@@ -380,3 +380,6 @@
 .rd-inc.is-resolved .rd-incident__mark { color: var(--ok); background: rgba(var(--ok-rgb), .14); }
 .rd-inc.is-resolved { opacity: .85; }
 @media (max-width: 640px) { .rd-inc { flex-wrap: wrap; } .rd-inc__actions { width: 100%; justify-content: flex-start; } }
+.rd-inc__check { font-weight: 600; }
+.rd-inc__check.is-ok { color: var(--ok); }
+.rd-inc__check.is-bad { color: var(--danger); }

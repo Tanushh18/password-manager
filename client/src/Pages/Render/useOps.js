@@ -58,9 +58,9 @@ export function useOps() {
     } catch { /* the next poll retries */ }
   }, []);
 
-  const resolveIncidents = useCallback(async ({ ids, all } = {}) => {
+  const resolveIncidents = useCallback(async ({ ids, all, verified, reason } = {}) => {
     try {
-      const result = await resolveRenderIncidents(all ? { all: true } : { ids });
+      const result = await resolveRenderIncidents(all ? { all: true } : { ids, ...(verified ? { verified: true, reason } : {}) });
       await refreshIncidents();
       return result;
     } catch (e) { toast.error(errorMessage(e, "Could not resolve incidents.")); throw e; }

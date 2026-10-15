@@ -328,7 +328,7 @@ export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, 
 /* ====================================================================== Incidents */
 
 const PAGE = 40;
-const RESOLVED_BY = { recovered: "Recovered on its own", manual: "Closed manually", auto: "Closed automatically" };
+const RESOLVED_BY = { recovered: "Recovered on its own", manual: "Closed manually", auto: "Closed automatically", check: "Verified by a check" };
 
 /** Incident management: real incidents (not raw events), stale ones flagged, and every state closable. */
 export function IncidentsView({ ops, incidents, onSample, askConfirm, onOpenService, onGoMonitoring }) {
@@ -340,6 +340,8 @@ export function IncidentsView({ ops, incidents, onSample, askConfirm, onOpenServ
   const [groupId, setGroupId] = useState("all");
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(PAGE);
+  const [checks, setChecks] = useState({}); // incident id -> { at, ok, text } (latest check result)
+  const [checking, setChecking] = useState([]);
 
   const open = useMemo(() => incidents.filter((i) => i.status === "open" && !i.stale), [incidents]);
   const stale = useMemo(() => incidents.filter((i) => i.status === "open" && i.stale), [incidents]);
@@ -375,6 +377,51 @@ export function IncidentsView({ ops, incidents, onSample, askConfirm, onOpenServ
     finally { setFixing(""); }
   };
 
+  /* Check one incident against the live service. Health / deploy incidents can be verified directly and are closed
+     when the problem is gone; resource and budget incidents need a fresh monitoring sample, which closes them itself. */
+  const checkOne = async (incident) => {
+    const [accountId, ...rest] = String(incident.serviceKey || "").split(":");
+    const serviceId = rest.join(":");
+    const note = (ok, text) => setChecks((old) => ({ ...old, [incident.id]: { at: new Date().toISOString(), ok, text } }));
+    try {
+      if (incident.type === "health" && accountId && serviceId) {
+        const h = await checkRenderHealth(accountId, serviceId);
+        if (h.state === "healthy") {
+          await ops.resolveIncidents({ ids: [incident.id], verified: true, reason: "Verified healthy by a manual check" + (h.status ? " (HTTP " + h.status + ")" : "") + "." });
+          note(true, "Healthy now" + (h.status ? " (HTTP " + h.status + ")" : "") + " — incident closed.");
+          return "fixed";
+        }
+        note(false, h.state === "suspended" ? "The service is suspended." : "Still " + (h.state || "unhealthy") + (h.status ? " (HTTP " + h.status + ")" : "") + (h.message ? ": " + h.message : "") + ".");
+        return "failing";
+      }
+      if (incident.type === "deploy_failure" && accountId && serviceId) {
+        const deploys = normalizeList(await getRenderDeploys(accountId, serviceId), "deploy").sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
+        const status = String(deploys[0]?.status || "unknown").toLowerCase();
+        if (status === "live") {
+          await ops.resolveIncidents({ ids: [incident.id], verified: true, reason: "Verified by a manual check: the latest deploy is live." });
+          note(true, "Latest deploy is live — incident closed.");
+          return "fixed";
+        }
+        note(false, "Latest deploy is " + status.replace(/_/g, " ") + (deploys[0]?.createdAt ? " (" + timeAgo(deploys[0].createdAt) + ")" : "") + ".");
+        return "failing";
+      }
+      await onSample(); // CPU, memory, latency and budget: the monitor re-reads the numbers and closes it if it recovered
+      note(true, "Re-checked metrics just now. If the numbers are back under the limit it closes automatically.");
+      return "sampled";
+    } catch (e) { note(false, errorMessage(e, "The check failed.")); return "error"; }
+  };
+  const runChecks = async (list) => {
+    if (!list.length || checking.length) return;
+    setChecking(list.map((i) => i.id));
+    const results = [];
+    for (const incident of list) { results.push(await checkOne(incident)); setChecking((old) => old.filter((id) => id !== incident.id)); }
+    setChecking([]);
+    const fixed = results.filter((r) => r === "fixed").length, failing = results.filter((r) => r === "failing" || r === "error").length;
+    if (list.length > 1) (failing ? toast.info : toast.success)(fixed + " closed · " + failing + " still failing" + (results.length - fixed - failing ? " · " + (results.length - fixed - failing) + " re-sampled" : "") + ".");
+    else if (results[0] === "fixed") toast.success("Healthy again — incident closed.");
+    else if (results[0] === "failing") toast.error("Still failing. Details are under the incident.");
+  };
+
   const resolve = async (list, title, message) => {
     if (!list.length || busy) return;
     const ok = await askConfirm({ title, message, confirmLabel: "Mark resolved", danger: false });
@@ -399,7 +446,7 @@ export function IncidentsView({ ops, incidents, onSample, askConfirm, onOpenServ
     <Section title="Incidents" subtitle="Each outage appears once, from the moment it opens until it is resolved. Stale ones are flagged so nothing is stuck open."
       actions={<>
         <button type="button" className="rd-btn rd-btn--quiet" onClick={() => void ops.exportReport("csv")} title="Download the incident log">⇩ Export</button>
-        <button type="button" className="rd-btn rd-btn--quiet" disabled={running} onClick={onSample}>{running ? "Checking…" : "↻ Check now"}</button>
+        <button type="button" className="rd-btn rd-btn--quiet" disabled={running} onClick={onSample}>{running ? "Checking…" : "↻ Re-sample monitoring"}</button>
       </>}>
       <div className="rd-kpis">
         <Kpi label="Open now" value={open.length} tone={open.length ? "danger" : "ok"} hint={open.length ? "Needs attention" : "All clear"} />
@@ -428,8 +475,9 @@ export function IncidentsView({ ops, incidents, onSample, askConfirm, onOpenServ
         {groupOptions.length > 1 && <select className="rd-field rd-field--inline" value={groupId} onChange={(e) => setGroupId(e.target.value)} aria-label="Filter by group"><option value="all">All groups</option>{groupOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>}
         <input className="rd-field rd-field--inline" type="search" placeholder="Search incidents…" aria-label="Search incidents" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
-      {(open.length > 1 || resolved.length > 0) && (
+      {(open.length > 0 || resolved.length > 0) && (
         <div className="rd-toolrow rd-toolrow--end">
+          {open.length > 0 && <button type="button" className="rd-btn rd-btn--primary" disabled={Boolean(busy) || checking.length > 0} onClick={() => void runChecks(open)} title="Test every open incident against the live service and close the ones that are fixed">{checking.length ? "Checking " + checking.length + "…" : "🔍 Check all open (" + open.length + ")"}</button>}
           {open.length > 1 && <button type="button" className="rd-btn rd-btn--quiet" disabled={Boolean(busy)} onClick={() => void resolve(open, "Mark " + open.length + " incidents resolved?", "Use this once you have dealt with them. If a problem is still there, monitoring opens a fresh incident on the next check.")}>✓ Resolve all open ({open.length})</button>}
           {resolved.length > 0 && <button type="button" className="rd-btn rd-btn--danger-quiet" disabled={Boolean(busy)} onClick={() => void clearClosed()}>🗑 Clear resolved ({resolved.length})</button>}
         </div>
@@ -457,8 +505,10 @@ export function IncidentsView({ ops, incidents, onSample, askConfirm, onOpenServ
                     {state === "resolved" && " · " + (RESOLVED_BY[i.resolvedBy] || "Resolved") + " after " + formatDuration(i.durationMs)}
                     {state === "stale" && " · " + i.staleReason}
                   </small>
+                  {checks[i.id] && state !== "resolved" && <small className={"rd-inc__check " + (checks[i.id].ok ? "is-ok" : "is-bad")}>{checks[i.id].ok ? "✓" : "✕"} Checked {timeAgo(checks[i.id].at)}: {checks[i.id].text}</small>}
                 </div>
                 <div className="rd-inc__actions">
+                  {state === "open" && <button type="button" className="rd-btn rd-btn--quiet" disabled={checking.length > 0 || Boolean(busy)} onClick={() => void runChecks([i])} title="Test this incident against the live service now">{checking.includes(i.id) ? "Checking…" : "🔍 Check"}</button>}
                   {plan && <button type="button" className="rd-btn rd-btn--primary" disabled={Boolean(fixing) || Boolean(busy)} onClick={() => void fix(i)}>{fixing === i.id ? "Fixing…" : plan.label}</button>}
                   {state !== "resolved" && <button type="button" className="rd-btn rd-btn--quiet" disabled={Boolean(busy)} onClick={() => void resolve([i], (state === "stale" ? "Close" : "Mark resolved") + ": " + i.serviceName + "?", state === "stale" ? "It is marked resolved and kept in the log." : "Use this once you have dealt with it. If the problem is still there, monitoring opens a fresh incident on the next check.")}>{state === "stale" ? "Close" : "✓ Resolve"}</button>}
                 </div>

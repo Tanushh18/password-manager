@@ -431,7 +431,7 @@ export default function RenderDashboard() {
             onOpenService={(s) => setSelectedKey(serviceKey(s))} onRefreshServices={() => loadAccounts({ quiet: true })} onAudit={loadAudit} onGoServices={() => go("services")} />
         )}
 
-        {view === "incidents" && <IncidentsView ops={ops} incidents={incidentList} onSample={() => void ops.sampleNow()} askConfirm={ask} onGoMonitoring={() => go("monitoring")}
+        {view === "incidents" && <IncidentsView ops={ops} incidents={incidentList} onSample={() => ops.sampleNow()} askConfirm={ask} onGoMonitoring={() => go("monitoring")}
           onOpenService={(key) => { if (services.some((s) => serviceKey(s) === key)) setSelectedKey(key); else toast.info("That service no longer exists on Render."); }} />}
 
         {view === "settings" && (
