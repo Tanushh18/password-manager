@@ -18,6 +18,7 @@ const HISTORY_LIMIT = 200;
 const INCIDENT_LIMIT = 200;
 const TICK_WINDOW_MS = 10 * 60 * 1000;
 
+const { openEvents, orphanedOpen, closingEvent } = require("./incidentFold");
 const asEntry = (entry, dataKey) => {
   if (!entry || entry.enc !== "udk") return null;
   const value = User.publicEntry(entry, dataKey);
@@ -134,6 +135,34 @@ async function saveEncryptedList(userId, field, entries, limit) {
   if (!entries.length) return;
   const bounded = entries.slice(-limit);
   await User.updateOne({ _id: userId }, { $push: { [field]: { $each: bounded, $slice: -limit } } });
+}
+
+/** Manually closes open incidents (by event id, or all of them). Appends resolved events; history is kept. */
+async function resolveIncidents(user, { ids = null, reason = "Marked resolved manually." } = {}) {
+  const dataKey = await user.getDataKey();
+  const open = openEvents(encryptedList(user, "renderIncidents", dataKey, INCIDENT_LIMIT));
+  const wanted = ids ? new Set(ids.map(String)) : null;
+  const targets = open.filter((e) => !wanted || wanted.has(String(e.id)));
+  if (!targets.length) return { resolved: 0 };
+  const at = nowIso();
+  const docs = targets.map((e) => ({
+    _id: new mongoose.Types.ObjectId(), enc: "udk",
+    data: User.sealEntry(dataKey, closingEvent(e, { id: crypto.randomUUID(), message: reason, by: "manual", at })),
+    createdAt: new Date(), updatedAt: new Date()
+  }));
+  await saveEncryptedList(user._id, "renderIncidents", docs, INCIDENT_LIMIT);
+  return { resolved: targets.length };
+}
+
+/** Deletes closed history; incidents that are still open are kept. */
+async function clearClosedIncidents(user) {
+  const dataKey = await user.getDataKey();
+  const rows = (user.renderIncidents || []).map((entry) => ({ entry, fields: asEntry(entry, dataKey) }));
+  const keep = new Set(openEvents(rows.map((r) => r.fields).filter(Boolean)).map((e) => e.id));
+  const drop = rows.filter((r) => !r.fields || !keep.has(r.fields.id)).map((r) => r.entry._id);
+  if (!drop.length) return { removed: 0 };
+  await User.updateOne({ _id: user._id }, { $pull: { renderIncidents: { _id: { $in: drop } } } });
+  return { removed: drop.length };
 }
 
 async function sendTelegram(config, message) {
@@ -287,9 +316,10 @@ async function runUserMonitoring(user, options = {}) {
         result.suspended = service?.suspended === "suspended";
         result.status = String(service?.serviceDetails?.runtime || service?.status || "");
         if (config.monitor?.checkHealth && service && service.suspended !== "suspended") result.health = await probeService(service);
-      } catch {
+      } catch (error) {
         result.name = member.serviceId;
         result.error = "Could not retrieve service status from Render.";
+        result.gone = error?.status === 404;
       }
       try {
         const deployPayload = await renderRequest(member.apiKey, "/v1/services/" + encodeURIComponent(member.serviceId) + "/deploys?limit=5");
@@ -365,12 +395,12 @@ async function runUserMonitoring(user, options = {}) {
         pendingIncidents.push({
           id: crypto.randomUUID(), groupId: group.id, groupName: group.name, serviceKey: member.key,
           serviceName: result.name, type, severity: latest.severity || "warning",
-          state: "resolved", message: result.name + " " + type + " condition recovered.",
-          openedAt: latest.openedAt || latest.at, at: endTime
+          state: "resolved", message: result.gone ? "Closed automatically: " + (latest.serviceName || result.name) + " no longer exists on Render." : result.name + " " + type + " condition recovered.",
+          openedAt: latest.openedAt || latest.at, at: endTime, ...(result.gone ? { resolvedBy: "auto" } : {})
         });
       }
       for (const check of checks) {
-        if (openFor(check.type)) continue;
+        if (result.gone || openFor(check.type)) continue;
         const incident = {
           id: crypto.randomUUID(), groupId: group.id, groupName: group.name, serviceKey: member.key,
           serviceName: result.name, type: check.type, severity: check.severity, state: "open",
@@ -421,6 +451,12 @@ async function runUserMonitoring(user, options = {}) {
       estimatedMonthlyCostUsd, monthlyBudgetUsd, costCoverageCount, costCoverageComplete,
       source: options.force ? "manual" : "scheduled"
     });
+  }
+
+  // Incidents that can never resolve by themselves (group removed, service left the group, account disconnected).
+  const accountIds = new Set((user.renderAccounts || []).map((a) => String(a._id)));
+  for (const open of orphanedOpen([...priorIncidents, ...pendingIncidents], config.groups || [], accountIds)) {
+    pendingIncidents.push(closingEvent(open, { id: crypto.randomUUID(), message: "Closed automatically: monitoring for " + (open.serviceName || "this service") + " was removed.", by: "auto", at: endTime }));
   }
 
   const sealMany = (items) => items.map((fields) => ({
@@ -481,6 +517,6 @@ function verifySecret(candidate, expected) {
 
 module.exports = {
   defaultConfig, normalizeConfig, readConfig, saveConfig, publicConfig,
-  runUserMonitoring, runAllEnabledMonitoring, sendTelegram, encryptedList, verifySecret, renderRequest,
+  runUserMonitoring, runAllEnabledMonitoring, resolveIncidents, clearClosedIncidents, sendTelegram, encryptedList, verifySecret, renderRequest,
   HISTORY_LIMIT, INCIDENT_LIMIT
 };

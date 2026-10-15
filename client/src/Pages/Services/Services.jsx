@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import { getLiveDashboard, saveUsageSettings } from "../../api/client";
 import { Skeleton, Empty } from "../Render/RenderUi";
 import { timeAgo, errorMessage } from "../Render/renderUtils";
+import { usePolling } from "../Render/renderHooks";
 import { formatAmount, forecastText, summarize, projectSummary, metricRows, accountRows, STATUS_LABEL } from "./servicesUtils";
 import "../Render/RenderDashboard.css";
 import "./Services.css";
@@ -46,7 +47,7 @@ function Overview({ data, onOpen }) {
   return (
     <div className="sv-stack">
       <div className="sv-stats">
-        <div><span>Live projects</span><b>{data.projectCount ?? data.projects.length}</b><small>{data.liveCount} of {data.totalCount} Render services live</small></div>
+        <div><span>Live projects</span><b>{data.projectCount ?? data.projects.length}</b><small>{data.liveCount} of {data.totalCount} Render services live · syncs every minute</small></div>
         <div><span>Services tracked</span><b>{summary.tracked}</b><small>with live usage data</small></div>
         <div className={summary.critical ? "is-critical" : summary.warn ? "is-warn" : ""}><span>Needs attention</span><b>{summary.warn + summary.critical}</b><small>{summary.critical ? summary.critical + " almost out" : summary.warn ? summary.warn + " getting low" : "All within limits"}</small></div>
         <div><span>Soonest to run out</span><b>{summary.soonest ? new Date(summary.soonest.at).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "—"}</b><small>{summary.soonest ? summary.soonest.project + " · " + summary.soonest.label : "Nothing projected"}</small></div>
@@ -243,16 +244,19 @@ export default function Services() {
   const [selected, setSelected] = useState("overview");
   const [showSettings, setShowSettings] = useState(false);
 
-  const load = useCallback(async (refresh = false) => {
-    setLoading(true); setError("");
+  const load = useCallback(async (refresh = false, quiet = false) => {
+    if (!quiet) { setLoading(true); setError(""); }
     try {
       const result = await getLiveDashboard({ refresh });
       setData(result);
       if (result?.settings?.mongoLimitMb) setMongoMb(String(result.settings.mongoLimitMb));
-    } catch (e) { setError(errorMessage(e, "Could not load the services dashboard.")); }
-    finally { setLoading(false); }
+      if (quiet) setError("");
+    } catch (e) { if (!quiet) setError(errorMessage(e, "Could not load the services dashboard.")); }
+    finally { if (!quiet) setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  // Live sync: new, deleted and suspended Render services show up on their own (providers are cached server-side).
+  usePolling(() => load(false, true), 60000, true);
 
   const save = async (patch, message) => {
     try {

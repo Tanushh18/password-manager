@@ -35,6 +35,37 @@ export const serviceKind = (s) => {
 
 export const serviceKey = (s) => s.accountId + ":" + s.id;
 
+const REPO_RE = /github\.com[/:]([^/\s]+)\/([^/\s#?]+?)(?:\.git)?(?:[/?#].*)?$/i;
+/** "owner/repo" (lowercase) for a GitHub URL, or "". Same repo = same app. */
+export const repoKeyOf = (url) => { const m = String(url || "").match(REPO_RE); return m ? (m[1] + "/" + m[2]).toLowerCase() : ""; };
+export const repoNameOf = (url) => { const m = String(url || "").match(REPO_RE); return m ? m[2] : ""; };
+
+const isSuspended = (s) => s?.suspended === "suspended";
+
+/**
+ * Groups services that are deployed from the same GitHub repo into one app: [{ key, name, repo, main, members,
+ * active, suspended, accounts }]. `main` is the newest running service (else the newest). Services without a
+ * repo stay on their own. Group order follows the first member, so any sort of the input is kept.
+ */
+export function groupServices(services) {
+  const map = new Map();
+  for (const s of services || []) {
+    const key = repoKeyOf(s.repo) || "svc:" + serviceKey(s);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(s);
+  }
+  return [...map].map(([key, list]) => {
+    const members = [...list].sort((a, b) => Number(isSuspended(a)) - Number(isSuspended(b)) || (Date.parse(b.updatedAt || 0) || 0) - (Date.parse(a.updatedAt || 0) || 0));
+    const main = members[0];
+    const shared = !key.startsWith("svc:");
+    return {
+      key, name: shared ? repoNameOf(main.repo) || main.name : main.name, repo: shared ? main.repo : "", main, members,
+      active: members.filter((m) => !isSuspended(m)).length, suspended: members.filter(isSuspended).length,
+      accounts: [...new Set(members.map((m) => m.accountName).filter(Boolean))]
+    };
+  });
+}
+
 export const normalizeServices = (payload) => (Array.isArray(payload) ? payload : [])
   .map((entry) => entry?.service || entry)
   .filter((s) => s?.id)
@@ -144,6 +175,55 @@ export const openIncidents = (incidents) => {
     .sort((a, b) => Date.parse(a.at || a.openedAt || 0) - Date.parse(b.at || b.openedAt || 0))
     .forEach((incident) => latest.set([incident.groupId, incident.serviceKey, incident.type].join(":"), incident));
   return [...latest.values()].filter((incident) => incident.state === "open");
+};
+
+const stamp = (e) => Date.parse(e?.at || e?.openedAt || 0) || 0;
+export const INCIDENT_TYPES = { health: "Health check", deploy_failure: "Deploy failed", cpu: "High CPU", memory: "High memory", latency: "Slow responses", budget: "Over budget" };
+export const incidentTypeLabel = (type) => INCIDENT_TYPES[type] || String(type || "Incident").replace(/_/g, " ");
+
+/**
+ * Folds the event log (open / resolved events) into incidents, one per outage: { id, status, openedAt, resolvedAt,
+ * durationMs, resolvedBy, stale, staleReason, event, ... }. An open incident is "stale" when it can never resolve
+ * by itself: its service no longer exists on Render (liveKeys) or its monitoring group was removed (groupIds).
+ * Pass null for liveKeys/groupIds when that list is not known, and nothing is marked stale.
+ */
+export function buildIncidents(events, { liveKeys = null, groupIds = null, now = Date.now() } = {}) {
+  const current = new Map();
+  const out = [];
+  [...(events || [])].sort((a, b) => stamp(a) - stamp(b)).forEach((e) => {
+    const key = [e.groupId, e.serviceKey, e.type].join(":");
+    if (e.state === "open") {
+      if (current.has(key)) return;
+      const incident = {
+        id: e.id, key, groupId: e.groupId, groupName: e.groupName || "Group", serviceKey: e.serviceKey, serviceName: e.serviceName || "Service",
+        type: e.type, severity: e.severity || "warning", message: e.message || "", openedAt: e.openedAt || e.at,
+        status: "open", resolvedAt: null, resolvedBy: "", resolveMessage: "", stale: false, staleReason: "", event: e
+      };
+      current.set(key, incident);
+      out.push(incident);
+    } else if (e.state === "resolved") {
+      const incident = current.get(key);
+      if (!incident) return;
+      Object.assign(incident, { status: "resolved", resolvedAt: e.at, resolvedBy: e.resolvedBy || "recovered", resolveMessage: e.message || "" });
+      current.delete(key);
+    }
+  });
+  for (const incident of out) {
+    const start = Date.parse(incident.openedAt) || 0;
+    incident.durationMs = Math.max(0, (incident.status === "open" ? now : Date.parse(incident.resolvedAt) || now) - start);
+    if (incident.status !== "open" || incident.serviceKey === "group-budget" && !(groupIds && !groupIds.has(incident.groupId))) continue;
+    if (groupIds && !groupIds.has(incident.groupId)) { incident.stale = true; incident.staleReason = "Its monitoring group was removed."; }
+    else if (liveKeys && incident.serviceKey !== "group-budget" && !liveKeys.has(incident.serviceKey)) { incident.stale = true; incident.staleReason = "This service no longer exists on Render."; }
+  }
+  return out.sort((a, b) => (Date.parse(b.openedAt) || 0) - (Date.parse(a.openedAt) || 0));
+}
+
+export const formatDuration = (ms) => {
+  const mins = Math.round(Math.max(0, ms) / 60000);
+  if (mins < 1) return "under a minute";
+  if (mins < 60) return mins + " min";
+  if (mins < 1440) return Math.floor(mins / 60) + "h " + (mins % 60) + "m";
+  return Math.floor(mins / 1440) + "d " + Math.floor((mins % 1440) / 60) + "h";
 };
 
 /**

@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import {
   getRenderOpsConfig, saveRenderOpsConfig, getRenderOpsHistory, getRenderOpsIncidents,
-  runRenderOpsNow, testRenderOpsNotification, getRenderOpsReport
+  runRenderOpsNow, testRenderOpsNotification, getRenderOpsReport, resolveRenderIncidents, clearRenderIncidents
 } from "../../api/client";
 import { openIncidents, readStored, writeStored, errorMessage } from "./renderUtils";
 
@@ -49,6 +49,30 @@ export function useOps() {
       setLoadError(errorMessage(e, "Could not load persistent monitoring. Check the Stashr API deployment."));
     } finally { setLoading(false); }
   }, []);
+
+  // Lightweight: only the incident log (used by the incidents page to stay live).
+  const refreshIncidents = useCallback(async () => {
+    try {
+      const result = await getRenderOpsIncidents(200);
+      setIncidents(Array.isArray(result.incidents) ? result.incidents : []);
+    } catch { /* the next poll retries */ }
+  }, []);
+
+  const resolveIncidents = useCallback(async ({ ids, all } = {}) => {
+    try {
+      const result = await resolveRenderIncidents(all ? { all: true } : { ids });
+      await refreshIncidents();
+      return result;
+    } catch (e) { toast.error(errorMessage(e, "Could not resolve incidents.")); throw e; }
+  }, [refreshIncidents]);
+
+  const clearHistory = useCallback(async () => {
+    try {
+      const result = await clearRenderIncidents();
+      await refreshIncidents();
+      return result;
+    } catch (e) { toast.error(errorMessage(e, "Could not clear incident history.")); throw e; }
+  }, [refreshIncidents]);
 
   const persist = useCallback(async (overrides = {}, { silent = false } = {}) => {
     setSaving(true);
@@ -115,6 +139,6 @@ export function useOps() {
   return {
     config, groups, monitor, setMonitor, telegramBotToken, setTelegramBotToken, telegramChatId, setTelegramChatId,
     history, incidents, openIncidents: open, loading, saving, running, loadError,
-    refresh, persist, sampleNow, testTelegram, clearTelegram, exportReport
+    refresh, refreshIncidents, resolveIncidents, clearHistory, persist, sampleNow, testTelegram, clearTelegram, exportReport
   };
 }

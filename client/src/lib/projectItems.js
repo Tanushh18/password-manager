@@ -52,6 +52,11 @@ export const emptyProject = () => ({
   renderAutoSync: "", // "on" | ""
   renderAutoLinked: "", // "yes" = linked automatically | "off" = you unlinked it, so it is never auto-linked again
 
+  // Set by the automatic GitHub/Render sync: "github" | "render" = created by Stashr, "" = added by you.
+  autoSource: "",
+  autoStale: "", // "yes" = repo no longer found anywhere (archived automatically; returns if the repo does)
+  autoSyncedAt: "",
+
   lastDeployedAt: "",
   notes: "",
 

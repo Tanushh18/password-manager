@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { useVault } from "../../state/vault";
 import { ShieldLine, Menu, Close, Arrow } from "../Icons/Icons";
 import ThemeToggle from "../ThemeToggle/ThemeToggle";
+import VersionBadge from "../WhatsNew/WhatsNew";
 import "./Navbar.css";
 
 function Navbar() {
@@ -55,6 +56,7 @@ function Navbar() {
     <>
       <header className={`nav ${scrolled ? "is-scrolled" : ""}`}>
         <div className="nav__inner">
+          <div className="nav__brandwrap">
           <Link to="/" className="nav__brand" aria-label="Stashr home">
             <span className="nav__mark">
               <ShieldLine size={19} strokeWidth={1.8} />
@@ -63,6 +65,8 @@ function Navbar() {
               <span className="nav__name">Stashr</span>
             </span>
           </Link>
+          <VersionBadge autoOpen={isAuthenticated} />
+          </div>
 
           <nav className="nav__links" aria-label="Primary">
             {links.map((link) => (

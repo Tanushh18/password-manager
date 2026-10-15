@@ -3,12 +3,13 @@ const mongoose = require("mongoose");
 const renderOps = require("../utils/renderOps");
 const { fetchAllPages } = require("../utils/renderPaging");
 const { syncProjectEnv, runAllEnvSync } = require("../utils/renderEnvSync");
-const { getProjectStatuses, runAllAutoLink } = require("../utils/projectStatus");
+const { getProjectStatuses, runAllAutoLink, clearServicesCache } = require("../utils/projectStatus");
 const { runUsage, runAllUsage, readSettings, saveSettings } = require("../utils/usageIO");
 const { pushProjectEnv } = require("../utils/renderEnvPush");
 const { provision } = require("../utils/provision");
 const { groupKey, mergeProjects } = require("../utils/projectMerge");
 const { syncAllProjects } = require("../utils/projectSyncAll");
+const { autoSyncProjects, runAllProjectSync } = require("../utils/projectAutoSync");
 const { validateProvisionInput } = require("../utils/provisionInput");
 const { githubSend, probeScopes, loadGithubAccounts } = require("../utils/githubClient");
 const { buildRegistrySync, setAutoSync, runAllRegistrySync } = require("../utils/registrySyncIO");
@@ -121,11 +122,12 @@ router.post("/render/ops/tick", apiLimiter, async (req, res) => {
     // Each upkeep step is isolated: one failing never blocks the others.
     const step = async (fn) => { try { return await fn(); } catch { return { error: true }; } };
     const autoLink = await step(runAllAutoLink);
+    const projectSync = await step(runAllProjectSync);
     const envSync = await step(runAllEnvSync);
     const registrySync = await step(runAllRegistrySync);
     const usage = await step(runAllUsage);
     res.set("Cache-Control", "no-store");
-    return res.json({ ok: true, ...summary, autoLink, envSync, registrySync, usage, completedAt: new Date().toISOString() });
+    return res.json({ ok: true, ...summary, autoLink, projectSync, envSync, registrySync, usage, completedAt: new Date().toISOString() });
   } catch {
     return res.status(500).json({ error: "Monitoring tick failed. Check server logs without logging secrets." });
   }
@@ -133,6 +135,13 @@ router.post("/render/ops/tick", apiLimiter, async (req, res) => {
 
 /* All user-facing Render operations use Stashr's authenticated session. */
 router.use("/render", authenticate, apiLimiter);
+
+/* Anything that changes services (delete, suspend, resume, create, deploy) invalidates the cached service list,
+   so every page shows the new state on its next refresh. */
+router.use("/render", (req, res, next) => {
+  if (req.method !== "GET") res.on("finish", () => { try { clearServicesCache(req.rootUser._id); } catch { /* cache only */ } });
+  next();
+});
 
 router.get("/render/ops/config", async (req, res) => {
   try {
@@ -192,6 +201,27 @@ router.get("/render/ops/incidents", async (req, res) => {
   } catch {
     return res.status(500).json({ error: "Could not load incident history." });
   }
+});
+
+/* Close open incidents by hand (ids, or all) and clear closed history. Neither touches Render. */
+router.post("/render/ops/incidents/resolve", async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((v) => typeof v === "string" && v.length <= 80).slice(0, 200) : null;
+  if (!ids && req.body?.all !== true) return res.status(400).json({ error: "Choose incidents to resolve." });
+  try {
+    const result = await renderOps.resolveIncidents(req.rootUser, { ids });
+    await recordAudit(req, "incidents_resolved", "", "", { count: result.resolved });
+    res.set("Cache-Control", "no-store");
+    return res.json(result);
+  } catch { return res.status(500).json({ error: "Could not resolve incidents." }); }
+});
+
+router.post("/render/ops/incidents/clear", async (req, res) => {
+  try {
+    const result = await renderOps.clearClosedIncidents(req.rootUser);
+    await recordAudit(req, "incidents_cleared", "", "", { count: result.removed });
+    res.set("Cache-Control", "no-store");
+    return res.json(result);
+  } catch { return res.status(500).json({ error: "Could not clear incident history." }); }
 });
 
 router.post("/render/ops/run", async (req, res) => {
@@ -754,6 +784,16 @@ router.post("/render/provision", provisionLimiter, async (req, res) => {
     return res.status(result.ok ? 201 : 422).json(result);
   } catch (error) {
     return res.status(500).json({ ok: false, error: "Could not create the project. Nothing was deleted; check GitHub and Render for anything already created." });
+  }
+});
+
+router.post("/render/projects/auto-sync", async (req, res) => {
+  try {
+    const summary = await autoSyncProjects(req.rootUser, { force: req.body?.force === true });
+    res.set("Cache-Control", "no-store");
+    return res.json({ ok: true, ...summary });
+  } catch (error) {
+    return res.status(500).json({ error: "Could not sync projects." });
   }
 });
 

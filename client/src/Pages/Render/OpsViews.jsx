@@ -8,7 +8,7 @@ import { Kpi, Section, Skeleton, Empty, LineChart } from "./RenderUi";
 import { usePolling } from "./renderHooks";
 import {
   serviceKind, serviceKey, normalizeList, sumMetricPoints, peakOf, rangeStart, timeAgo, formatNumber, formatDateTime,
-  formatTime, isErrorLog, errorMessage, remediationFor, METRIC_OPTIONS, RANGE_OPTIONS
+  formatTime, isErrorLog, errorMessage, remediationFor, incidentTypeLabel, formatDuration, METRIC_OPTIONS, RANGE_OPTIONS
 } from "./renderUtils";
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -327,13 +327,40 @@ export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, 
 
 /* ====================================================================== Incidents */
 
-export function IncidentsView({ ops, onSample, askConfirm }) {
-  const { incidents, openIncidents, loading, running } = ops;
+const PAGE = 40;
+const RESOLVED_BY = { recovered: "Recovered on its own", manual: "Closed manually", auto: "Closed automatically" };
+
+/** Incident management: real incidents (not raw events), stale ones flagged, and every state closable. */
+export function IncidentsView({ ops, incidents, onSample, askConfirm, onOpenService, onGoMonitoring }) {
+  const { loading, running, groups, monitor } = ops;
   const [fixing, setFixing] = useState("");
+  const [busy, setBusy] = useState("");
+  const [tab, setTab] = useState("open");
+  const [severity, setSeverity] = useState("all");
+  const [groupId, setGroupId] = useState("all");
+  const [query, setQuery] = useState("");
+  const [limit, setLimit] = useState(PAGE);
+
+  const open = useMemo(() => incidents.filter((i) => i.status === "open" && !i.stale), [incidents]);
+  const stale = useMemo(() => incidents.filter((i) => i.status === "open" && i.stale), [incidents]);
+  const resolved = useMemo(() => incidents.filter((i) => i.status === "resolved"), [incidents]);
+  const mttr = resolved.length ? resolved.reduce((sum, i) => sum + i.durationMs, 0) / resolved.length : null;
+  const tabs = [["open", "Open", open.length], ...(stale.length ? [["stale", "Stale", stale.length]] : []), ["resolved", "Resolved", resolved.length], ["all", "All", incidents.length]];
+  useEffect(() => { if (tab === "stale" && !stale.length) setTab("open"); }, [tab, stale.length]);
+  useEffect(() => { setLimit(PAGE); }, [tab, severity, groupId, query]);
+
+  const rows = useMemo(() => {
+    const pool = tab === "open" ? open : tab === "stale" ? stale : tab === "resolved" ? resolved : incidents;
+    const q = query.trim().toLowerCase();
+    return pool.filter((i) => (severity === "all" || i.severity === severity) && (groupId === "all" || i.groupId === groupId)
+      && (!q || [i.message, i.type, i.groupName, i.serviceName].join(" ").toLowerCase().includes(q)));
+  }, [tab, open, stale, resolved, incidents, severity, groupId, query]);
+  const groupOptions = useMemo(() => [...new Map(incidents.map((i) => [i.groupId, i.groupName])).entries()], [incidents]);
+
   const fix = async (incident) => {
-    const plan = remediationFor(incident);
+    const plan = remediationFor(incident.event);
     if (!plan || fixing) return;
-    const ok = await askConfirm({ title: plan.label + " " + (incident.serviceName || "service") + "?", message: plan.confirm, confirmLabel: plan.label, danger: false });
+    const ok = await askConfirm({ title: plan.label + " " + incident.serviceName + "?", message: plan.confirm, confirmLabel: plan.label, danger: false });
     if (!ok) return;
     setFixing(incident.id);
     try {
@@ -341,47 +368,107 @@ export function IncidentsView({ ops, onSample, askConfirm }) {
       else await restartRenderService(plan.target.accountId, plan.target.id);
       toast.info(plan.label + " requested. Waiting for the service to recover…");
       const result = await waitForServiceReady(plan.target, { timeoutMs: plan.action === "deploy" ? 300000 : 90000, shouldStop: () => false });
-      if (result.ok) toast.success((incident.serviceName || "Service") + " is healthy again.");
+      if (result.ok) toast.success(incident.serviceName + " is healthy again.");
       else toast.error(result.message || "The service has not recovered yet.");
       onSample();
     } catch (e) { toast.error(errorMessage(e, "Could not run the fix.")); }
     finally { setFixing(""); }
   };
-  const [filter, setFilter] = useState("all");
-  const [query, setQuery] = useState("");
-  // An "open" event is only still open if nothing later resolved it.
-  const activeIds = useMemo(() => new Set(openIncidents.map((i) => i.id)), [openIncidents]);
-  const isActive = (i) => i.state === "open" && activeIds.has(i.id);
-  const rows = useMemo(() => [...incidents]
-    .sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0))
-    .filter((i) => (filter === "all" || (filter === "open" ? activeIds.has(i.id) : !activeIds.has(i.id))) && (!query.trim() || [i.message, i.type, i.groupName, i.serviceName].join(" ").toLowerCase().includes(query.trim().toLowerCase()))), [incidents, filter, query, activeIds]);
 
+  const resolve = async (list, title, message) => {
+    if (!list.length || busy) return;
+    const ok = await askConfirm({ title, message, confirmLabel: "Mark resolved", danger: false });
+    if (!ok) return;
+    setBusy("resolve");
+    try { const r = await ops.resolveIncidents({ ids: list.map((i) => i.id) }); toast.success(r.resolved + " incident" + (r.resolved === 1 ? "" : "s") + " closed."); }
+    catch { /* toast shown */ }
+    finally { setBusy(""); }
+  };
+  const clearClosed = async () => {
+    if (!resolved.length || busy) return;
+    const ok = await askConfirm({ title: "Clear resolved history?", message: "Deletes the " + resolved.length + " resolved incident" + (resolved.length === 1 ? "" : "s") + " from your log. Open incidents are kept.", confirmLabel: "Clear history", danger: true });
+    if (!ok) return;
+    setBusy("clear");
+    try { const r = await ops.clearHistory(); toast.success("Removed " + r.removed + " log entr" + (r.removed === 1 ? "y" : "ies") + "."); }
+    catch { /* toast shown */ }
+    finally { setBusy(""); }
+  };
+
+  const noGroups = !groups.length;
   return (
-    <Section title="Incident timeline" subtitle="Health, resource-threshold and budget transitions recorded by persistent monitoring."
-      actions={<button type="button" className="rd-btn rd-btn--quiet" disabled={running} onClick={onSample}>{running ? "Sampling…" : "Sample now"}</button>}>
-      <div className="rd-kpis rd-kpis--3">
-        <Kpi label="Open now" value={openIncidents.length} tone={openIncidents.length ? "danger" : "ok"} hint={openIncidents.length ? "Needs attention" : "All clear"} />
-        <Kpi label="Events recorded" value={incidents.length} />
-        <Kpi label="Latest event" value={incidents.length ? timeAgo(incidents.reduce((a, i) => (Date.parse(i.at || 0) > Date.parse(a || 0) ? i.at : a), 0)) : "—"} />
+    <Section title="Incidents" subtitle="Each outage appears once, from the moment it opens until it is resolved. Stale ones are flagged so nothing is stuck open."
+      actions={<>
+        <button type="button" className="rd-btn rd-btn--quiet" onClick={() => void ops.exportReport("csv")} title="Download the incident log">⇩ Export</button>
+        <button type="button" className="rd-btn rd-btn--quiet" disabled={running} onClick={onSample}>{running ? "Checking…" : "↻ Check now"}</button>
+      </>}>
+      <div className="rd-kpis">
+        <Kpi label="Open now" value={open.length} tone={open.length ? "danger" : "ok"} hint={open.length ? "Needs attention" : "All clear"} />
+        <Kpi label="Stale" value={stale.length} tone={stale.length ? "warn" : undefined} hint={stale.length ? "Service or group is gone" : "None"} />
+        <Kpi label="Resolved" value={resolved.length} hint="In the log" />
+        <Kpi label="Avg time to fix" value={mttr == null ? "—" : formatDuration(mttr)} hint="Across resolved incidents" />
       </div>
+
+      {noGroups && (
+        <div className="rd-alert"><span aria-hidden="true">i</span><div>Incidents are recorded for <strong>server groups</strong>. Select two or more services in Services → “Group selected”, then turn monitoring on in Settings.{" "}
+          {onGoMonitoring && <button type="button" className="rd-btn rd-btn--link" onClick={onGoMonitoring}>Open Monitoring</button>}</div></div>
+      )}
+      {!noGroups && !monitor?.enabled && (
+        <div className="rd-alert"><span aria-hidden="true">i</span><div>Monitoring is off, so no new incidents are being recorded. Turn it on in Settings → Alert policy.</div></div>
+      )}
+      {stale.length > 0 && (
+        <div className="rd-alert rd-alert--warn" role="status"><span aria-hidden="true">▲</span>
+          <div>{stale.length} open incident{stale.length === 1 ? " belongs" : "s belong"} to services or groups that no longer exist, so {stale.length === 1 ? "it" : "they"} can never recover on {stale.length === 1 ? "its" : "their"} own.</div>
+          <button type="button" disabled={Boolean(busy)} onClick={() => void resolve(stale, "Close " + stale.length + " stale incident" + (stale.length === 1 ? "" : "s") + "?", "Their service or monitoring group no longer exists. They are marked resolved and kept in the log.")}>Close {stale.length === 1 ? "it" : "all"}</button>
+        </div>
+      )}
+
       <div className="rd-toolrow">
-        <div className="rd-segmented" role="group" aria-label="Filter incidents">{[["all", "All"], ["open", "Open"], ["resolved", "Resolved"]].map(([v, l]) => <button key={v} type="button" aria-pressed={filter === v} className={filter === v ? "is-active" : ""} onClick={() => setFilter(v)}>{l}</button>)}</div>
+        <div className="rd-segmented" role="tablist" aria-label="Incident status">{tabs.map(([id, label, count]) => <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "is-active" : ""} onClick={() => setTab(id)}>{label} <small>{count}</small></button>)}</div>
+        <select className="rd-field rd-field--inline" value={severity} onChange={(e) => setSeverity(e.target.value)} aria-label="Filter by severity"><option value="all">Any severity</option><option value="critical">Critical</option><option value="warning">Warning</option></select>
+        {groupOptions.length > 1 && <select className="rd-field rd-field--inline" value={groupId} onChange={(e) => setGroupId(e.target.value)} aria-label="Filter by group"><option value="all">All groups</option>{groupOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>}
         <input className="rd-field rd-field--inline" type="search" placeholder="Search incidents…" aria-label="Search incidents" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
-      {loading && !incidents.length ? <Skeleton lines={5} height={44} /> : (
+      {(open.length > 1 || resolved.length > 0) && (
+        <div className="rd-toolrow rd-toolrow--end">
+          {open.length > 1 && <button type="button" className="rd-btn rd-btn--quiet" disabled={Boolean(busy)} onClick={() => void resolve(open, "Mark " + open.length + " incidents resolved?", "Use this once you have dealt with them. If a problem is still there, monitoring opens a fresh incident on the next check.")}>✓ Resolve all open ({open.length})</button>}
+          {resolved.length > 0 && <button type="button" className="rd-btn rd-btn--danger-quiet" disabled={Boolean(busy)} onClick={() => void clearClosed()}>🗑 Clear resolved ({resolved.length})</button>}
+        </div>
+      )}
+
+      {loading && !incidents.length ? <Skeleton lines={5} height={64} /> : (
         <ul className="rd-incidents">
-          {rows.slice(0, 100).map((i, index) => (
-            <li key={i.id || i._id || index} className={"rd-incident " + (isActive(i) ? "is-open" : "is-resolved")}>
-              <span className="rd-incident__mark" aria-hidden="true">{isActive(i) ? "!" : "✓"}</span>
-              <div><strong>{i.message || i.type}</strong><small>{i.groupName || "Group"} · {i.serviceName || "Service"} · {i.at ? formatDateTime(i.at) : "—"}</small></div>
-              {isActive(i) && remediationFor(i) && <button type="button" className="rd-btn rd-btn--primary" disabled={Boolean(fixing)} onClick={() => void fix(i)}>{fixing === i.id ? "Fixing…" : "Fix · " + remediationFor(i).label}</button>}
-              {i.severity && <span className={"rd-sev is-" + i.severity}>{i.severity}</span>}
-              <span className="rd-incident__state">{i.state === "open" && !isActive(i) ? "superseded" : i.state || "event"}</span>
-            </li>
-          ))}
-          {!rows.length && <Empty icon="✓" title={incidents.length ? "No incidents match" : "No incidents recorded"}>{incidents.length ? "Change the filter or search." : "Run a sample or enable monitoring after configuring a group."}</Empty>}
+          {rows.slice(0, limit).map((i) => {
+            const plan = i.status === "open" && !i.stale ? remediationFor(i.event) : null;
+            const state = i.status === "resolved" ? "resolved" : i.stale ? "stale" : "open";
+            return (
+              <li key={i.id} className={"rd-inc is-" + state}>
+                <span className="rd-incident__mark" aria-hidden="true">{state === "open" ? "!" : state === "stale" ? "▲" : "✓"}</span>
+                <div className="rd-inc__body">
+                  <div className="rd-inc__top">
+                    <strong>{i.message || incidentTypeLabel(i.type)}</strong>
+                    <span className={"rd-sev is-" + i.severity}>{i.severity}</span>
+                    <span className="rd-inc__type">{incidentTypeLabel(i.type)}</span>
+                  </div>
+                  <small>
+                    {i.serviceKey !== "group-budget" && onOpenService && state !== "stale"
+                      ? <button type="button" className="rd-btn rd-btn--link rd-inc__svc" onClick={() => onOpenService(i.serviceKey)}>{i.serviceName}</button> : i.serviceName}
+                    {" · "}{i.groupName} · opened {timeAgo(i.openedAt)}
+                    {state === "open" && " · down for " + formatDuration(i.durationMs)}
+                    {state === "resolved" && " · " + (RESOLVED_BY[i.resolvedBy] || "Resolved") + " after " + formatDuration(i.durationMs)}
+                    {state === "stale" && " · " + i.staleReason}
+                  </small>
+                </div>
+                <div className="rd-inc__actions">
+                  {plan && <button type="button" className="rd-btn rd-btn--primary" disabled={Boolean(fixing) || Boolean(busy)} onClick={() => void fix(i)}>{fixing === i.id ? "Fixing…" : plan.label}</button>}
+                  {state !== "resolved" && <button type="button" className="rd-btn rd-btn--quiet" disabled={Boolean(busy)} onClick={() => void resolve([i], (state === "stale" ? "Close" : "Mark resolved") + ": " + i.serviceName + "?", state === "stale" ? "It is marked resolved and kept in the log." : "Use this once you have dealt with it. If the problem is still there, monitoring opens a fresh incident on the next check.")}>{state === "stale" ? "Close" : "✓ Resolve"}</button>}
+                </div>
+              </li>
+            );
+          })}
+          {!rows.length && <Empty icon="✓" title={incidents.length ? (tab === "open" ? "Nothing is open" : "No incidents here") : "No incidents recorded"}>{incidents.length ? (tab === "open" && !query ? "Every service is healthy. Resolved incidents are under the Resolved tab." : "Change the tab, filters or search.") : "Once monitoring is on for a server group, outages show up here."}</Empty>}
         </ul>
       )}
+      {rows.length > limit && <div className="rd-toolrow rd-toolrow--end"><button type="button" className="rd-btn rd-btn--quiet" onClick={() => setLimit((n) => n + PAGE)}>Show {Math.min(PAGE, rows.length - limit)} more ({rows.length - limit} left)</button></div>}
     </Section>
   );
 }

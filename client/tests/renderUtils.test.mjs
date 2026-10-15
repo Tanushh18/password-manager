@@ -154,3 +154,52 @@ test("remediationFor maps incident types to safe actions", () => {
   assert.equal(remediationFor({ ...base, state: "resolved", type: "health" }), null);
   assert.equal(remediationFor({ state: "open", type: "health" }), null);
 });
+
+import { groupServices, repoKeyOf } from "../src/Pages/Render/renderUtils.js";
+test("services from the same repo group into one app, main = newest running", () => {
+  const repo = "https://github.com/Tanushh18/Deal_Radar";
+  const s = (id, o = {}) => ({ id, name: id, repo, accountId: "a1", accountName: "Main", suspended: "not_suspended", updatedAt: "2026-10-01T00:00:00Z", ...o });
+  const groups = groupServices([
+    s("old", { suspended: "suspended", updatedAt: "2026-10-14T00:00:00Z" }), s("new", { updatedAt: "2026-10-10T00:00:00Z" }),
+    s("other-acc", { accountId: "a2", accountName: "Second", repo: repo + ".git", updatedAt: "2026-10-12T00:00:00Z" }),
+    { id: "db", name: "solo", accountId: "a1", accountName: "Main" }
+  ]);
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].name, "Deal_Radar");
+  assert.equal(groups[0].main.id, "other-acc");
+  assert.deepEqual(groups[0].members.map((m) => m.id), ["other-acc", "new", "old"]);
+  assert.equal(groups[0].active, 2);
+  assert.equal(groups[0].suspended, 1);
+  assert.deepEqual(groups[0].accounts, ["Second", "Main"]);
+  assert.equal(groups[1].name, "solo");
+  assert.equal(repoKeyOf("git@github.com:Tanushh18/Deal_Radar.git"), "tanushh18/deal_radar");
+});
+
+import { buildIncidents, formatDuration } from "../src/Pages/Render/renderUtils.js";
+test("events fold into incidents with durations; incidents of deleted services or removed groups are stale", () => {
+  const e = (id, state, at, o = {}) => ({ id, groupId: "g1", groupName: "App", serviceKey: "a:srv-1", serviceName: "api", type: "health", severity: "critical", state, at, openedAt: at, ...o });
+  const now = Date.parse("2026-10-15T12:00:00Z");
+  const list = buildIncidents([
+    e("1", "open", "2026-10-15T09:00:00Z"), e("2", "resolved", "2026-10-15T09:30:00Z", { resolvedBy: "manual" }),
+    e("3", "open", "2026-10-15T10:00:00Z"),
+    e("4", "open", "2026-10-15T10:00:00Z", { serviceKey: "a:gone", type: "cpu" }),
+    e("5", "open", "2026-10-15T10:00:00Z", { groupId: "removed", type: "memory" }),
+    e("6", "open", "2026-10-15T11:00:00Z", { serviceKey: "group-budget", type: "budget" }),
+    e("7", "resolved", "2026-10-15T08:00:00Z", { type: "latency" })
+  ], { liveKeys: new Set(["a:srv-1"]), groupIds: new Set(["g1"]), now });
+  assert.equal(list.length, 5);
+  const by = Object.fromEntries(list.map((i) => [i.id, i]));
+  assert.equal(by["1"].status, "resolved");
+  assert.equal(by["1"].resolvedBy, "manual");
+  assert.equal(by["1"].durationMs, 30 * 60000);
+  assert.equal(by["3"].status, "open");
+  assert.equal(by["3"].stale, false);
+  assert.equal(by["3"].durationMs, 2 * 3600000);
+  assert.equal(by["4"].stale, true);
+  assert.equal(by["5"].stale, true);
+  assert.equal(by["6"].stale, false); // budget alerts follow the group, not a service
+  assert.equal(list[0].id, "6"); // newest first
+  assert.equal(buildIncidents([e("9", "open", "2026-10-15T10:00:00Z", { serviceKey: "a:gone" })], { now })[0].stale, false); // unknown inventory: never guess
+  assert.equal(formatDuration(30 * 60000), "30 min");
+  assert.equal(formatDuration(150 * 60000), "2h 30m");
+});

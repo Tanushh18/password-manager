@@ -1,5 +1,16 @@
 # Next up (planned 15 Oct 2026)
 
+## v2.0.0 shipped 15 Oct — verify on the live site (stashr.tanush.qd.je)
+- [ ] Projects: opens with "Auto-sync is on"; every repo of the connected GitHub token(s) shows up (source badge
+      GitHub); hand-made projects stay untouched; archived ones are under the Archived tab.
+- [ ] Projects: the 3 Deal-Radar projects → "Merge into one" banner → one card with a "N servers" dropdown.
+- [ ] Render → Services: servers of one repo are one row with a dropdown; delete a service on Render → gone within ~30 s.
+- [ ] Services (usage) page: deleted services are gone (list is read live every minute now, no 2-min cache).
+- [ ] Render → Incidents: one row per outage, stale ones flagged ("Close it"), Resolve / Resolve all / Clear resolved work.
+- [ ] Whole app re-syncs on its own: Projects 2 min, Render 30 s, Services 1 min, Incidents 1 min, server tick every 5 min.
+- Known gaps: monitoring groups keep deleted services as members (only their incidents are auto-closed);
+  GitHub forks are imported too (say if you want them skipped); "Sync now" does not merge duplicates (use the banner).
+
 ## 0. Check what shipped on 14 Oct (Projects ↔ Render sync)
 - [ ] Projects page → "Sync with Render": duplicate Deal-Radar projects merge into one; repos running on any
       connected Render account without a project get one. Verify on stashr.tanush.qd.je with real data.

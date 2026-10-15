@@ -6,7 +6,11 @@ import ProjectCard from "../../Components/Project/ProjectCard";
 import ProjectImportModal from "../../Components/Project/ProjectImportModal";
 import GithubConnectModal from "../../Components/Project/GithubConnectModal";
 import { toast } from "react-toastify";
-import { getGithubAccounts, getProjectStatuses, syncAllProjectsWithRender, mergeProjects } from "../../api/client";
+import { getGithubAccounts, getProjectStatuses, autoSyncProjects, mergeProjects } from "../../api/client";
+import { usePolling } from "../Render/renderHooks";
+import { timeAgo } from "../Render/renderUtils";
+import { repoKeyOf } from "../Render/renderUtils";
+import { APP_VERSION } from "../../lib/appVersion";
 import { TreeLeaf } from "../../Components/Project/ProjectTree";
 import { Globe, Plus, Search, Grid, Alert, Upload } from "../../Components/Icons/Icons";
 import { useVault } from "../../state/vault";
@@ -22,7 +26,8 @@ export default function Projects() {
   const { projects, projectsBroken, importProjects, prefs, refreshProfile } = useVault();
 
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("__all");
+  const [status, setStatus] = useState("__active"); // __active = everything except archived
+  const [source, setSource] = useState("any"); // any | github | render | manual
   const [view, setView] = useState("all"); // all | values | projects (while searching)
   const [importing, setImporting] = useState(false);
   const [githubOpen, setGithubOpen] = useState(false);
@@ -42,11 +47,12 @@ export default function Projects() {
     return () => { live = false; };
   }, []);
   const [syncing, setSyncing] = useState(false);
+  const [sync, setSync] = useState(null); // last automatic sync result
+  const [syncFailed, setSyncFailed] = useState(false);
   // Same GitHub repo = same app. Offer to merge (e.g. one repo deployed several times on Render).
   const duplicates = useMemo(() => {
-    const key = (p) => { const m = String(p.repoUrl || "").match(/github\.com[/:]([^/]+)\/([^/#?]+?)(?:\.git)?\/?(?:[#?].*)?$/i); return m ? (m[1] + "/" + m[2]).toLowerCase() : ""; };
     const groups = new Map();
-    for (const p of projects) { const k = key(p); if (!k) continue; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
+    for (const p of projects) { const k = repoKeyOf(p.repoUrl); if (!k) continue; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
     return [...groups.entries()].filter(([, list]) => list.length > 1).map(([repo, list]) => ({ repo, list }));
   }, [projects]);
   const reloadStatuses = async () => {
@@ -62,24 +68,33 @@ export default function Projects() {
       void reloadStatuses();
     } catch (e) { toast.error(e?.response?.data?.error || "Could not merge."); }
   };
-  const syncAll = async () => {
+  // Automatic sync with GitHub + Render. The server throttles it, so opening the page and polling are cheap.
+  const runSync = async (force = false) => {
     setSyncing(true);
     try {
-      const r = await syncAllProjectsWithRender();
-      await refreshProfile();
-      const parts = [];
-      if (r.merged) parts.push(r.merged + " duplicate" + (r.merged === 1 ? "" : "s") + " merged");
-      if (r.created.length) parts.push(r.created.length + " new: " + r.created.join(", "));
-      if (r.refreshed) parts.push(r.refreshed + " link" + (r.refreshed === 1 ? "" : "s") + " updated");
-      toast.success(parts.length ? "Synced with Render — " + parts.join(" · ") : "Already in sync with Render.");
-      void reloadStatuses();
-    } catch (e) { toast.error(e?.response?.data?.error || "Could not sync with Render."); }
+      const r = await autoSyncProjects(force);
+      setSync(r); setSyncFailed(false);
+      const changed = (r.created?.length || 0) + (r.archived || 0) + (r.revived || 0) + (r.refreshed || 0);
+      if (changed) { await refreshRef.current?.(); void reloadStatuses(); }
+      if (!r.throttled && r.created?.length) toast.success(r.created.length + " project" + (r.created.length === 1 ? "" : "s") + " added from GitHub/Render" + (r.created.length <= 3 ? ": " + r.created.join(", ") : "") + ".");
+      if (force && !changed) toast.success("Already up to date.");
+    } catch { setSyncFailed(true); if (force) toast.error("Could not sync right now."); }
     finally { setSyncing(false); }
   };
+  useEffect(() => { void runSync(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  usePolling(() => runSync(), 120000, true);
   const navigate = useNavigate();
   const searchRef = useShortcuts(() => navigate("/projects/new"));
 
-  const byStatus = useMemo(() => projects.filter((p) => status === "__all" || p.status === status), [projects, status]);
+  const sourceOf = (p) => p.autoSource || "manual";
+  const byStatus = useMemo(() => projects.filter((p) =>
+    (status === "__all" || (status === "__active" ? p.status !== "archived" : p.status === status)) && (source === "any" || sourceOf(p) === source)), [projects, status, source]);
+  const tiles = useMemo(() => ({
+    active: projects.filter((p) => p.status !== "archived").length,
+    deployed: projects.filter((p) => p.status === "deployed").length,
+    auto: projects.filter((p) => p.autoSource).length,
+    archived: projects.filter((p) => p.status === "archived").length
+  }), [projects]);
 
   const results = useMemo(() => {
     const r = searchProjects(byStatus, search);
@@ -95,16 +110,44 @@ export default function Projects() {
   return (
     <div className="vault page">
       <div className="shell">
-        <header className="vault__head">
+        <header className="vault__head pv2-head">
           <div>
-            <h1 className="vault__title">Projects</h1>
+            <h1 className="vault__title">Projects <span className="pv2-ver">v{APP_VERSION}</span></h1>
             <p className="vault__count">
               {projects.length === 0
                 ? "No projects yet."
-                : `${projects.length} project${projects.length === 1 ? "" : "s"} · end-to-end encrypted`}
+                : `${tiles.active} active project${tiles.active === 1 ? "" : "s"}${tiles.archived ? ` · ${tiles.archived} archived` : ""} · end-to-end encrypted`}
             </p>
           </div>
         </header>
+
+        <section className={"pv2-sync" + (syncFailed ? " is-error" : "")} aria-live="polite">
+          <span className={"pv2-sync__dot" + (syncing ? " is-busy" : "")} aria-hidden="true" />
+          <div className="pv2-sync__text">
+            <strong>{syncing ? "Syncing with GitHub and Render…" : syncFailed ? "Couldn’t reach GitHub or Render" : "Auto-sync is on"}</strong>
+            <small>
+              {sync?.checkedAt ? "Last synced " + timeAgo(sync.checkedAt) + " · " : ""}
+              {sync ? `GitHub ${sync.github?.repos ?? 0} repo${sync.github?.repos === 1 ? "" : "s"} · Render ${sync.render?.services ?? 0} service${sync.render?.services === 1 ? "" : "s"}` : "New repos and servers are added automatically."}
+              {sync?.github?.failed ? " · a GitHub token failed — reconnect it" : ""}
+            </small>
+          </div>
+          {githubAccounts && !githubAccounts.length ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => setGithubOpen(true)}>Connect GitHub to import repos</button> : null}
+          <button type="button" className="btn btn--ghost btn--sm" disabled={syncing} onClick={() => void runSync(true)}>{syncing ? "Syncing…" : "↻ Sync now"}</button>
+        </section>
+
+        <div className="pv2-tiles">
+          {[
+            ["active", "Active projects", tiles.active, "__active", "Everything not archived"],
+            ["deployed", "Live", tiles.deployed, "deployed", "Deployed on Render"],
+            ["auto", "Auto-synced", tiles.auto, "__all", "From GitHub and Render"],
+            ["archived", "Archived", tiles.archived, "archived", "Repo gone or archived"]
+          ].map(([id, label, value, target, hint]) => (
+            <button key={id} type="button" className={"pv2-tile" + (status === target && (id !== "auto" || source !== "any") ? " is-active" : "")}
+              onClick={() => { setStatus(target); setSource(id === "auto" ? "github" : "any"); }} title={hint}>
+              <span>{label}</span><b>{value}</b><small>{hint}</small>
+            </button>
+          ))}
+        </div>
 
         {projectsBroken ? (
           <div className="notice notice--err vault__notice">
@@ -132,9 +175,6 @@ export default function Projects() {
             <Link className="btn btn--ghost" to="/projects/deploy" title="Create a GitHub repo and deploy it on Render's free plan in one step">
               Create &amp; deploy
             </Link>
-            <button className="btn btn--ghost" disabled={syncing} onClick={() => void syncAll()} title="Merge duplicates and add a project for every repo running on your connected Render accounts">
-              {syncing ? "Syncing…" : "Sync with Render"}
-            </button>
             <button className="btn btn--ghost" onClick={() => setImporting(true)}>
               <Upload size={15} /> Import
             </button>
@@ -166,18 +206,27 @@ export default function Projects() {
               <span className="folders__sep" />
             </>
           ) : null}
-          <button type="button" className={`folder-chip ${status === "__all" ? "is-active" : ""}`} onClick={() => setStatus("__all")}>
-            <Grid size={13} /> All <span>{projects.length}</span>
+          <button type="button" className={`folder-chip ${status === "__active" ? "is-active" : ""}`} onClick={() => setStatus("__active")}>
+            <Grid size={13} /> Active <span>{tiles.active}</span>
           </button>
-          {STATUSES.map((s) => {
-            const count = projects.filter((p) => p.status === s).length;
+          {STATUSES.map((st) => {
+            const count = projects.filter((p) => p.status === st).length;
             if (!count) return null;
             return (
-              <button key={s} type="button" className={`folder-chip ${status === s ? "is-active" : ""}`} onClick={() => setStatus(s)}>
-                {STATUS_LABEL[s]} <span>{count}</span>
+              <button key={st} type="button" className={`folder-chip ${status === st ? "is-active" : ""}`} onClick={() => setStatus(st)}>
+                {STATUS_LABEL[st]} <span>{count}</span>
               </button>
             );
           })}
+          <button type="button" className={`folder-chip ${status === "__all" ? "is-active" : ""}`} onClick={() => setStatus("__all")}>
+            All <span>{projects.length}</span>
+          </button>
+          <span className="folders__sep" />
+          <span className="pv2-segment" role="group" aria-label="Source">
+            {[["any", "Any source"], ["github", "GitHub"], ["render", "Render"], ["manual", "Manual"]].map(([id, label]) => (
+              <button key={id} type="button" aria-pressed={source === id} className={source === id ? "is-active" : ""} onClick={() => setSource(id)}>{label}</button>
+            ))}
+          </span>
         </nav>
 
         {showValues ? (
@@ -209,7 +258,7 @@ export default function Projects() {
           <Reveal className="empty empty--slim card">
             <span className="empty__icon"><Search size={24} /></span>
             <h2 className="empty__title">Nothing matches “{search}”</h2>
-            <button className="btn btn--ghost" onClick={() => { setSearch(""); setStatus("__all"); }}>
+            <button className="btn btn--ghost" onClick={() => { setSearch(""); setStatus("__all"); setSource("any"); }}>
               Show everything
             </button>
           </Reveal>

@@ -15,7 +15,7 @@ const { syncProjectEnv } = require("./renderEnvSync");
  *   3. compute deploy drift (undeployed commits), CI and a health score from live Render + GitHub data
  * Reads only from Render and GitHub. Nothing here ever writes to either of them.
  */
-const SERVICES_TTL_MS = 2 * 60 * 1000;
+const SERVICES_TTL_MS = 30 * 1000; // short: deleted / suspended services must disappear quickly
 const STATUS_TTL_MS = 2 * 60 * 1000;
 const STRIP = ["_id", "createdAt", "updatedAt", "broken"];
 const servicesCache = new Map();
@@ -196,4 +196,11 @@ async function runAllAutoLink() {
   return summary;
 }
 
-module.exports = { getProjectStatuses, runAllAutoLink, loadRenderServices, ensureLinks };
+/** Forget the cached service list (after a delete, suspend or resume done through Stashr). */
+function clearServicesCache(userId) {
+  const prefix = String(userId);
+  servicesCache.delete(prefix);
+  for (const key of [...statusCache.keys()]) if (key.startsWith(prefix + ":")) statusCache.delete(key);
+}
+
+module.exports = { getProjectStatuses, runAllAutoLink, loadRenderServices, ensureLinks, clearServicesCache };

@@ -7,13 +7,14 @@ import { MonitoringView, IncidentsView, AlertPolicyView } from "./OpsViews";
 import { usePolling } from "./renderHooks";
 import { useOps } from "./useOps";
 import {
-  SERVICE_KINDS, serviceKind, serviceKey, serviceState, summarizeFleet, filterServices, sortServices, paginate,
-  normalizeServices, initials, timeAgo, formatDateTime, safeUrl, readStored, writeStored, errorMessage
+  SERVICE_KINDS, serviceKind, serviceKey, serviceState, summarizeFleet, filterServices, sortServices, paginate, groupServices,
+  normalizeServices, buildIncidents, initials, timeAgo, formatDateTime, safeUrl, readStored, writeStored, errorMessage
 } from "./renderUtils";
 import "./RenderDashboard.css";
 
 const VIEWS = [["overview", "Overview"], ["services", "Services"], ["monitoring", "Monitoring"], ["incidents", "Incidents"], ["settings", "Settings"]];
 const PAGE_SIZE = 15;
+const REFRESH_MS = 30000;
 const FAV_KEY = "stashr_render_favorites";
 const viewFromHash = () => { const h = window.location.hash.replace("#", ""); return VIEWS.some(([id]) => id === h) ? h : "overview"; };
 
@@ -38,6 +39,7 @@ export default function RenderDashboard() {
   const [sort, setSort] = useState({ key: "name", dir: "asc" });
   const [page, setPage] = useState(1);
   const [checked, setChecked] = useState([]);
+  const [openGroups, setOpenGroups] = useState([]); // app keys whose server list is expanded
   const [favorites, setFavorites] = useState(() => readStored(FAV_KEY, []));
   const searchRef = useRef(null);
 
@@ -80,9 +82,18 @@ export default function RenderDashboard() {
   }, []);
 
   useEffect(() => { void loadAccounts(); void loadAudit(); void refreshOps(); }, [loadAccounts, loadAudit, refreshOps]);
-  usePolling(() => loadAccounts({ quiet: true }), 120000, auto);
+  usePolling(() => loadAccounts({ quiet: true }), REFRESH_MS, auto);
+  usePolling(() => ops.refreshIncidents(), 60000, view === "incidents" || view === "overview");
   useEffect(() => { writeStored("stashr_render_auto_refresh", auto); }, [auto]);
   useEffect(() => { writeStored(FAV_KEY, favorites); }, [favorites]);
+
+  // A service deleted or suspended elsewhere must not linger in selections or open panels.
+  useEffect(() => {
+    if (loading) return;
+    const live = new Set(services.map(serviceKey));
+    setChecked((old) => (old.every((k) => live.has(k)) ? old : old.filter((k) => live.has(k))));
+    setSelectedKey((old) => (old && !live.has(old) ? null : old));
+  }, [services, loading]);
 
   const refreshAll = async () => {
     setRefreshing(true);
@@ -115,7 +126,15 @@ export default function RenderDashboard() {
   }, [go]);
 
   /* ---------- derived ---------- */
-  const fleet = useMemo(() => summarizeFleet(services, ops.incidents), [services, ops.incidents]);
+  // Incidents folded from the event log. Only trusted against the live inventory when every account loaded in full.
+  const inventoryKnown = !loading && accounts.length > 0 && accounts.every((a) => !a.loadError && !a.truncated);
+  const incidentList = useMemo(() => buildIncidents(ops.incidents, {
+    liveKeys: inventoryKnown ? new Set(services.map(serviceKey)) : null,
+    groupIds: ops.config ? new Set(ops.groups.map((g) => g.id)) : null
+  }), [ops.incidents, ops.groups, ops.config, services, inventoryKnown]);
+  const openNow = useMemo(() => incidentList.filter((i) => i.status === "open" && !i.stale), [incidentList]);
+  const staleCount = useMemo(() => incidentList.filter((i) => i.status === "open" && i.stale).length, [incidentList]);
+  const fleet = useMemo(() => summarizeFleet(services, openNow.map((i) => i.event)), [services, openNow]);
   const nameOf = useCallback((id) => services.find((s) => s.id === id)?.name, [services]);
 
   const filtered = useMemo(() => {
@@ -123,7 +142,9 @@ export default function RenderDashboard() {
     const withState = stateFilter === "all" ? base : base.filter((s) => serviceState(s, fleet.incidentKeys) === stateFilter);
     return sortServices(withState, sort.key, sort.dir);
   }, [services, query, accountFilter, typeFilter, stateFilter, hideSuspended, favoriteOnly, favorites, sort, fleet.incidentKeys]);
-  const pageData = paginate(filtered, page, PAGE_SIZE);
+  const groups = useMemo(() => groupServices(filtered), [filtered]);
+  const appCount = useMemo(() => groupServices(services).length, [services]);
+  const pageData = paginate(groups, page, PAGE_SIZE);
   useEffect(() => { setPage(1); }, [query, accountFilter, typeFilter, stateFilter, hideSuspended, favoriteOnly]);
 
   const selected = selectedKey ? services.find((s) => serviceKey(s) === selectedKey) : null;
@@ -131,7 +152,13 @@ export default function RenderDashboard() {
   const clearFilters = () => { setQuery(""); setAccountFilter("all"); setTypeFilter("all"); setStateFilter("all"); setFavoriteOnly(false); setHideSuspended(false); };
   const toggleSort = (key) => setSort((old) => (old.key === key ? { key, dir: old.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
   const toggleFavorite = (s) => setFavorites((old) => (old.includes(serviceKey(s)) ? old.filter((x) => x !== serviceKey(s)) : [...old, serviceKey(s)]));
-  const pageKeys = pageData.rows.map(serviceKey);
+  const pageKeys = pageData.rows.flatMap((g) => g.members.map(serviceKey));
+  const toggleOpen = (key) => setOpenGroups((old) => (old.includes(key) ? old.filter((k) => k !== key) : [...old, key]));
+  const toggleGroupChecked = (group) => {
+    const keys = group.members.map(serviceKey);
+    const all = keys.every((k) => checked.includes(k));
+    setChecked((old) => (all ? old.filter((k) => !keys.includes(k)) : [...new Set([...old, ...keys])]));
+  };
   const allOnPage = pageKeys.length > 0 && pageKeys.every((k) => checked.includes(k));
   const toggleChecked = (key) => setChecked((old) => (old.includes(key) ? old.filter((k) => k !== key) : [...old, key]));
   const togglePage = () => setChecked((old) => (allOnPage ? old.filter((k) => !pageKeys.includes(k)) : [...new Set([...old, ...pageKeys])]));
@@ -214,15 +241,16 @@ export default function RenderDashboard() {
   /* ---------- attention list ---------- */
   const attention = useMemo(() => {
     const items = [];
-    ops.openIncidents.slice(0, 5).forEach((i) => items.push({ key: "i" + (i.id || i.serviceKey + i.type), tone: "danger", title: i.message || i.type, meta: (i.groupName || "Group") + " · " + (i.serviceName || "Service") + " · " + timeAgo(i.at), onClick: () => go("incidents") }));
+    openNow.slice(0, 5).forEach((i) => items.push({ key: "i" + i.id, tone: "danger", title: i.message || i.type, meta: i.groupName + " · " + i.serviceName + " · " + timeAgo(i.openedAt), onClick: () => go("incidents") }));
+    if (staleCount) items.push({ key: "stale-inc", tone: "warn", title: staleCount + " stale incident" + (staleCount === 1 ? "" : "s"), meta: "Their service or group no longer exists — close them", onClick: () => go("incidents") });
     services.filter((s) => s.suspended === "suspended").slice(0, 5).forEach((s) => items.push({ key: "s" + serviceKey(s), tone: "warn", title: s.name + " is suspended", meta: s.accountName + " · " + serviceKind(s), onClick: () => setSelectedKey(serviceKey(s)) }));
     accounts.filter((a) => a.truncated).forEach((a) => items.push({ key: "t" + a.id, tone: "warn", title: a.name + ": inventory is incomplete", meta: "This account has more services than Stashr can list at once.", onClick: () => go("settings") }));
     accounts.filter((a) => a.loadError).forEach((a) => items.push({ key: "a" + a.id, tone: "danger", title: a.name + ": " + a.loadError, meta: "Check the API key in Settings → Connections", onClick: () => go("settings") }));
     if (ops.loadError) items.push({ key: "ops", tone: "warn", title: "Persistent monitoring unavailable", meta: ops.loadError, onClick: () => void refreshOps() });
     return items;
-  }, [ops.openIncidents, ops.loadError, services, accounts, go, refreshOps]);
+  }, [openNow, staleCount, ops.loadError, services, accounts, go, refreshOps]);
 
-  const counts = { services: services.length, incidents: ops.openIncidents.length };
+  const counts = { services: appCount, incidents: openNow.length };
   const sortHeader = (key, label) => (
     <th scope="col" aria-sort={sort.key === key ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
       <button type="button" className="rd-sortbtn" onClick={() => toggleSort(key)}>{label}<span aria-hidden="true">{sort.key === key ? (sort.dir === "asc" ? "▲" : "▼") : ""}</span></button>
@@ -239,7 +267,7 @@ export default function RenderDashboard() {
           </div>
           <div className="rd-topbar__tools">
             <span className="rd-sync" role="status" aria-live="polite">{loading ? "Loading…" : lastSync ? "Synced " + timeAgo(lastSync.toISOString()) : "Not synced"}</span>
-            <label className="rd-check" title="Refresh the service list every 2 minutes while this tab is visible"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> Auto-refresh</label>
+            <label className="rd-check" title="Re-reads every connected Render account every 30 seconds while this tab is visible, so new, deleted and suspended services show up on their own"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> Live sync</label>
             <button type="button" className="rd-btn rd-btn--quiet" onClick={() => void refreshAll()} disabled={refreshing || loading}>{refreshing ? "Refreshing…" : "↻ Refresh"}</button>
             <button type="button" className="rd-btn rd-btn--primary" onClick={() => { setConnectError(""); setConnectOpen(true); }}>＋ Connect account</button>
           </div>
@@ -261,9 +289,9 @@ export default function RenderDashboard() {
         {view === "overview" && (
           <div className="rd-stack">
             <div className="rd-kpis">
-              <Kpi label="Services" value={loading ? "–" : fleet.total} hint={accounts.length + " connected account" + (accounts.length === 1 ? "" : "s")} onClick={() => go("services")} />
+              <Kpi label="Apps" value={loading ? "–" : appCount} hint={fleet.total + " services · " + accounts.length + " account" + (accounts.length === 1 ? "" : "s")} onClick={() => go("services")} />
               <Kpi label="Active" value={loading ? "–" : fleet.active} tone="ok" hint="Listed as not suspended" onClick={() => { clearFilters(); setStateFilter("active"); go("services"); }} />
-              <Kpi label="Open incidents" value={ops.openIncidents.length} tone={ops.openIncidents.length ? "danger" : undefined} hint={ops.openIncidents.length ? "Review the timeline" : "None open"} onClick={() => go("incidents")} />
+              <Kpi label="Open incidents" value={openNow.length} tone={openNow.length ? "danger" : undefined} hint={openNow.length ? "Review and fix" : staleCount ? staleCount + " stale to close" : "None open"} onClick={() => go("incidents")} />
               <Kpi label="Suspended" value={loading ? "–" : fleet.suspended} tone={fleet.suspended ? "warn" : undefined} hint="May need attention" onClick={() => { clearFilters(); setStateFilter("suspended"); go("services"); }} />
             </div>
 
@@ -299,7 +327,7 @@ export default function RenderDashboard() {
         )}
 
         {view === "services" && (
-          <Section title="Service inventory" subtitle={"Showing " + filtered.length + " of " + services.length + " services"} className="rd-card--flush"
+          <Section title="Apps & servers" subtitle={groups.length + " app" + (groups.length === 1 ? "" : "s") + " · " + filtered.length + " of " + services.length + " services · servers from the same repo are grouped"} className="rd-card--flush"
             actions={<a className="rd-btn rd-btn--quiet" href="https://dashboard.render.com" target="_blank" rel="noreferrer noopener">Open Render ↗</a>}>
             <div className="rd-toolbar">
               <label className="rd-search"><span aria-hidden="true">⌕</span><input ref={searchRef} type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, region, branch, repo…  ( / or Ctrl+K )" aria-label="Search services" /></label>
@@ -328,23 +356,54 @@ export default function RenderDashboard() {
                 </tr></thead>
                 <tbody>
                   {loading && Array.from({ length: 5 }, (_, i) => <tr key={"sk" + i} aria-hidden="true"><td colSpan="8"><Skeleton lines={1} height={22} /></td></tr>)}
-                  {!loading && pageData.rows.map((s) => {
-                    const key = serviceKey(s), state = serviceState(s, fleet.incidentKeys), fav = favorites.includes(key);
+                  {!loading && pageData.rows.map((group) => {
+                    const multi = group.members.length > 1;
+                    const open = multi && (openGroups.includes(group.key) || Boolean(query));
+                    const serviceRow = (s, nested) => {
+                      const key = serviceKey(s), state = serviceState(s, fleet.incidentKeys), fav = favorites.includes(key);
+                      return (
+                        <tr key={key} className={(checked.includes(key) ? "is-checked " : "") + (nested ? "rd-row--nested" : "")} onClick={() => setSelectedKey(key)}>
+                          <td className="rd-col-check" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={checked.includes(key)} onChange={() => toggleChecked(key)} aria-label={"Select " + s.name} /></td>
+                          <td><button type="button" className="rd-svc" onClick={(e) => { e.stopPropagation(); setSelectedKey(key); }}><span className="rd-svc__icon" aria-hidden="true">{serviceKind(s) === "PostgreSQL" ? "▤" : "▣"}</span><span><strong>{s.name}</strong><small className="rd-mono">{s.id}{s.branch ? " · " + s.branch : ""}</small></span></button></td>
+                          <td><span className="rd-account"><i aria-hidden="true">{initials(s.accountName)}</i>{s.accountName}</span></td>
+                          <td>{serviceKind(s)}</td>
+                          <td>{s.serviceDetails?.region || "—"}</td>
+                          <td><StatePill state={state} /></td>
+                          <td title={formatDateTime(s.updatedAt)}>{timeAgo(s.updatedAt)}</td>
+                          <td className="rd-col-actions" onClick={(e) => e.stopPropagation()}>
+                            <button type="button" className={"rd-icon-btn" + (fav ? " is-on" : "")} aria-pressed={fav} aria-label={(fav ? "Unfavorite " : "Favorite ") + s.name} onClick={() => toggleFavorite(s)}>{fav ? "★" : "☆"}</button>
+                            <button type="button" className="rd-icon-btn" aria-label={"Copy ID of " + s.name} title="Copy service ID" onClick={() => void copyToClipboard(s.id)}>⧉</button>
+                            <a className="rd-icon-btn" href={safeUrl(s.dashboardUrl)} target="_blank" rel="noreferrer noopener" aria-label={"Open " + s.name + " in Render"}>↗</a>
+                          </td>
+                        </tr>
+                      );
+                    };
+                    if (!multi) return serviceRow(group.main, false);
+                    const keys = group.members.map(serviceKey);
+                    const allChecked = keys.every((k) => checked.includes(k));
+                    const worst = group.members.some((m) => serviceState(m, fleet.incidentKeys) === "incident") ? "incident" : group.active ? "active" : "suspended";
                     return (
-                      <tr key={key} className={checked.includes(key) ? "is-checked" : ""} onClick={() => setSelectedKey(key)}>
-                        <td className="rd-col-check" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={checked.includes(key)} onChange={() => toggleChecked(key)} aria-label={"Select " + s.name} /></td>
-                        <td><button type="button" className="rd-svc" onClick={(e) => { e.stopPropagation(); setSelectedKey(key); }}><span className="rd-svc__icon" aria-hidden="true">{serviceKind(s) === "PostgreSQL" ? "▤" : "▣"}</span><span><strong>{s.name}</strong><small className="rd-mono">{s.id}{s.branch ? " · " + s.branch : ""}</small></span></button></td>
-                        <td><span className="rd-account"><i aria-hidden="true">{initials(s.accountName)}</i>{s.accountName}</span></td>
-                        <td>{serviceKind(s)}</td>
-                        <td>{s.serviceDetails?.region || "—"}</td>
-                        <td><StatePill state={state} /></td>
-                        <td title={formatDateTime(s.updatedAt)}>{timeAgo(s.updatedAt)}</td>
-                        <td className="rd-col-actions" onClick={(e) => e.stopPropagation()}>
-                          <button type="button" className={"rd-icon-btn" + (fav ? " is-on" : "")} aria-pressed={fav} aria-label={(fav ? "Unfavorite " : "Favorite ") + s.name} onClick={() => toggleFavorite(s)}>{fav ? "★" : "☆"}</button>
-                          <button type="button" className="rd-icon-btn" aria-label={"Copy ID of " + s.name} title="Copy service ID" onClick={() => void copyToClipboard(s.id)}>⧉</button>
-                          <a className="rd-icon-btn" href={safeUrl(s.dashboardUrl)} target="_blank" rel="noreferrer noopener" aria-label={"Open " + s.name + " in Render"}>↗</a>
-                        </td>
-                      </tr>
+                      <React.Fragment key={group.key}>
+                        <tr className={"rd-row--group" + (open ? " is-open" : "") + (allChecked ? " is-checked" : "")} onClick={() => toggleOpen(group.key)}>
+                          <td className="rd-col-check" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={allChecked} onChange={() => toggleGroupChecked(group)} aria-label={"Select all " + group.members.length + " servers of " + group.name} /></td>
+                          <td>
+                            <button type="button" className="rd-svc rd-svc--group" aria-expanded={open} onClick={(e) => { e.stopPropagation(); toggleOpen(group.key); }}>
+                              <span className="rd-svc__icon rd-svc__chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
+                              <span><strong>{group.name}</strong><small>{group.members.length} servers · {group.active} running{group.suspended ? " · " + group.suspended + " suspended" : ""}</small></span>
+                            </button>
+                          </td>
+                          <td><span className="rd-account"><i aria-hidden="true">{initials(group.accounts[0])}</i>{group.accounts.length > 1 ? group.accounts.length + " accounts" : group.accounts[0]}</span></td>
+                          <td>{serviceKind(group.main)}</td>
+                          <td>{group.main.serviceDetails?.region || "—"}</td>
+                          <td><StatePill state={worst} /></td>
+                          <td title={formatDateTime(group.main.updatedAt)}>{timeAgo(group.main.updatedAt)}</td>
+                          <td className="rd-col-actions" onClick={(e) => e.stopPropagation()}>
+                            <span className="rd-count" title={group.members.length + " Render services built from this repo"}>{group.members.length}</span>
+                            {group.repo && <a className="rd-icon-btn" href={safeUrl(group.repo)} target="_blank" rel="noreferrer noopener" aria-label={"Open " + group.name + " on GitHub"} title="Open the repository">⌥</a>}
+                          </td>
+                        </tr>
+                        {open && group.members.map((m) => serviceRow(m, true))}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
@@ -357,7 +416,7 @@ export default function RenderDashboard() {
               )}
             </div>
             <footer className="rd-pager">
-              <span>{filtered.length ? (pageData.page - 1) * PAGE_SIZE + 1 + "–" + Math.min(pageData.page * PAGE_SIZE, filtered.length) + " of " + filtered.length : "0 results"}</span>
+              <span>{groups.length ? (pageData.page - 1) * PAGE_SIZE + 1 + "–" + Math.min(pageData.page * PAGE_SIZE, groups.length) + " of " + groups.length + " apps" : "0 results"}</span>
               <div>
                 <button type="button" className="rd-btn rd-btn--quiet" disabled={pageData.page <= 1} onClick={() => setPage(pageData.page - 1)}>‹ Prev</button>
                 <span aria-live="polite">Page {pageData.page} / {pageData.pages}</span>
@@ -372,7 +431,8 @@ export default function RenderDashboard() {
             onOpenService={(s) => setSelectedKey(serviceKey(s))} onRefreshServices={() => loadAccounts({ quiet: true })} onAudit={loadAudit} onGoServices={() => go("services")} />
         )}
 
-        {view === "incidents" && <IncidentsView ops={ops} onSample={() => void ops.sampleNow()} askConfirm={ask} />}
+        {view === "incidents" && <IncidentsView ops={ops} incidents={incidentList} onSample={() => void ops.sampleNow()} askConfirm={ask} onGoMonitoring={() => go("monitoring")}
+          onOpenService={(key) => { if (services.some((s) => serviceKey(s) === key)) setSelectedKey(key); else toast.info("That service no longer exists on Render."); }} />}
 
         {view === "settings" && (
           <div className="rd-stack">

@@ -205,6 +205,7 @@ export const syncProjectRenderEnv = (projectId, options = {}) => instance.post("
 /* One-click create & deploy (GitHub repo + free Render service + env vars) and Stashr -> Render env push. */
 export const getRenderOwners = (accountId) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/owners").then((r) => r.data);
 export const provisionProject = (body) => instance.post("/render/provision", body, { timeout: 180000 }).then((r) => r.data);
+export const autoSyncProjects = (force = false) => instance.post("/render/projects/auto-sync", { force }, { timeout: 120000 }).then((r) => r.data);
 export const syncAllProjectsWithRender = () => instance.post("/render/projects/sync-all", {}, { timeout: 120000 }).then((r) => r.data);
 export const mergeProjects = (ids, keepId) => instance.post("/projects/merge", { ids, ...(keepId ? { keepId } : {}) }).then((r) => r.data);
 export const pushProjectRenderEnv = (projectId, options = {}) => instance.post("/render/project-push/" + encodeURIComponent(projectId), options, { timeout: 90000 }).then((r) => r.data);
@@ -225,6 +226,8 @@ export const getRenderOpsConfig = () => instance.get("/render/ops/config").then(
 export const saveRenderOpsConfig = (config) => instance.put("/render/ops/config", config).then((r) => r.data);
 export const getRenderOpsHistory = (limit = 100) => instance.get("/render/ops/history", { params: { limit } }).then((r) => r.data);
 export const getRenderOpsIncidents = (limit = 100) => instance.get("/render/ops/incidents", { params: { limit } }).then((r) => r.data);
+export const resolveRenderIncidents = (payload) => instance.post("/render/ops/incidents/resolve", payload).then((r) => r.data);
+export const clearRenderIncidents = () => instance.post("/render/ops/incidents/clear").then((r) => r.data);
 export const runRenderOpsNow = () => instance.post("/render/ops/run").then((r) => r.data);
 export const testRenderOpsNotification = () => instance.post("/render/ops/notify/test").then((r) => r.data);
 export const getRenderOpsReport = (format = "json") => instance.get("/render/ops/report", { params: { format }, responseType: format === "csv" ? "blob" : "json" }).then((r) => r.data);

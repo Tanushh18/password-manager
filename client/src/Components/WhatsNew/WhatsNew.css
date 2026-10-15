@@ -1,0 +1,11 @@
+.ver-badge { margin-left: 0.5rem; padding: 0.12rem 0.5rem; font: inherit; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; border-radius: 999px; border: 1px solid rgba(var(--accent-rgb), 0.45); background: rgba(var(--accent-rgb), 0.12); color: var(--accent); cursor: pointer; align-self: center; }
+.ver-badge:hover { background: rgba(var(--accent-rgb), 0.22); }
+.react-responsive-modal-modal.whatsnew { max-width: 520px !important; border-radius: var(--r-lg, 14px); background: var(--surface, var(--bg)); color: var(--text); padding: 1.5rem; }
+.whatsnew__head { display: flex; gap: 0.8rem; align-items: center; margin-bottom: 1rem; }
+.whatsnew__head h2 { margin: 0; font-size: 1.35rem; color: var(--heading); }
+.whatsnew__head p { margin: 0.1rem 0 0; font-size: 0.88rem; color: var(--text-muted); }
+.whatsnew__icon { display: grid; place-items: center; width: 2.4rem; height: 2.4rem; border-radius: var(--r-md); background: rgba(var(--accent-rgb), 0.16); color: var(--accent); flex: none; }
+.whatsnew__list { list-style: none; margin: 0 0 1.2rem; padding: 0; display: grid; gap: 0.75rem; }
+.whatsnew__list li { display: grid; gap: 0.15rem; padding-left: 0.8rem; border-left: 2px solid rgba(var(--accent-rgb), 0.5); }
+.whatsnew__list strong { color: var(--heading); font-size: 0.93rem; }
+.whatsnew__list span { color: var(--text-muted); font-size: 0.85rem; line-height: 1.45; }

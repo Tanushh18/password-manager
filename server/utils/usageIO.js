@@ -53,7 +53,8 @@ async function saveSettings(user, dataKey, input) {
 async function runUsage(user, dataKey, { refresh = false, record = true } = {}) {
   const settings = readSettings(user, dataKey);
   if (!settings.enabled) return { enabled: false, settings };
-  const { services, accounts } = await loadRenderServices(user, dataKey, { refresh });
+  // The service list is always read live (one cheap call per account); only provider usage is cached.
+  const { services, accounts } = await loadRenderServices(user, dataKey, { refresh: true });
   const request = (accountId, path) => renderOps.renderRequest(accounts.get(accountId).apiKey, path);
   const history = readEntry(user, "usageHistory", dataKey, { snapshots: [] }).snapshots || [];
   const data = await buildLiveDashboard({ services, accounts, request, providers: getProviders(), settings, history, refresh });

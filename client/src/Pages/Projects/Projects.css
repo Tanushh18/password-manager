@@ -153,3 +153,46 @@
 .dp-code { position: relative; font-family: var(--font-mono); font-size: .78rem; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-md); padding: .8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .dp-links { display: flex; flex-wrap: wrap; gap: .5rem; }
 @media (max-width: 640px) { .dp-env-row { grid-template-columns: 1fr; } }
+
+
+/* ════════ v2.0 — organised projects page ════════ */
+.pv2-ver { display: inline-block; vertical-align: middle; margin-left: .45rem; padding: .12rem .5rem; font: 700 .68rem/1.3 var(--font-sans, inherit); letter-spacing: .05em; border-radius: 999px; color: var(--accent); background: rgba(var(--accent-rgb), .14); border: 1px solid rgba(var(--accent-rgb), .4); }
+.pv2-sync { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; padding: .75rem 1rem; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface, transparent); }
+.pv2-sync.is-error { border-color: rgba(var(--danger-rgb), .4); }
+.pv2-sync__text { flex: 1; min-width: 200px; display: grid; gap: .1rem; }
+.pv2-sync__text strong { font-size: .9rem; color: var(--heading); }
+.pv2-sync__text small { font-size: .78rem; color: var(--text-muted); }
+.pv2-sync__dot { width: .6rem; height: .6rem; border-radius: 50%; background: var(--ok, #3fb950); box-shadow: 0 0 0 4px rgba(var(--ok-rgb, 63, 185, 80), .18); flex: none; }
+.pv2-sync.is-error .pv2-sync__dot { background: var(--danger, #f85149); box-shadow: 0 0 0 4px rgba(var(--danger-rgb, 248, 81, 73), .18); }
+.pv2-sync__dot.is-busy { background: var(--accent); animation: pv2-pulse 1s ease-in-out infinite; }
+@keyframes pv2-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .pv2-sync__dot.is-busy { animation: none; } }
+
+.pv2-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin-bottom: 1.1rem; }
+.pv2-tile { text-align: left; display: grid; gap: .1rem; padding: .8rem 1rem; font: inherit; color: var(--text); background: var(--surface, transparent); border: 1px solid var(--line); border-radius: var(--r-lg); cursor: pointer; transition: border-color .15s, transform .15s; }
+.pv2-tile:hover { border-color: rgba(var(--accent-rgb), .5); transform: translateY(-1px); }
+.pv2-tile.is-active { border-color: var(--accent); background: rgba(var(--accent-rgb), .08); }
+.pv2-tile span { font-size: .72rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-faint); }
+.pv2-tile b { font-size: 1.7rem; line-height: 1.1; color: var(--heading); }
+.pv2-tile small { font-size: .74rem; color: var(--text-muted); }
+@media (max-width: 760px) { .pv2-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.pv2-segment { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--r-md); overflow: hidden; }
+.pv2-segment button { border: 0; background: transparent; color: var(--text-muted); font: inherit; font-size: .8rem; font-weight: 600; padding: .35rem .75rem; cursor: pointer; }
+.pv2-segment button + button { border-left: 1px solid var(--line-strong); }
+.pv2-segment button.is-active { background: rgba(var(--accent-rgb), .16); color: var(--accent); }
+
+.pv2-card.is-archived { opacity: .68; }
+.pv2-src--github { color: var(--text); border-color: var(--line-strong); }
+.pv2-src--render { color: var(--accent); }
+.pv2-src--manual { color: var(--text-muted); }
+.pv2-servers { cursor: pointer; font: inherit; font-weight: 600; }
+.pv2-serverlist { list-style: none; margin: 0; padding: .45rem .6rem; display: grid; gap: .3rem; border: 1px solid var(--line); border-radius: var(--r-md); background: rgba(127, 127, 127, .05); }
+.pv2-serverlist li { display: flex; align-items: center; gap: .5rem; font-size: .82rem; }
+.pv2-serverlist__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv2-serverlist em { font-style: normal; font-size: .66rem; font-weight: 700; text-transform: uppercase; color: var(--accent); }
+.pv2-serverlist a { color: var(--text-muted); display: inline-flex; }
+.pv2-serverlist a:hover { color: var(--accent); }
+.pv2-dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--text-faint); flex: none; }
+.pv2-dot.is-main { background: var(--ok, #3fb950); }
+.pv2-links { display: inline-flex; align-items: center; gap: .9rem; }
