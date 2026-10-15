@@ -21,10 +21,26 @@ async function pingOnce(url, path) {
 
 const dueFor = (job, last, now) => !last || now - Date.parse(last.at) >= job.everyMinutes * 60000 - 30000;
 
+/** Default jobs: every running web service with a Render URL that has no job of its own, every 10 minutes. Pure. */
+function defaultJobs(services, explicit) {
+  const own = new Set((explicit || []).map((j) => j.serviceKey));
+  return (services || [])
+    .filter((s) => !s.suspended && /^https:\/\/[^/]+\.onrender\.com\/?$/i.test(s.url || "") && !/cron|worker|private/i.test(s.type || ""))
+    .map((s) => ({ serviceKey: s.accountId + ":" + s.id, name: s.name, url: s.url.replace(/\/$/, ""), path: "/health", everyMinutes: renderOps.DEFAULT_PING_MINUTES, enabled: true, auto: true }))
+    .filter((j) => !own.has(j.serviceKey));
+}
+
+async function jobsFor(user, config) {
+  const explicit = config.pings || [];
+  if (config.pingAll === false) return explicit;
+  const { services } = await renderOps.listEveryService(user, await user.getDataKey());
+  return [...explicit, ...defaultJobs(services, explicit)];
+}
+
 /** Runs one user's jobs; `force` ignores the schedule (the "Run now" button). */
 async function runUserPings(user, { force = false } = {}) {
   const config = await renderOps.readConfig(user);
-  const jobs = (config.pings || []).filter((j) => j.enabled);
+  const jobs = (await jobsFor(user, config)).filter((j) => j.enabled);
   const mine = results.get(String(user._id)) || new Map();
   const now = Date.now();
   let ran = 0;
@@ -38,7 +54,7 @@ async function runUserPings(user, { force = false } = {}) {
 }
 
 async function runAllPings() {
-  const users = await User.find({ "renderOps.0": { $exists: true } }).limit(500);
+  const users = await User.find({ "renderAccounts.0": { $exists: true } }).limit(500);
   let ran = 0, errors = 0;
   for (const user of users) { try { ran += (await runUserPings(user)).ran; } catch { errors += 1; } }
   return { ran, errors };
@@ -59,4 +75,4 @@ async function scanHealthRoutes(user) {
   return out;
 }
 
-module.exports = { runUserPings, runAllPings, pingResults, scanHealthRoutes, pingOnce };
+module.exports = { runUserPings, runAllPings, pingResults, scanHealthRoutes, pingOnce, defaultJobs };

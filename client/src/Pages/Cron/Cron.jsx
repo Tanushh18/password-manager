@@ -30,6 +30,7 @@ export default function Cron() {
   const [ask, confirmDialog] = useConfirm();
   const [services, setServices] = useState([]);
   const [pings, setPings] = useState([]);
+  const [pingAll, setPingAll] = useState(true); // every running web service pinged every 10 min unless it has its own job
   const [results, setResults] = useState({});
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -49,6 +50,7 @@ export default function Cron() {
       }));
       setServices(all.flat());
       setPings(cfg.config?.pings || []);
+      setPingAll(cfg.config?.pingAll !== false);
       setStatus(st);
       setResults(pr.results || {});
     } catch (e) { if (!quiet) toast.error(errorMessage(e, "Could not load cron jobs.")); }
@@ -59,7 +61,14 @@ export default function Cron() {
 
   const web = useMemo(() => services.filter((s) => isWeb(s) && s.suspended !== "suspended").sort((a, b) => a.name.localeCompare(b.name)), [services]);
   const crons = useMemo(() => services.filter((s) => /cron/i.test(String(s.type || ""))), [services]);
-  const jobOf = (key) => pings.find((p) => p.serviceKey === key);
+  // A server with no job of its own follows the default (on, every 10 minutes, /health) while pingAll is on.
+  const jobOf = (key) => pings.find((p) => p.serviceKey === key) || (pingAll ? { serviceKey: key, path: "/health", everyMinutes: 10, enabled: true, auto: true } : undefined);
+  const toggleAll = async (on) => {
+    setSaving(true);
+    try { const r = await saveRenderOpsConfig({ pingAll: on }); setPingAll(r.config?.pingAll !== false); toast.success(on ? "Every server is pinged every 10 minutes by default." : "Default pings off. Only servers you switch on are pinged."); }
+    catch (e) { toast.error(errorMessage(e, "Could not save.")); }
+    finally { setSaving(false); }
+  };
 
   const save = async (next, message) => {
     setSaving(true);
@@ -115,7 +124,7 @@ export default function Cron() {
 
   const allSelected = web.length > 0 && web.every((s) => selected.includes(serviceKey(s)));
   const chosen = web.filter((s) => selected.includes(serviceKey(s)));
-  const enabledCount = pings.filter((p) => p.enabled).length;
+  const enabledCount = web.filter((s) => jobOf(serviceKey(s))?.enabled).length;
   const lastTickAge = status?.lastTick?.completedAt ? Date.now() - Date.parse(status.lastTick.completedAt) : null;
 
   return (
@@ -138,7 +147,7 @@ export default function Cron() {
         </div>
 
         <Section title="Ping jobs" subtitle="Stashr calls each server's URL on a schedule: it keeps free Render services awake and shows straight away if one stops answering." className="rd-card--flush"
-          actions={<button type="button" className="rd-btn rd-btn--quiet" disabled={saving || !web.length} onClick={() => setFor(web, { enabled: true }, "Ping jobs on for every running web service.")}>Enable for all</button>}>
+          actions={<label className="cr-switch cr-switch--main" title="New servers are added automatically"><input type="checkbox" checked={pingAll} disabled={saving} onChange={(e) => void toggleAll(e.target.checked)} /><span>Ping every server by default (every 10 min)</span></label>}>
           {selected.length > 0 && (
             <div className="rd-selectbar">
               <strong>{selected.length} selected</strong>
@@ -163,7 +172,7 @@ export default function Cron() {
                       <td className="rd-col-check"><input type="checkbox" checked={selected.includes(key)} onChange={() => setSelected((o) => (o.includes(key) ? o.filter((k) => k !== key) : [...o, key]))} aria-label={"Select " + s.name} /></td>
                       <td><strong>{s.name}</strong><a className="rd-url" href={safeUrl(s.serviceDetails.url)} target="_blank" rel="noreferrer noopener">{s.serviceDetails.url.replace(/^https?:\/\//, "")}</a><small className="cr-dim">{s.accountName}</small></td>
                       <td>{project ? <Link className="rd-project" to={"/projects/" + project.id}>{project.name}</Link> : <span className="cr-dim">—</span>}</td>
-                      <td><label className="cr-switch"><input type="checkbox" checked={Boolean(job?.enabled)} disabled={saving} onChange={(e) => setFor([s], { enabled: e.target.checked }, e.target.checked ? "Ping job on for " + s.name + "." : "Paused.")} /><span>{job?.enabled ? "On" : job ? "Paused" : "Off"}</span></label></td>
+                      <td><label className="cr-switch"><input type="checkbox" checked={Boolean(job?.enabled)} disabled={saving} onChange={(e) => setFor([s], { enabled: e.target.checked }, e.target.checked ? "Ping job on for " + s.name + "." : "Paused.")} /><span>{job?.enabled ? (job.auto ? "On · default" : "On") : job ? "Paused" : "Off"}</span></label></td>
                       <td><input className="rd-field cr-path" defaultValue={job?.path || "/health"} disabled={saving} onBlur={(e) => { const v = e.target.value.trim() || "/health"; if (v !== (job?.path || "/health")) setFor([s], { path: v.startsWith("/") ? v : "/" + v }, "Path saved."); }} aria-label={"Path for " + s.name} /></td>
                       <td><select className="rd-field" value={job?.everyMinutes || 10} disabled={saving} onChange={(e) => setFor([s], { everyMinutes: Number(e.target.value) }, "Saved.")} aria-label={"Interval for " + s.name}>{EVERY.map((m) => <option key={m} value={m}>{m} min</option>)}</select></td>
                       <td><Result r={results[key]} /></td>

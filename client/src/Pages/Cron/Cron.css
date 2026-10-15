@@ -18,3 +18,4 @@
 .cr-res.is-warn { color: var(--rd-warn); }
 .cr-res.is-bad { color: var(--danger); }
 .cr-switch { display: inline-flex; align-items: center; gap: .4rem; font-size: .78rem; font-weight: 600; cursor: pointer; }
+.cr-switch--main { padding: .4rem .7rem; border: 1px solid var(--line-strong); border-radius: var(--r-md); }

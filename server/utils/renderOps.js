@@ -46,6 +46,7 @@ const defaultConfig = () => ({
 });
 
 const PING_EVERY = [5, 10, 15, 30, 60];
+const DEFAULT_PING_MINUTES = 10;
 const MAX_PINGS = 60;
 /* Ping jobs ("cron"): GET <service url><path> every N minutes. Only Render-provided https *.onrender.com URLs. */
 function normalizePings(list) {
@@ -121,6 +122,8 @@ function normalizeConfig(input, previous = defaultConfig()) {
     },
     notifications: { telegramBotToken, telegramChatId },
     pings: Array.isArray(source.pings) ? normalizePings(source.pings) : prior.pings || [],
+    // Every running web service is pinged every 10 minutes unless it has its own job (paused or another interval).
+    pingAll: source.pingAll === undefined ? prior.pingAll !== false : source.pingAll === true,
     updatedAt: nowIso()
   };
 }
@@ -554,6 +557,7 @@ function publicConfig(config) {
     groups: config.groups || [],
     monitor: config.monitor || defaultConfig().monitor,
     pings: config.pings || [],
+    pingAll: config.pingAll !== false,
     notifications: {
       telegramConfigured: Boolean(config.notifications?.telegramBotToken && config.notifications?.telegramChatId),
       telegramChatId: config.notifications?.telegramChatId || ""
@@ -571,6 +575,6 @@ function verifySecret(candidate, expected) {
 
 module.exports = {
   defaultConfig, normalizeConfig, readConfig, saveConfig, publicConfig,
-  runUserMonitoring, runAllEnabledMonitoring, listEveryService, normalizePings, resolveIncidents, clearClosedIncidents, sendTelegram, encryptedList, verifySecret, renderRequest,
+  runUserMonitoring, runAllEnabledMonitoring, listEveryService, normalizePings, DEFAULT_PING_MINUTES, resolveIncidents, clearClosedIncidents, sendTelegram, encryptedList, verifySecret, renderRequest,
   HISTORY_LIMIT, INCIDENT_LIMIT
 };
