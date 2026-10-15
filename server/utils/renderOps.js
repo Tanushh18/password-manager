@@ -19,6 +19,8 @@ const INCIDENT_LIMIT = 200;
 const TICK_WINDOW_MS = 10 * 60 * 1000;
 
 const { openEvents, orphanedOpen, closingEvent } = require("./incidentFold");
+const { fetchAllPages } = require("./renderPaging");
+const { buildAutoGroups, isAutoGroup } = require("./monitorGroups");
 const asEntry = (entry, dataKey) => {
   if (!entry || entry.enc !== "udk") return null;
   const value = User.publicEntry(entry, dataKey);
@@ -92,6 +94,8 @@ function normalizeConfig(input, previous = defaultConfig()) {
       enabled: sourceMonitor.enabled === undefined ? Boolean(priorMonitor.enabled) : sourceMonitor.enabled === true,
       intervalMinutes: [5, 10, 15].includes(Number(sourceMonitor.intervalMinutes)) ? Number(sourceMonitor.intervalMinutes) : Number(priorMonitor.intervalMinutes) || 5,
       checkHealth: sourceMonitor.checkHealth === undefined ? priorMonitor.checkHealth !== false : sourceMonitor.checkHealth === true,
+      // Watch every running service automatically (grouped by app), not only the groups you made. On by default.
+      autoAll: sourceMonitor.autoAll === undefined ? priorMonitor.autoAll !== false : sourceMonitor.autoAll === true,
       thresholds: {
         cpu: boundedNumber(thresholds.cpu, 1, 100, Number(priorMonitor.thresholds?.cpu) || 85),
         memory: boundedNumber(thresholds.memory, 1, 100, Number(priorMonitor.thresholds?.memory) || 90),
@@ -238,6 +242,25 @@ function encryptedList(user, field, dataKey, limit = 100) {
   return (user[field] || []).slice(-limit).map((entry) => asEntry(entry, dataKey)).filter(Boolean);
 }
 
+/** Every service in every connected account (for the automatic groups). `complete` is false if any account failed. */
+async function listEveryService(user, dataKey) {
+  const services = [];
+  let complete = true;
+  for (const entry of user.renderAccounts || []) {
+    const account = asEntry(entry, dataKey);
+    if (!account?.apiKey) { complete = false; continue; }
+    try {
+      const listing = await fetchAllPages((path) => renderRequest(account.apiKey, path), "/v1/services");
+      if (listing.truncated) complete = false;
+      for (const item of listing.items) {
+        const s = item?.service || item;
+        if (s?.id) services.push({ id: s.id, name: s.name, repo: s.repo || "", suspended: s.suspended === "suspended", accountId: String(entry._id) });
+      }
+    } catch { complete = false; }
+  }
+  return { services, complete };
+}
+
 async function runUserMonitoring(user, options = {}) {
   const config = await readConfig(user);
   if (!options.force && !config.monitor?.enabled) return { skipped: true, groupsChecked: 0, samplesSaved: 0, incidentsOpened: 0 };
@@ -264,9 +287,18 @@ async function runUserMonitoring(user, options = {}) {
   const observedServices = new Map();
   let remainingServiceBudget = MAX_MONITORED_SERVICES_PER_USER;
   const configuredGroups = (config.groups || []).slice(0, MAX_GROUPS);
+  // Automatic groups: every running service in every connected account that is not in one of your own groups.
+  let autoGroups = [];
+  let autoComplete = true;
+  if (config.monitor?.autoAll !== false) {
+    const listed = await listEveryService(user, dataKey);
+    autoComplete = listed.complete;
+    autoGroups = buildAutoGroups(listed.services, configuredGroups);
+  }
+  const allGroups = [...configuredGroups, ...autoGroups];
   const rotationInterval = (Number(config.monitor?.intervalMinutes) || 5) * 60 * 1000;
-  const rotation = configuredGroups.length ? Math.floor(now / rotationInterval) % configuredGroups.length : 0;
-  const groupsToSample = [...configuredGroups.slice(rotation), ...configuredGroups.slice(0, rotation)];
+  const rotation = allGroups.length ? Math.floor(now / rotationInterval) % allGroups.length : 0;
+  const groupsToSample = [...allGroups.slice(rotation), ...allGroups.slice(0, rotation)];
   async function resolveService(key) {
     if (serviceCache.has(key)) return serviceCache.get(key);
     const split = key.indexOf(":");
@@ -455,7 +487,10 @@ async function runUserMonitoring(user, options = {}) {
 
   // Incidents that can never resolve by themselves (group removed, service left the group, account disconnected).
   const accountIds = new Set((user.renderAccounts || []).map((a) => String(a._id)));
-  for (const open of orphanedOpen([...priorIncidents, ...pendingIncidents], config.groups || [], accountIds)) {
+  const orphans = orphanedOpen([...priorIncidents, ...pendingIncidents], [...(config.groups || []), ...autoGroups], accountIds)
+    // If an account could not be listed, its automatic groups are unknown this run: never close those by guesswork.
+    .filter((open) => autoComplete || !isAutoGroup(open.groupId));
+  for (const open of orphans) {
     pendingIncidents.push(closingEvent(open, { id: crypto.randomUUID(), message: "Closed automatically: monitoring for " + (open.serviceName || "this service") + " was removed.", by: "auto", at: endTime }));
   }
 

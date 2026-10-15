@@ -1,5 +1,26 @@
 # Next up (planned 15 Oct 2026)
 
+## Site audit (15 Oct) — still open
+Render
+- [ ] Automatic monitoring groups are not shown in the Monitoring tab (no charts for them yet).
+- [ ] Monitoring checks at most 15 services per tick and the tick comes from GitHub Actions (~5 min, often late):
+      not instant. Move the scheduler into the server / a Render cron job (ties into "instant down alerts").
+- [ ] No bulk suspend / resume; favourites are per browser (localStorage), not synced across devices.
+Services (usage)
+- [ ] Off until "Turn on usage tracking" is clicked; only a few providers have usage APIs (Mongo, Cloudinary,
+      Brevo, Twilio, Deepgram); suspended services are not listed (by design).
+Projects
+- [ ] Duplicates still need one "Merge into one" click; forks are imported too; env changes need "Push to Render".
+- [ ] Health / drift badges only look at the main server, not every deployment.
+Passwords
+- [ ] Breach check only runs when clicked (could run weekly); folders can't be renamed or merged.
+- [ ] Items that fail to decrypt are not counted ("broken" is hard-coded to 0) — check what the card shows.
+Incidents
+- [ ] Alerts go to Telegram only (no in-app push yet); the log keeps the last 200 events.
+Everywhere
+- [ ] "Render" and "Services" overlap: consider one "Infrastructure" page with tabs (Apps, Usage, Incidents,
+      Monitoring, Settings). Navbar wraps "Sign out" on laptop widths.
+
 ## v2.0.0 shipped 15 Oct — verify on the live site (stashr.tanush.qd.je)
 - [ ] Projects: opens with "Auto-sync is on"; every repo of the connected GitHub token(s) shows up (source badge
       GitHub); hand-made projects stay untouched; archived ones are under the Archived tab.

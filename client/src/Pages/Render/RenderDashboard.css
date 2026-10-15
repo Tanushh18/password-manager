@@ -387,3 +387,5 @@
 .rd-url { display: block; margin-top: .1rem; font-size: .72rem; font-weight: 600; color: var(--accent); text-decoration: none; word-break: break-all; }
 .rd-url:hover { text-decoration: underline; }
 .rd-url--sub { margin-left: 2.35rem; }
+.rd-project { font-weight: 600; color: var(--accent); text-decoration: none; white-space: nowrap; }
+.rd-project:hover { text-decoration: underline; }

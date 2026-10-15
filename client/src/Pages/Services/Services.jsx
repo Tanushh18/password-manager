@@ -4,6 +4,9 @@ import { getLiveDashboard, saveUsageSettings } from "../../api/client";
 import { Skeleton, Empty } from "../Render/RenderUi";
 import { timeAgo, errorMessage } from "../Render/renderUtils";
 import { usePolling } from "../Render/renderHooks";
+import { Link } from "react-router-dom";
+import { useVault } from "../../state/vault";
+import { serviceProjectIndex } from "../../lib/serviceProjects";
 import { formatAmount, forecastText, summarize, projectSummary, metricRows, accountRows, STATUS_LABEL } from "./servicesUtils";
 import "../Render/RenderDashboard.css";
 import "./Services.css";
@@ -39,9 +42,12 @@ function shortForecast(m) {
   return m.method == null && m.status !== "unknown" ? "Collecting data" : "—";
 }
 
+/** The Stashr project a dashboard entry (one app, maybe several servers) belongs to. */
+const projectFor = (index, entry) => [entry.id, ...(entry.deployments || []).map((d) => d.id)].map((id) => index.get(id)).find(Boolean) || null;
+
 /* ---------------------------------------------------------------- Overview */
 
-function Overview({ data, onOpen }) {
+function Overview({ data, onOpen, projectOf }) {
   const summary = summarize(data);
   const rows = data.projects.map((p) => ({ p, s: projectSummary(p) }));
   return (
@@ -57,12 +63,13 @@ function Overview({ data, onOpen }) {
         <header className="sv-panel__head"><h2>Projects</h2><span className="sv-dim">Click a project for its full breakdown</span></header>
         <div className="sv-tablewrap">
           <table className="sv-table sv-table--click">
-            <thead><tr><th>Project</th><th>Account</th><th>Services</th><th>Highest usage</th><th>Outlook</th><th>Status</th></tr></thead>
+            <thead><tr><th>App</th><th>Stashr project</th><th>Account</th><th>Services</th><th>Highest usage</th><th>Outlook</th><th>Status</th></tr></thead>
             <tbody>
               {rows.map(({ p, s }) => (
                 <tr key={p.id} tabIndex={0} onClick={() => onOpen(p.id)} onKeyDown={(e) => { if (e.key === "Enter") onOpen(p.id); }}>
                   <td><strong>{p.name}</strong><small className="sv-sub">{(p.deployments || []).length > 1 ? p.deployments.length + " deployments" : p.url ? p.url.replace(/^https?:\/\//, "") : p.type}</small></td>
-                  <td>{p.accountName}</td>
+                  <td onClick={(e) => e.stopPropagation()}>{(() => { const hit = projectFor(projectOf, p); return hit ? <Link to={"/projects/" + hit.id}>{hit.name}</Link> : <span className="sv-dim">—</span>; })()}</td>
+                  <td>{(p.deployments || []).length > 1 ? [...new Set(p.deployments.map((d) => d.accountName))].join(", ") : p.accountName}</td>
                   <td>{s.services}</td>
                   <td>{s.worst ? <><UsageBar m={s.worst} /><small className="sv-sub">{s.worst.service} · {s.worst.label}</small></> : <span className="sv-dim">No limit data</span>}</td>
                   <td>{s.worst ? shortForecast(s.worst) : "—"}</td>
@@ -86,7 +93,7 @@ const varGroups = (project) => [
   { label: "App config", vars: project.internalVars || [] }
 ].filter((g) => g.vars.length);
 
-function ProjectDetail({ project, onToggle }) {
+function ProjectDetail({ project, onToggle, projectOf }) {
   const s = projectSummary(project);
   const withData = project.services.filter((svc) => svc.state === "ok" && metricRows(svc).length);
   const without = project.services.filter((svc) => !withData.includes(svc));
@@ -104,6 +111,7 @@ function ProjectDetail({ project, onToggle }) {
           {project.url && <a className="rd-btn rd-btn--quiet" href={project.url} target="_blank" rel="noopener noreferrer">Open app ↗</a>}
           {project.dashboardUrl && <a className="rd-btn rd-btn--quiet" href={project.dashboardUrl} target="_blank" rel="noopener noreferrer">Render ↗</a>}
           {project.repo && <a className="rd-btn rd-btn--quiet" href={project.repo} target="_blank" rel="noopener noreferrer">GitHub ↗</a>}
+          {(() => { const hit = projectFor(projectOf, project); return hit ? <Link className="rd-btn rd-btn--quiet" to={"/projects/" + hit.id}>Stashr project: {hit.name}</Link> : null; })()}
         </div>
       </header>
 
@@ -237,6 +245,8 @@ function ProjectDetail({ project, onToggle }) {
 /* ---------------------------------------------------------------- Page */
 
 export default function Services() {
+  const { projects: vaultProjects } = useVault();
+  const projectOf = useMemo(() => serviceProjectIndex(vaultProjects), [vaultProjects]);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -333,7 +343,7 @@ export default function Services() {
                 </ul>
               </nav>
               <div className="sv-main">
-                {current ? <ProjectDetail key={current.id} project={current} onToggle={toggle} /> : <Overview data={data} onOpen={setSelected} />}
+                {current ? <ProjectDetail key={current.id} project={current} onToggle={toggle} projectOf={projectOf} /> : <Overview data={data} onOpen={setSelected} projectOf={projectOf} />}
               </div>
             </div>
           )

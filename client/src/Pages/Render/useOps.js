@@ -6,7 +6,7 @@ import {
 } from "../../api/client";
 import { openIncidents, readStored, writeStored, errorMessage } from "./renderUtils";
 
-export const DEFAULT_MONITOR = { enabled: false, intervalMinutes: 5, checkHealth: true, thresholds: { cpu: 85, memory: 90, latencyMs: 1500 } };
+export const DEFAULT_MONITOR = { enabled: false, intervalMinutes: 5, checkHealth: true, autoAll: true, thresholds: { cpu: 85, memory: 90, latencyMs: 1500 } };
 const GROUPS_KEY = "stashr_render_service_groups";
 
 const withFlags = (config, result) => ({ ...config, schedulerConfigured: Boolean(result.schedulerConfigured), aiDiagnosisAvailable: Boolean(result.aiDiagnosisAvailable) });

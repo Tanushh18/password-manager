@@ -11,6 +11,9 @@ import {
   normalizeServices, buildIncidents, initials, timeAgo, formatDateTime, safeUrl, readStored, writeStored, errorMessage
 } from "./renderUtils";
 import "./RenderDashboard.css";
+import { Link } from "react-router-dom";
+import { useVault } from "../../state/vault";
+import { serviceProjectIndex } from "../../lib/serviceProjects";
 
 const VIEWS = [["overview", "Overview"], ["services", "Services"], ["monitoring", "Monitoring"], ["incidents", "Incidents"], ["settings", "Settings"]];
 const PAGE_SIZE = 15;
@@ -56,6 +59,12 @@ export default function RenderDashboard() {
   const [selectedGroupId, setSelectedGroupId] = useState("");
   const [ask, confirmDialog] = useConfirm();
   const ops = useOps();
+  const { projects: vaultProjects } = useVault();
+  const projectOf = useMemo(() => serviceProjectIndex(vaultProjects), [vaultProjects]);
+  const projectCell = (list) => {
+    const hit = list.map((x) => projectOf.get(x.id)).find(Boolean);
+    return hit ? <Link className="rd-project" to={"/projects/" + hit.id} onClick={(e) => e.stopPropagation()} title={"Open the Stashr project " + hit.name}>{hit.name}</Link> : <span className="rd-muted" title="Not linked to a Stashr project yet">—</span>;
+  };
   const { refresh: refreshOps } = ops;
 
   /* ---------- data ---------- */
@@ -84,6 +93,7 @@ export default function RenderDashboard() {
   useEffect(() => { void loadAccounts(); void loadAudit(); void refreshOps(); }, [loadAccounts, loadAudit, refreshOps]);
   usePolling(() => loadAccounts({ quiet: true }), REFRESH_MS, auto);
   usePolling(() => ops.refreshIncidents(), 60000, view === "incidents" || view === "overview");
+  usePolling(() => refreshOps(), 120000, view === "monitoring" || view === "settings");
   useEffect(() => { writeStored("stashr_render_auto_refresh", auto); }, [auto]);
   useEffect(() => { writeStored(FAV_KEY, favorites); }, [favorites]);
 
@@ -372,11 +382,11 @@ export default function RenderDashboard() {
               <table className="rd-table">
                 <thead><tr>
                   <th scope="col" className="rd-col-check"><input type="checkbox" checked={allOnPage} onChange={togglePage} aria-label="Select all services on this page" /></th>
-                  {sortHeader("name", "Service")}{sortHeader("account", "Account")}{sortHeader("type", "Type")}{sortHeader("region", "Region")}{sortHeader("status", "Status")}{sortHeader("updated", "Updated")}
+                  {sortHeader("name", "Service")}<th scope="col">Project</th>{sortHeader("account", "Account")}{sortHeader("type", "Type")}{sortHeader("region", "Region")}{sortHeader("status", "Status")}{sortHeader("updated", "Updated")}
                   <th scope="col"><span className="rd-sr">Actions</span></th>
                 </tr></thead>
                 <tbody>
-                  {loading && Array.from({ length: 5 }, (_, i) => <tr key={"sk" + i} aria-hidden="true"><td colSpan="8"><Skeleton lines={1} height={22} /></td></tr>)}
+                  {loading && Array.from({ length: 5 }, (_, i) => <tr key={"sk" + i} aria-hidden="true"><td colSpan="9"><Skeleton lines={1} height={22} /></td></tr>)}
                   {!loading && pageData.rows.map((group) => {
                     const multi = group.members.length > 1;
                     const open = multi && (openGroups.includes(group.key) || Boolean(query));
@@ -386,6 +396,7 @@ export default function RenderDashboard() {
                         <tr key={key} className={(checked.includes(key) ? "is-checked " : "") + (nested ? "rd-row--nested" : "")} onClick={() => setSelectedKey(key)}>
                           <td className="rd-col-check" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={checked.includes(key)} onChange={() => toggleChecked(key)} aria-label={"Select " + s.name} /></td>
                           <td><button type="button" className="rd-svc" onClick={(e) => { e.stopPropagation(); setSelectedKey(key); }}><span className="rd-svc__icon" aria-hidden="true">{serviceKind(s) === "PostgreSQL" ? "▤" : "▣"}</span><span><strong>{s.name}</strong><small className="rd-mono">{s.id}{s.branch ? " · " + s.branch : ""}</small></span></button>{s.serviceDetails?.url && <a className="rd-url rd-url--sub" href={safeUrl(s.serviceDetails.url)} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()}>{s.serviceDetails.url.replace(/^https?:\/\//, "")} ↗</a>}</td>
+                          <td>{projectCell([s])}</td>
                           <td><span className="rd-account"><i aria-hidden="true">{initials(s.accountName)}</i>{s.accountName}</span></td>
                           <td>{serviceKind(s)}</td>
                           <td>{s.serviceDetails?.region || "—"}</td>
@@ -414,6 +425,7 @@ export default function RenderDashboard() {
                             </button>
                             {group.main.serviceDetails?.url && <a className="rd-url rd-url--sub" href={safeUrl(group.main.serviceDetails.url)} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()}>{group.main.serviceDetails.url.replace(/^https?:\/\//, "")} ↗</a>}
                           </td>
+                          <td>{projectCell(group.members)}</td>
                           <td><span className="rd-account"><i aria-hidden="true">{initials(group.accounts[0])}</i>{group.accounts.length > 1 ? group.accounts.length + " accounts" : group.accounts[0]}</span></td>
                           <td>{serviceKind(group.main)}</td>
                           <td>{group.main.serviceDetails?.region || "—"}</td>
@@ -453,7 +465,7 @@ export default function RenderDashboard() {
             onOpenService={(s) => setSelectedKey(serviceKey(s))} onRefreshServices={() => loadAccounts({ quiet: true })} onAudit={loadAudit} onGoServices={() => go("services")} />
         )}
 
-        {view === "incidents" && <IncidentsView ops={ops} incidents={incidentList} onSample={() => ops.sampleNow()} askConfirm={ask} onGoMonitoring={() => go("monitoring")}
+        {view === "incidents" && <IncidentsView ops={ops} incidents={incidentList} projectOf={projectOf} onSample={() => ops.sampleNow()} askConfirm={ask} onGoMonitoring={() => go("monitoring")}
           onOpenService={(key) => { if (services.some((s) => serviceKey(s) === key)) setSelectedKey(key); else toast.info("That service no longer exists on Render."); }} />}
 
         {view === "settings" && (

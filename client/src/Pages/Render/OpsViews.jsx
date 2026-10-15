@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
+import { Link } from "react-router-dom";
 import {
   getRenderMetrics, getRenderLogs, getRenderEnvVars, getRenderDeploys, triggerRenderDeploy,
   restartRenderService, checkRenderHealth
@@ -331,7 +332,7 @@ const PAGE = 40;
 const RESOLVED_BY = { recovered: "Recovered on its own", manual: "Closed manually", auto: "Closed automatically", check: "Verified by a check" };
 
 /** Incident management: real incidents (not raw events), stale ones flagged, and every state closable. */
-export function IncidentsView({ ops, incidents, onSample, askConfirm, onOpenService, onGoMonitoring }) {
+export function IncidentsView({ ops, incidents, projectOf, onSample, askConfirm, onOpenService, onGoMonitoring }) {
   const { loading, running, groups, monitor } = ops;
   const [fixing, setFixing] = useState("");
   const [busy, setBusy] = useState("");
@@ -441,7 +442,7 @@ export function IncidentsView({ ops, incidents, onSample, askConfirm, onOpenServ
     finally { setBusy(""); }
   };
 
-  const noGroups = !groups.length;
+  const noGroups = !groups.length && monitor?.autoAll === false;
   return (
     <Section title="Incidents" subtitle="Each outage appears once, from the moment it opens until it is resolved. Stale ones are flagged so nothing is stuck open."
       actions={<>
@@ -461,6 +462,9 @@ export function IncidentsView({ ops, incidents, onSample, askConfirm, onOpenServ
       )}
       {!noGroups && !monitor?.enabled && (
         <div className="rd-alert"><span aria-hidden="true">i</span><div>Monitoring is off, so no new incidents are being recorded. Turn it on in Settings → Alert policy.</div></div>
+      )}
+      {monitor?.enabled && monitor?.autoAll !== false && (
+        <div className="rd-alert"><span aria-hidden="true">i</span><div>Every running service is watched automatically (grouped by app), plus any groups you made. Server down, failed deploys and high CPU / memory / latency open an incident here.</div></div>
       )}
       {stale.length > 0 && (
         <div className="rd-alert rd-alert--warn" role="status"><span aria-hidden="true">▲</span>
@@ -500,6 +504,7 @@ export function IncidentsView({ ops, incidents, onSample, askConfirm, onOpenServ
                   <small>
                     {i.serviceKey !== "group-budget" && onOpenService && state !== "stale"
                       ? <button type="button" className="rd-btn rd-btn--link rd-inc__svc" onClick={() => onOpenService(i.serviceKey)}>{i.serviceName}</button> : i.serviceName}
+                    {(() => { const p = projectOf?.get(String(i.serviceKey || "").split(":").slice(1).join(":")); return p ? <> · project <Link className="rd-project" to={"/projects/" + p.id}>{p.name}</Link></> : null; })()}
                     {" · "}{i.groupName} · opened {timeAgo(i.openedAt)}
                     {state === "open" && " · down for " + formatDuration(i.durationMs)}
                     {state === "resolved" && " · " + (RESOLVED_BY[i.resolvedBy] || "Resolved") + " after " + formatDuration(i.durationMs)}
@@ -553,6 +558,7 @@ export function AlertPolicyView({ ops, askConfirm }) {
         <div className="rd-formgrid">
           <label>Sampling interval<select value={monitor.intervalMinutes || 5} onChange={(e) => setMonitor((o) => ({ ...o, intervalMinutes: Number(e.target.value) }))}><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option></select></label>
           <label className="rd-check rd-check--box"><input type="checkbox" checked={monitor.checkHealth !== false} onChange={(e) => setMonitor((o) => ({ ...o, checkHealth: e.target.checked }))} /> Probe service URLs for health</label>
+          <label className="rd-check rd-check--box" title="Watches every running service in every connected account, grouped by app. Your own groups are still used for the services in them."><input type="checkbox" checked={monitor.autoAll !== false} onChange={(e) => setMonitor((o) => ({ ...o, autoAll: e.target.checked }))} /> Watch every running service automatically</label>
           <label>CPU alert (%)<input className="rd-field" type="number" min="1" max="100" value={monitor.thresholds?.cpu ?? 85} onChange={setThreshold("cpu", 1, 100)} /></label>
           <label>Memory alert (%)<input className="rd-field" type="number" min="1" max="100" value={monitor.thresholds?.memory ?? 90} onChange={setThreshold("memory", 1, 100)} /></label>
           <label>Latency alert (ms)<input className="rd-field" type="number" min="100" max="60000" value={monitor.thresholds?.latencyMs ?? 1500} onChange={setThreshold("latencyMs", 100, 60000)} /></label>

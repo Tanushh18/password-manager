@@ -108,3 +108,17 @@ test("rowsToProjects maps the Excel template and attaches matching databases", (
   assert.equal(projects[0].databases[0].provider, "MongoDB Atlas");
   assert.deepEqual(projects[0].envVars, []);
 });
+
+import { serviceProjectIndex, serviceIdOfKey } from "../src/lib/serviceProjects.js";
+test("every linked Render service maps back to its project", () => {
+  const index = serviceProjectIndex([
+    { id: "p1", name: "Deal-Radar", renderServiceId: "srv-1", renderServices: [{ serviceId: "srv-1" }, { serviceId: "srv-2" }] },
+    { id: "p2", name: "Tasks", renderServiceId: "srv-9" },
+    { id: "p3", name: "Manual" }
+  ]);
+  assert.deepEqual(index.get("srv-1"), { id: "p1", name: "Deal-Radar", main: true });
+  assert.deepEqual(index.get("srv-2"), { id: "p1", name: "Deal-Radar", main: false });
+  assert.equal(index.get("srv-9").name, "Tasks");
+  assert.equal(index.size, 3);
+  assert.equal(serviceIdOfKey("acc1:srv-2"), "srv-2");
+});

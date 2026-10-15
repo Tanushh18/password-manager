@@ -211,8 +211,8 @@ export function buildIncidents(events, { liveKeys = null, groupIds = null, now =
   for (const incident of out) {
     const start = Date.parse(incident.openedAt) || 0;
     incident.durationMs = Math.max(0, (incident.status === "open" ? now : Date.parse(incident.resolvedAt) || now) - start);
-    if (incident.status !== "open" || incident.serviceKey === "group-budget" && !(groupIds && !groupIds.has(incident.groupId))) continue;
-    if (groupIds && !groupIds.has(incident.groupId)) { incident.stale = true; incident.staleReason = "Its monitoring group was removed."; }
+    if (incident.status !== "open" || incident.serviceKey === "group-budget" && !(groupIds && !String(incident.groupId).startsWith("auto-") && !groupIds.has(incident.groupId))) continue;
+    if (groupIds && !String(incident.groupId).startsWith("auto-") && !groupIds.has(incident.groupId)) { incident.stale = true; incident.staleReason = "Its monitoring group was removed."; }
     else if (liveKeys && incident.serviceKey !== "group-budget" && !liveKeys.has(incident.serviceKey)) { incident.stale = true; incident.staleReason = "This service no longer exists on Render."; }
   }
   return out.sort((a, b) => (Date.parse(b.openedAt) || 0) - (Date.parse(a.openedAt) || 0));
