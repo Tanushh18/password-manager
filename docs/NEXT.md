@@ -10,6 +10,9 @@
 - [ ] Whole app re-syncs on its own: Projects 2 min, Render 30 s, Services 1 min, Incidents 1 min, server tick every 5 min.
 - [ ] Render → Services: 🗑 on every row deletes a live or suspended service (type its name); "Delete selected" for several
       (type DELETE when a live one is included). The group checkbox selects only the main server.
+- [ ] Projects → open a merged project (Deal-Radar): "Deployments" lists every server with its URL, status, last deploy; the env
+      matrix shows which variables are common / differ (same letter = same value) / only on some servers / only in Stashr.
+      Render → Services: each app and server shows its deployed URL.
 - Known gaps: monitoring groups keep deleted services as members (only their incidents are auto-closed);
   GitHub forks are imported too (say if you want them skipped); "Sync now" does not merge duplicates (use the banner).
 

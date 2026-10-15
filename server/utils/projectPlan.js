@@ -57,7 +57,7 @@ function planAutoProjects({ projects = [], repos = [], services = [], complete =
     };
     const main = running[0];
     const fields = main ? { ...base, ...linkPatch(base, main, accountName(main.accountId)), renderAutoLinked: "yes" } : base;
-    if (list.length > 1) fields.renderServices = list.map((s) => ({ accountId: s.accountId, serviceId: s.id, name: s.name }));
+    if (list.length > 1) fields.renderServices = list.map((s) => ({ accountId: s.accountId, serviceId: s.id, name: s.name, url: s.url || "", suspended: Boolean(s.suspended) }));
     create.push(fields);
   }
 

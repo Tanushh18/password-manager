@@ -385,7 +385,7 @@ export default function RenderDashboard() {
                       return (
                         <tr key={key} className={(checked.includes(key) ? "is-checked " : "") + (nested ? "rd-row--nested" : "")} onClick={() => setSelectedKey(key)}>
                           <td className="rd-col-check" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={checked.includes(key)} onChange={() => toggleChecked(key)} aria-label={"Select " + s.name} /></td>
-                          <td><button type="button" className="rd-svc" onClick={(e) => { e.stopPropagation(); setSelectedKey(key); }}><span className="rd-svc__icon" aria-hidden="true">{serviceKind(s) === "PostgreSQL" ? "▤" : "▣"}</span><span><strong>{s.name}</strong><small className="rd-mono">{s.id}{s.branch ? " · " + s.branch : ""}</small></span></button></td>
+                          <td><button type="button" className="rd-svc" onClick={(e) => { e.stopPropagation(); setSelectedKey(key); }}><span className="rd-svc__icon" aria-hidden="true">{serviceKind(s) === "PostgreSQL" ? "▤" : "▣"}</span><span><strong>{s.name}</strong><small className="rd-mono">{s.id}{s.branch ? " · " + s.branch : ""}</small></span></button>{s.serviceDetails?.url && <a className="rd-url rd-url--sub" href={safeUrl(s.serviceDetails.url)} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()}>{s.serviceDetails.url.replace(/^https?:\/\//, "")} ↗</a>}</td>
                           <td><span className="rd-account"><i aria-hidden="true">{initials(s.accountName)}</i>{s.accountName}</span></td>
                           <td>{serviceKind(s)}</td>
                           <td>{s.serviceDetails?.region || "—"}</td>
@@ -412,6 +412,7 @@ export default function RenderDashboard() {
                               <span className="rd-svc__icon rd-svc__chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
                               <span><strong>{group.name}</strong><small>{group.members.length} servers · {group.active} running{group.suspended ? " · " + group.suspended + " suspended" : ""}</small></span>
                             </button>
+                            {group.main.serviceDetails?.url && <a className="rd-url rd-url--sub" href={safeUrl(group.main.serviceDetails.url)} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()}>{group.main.serviceDetails.url.replace(/^https?:\/\//, "")} ↗</a>}
                           </td>
                           <td><span className="rd-account"><i aria-hidden="true">{initials(group.accounts[0])}</i>{group.accounts.length > 1 ? group.accounts.length + " accounts" : group.accounts[0]}</span></td>
                           <td>{serviceKind(group.main)}</td>

@@ -78,7 +78,7 @@ function refreshLinks(project, services, listed) {
   const prev = Array.isArray(project?.renderServices) ? project.renderServices : [];
   const fromRepo = key ? list.filter((s) => repoKey(s.repo) === key) : [];
   const next = [
-    ...fromRepo.map((s) => ({ accountId: s.accountId, serviceId: s.id, name: s.name })),
+    ...fromRepo.map((s) => ({ accountId: s.accountId, serviceId: s.id, name: s.name, url: s.url || "", suspended: Boolean(s.suspended) })),
     ...prev.filter((s) => s && !known(s.accountId) && !fromRepo.some((f) => f.id === s.serviceId))
   ];
   const patch = {};

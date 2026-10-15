@@ -57,8 +57,8 @@ export default function ProjectCard({ project, style, status }) {
         <ul className="pv2-serverlist" aria-label="Render servers">
           {servers.map((sv) => (
             <li key={sv.serviceId}>
-              <span className={"pv2-dot" + (sv.serviceId === project.renderServiceId ? " is-main" : "")} aria-hidden="true" />
-              <span className="pv2-serverlist__name">{sv.name || sv.serviceId}</span>
+              <span className={"pv2-dot" + (sv.suspended ? "" : " is-main")} aria-hidden="true" title={sv.suspended ? "Suspended" : "Running"} />
+              <span className="pv2-serverlist__name">{sv.name || sv.serviceId}{sv.url ? <a className="pv2-serverlist__url" href={sv.url} target="_blank" rel="noopener noreferrer">{sv.url.replace(/^https:\/\//, "")}</a> : null}</span>
               {sv.serviceId === project.renderServiceId ? <em>main</em> : null}
               <a href={"https://dashboard.render.com/web/" + encodeURIComponent(sv.serviceId)} target="_blank" rel="noopener noreferrer" aria-label={"Open " + (sv.name || sv.serviceId) + " in Render"}><External size={13} /></a>
             </li>

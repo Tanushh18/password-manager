@@ -10,6 +10,7 @@ const { provision } = require("../utils/provision");
 const { groupKey, mergeProjects } = require("../utils/projectMerge");
 const { syncAllProjects } = require("../utils/projectSyncAll");
 const { autoSyncProjects, runAllProjectSync } = require("../utils/projectAutoSync");
+const { getProjectDeployments } = require("../utils/projectDeployments");
 const { validateProvisionInput } = require("../utils/provisionInput");
 const { githubSend, probeScopes, loadGithubAccounts } = require("../utils/githubClient");
 const { buildRegistrySync, setAutoSync, runAllRegistrySync } = require("../utils/registrySyncIO");
@@ -680,6 +681,17 @@ router.get("/render/projects/status", async (req, res) => {
     res.set("Cache-Control", "no-store");
     return res.json(data);
   } catch { return res.status(500).json({ error: "Could not compute project status." }); }
+});
+
+/* Where a project is deployed: every linked Render service with its URL, status and an env comparison (no values). */
+router.get("/render/projects/:projectId/deployments", async (req, res) => {
+  try {
+    const data = await getProjectDeployments(req.rootUser, req.params.projectId);
+    res.set("Cache-Control", "no-store");
+    return res.json(data);
+  } catch (error) {
+    return res.status(Number.isInteger(error.status) ? error.status : 500).json({ error: Number.isInteger(error.status) ? error.message : "Could not read this project's deployments." });
+  }
 });
 
 /* Live-services usage dashboard: only running Render services, with provider usage, limits and projections. */

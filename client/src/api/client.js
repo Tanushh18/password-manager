@@ -205,6 +205,7 @@ export const syncProjectRenderEnv = (projectId, options = {}) => instance.post("
 /* One-click create & deploy (GitHub repo + free Render service + env vars) and Stashr -> Render env push. */
 export const getRenderOwners = (accountId) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/owners").then((r) => r.data);
 export const provisionProject = (body) => instance.post("/render/provision", body, { timeout: 180000 }).then((r) => r.data);
+export const getProjectDeployments = (projectId) => instance.get("/render/projects/" + encodeURIComponent(projectId) + "/deployments", { timeout: 90000 }).then((r) => r.data);
 export const autoSyncProjects = (force = false) => instance.post("/render/projects/auto-sync", { force }, { timeout: 120000 }).then((r) => r.data);
 export const syncAllProjectsWithRender = () => instance.post("/render/projects/sync-all", {}, { timeout: 120000 }).then((r) => r.data);
 export const mergeProjects = (ids, keepId) => instance.post("/projects/merge", { ids, ...(keepId ? { keepId } : {}) }).then((r) => r.data);

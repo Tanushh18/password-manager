@@ -196,3 +196,5 @@
 .pv2-dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--text-faint); flex: none; }
 .pv2-dot.is-main { background: var(--ok, #3fb950); }
 .pv2-links { display: inline-flex; align-items: center; gap: .9rem; }
+.pv2-serverlist__name { display: grid; }
+.pv2-serverlist__url { font-size: .72rem; color: var(--accent) !important; overflow: hidden; text-overflow: ellipsis; }

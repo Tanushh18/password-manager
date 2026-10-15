@@ -34,13 +34,16 @@ function pickPrimary(projects) {
 /** Every Render service the projects were linked to, without repeats. */
 function linkedServices(projects) {
   const out = [];
-  const add = (accountId, serviceId, name) => {
+  const add = (accountId, serviceId, name, extra = {}) => {
     if (!accountId || !serviceId || out.some((s) => s.serviceId === serviceId)) return;
-    out.push({ accountId: String(accountId), serviceId: String(serviceId), name: String(name || "") });
+    out.push({ accountId: String(accountId), serviceId: String(serviceId), name: String(name || ""), ...extra });
   };
+  const extras = (s) => ({ ...(typeof s?.url === "string" && s.url ? { url: s.url } : {}), ...(typeof s?.suspended === "boolean" ? { suspended: s.suspended } : {}) });
   for (const p of projects) {
+    // The detailed entry (with url / suspended) wins over the bare primary link.
+    for (const s of Array.isArray(p.renderServices) ? p.renderServices : []) if (s.serviceId === p.renderServiceId) add(s.accountId, s.serviceId, s.name, extras(s));
     add(p.renderAccountId, p.renderServiceId, p.renderServiceName);
-    for (const s of Array.isArray(p.renderServices) ? p.renderServices : []) add(s.accountId, s.serviceId, s.name);
+    for (const s of Array.isArray(p.renderServices) ? p.renderServices : []) add(s.accountId, s.serviceId, s.name, extras(s));
   }
   return out;
 }

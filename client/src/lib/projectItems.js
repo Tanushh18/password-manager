@@ -87,7 +87,7 @@ export function normalizeProject(raw = {}) {
     : [];
   // Every Render service deployed from this repo (kept in step with Render by the server).
   if (Array.isArray(raw.renderServices) && raw.renderServices.length) {
-    next.renderServices = raw.renderServices.filter((s) => s && s.serviceId).map((s) => ({ accountId: String(s.accountId || ""), serviceId: String(s.serviceId), name: String(s.name || "") }));
+    next.renderServices = raw.renderServices.filter((s) => s && s.serviceId).map((s) => ({ accountId: String(s.accountId || ""), serviceId: String(s.serviceId), name: String(s.name || ""), url: /^https:\/\//i.test(String(s.url || "")) ? String(s.url) : "", suspended: Boolean(s.suspended) }));
   }
   return next;
 }
