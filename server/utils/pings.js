@@ -13,7 +13,7 @@ async function pingOnce(url, path) {
   try {
     const res = await fetch(url + path, { method: "GET", redirect: "manual", signal: AbortSignal.timeout(20000), headers: { "User-Agent": "Stashr-Ping/1.0", "Cache-Control": "no-cache" } });
     await res.body?.cancel();
-    return { at: new Date().toISOString(), status: res.status, ms: Date.now() - started, ok: res.status >= 200 && res.status < 400, missingRoute: res.status === 404 };
+    return { at: new Date().toISOString(), status: res.status, ms: Date.now() - started, ok: (res.status >= 200 && res.status < 400) || res.status === 429, missingRoute: res.status === 404 };
   } catch (error) {
     return { at: new Date().toISOString(), status: null, ms: Date.now() - started, ok: false, error: error?.name === "TimeoutError" ? "timeout" : "unreachable" };
   }

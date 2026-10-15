@@ -237,6 +237,27 @@ function extractPoints(payload) {
     .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
 }
 
+/*
+ * Is the service up? Any answer below 5xx proves the process is running: an API that returns 404 for "/" or 429 when
+ * rate limiting is alive, not down. Only no answer (after a retry for free-tier cold starts), a 5xx, or Render's own
+ * "no server here" page (deleted / suspended service) counts as down.
+ */
+const FALLBACK_HEALTH_PATHS = ["/health", "/healthz", "/api/health", "/ping"];
+const PROBE_HEADERS = { "User-Agent": "Stashr-Render-Monitor/1.0", "Cache-Control": "no-cache" };
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const retryable = (r) => Boolean(r.error) || [502, 503, 504].includes(r.status);
+const renderHasNoServer = (routing) => /no-server|suspend/i.test(routing || "");
+
+async function attemptProbe(url, timeoutMs) {
+  try {
+    const response = await fetch(url, { method: "GET", redirect: "manual", signal: AbortSignal.timeout(timeoutMs), headers: PROBE_HEADERS });
+    await response.body?.cancel();
+    return { status: response.status, routing: response.headers?.get?.("x-render-routing") || "" };
+  } catch (error) {
+    return { error: error.name === "TimeoutError" || error.name === "AbortError" ? "timeout" : "unreachable" };
+  }
+}
+
 async function probeService(service) {
   if (service?.suspended === "suspended") return { state: "suspended", checkedAt: nowIso() };
   const rawUrl = service?.serviceDetails?.url;
@@ -247,16 +268,25 @@ async function probeService(service) {
     return { state: "unsupported", checkedAt: nowIso(), message: "Only Render-provided HTTPS *.onrender.com URLs are probed." };
   }
   const started = Date.now();
-  try {
-    const response = await fetch(target.toString(), {
-      method: "GET", redirect: "manual", signal: AbortSignal.timeout(6000),
-      headers: { "User-Agent": "Stashr-Render-Monitor/1.0", "Cache-Control": "no-cache" }
-    });
-    await response.body?.cancel();
-    return { state: response.status >= 200 && response.status < 400 ? "healthy" : "unhealthy", status: response.status, latencyMs: Date.now() - started, checkedAt: nowIso() };
-  } catch (error) {
-    return { state: error.name === "TimeoutError" || error.name === "AbortError" ? "timeout" : "unhealthy", latencyMs: Date.now() - started, checkedAt: nowIso() };
+  const done = (fields) => ({ latencyMs: Date.now() - started, checkedAt: nowIso(), ...fields });
+
+  let probe = await attemptProbe(target.toString(), 8000);
+  // A sleeping free instance needs a while to wake: ask once more, with patience, before calling it down.
+  if (retryable(probe)) { await sleep(1000); probe = await attemptProbe(target.toString(), 20000); }
+
+  if (probe.error) return done({ state: probe.error === "timeout" ? "timeout" : "unhealthy" });
+  if (renderHasNoServer(probe.routing)) return done({ state: "unhealthy", status: probe.status, message: "Render has no running server at this URL (deleted, suspended or never deployed)." });
+  if (probe.status >= 200 && probe.status < 400) return done({ state: "healthy", status: probe.status });
+  if (probe.status < 500) {
+    if (probe.status === 404) {
+      for (const path of FALLBACK_HEALTH_PATHS) {
+        const next = await attemptProbe(new URL(path, target).toString(), 8000);
+        if (next.status >= 200 && next.status < 400) return done({ state: "healthy", status: next.status, path });
+      }
+    }
+    return done({ state: "healthy", status: probe.status, message: "Answered HTTP " + probe.status + "; the server is up (no health route on /)." });
   }
+  return done({ state: "unhealthy", status: probe.status });
 }
 
 function encryptedList(user, field, dataKey, limit = 100) {
@@ -581,5 +611,5 @@ function verifySecret(candidate, expected) {
 module.exports = {
   defaultConfig, normalizeConfig, readConfig, saveConfig, publicConfig,
   runUserMonitoring, runAllEnabledMonitoring, listEveryService, normalizePings, DEFAULT_PING_MINUTES, resolveIncidents, clearClosedIncidents, sendTelegram, encryptedList, verifySecret, renderRequest,
-  HISTORY_LIMIT, INCIDENT_LIMIT
+  HISTORY_LIMIT, INCIDENT_LIMIT, probeService
 };
