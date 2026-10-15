@@ -270,6 +270,8 @@ export const verifyCustomDomain = (a, s, name) => instance.post(domainsPath(a, s
 export const removeCustomDomain = (a, s, name) => instance.delete(domainsPath(a, s) + "/" + encodeURIComponent(name)).then((r) => r.data);
 export const findUrlReferences = (fromUrl) => instance.post("/render/url-references", { fromUrl }, { timeout: 180000 }).then((r) => r.data);
 export const replaceUrlReferences = (payload) => instance.post("/render/url-replace", payload, { timeout: 180000 }).then((r) => r.data);
+export const forgotPassword = (email) => instance.post("/forgot-password", { email }, { timeout: 60000 }).then((r) => r.data);
+export const resetPassword = (payload) => instance.post("/reset-password", payload, { timeout: 60000 }).then((r) => r.data);
 export const getTelegram = () => instance.get("/telegram").then((r) => r.data);
 export const connectTelegram = (token) => instance.post("/telegram/connect", { token }, { timeout: 60000 }).then((r) => r.data);
 export const saveTelegram = (patch) => instance.put("/telegram/settings", patch).then((r) => r.data);

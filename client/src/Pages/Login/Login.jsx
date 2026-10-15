@@ -108,7 +108,7 @@ export default function Login() {
           </button>
         ) : (
           <p className="auth__swap">
-            New here? <Link to="/signup">Create your vault</Link>
+            <Link to="/forgot-password">Forgot password?</Link> · New here? <Link to="/signup">Create your vault</Link>
           </p>
         )}
       </form>

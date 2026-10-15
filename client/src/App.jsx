@@ -17,6 +17,7 @@ import Servers from "./Pages/Servers/Servers";
 // Loaded on demand: the dashboard is large and only needed on /render.
 const Services = lazy(() => import("./Pages/Services/Services"));
 const Cron = lazy(() => import("./Pages/Cron/Cron"));
+const Forgot = lazy(() => import("./Pages/Forgot/Forgot"));
 const RenderDashboard = lazy(() => import("./Pages/Render/RenderDashboard"));
 import Privacy from "./Pages/Privacy/Privacy";
 import Logout from "./Pages/Logout/Logout";
@@ -80,6 +81,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/signin" element={<GuestOnly><Login /></GuestOnly>} />
+          <Route path="/forgot-password" element={<GuestOnly><Suspense fallback={<Splash />}><Forgot /></Suspense></GuestOnly>} />
           <Route path="/signup" element={<GuestOnly><Signup /></GuestOnly>} />
           <Route path="/passwords" element={<RequireVault><Vault /></RequireVault>} />
           <Route path="/projects" element={<RequireVault><Projects /></RequireVault>} />

@@ -29,3 +29,10 @@ services:
       # /render/ops/tick with Authorization: Bearer <this secret>.
       - key: RENDER_MONITOR_CRON_SECRET
         sync: false
+      # Forgot-password emails (Brevo transactional email). Without these, "Forgot password" says it is not set up.
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: BREVO_SENDER_NAME
+        value: Stashr

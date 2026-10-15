@@ -56,6 +56,12 @@ const schema = new mongoose.Schema({
         recoveryCodes: [{ type: String }]  // sha256 hashes
     },
 
+    // Forgot-password: only a salted hash of the 6-digit code, its expiry and the try / send counters.
+    passwordReset: {
+        codeHash: { type: String }, salt: { type: String }, expiresAt: { type: Date }, attempts: { type: Number, default: 0 },
+        sentAt: { type: Date }, windowStart: { type: Date }, sentCount: { type: Number, default: 0 }
+    },
+
     passwords: [entrySchema],
 
     // Project/infra tracker entries. Same shape and same end-to-end scheme as
