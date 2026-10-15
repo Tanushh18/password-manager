@@ -11,6 +11,19 @@ import { formatAmount, forecastText, summarize, projectSummary, metricRows, acco
 import "../Render/RenderDashboard.css";
 import "./Services.css";
 
+/* Plan limits you tell Stashr about: most providers do not report the limit of your plan. */
+const LIMIT_FIELDS = [
+  ["mongodb", "MongoDB storage (MB)", "Atlas free (M0) clusters have 512 MB."],
+  ["postgres", "PostgreSQL storage (MB)", "Neon free ≈ 512 MB, Supabase free ≈ 500 MB. Leave empty if unknown."],
+  ["mysql", "MySQL storage (MB)", "Leave empty if unknown."],
+  ["redis", "Redis memory (MB)", "Upstash free = 256 MB. Used only if the server reports no limit."],
+  ["turso", "Turso storage (MB)", "Leave empty if unknown."],
+  ["elasticsearch", "Elasticsearch storage (MB)", "Leave empty if unknown."],
+  ["aws", "S3 / R2 storage (MB)", "R2 free = 10 GB (10240 MB). Leave empty if unknown."]
+];
+const limitsFrom = (settings) => Object.fromEntries(LIMIT_FIELDS.map(([key]) => [key, String(key === "mongodb" ? (settings?.limitsMb?.mongodb ?? settings?.mongoLimitMb ?? 512) : (settings?.limitsMb?.[key] ?? ""))]));
+const limitsPatch = (limits) => ({ limitsMb: Object.fromEntries(LIMIT_FIELDS.map(([key]) => [key, limits[key] === "" || limits[key] == null ? "" : Number(limits[key]) || ""])) });
+
 const STATE_TEXT = {
   "no-credentials": "Keys needed to read usage aren’t set on this service",
   "no-reader": "No usage API",
@@ -155,7 +168,7 @@ function ProjectDetail({ project, onToggle, projectOf }) {
                   <tr className="sv-group">
                     <th colSpan={7}>
                       <div className="sv-groupline">
-                        <span><strong>{svc.label}</strong><em>{svc.category}</em>{svc.reports.length > 1 && <small>{svc.reports.length} accounts</small>}</span>
+                        <span><strong>{svc.label}</strong><em>{svc.category}{svc.host ? " · " + svc.host : ""}</em>{svc.reports.length > 1 && <small>{svc.reports.length} accounts</small>}</span>
                         <span className="sv-actions">
                           {svc.console && <a href={svc.console} target="_blank" rel="noopener noreferrer">Console ↗</a>}
                           <label className="rd-check"><input type="checkbox" checked onChange={() => onToggle(project.id + "|" + svc.key, true)} /> Track</label>
@@ -197,7 +210,7 @@ function ProjectDetail({ project, onToggle, projectOf }) {
               <thead><tr><th>Service</th><th>Category</th><th>Limits set in env</th><th>Usage / where to check</th><th /></tr></thead>
               <tbody>{without.map((svc) => (
                 <tr key={svc.key}>
-                  <td><strong>{svc.label}</strong></td>
+                  <td><strong>{svc.label}</strong>{svc.host ? <small className="sv-sub">{svc.host}</small> : null}</td>
                   <td>{svc.category}</td>
                   <td>{svc.configuredLimits.length ? svc.configuredLimits.map((l) => <code key={l.name} className="sv-tag">{l.name} = {l.value}{l.period ? " / " + l.period : ""}</code>) : <span className="sv-dim">—</span>}</td>
                   <td>
@@ -250,7 +263,7 @@ export default function Services() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [mongoMb, setMongoMb] = useState("512");
+  const [limits, setLimits] = useState(() => limitsFrom(null));
   const [selected, setSelected] = useState("overview");
   const [showSettings, setShowSettings] = useState(false);
 
@@ -259,7 +272,7 @@ export default function Services() {
     try {
       const result = await getLiveDashboard({ refresh });
       setData(result);
-      if (result?.settings?.mongoLimitMb) setMongoMb(String(result.settings.mongoLimitMb));
+      if (result?.settings) setLimits(limitsFrom(result.settings));
       if (quiet) setError("");
     } catch (e) { if (!quiet) setError(errorMessage(e, "Could not load the services dashboard.")); }
     finally { if (!quiet) setLoading(false); }
@@ -305,17 +318,25 @@ export default function Services() {
         {data && !data.enabled && (
           <section className="sv-panel sv-consent">
             <h2>Turn on usage tracking</h2>
-            <p>Stashr reads each running Render service’s environment variables, detects the databases and APIs it uses, and asks those providers (MongoDB, Cloudinary, Brevo, Twilio, Deepgram) for current usage. Everything is read-only, and keys stay on the server.</p>
-            <label className="sv-field">MongoDB storage limit (MB)<input className="rd-field" type="number" min="1" value={mongoMb} onChange={(e) => setMongoMb(e.target.value)} /><small className="sv-dim">Atlas free (M0) clusters have 512 MB.</small></label>
-            <button type="button" className="rd-btn rd-btn--primary" onClick={() => void save({ enabled: true, mongoLimitMb: Number(mongoMb) || 512 }, "Usage tracking enabled.")}>Enable usage tracking</button>
+            <p>Stashr reads each running Render service’s environment variables, detects the databases and APIs it uses, and asks those providers for current usage: databases (MongoDB, PostgreSQL, MySQL, Redis / Upstash, Turso, Pinecone, Elasticsearch), storage (Cloudinary, S3 / Cloudflare R2) and APIs (Brevo, SendGrid, Twilio, Vonage, Deepgram, ElevenLabs). Services without a usage API are still listed, with where to look. Everything is read-only, and keys stay on the server. Plan limits that providers do not report are the ones you set below.</p>
+            <div className="sv-limits">
+              {LIMIT_FIELDS.map(([key, label, hint]) => (
+                <label key={key} className="sv-field">{label}<input className="rd-field" type="number" min="1" value={limits[key]} onChange={(e) => setLimits((old) => ({ ...old, [key]: e.target.value }))} /><small className="sv-dim">{hint}</small></label>
+              ))}
+            </div>
+            <button type="button" className="rd-btn rd-btn--primary" onClick={() => void save({ enabled: true, ...limitsPatch(limits) }, "Usage tracking enabled.")}>Enable usage tracking</button>
           </section>
         )}
 
         {data?.enabled && showSettings && (
           <section className="sv-panel sv-settings">
-            <label className="sv-field">MongoDB storage limit (MB)<input className="rd-field" type="number" min="1" value={mongoMb} onChange={(e) => setMongoMb(e.target.value)} /></label>
+            <div className="sv-limits">
+              {LIMIT_FIELDS.map(([key, label, hint]) => (
+                <label key={key} className="sv-field">{label}<input className="rd-field" type="number" min="1" value={limits[key]} onChange={(e) => setLimits((old) => ({ ...old, [key]: e.target.value }))} /><small className="sv-dim">{hint}</small></label>
+              ))}
+            </div>
             <div className="sv-actions">
-              <button type="button" className="rd-btn rd-btn--primary" onClick={() => void save({ mongoLimitMb: Number(mongoMb) || 512 }, "Saved.")}>Save</button>
+              <button type="button" className="rd-btn rd-btn--primary" onClick={() => void save(limitsPatch(limits), "Saved.")}>Save</button>
               <button type="button" className="rd-btn rd-btn--danger-quiet" onClick={() => void save({ enabled: false }, "Usage tracking turned off.")}>Turn off tracking</button>
             </div>
             <p className="rd-note">{data.historyPoints || 0} hourly snapshot(s) stored. Storage and balance forecasts need about a day of history.</p>

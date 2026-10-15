@@ -5,6 +5,7 @@ import AuthShell from "../../Components/AuthShell/AuthShell";
 import Field from "../../Components/Field/Field";
 import StrengthMeter from "../../Components/StrengthMeter/StrengthMeter";
 import { Alert, Sparkle } from "../../Components/Icons/Icons";
+import AuthError from "../../Components/AuthError/AuthError";
 import { useVault } from "../../state/vault";
 import { estimate } from "../../lib/strength";
 
@@ -16,12 +17,14 @@ export default function Signup() {
   const [form, setForm] = useState({ name: "", email: "", password: "", cpassword: "" });
   const [agree, setAgree] = useState(false);
   const [errors, setErrors] = useState({});
+  const [formError, setFormError] = useState(null);
   const [loading, setLoading] = useState(false);
   const strength = useMemo(() => estimate(form.password), [form.password]);
 
   const set = (k) => (e) => {
     setForm((f) => ({ ...f, [k]: e.target.value }));
     setErrors((x) => ({ ...x, [k]: "" }));
+    setFormError(null);
   };
 
   const submit = async (e) => {
@@ -35,6 +38,7 @@ export default function Signup() {
     if (form.password !== form.cpassword) found.cpassword = "These two don't match";
     if (!agree) found.agree = "Please confirm you understand";
     setErrors(found);
+    setFormError(null);
     if (Object.keys(found).length) return;
 
     try {
@@ -44,7 +48,13 @@ export default function Signup() {
       toast.success("Your account is ready ✨");
       navigate("/passwords", { replace: true });
     } catch (err) {
-      toast.error(err.message);
+      const taken = /already|exist|registered|in use/i.test(err.message);
+      setFormError({
+        title: err.kind === "network" ? "Can't reach the server" : err.kind === "limited" ? "Too many attempts" : err.kind === "server" ? "The server had a problem" : taken ? "That email already has an account" : "We couldn't create your account",
+        message: err.message,
+        hint: taken ? "Try signing in instead, or use “Forgot password?” if you can't remember the password." : err.kind === "network" ? "Free servers sleep when idle and take up to a minute to wake." : undefined
+      });
+      if (taken) setErrors((x) => ({ ...x, email: "This email is already registered" }));
     } finally {
       setLoading(false);
     }
@@ -57,6 +67,7 @@ export default function Signup() {
           Create your <em className="serif-em">account.</em>
         </h1>
         <p className="auth__sub">Sign up with your email and a password — you'll use them to sign in and see your saved passwords.</p>
+        <AuthError error={formError} />
 
         <Field id="su-name" label="Name" value={form.name} onChange={set("name")} placeholder="Your name" autoComplete="name" error={errors.name} disabled={loading} />
         <Field id="su-email" label="Email" type="email" value={form.email} onChange={set("email")} placeholder="you@example.com" autoComplete="username" error={errors.email} disabled={loading} />

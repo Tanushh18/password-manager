@@ -33,27 +33,39 @@ const consoleLink = {
   firebase: "https://console.firebase.google.com", telegram: "https://t.me/BotFather", turso: "https://turso.tech/app",
   redis: "https://console.upstash.com", postgres: "https://dashboard.render.com", pinecone: "https://app.pinecone.io",
   sentry: "https://sentry.io", assemblyai: "https://www.assemblyai.com/app", livekit: "https://cloud.livekit.io",
-  github: "https://github.com/settings/tokens", stripe: "https://dashboard.stripe.com", supabase: "https://supabase.com/dashboard"
+  github: "https://github.com/settings/tokens", stripe: "https://dashboard.stripe.com", supabase: "https://supabase.com/dashboard",
+  mysql: "https://console.aiven.io", aws: "https://console.aws.amazon.com/s3", sendgrid: "https://app.sendgrid.com", vonage: "https://dashboard.nexmo.com",
+  elevenlabs: "https://elevenlabs.io/app/subscription", elasticsearch: "https://cloud.elastic.co", imagekit: "https://imagekit.io/dashboard",
+  uploadthing: "https://uploadthing.com/dashboard", vercelblob: "https://vercel.com/dashboard/stores", algolia: "https://dashboard.algolia.com", search: "https://cloud.meilisearch.com",
+  queue: "https://customer.cloudamqp.com", clerk: "https://dashboard.clerk.com", auth0: "https://manage.auth0.com", cloudflare: "https://dash.cloudflare.com", b2: "https://secure.backblaze.com/b2_buckets.htm"
 };
 
 /* Order matters: the first provider whose pattern matches a variable name owns it. */
 const PROVIDERS = [
   { key: "mongodb", label: "MongoDB", category: "Database", vars: /^(MONGO(DB)?(_[A-Z0-9_]+)?|MONGO_?DB_?URL|DB_URI|DATABASE)$/i },
+  { key: "postgres", label: "PostgreSQL", category: "Database", vars: /^(POSTGRES(QL)?|PG|NEON|COCKROACH(DB)?|PGHOST|PGUSER|PGPASSWORD|PGDATABASE)[A-Z0-9_]*$/i },
+  { key: "mysql", label: "MySQL / MariaDB", category: "Database", vars: /^(MYSQL|MARIADB|PLANETSCALE|TIDB)[A-Z0-9_]*$/i },
   { key: "turso", label: "Turso (libSQL)", category: "Database", vars: /^(TURSO|LIBSQL)[A-Z0-9_]*$/i },
   { key: "redis", label: "Redis / Upstash", category: "Database", vars: /^(REDIS|UPSTASH)[A-Z0-9_]*$/i },
   { key: "pinecone", label: "Pinecone", category: "Database", vars: /^PINECONE[A-Z0-9_]*$/i },
   { key: "elasticsearch", label: "Elasticsearch", category: "Database", vars: /^ELASTIC(SEARCH)?[A-Z0-9_]*$/i },
   { key: "supabase", label: "Supabase", category: "Database", vars: /^(NEXT_PUBLIC_)?SUPABASE[A-Z0-9_]*$/i },
   { key: "firebase", label: "Firebase / FCM", category: "Database", vars: /^((REACT_APP|EXPO_PUBLIC|VITE|NEXT_PUBLIC)_)?(FIREBASE|FCM)[A-Z0-9_]*$|^GOOGLE_APPLICATION_CREDENTIALS$/i },
+  { key: "imagekit", label: "ImageKit", category: "Media", vars: /^IMAGEKIT[A-Z0-9_]*$/i },
+  { key: "uploadthing", label: "UploadThing", category: "Media", vars: /^UPLOADTHING[A-Z0-9_]*$/i },
+  { key: "vercelblob", label: "Vercel Blob", category: "Media", vars: /^(BLOB_READ_WRITE_TOKEN|VERCEL_BLOB[A-Z0-9_]*)$/i },
+  { key: "b2", label: "Backblaze B2 / Spaces / Wasabi", category: "Media", vars: /^(B2|BACKBLAZE|SPACES|DO_SPACES|WASABI)_[A-Z0-9_]+$/i },
   { key: "cloudinary", label: "Cloudinary", category: "Media", vars: /^(CLOUDINARY[A-Z0-9_]*|CLOUD_NAME)$/i },
   { key: "twilio", label: "Twilio", category: "SMS / Voice", vars: /^TWILIO[A-Z0-9_]*$/i },
-  { key: "sms", label: "SMS gateway", category: "SMS / Voice", vars: /^(SMS|MSG91|FAST2SMS|EXOTEL|VONAGE|NEXMO|PLIVO)[A-Z0-9_]*$/i },
+  { key: "vonage", label: "Vonage (Nexmo)", category: "SMS / Voice", vars: /^(VONAGE|NEXMO)[A-Z0-9_]*$/i },
+  { key: "sms", label: "SMS gateway", category: "SMS / Voice", vars: /^(SMS|MSG91|FAST2SMS|EXOTEL|PLIVO)[A-Z0-9_]*$/i },
   { key: "deepgram", label: "Deepgram", category: "Voice / speech", vars: /^DEEPGRAM[A-Z0-9_]*$/i },
   { key: "assemblyai", label: "AssemblyAI", category: "Voice / speech", vars: /^ASSEMBLYAI[A-Z0-9_]*$/i },
   { key: "cartesia", label: "Cartesia", category: "Voice / speech", vars: /^CARTESIA[A-Z0-9_]*$/i },
   { key: "livekit", label: "LiveKit", category: "Realtime", vars: /^LIVEKIT[A-Z0-9_]*$/i },
   { key: "brevo", label: "Brevo", category: "Email", vars: /^(BREVO|SENDINBLUE)[A-Z0-9_]*$/i },
-  { key: "email", label: "Email (SMTP / API)", category: "Email", vars: /^(SMTP|MAIL|IMAP|GMAIL|SENDGRID|RESEND|MAILGUN|POSTMARK)[A-Z0-9_]*$|^EMAIL(_(USER|PASS|HOST|PORT|FROM|SERVICE)[A-Z0-9_]*)?$/i },
+  { key: "sendgrid", label: "SendGrid", category: "Email", vars: /^SENDGRID[A-Z0-9_]*$/i },
+  { key: "email", label: "Email (SMTP / API)", category: "Email", vars: /^(SMTP|MAIL|IMAP|GMAIL|RESEND|MAILGUN|POSTMARK)[A-Z0-9_]*$|^EMAIL(_(USER|PASS|HOST|PORT|FROM|SERVICE)[A-Z0-9_]*)?$/i },
   { key: "telegram", label: "Telegram", category: "Messaging", vars: /^(TELEGRAM[A-Z0-9_]*|TG_[A-Z0-9_]+|BOT_TOKEN)$/i },
   { key: "groq", label: "Groq", category: "AI", vars: /^GROQ[A-Z0-9_]*$/i },
   { key: "openai", label: "OpenAI", category: "AI", vars: /^OPENAI[A-Z0-9_]*$/i },
@@ -67,9 +79,15 @@ const PROVIDERS = [
   { key: "affiliate", label: "Affiliate / data APIs", category: "APIs", vars: /^(CUELINK|BUYHATKE|GNEWS|LOCATIONIQ|AFFILIATE)[A-Z0-9_]*$/i },
   { key: "aws", label: "AWS / S3", category: "Media", vars: /^(AWS|S3|R2)_[A-Z0-9_]+$/i },
   { key: "whatsapp", label: "WhatsApp", category: "Messaging", vars: /^(WHATSAPP|WA|META_WA|INTERAKT|GUPSHUP)_[A-Z0-9_]+$/i },
-  { key: "elevenlabs", label: "ElevenLabs", category: "Voice / speech", vars: /^(ELEVENLABS|ELEVEN)_[A-Z0-9_]+$/i },
+  { key: "elevenlabs", label: "ElevenLabs", category: "Voice / speech", vars: /^(ELEVENLABS|ELEVEN|XI)_[A-Z0-9_]+$/i },
   { key: "maps", label: "Maps (Google Maps / Mapbox)", category: "APIs", vars: /^((REACT_APP|EXPO_PUBLIC|VITE|NEXT_PUBLIC)_)?(GOOGLE_MAPS|MAPS|MAPBOX)[A-Z0-9_]*$/i },
   { key: "analytics", label: "Analytics (PostHog / Mixpanel / GA)", category: "Monitoring", vars: /^((REACT_APP|EXPO_PUBLIC|VITE|NEXT_PUBLIC)_)?(POSTHOG|MIXPANEL|GA_|GA4|AMPLITUDE)[A-Z0-9_]*$/i },
+  { key: "algolia", label: "Algolia", category: "Database", vars: /^ALGOLIA[A-Z0-9_]*$/i },
+  { key: "search", label: "Search (Meilisearch / Typesense)", category: "Database", vars: /^(MEILI(SEARCH)?|TYPESENSE)[A-Z0-9_]*$/i },
+  { key: "queue", label: "Queues (RabbitMQ / Kafka / SQS)", category: "Realtime", vars: /^(AMQP|RABBITMQ|CLOUDAMQP|KAFKA|UPSTASH_KAFKA|SQS|PUBSUB|NATS)[A-Z0-9_]*$/i },
+  { key: "clerk", label: "Clerk", category: "Auth", vars: /^((NEXT_PUBLIC|VITE|REACT_APP)_)?CLERK[A-Z0-9_]*$/i },
+  { key: "auth0", label: "Auth0", category: "Auth", vars: /^AUTH0[A-Z0-9_]*$/i },
+  { key: "cloudflare", label: "Cloudflare", category: "DevOps", vars: /^CLOUDFLARE[A-Z0-9_]*$/i },
   { key: "github", label: "GitHub", category: "DevOps", vars: /^GITHUB[A-Z0-9_]*$/i },
   { key: "render", label: "Render (platform)", category: "DevOps", vars: /^RENDER[A-Z0-9_]*$/i },
   { key: "expo", label: "Expo / EAS", category: "DevOps", vars: /^(EXPO|EAS|OTA)[A-Z0-9_]*$/i }
@@ -81,14 +99,21 @@ const INTERNAL = /^(PORT|NODE_ENV|NODE_VERSION|PYTHON_VERSION|HOST|BASE_URL|SELF
 const NUMBERISH = /^\s*\d+(\.\d+)?\s*$/;
 const LIMIT_NAME = /(LIMIT|MAX|CAP|QUOTA|RPD|RPM|TPD|TPM|BUDGET)/i;
 
+/** A connection string says what it is by its scheme, whatever the variable is called (DB_URL, SUPABASE_DB_URL, ...). */
+function schemeOwner(text) {
+  if (/^mongodb(\+srv)?:\/\//i.test(text)) return "mongodb";
+  if (/^postgres(ql)?:\/\//i.test(text)) return "postgres";
+  if (/^(mysql2?|mariadb):\/\//i.test(text)) return "mysql";
+  if (/^rediss?:\/\//i.test(text)) return "redis";
+  if (/^libsql:\/\//i.test(text)) return "turso";
+  return null;
+}
+
 function ownerOf(name, values) {
   const text = typeof values.get(name) === "string" ? values.get(name).trim() : "";
-  if (/^DATABASE_URL$/i.test(name)) {
-    if (/^postgres(ql)?:/i.test(text)) return "postgres";
-    if (/^mysql/i.test(text)) return "mysql";
-    if (/^mongodb/i.test(text)) return "mongodb";
-    return "database";
-  }
+  const bySchema = schemeOwner(text);
+  if (bySchema) return bySchema;
+  if (/^DATABASE_URL$/i.test(name)) return "database";
   for (const p of PROVIDERS) if (p.vars.test(name)) return p.key;
   return null;
 }
@@ -97,6 +122,16 @@ const lookup = (values, ...patterns) => {
   for (const [name, value] of values) for (const p of patterns) if (p.test(name) && typeof value === "string" && value.trim()) return { name, value: value.trim() };
   return null;
 };
+
+/** The first variable holding a connection string of this kind (server-side only: the value is never sent to a client). */
+function dbUri(values, scheme) {
+  const hit = [...values].find(([, value]) => typeof value === "string" && scheme.test(value.trim()));
+  return hit ? { uri: String(hit[1]).trim(), varName: hit[0] } : null;
+}
+
+/* The hosting provider behind a connection string, from its host name (never from credentials). */
+const HOST_LABELS = [[/neon\.tech$/, "Neon"], [/supabase\.(co|com)$/, "Supabase"], [/render\.com$/, "Render"], [/amazonaws\.com$/, "AWS RDS"], [/aivencloud\.com$/, "Aiven"], [/cockroachlabs\.cloud$/, "CockroachDB"], [/planetscale\.com$|psdb\.cloud$/, "PlanetScale"], [/railway\.app$|rlwy\.net$/, "Railway"], [/mongodb\.net$/, "Atlas"], [/upstash\.io$/, "Upstash"], [/redislabs\.com$|redis-cloud\.com$/, "Redis Cloud"], [/elephantsql\.com$/, "ElephantSQL"], [/digitalocean\.com$|ondigitalocean\.com$/, "DigitalOcean"], [/tidbcloud\.com$/, "TiDB Cloud"]];
+const hostLabel = (uri) => { try { const host = new URL(uri.replace(/^mongodb\+srv:/i, "mongodb:").replace(/^(mysql2|mariadb|rediss?|postgres(ql)?|mongodb):/i, "http:")).hostname.toLowerCase(); return (HOST_LABELS.find(([re]) => re.test(host)) || [])[1] || ""; } catch { return ""; } };
 
 /** Cloudinary can be configured as several accounts (e.g. CLOUDINARY_CLOUD_NAME and CLOUDINARY_CLOUD_NAME_shine). */
 function cloudinarySets(values) {
@@ -124,10 +159,44 @@ function cloudinarySets(values) {
 
 const CREDENTIALS = {
   mongodb: (values) => {
-    const hit = [...values].find(([name, value]) => PROVIDERS[0].vars.test(name) && /^mongodb(\+srv)?:\/\//i.test(String(value).trim()));
-    return hit ? { uri: String(hit[1]).trim(), varName: hit[0] } : null;
+    return dbUri(values, /^mongodb(\+srv)?:\/\//i);
   },
   cloudinary: (values) => { const sets = cloudinarySets(values); return sets.length ? { sets } : null; },
+  postgres: (values) => dbUri(values, /^postgres(ql)?:\/\//i),
+  mysql: (values) => dbUri(values, /^(mysql2?|mariadb):\/\//i),
+  redis: (values) => {
+    const rest = lookup(values, /^(UPSTASH_REDIS_REST_URL|KV_REST_API_URL)$/i), token = lookup(values, /^(UPSTASH_REDIS_REST_TOKEN|KV_REST_API_TOKEN)$/i);
+    if (rest && token && /^https:\/\//i.test(rest.value)) return { restUrl: rest.value.replace(/\/+$/, ""), restToken: token.value };
+    return dbUri(values, /^rediss?:\/\//i);
+  },
+  turso: (values) => {
+    const url = lookup(values, /^(TURSO_DATABASE_URL|LIBSQL_URL|TURSO_URL)$/i), token = lookup(values, /^(TURSO_AUTH_TOKEN|LIBSQL_AUTH_TOKEN)$/i);
+    return url && token ? { url: url.value.replace(/^libsql:/i, "https:").replace(/\/+$/, ""), token: token.value } : null;
+  },
+  pinecone: (values) => { const k = lookup(values, /^PINECONE_API_KEY$/i); return k ? { apiKey: k.value } : null; },
+  elasticsearch: (values) => {
+    const url = lookup(values, /^(ELASTIC(SEARCH)?_(URL|NODE|ENDPOINT|HOST))$/i);
+    if (!url || !/^https:\/\//i.test(url.value)) return null;
+    const key = lookup(values, /^ELASTIC(SEARCH)?_API_KEY$/i), user = lookup(values, /^ELASTIC(SEARCH)?_(USER(NAME)?)$/i), pass = lookup(values, /^ELASTIC(SEARCH)?_PASSWORD$/i);
+    const auth = key ? "ApiKey " + key.value : user && pass ? "Basic " + Buffer.from(user.value + ":" + pass.value).toString("base64") : "";
+    return auth ? { url: url.value.replace(/\/+$/, ""), auth } : null;
+  },
+  aws: (values) => {
+    const access = lookup(values, /^(AWS_ACCESS_KEY_ID|AWS_ACCESS_KEY|S3_ACCESS_KEY(_ID)?|R2_ACCESS_KEY(_ID)?)$/i);
+    const secret = lookup(values, /^(AWS_SECRET_ACCESS_KEY|AWS_SECRET_KEY|S3_SECRET(_ACCESS)?_KEY|R2_SECRET(_ACCESS)?_KEY)$/i);
+    const bucket = lookup(values, /^(AWS_S3_BUCKET(_NAME)?|AWS_BUCKET(_NAME)?|S3_BUCKET(_NAME)?|R2_BUCKET(_NAME)?|BUCKET_NAME)$/i);
+    if (!access || !secret || !bucket) return null;
+    const r2Account = lookup(values, /^R2_ACCOUNT_ID$/i), endpoint = lookup(values, /^(S3_ENDPOINT|R2_ENDPOINT|AWS_ENDPOINT(_URL(_S3)?)?)$/i);
+    const region = lookup(values, /^(AWS_REGION|AWS_DEFAULT_REGION|S3_REGION)$/i);
+    const base = endpoint && /^https:\/\//i.test(endpoint.value) ? endpoint.value.replace(/\/+$/, "") : r2Account ? "https://" + r2Account.value + ".r2.cloudflarestorage.com" : "";
+    return { accessKey: access.value, secretKey: secret.value, bucket: bucket.value, region: region?.value || (base ? "auto" : "us-east-1"), endpoint: base, sessionToken: lookup(values, /^AWS_SESSION_TOKEN$/i)?.value || "" };
+  },
+  sendgrid: (values) => { const k = lookup(values, /^SENDGRID_API_KEY$/i); return k ? { apiKey: k.value } : null; },
+  elevenlabs: (values) => { const k = lookup(values, /^(ELEVENLABS_API_KEY|ELEVEN_API_KEY|XI_API_KEY)$/i); return k ? { apiKey: k.value } : null; },
+  vonage: (values) => {
+    const key = lookup(values, /^(VONAGE|NEXMO)_API_KEY$/i), secret = lookup(values, /^(VONAGE|NEXMO)_API_SECRET$/i);
+    return key && secret ? { apiKey: key.value, apiSecret: secret.value } : null;
+  },
   brevo: (values) => { const k = lookup(values, /^(BREVO|SENDINBLUE)_API_KEY$/i); return k ? { apiKey: k.value } : null; },
   deepgram: (values) => { const k = lookup(values, /^DEEPGRAM_API_KEY$/i); return k ? { apiKey: k.value } : null; },
   twilio: (values) => {
@@ -164,13 +233,14 @@ function detectServices(values) {
     const def = PROVIDERS.find((p) => p.key === owner) || ({ postgres: { label: "PostgreSQL", category: "Database" }, mysql: { label: "MySQL", category: "Database" }, database: { label: "Database", category: "Database" } })[owner] || { label: owner, category: "Other" };
     const limits = vars.filter((v) => LIMIT_NAME.test(v.name) && NUMBERISH.test(String(v._raw))).map((v) => ({ name: v.name, value: Number(String(v._raw).trim()) }));
     const creds = CREDENTIALS[owner] ? CREDENTIALS[owner](map) : null;
+    const host = creds?.uri ? hostLabel(creds.uri) : "";
     services.push({
-      key: owner, label: def.label, category: def.category, console: consoleLink[owner] || null,
+      key: owner, label: def.label, host: host || "", category: def.category, console: consoleLink[owner] || null,
       vars: vars.map(({ _raw, ...safe }) => safe), configuredLimits: limits,
       hasCredentials: Boolean(creds), credentials: creds
     });
   }
-  const order = ["Database", "Media", "SMS / Voice", "Voice / speech", "Email", "Messaging", "AI", "Realtime", "APIs", "Monitoring", "DevOps", "Other"];
+  const order = ["Database", "Media", "SMS / Voice", "Voice / speech", "Email", "Messaging", "AI", "Realtime", "Auth", "APIs", "Monitoring", "DevOps", "Other"];
   services.sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category) || a.label.localeCompare(b.label));
   return { services, internal, other };
 }
@@ -181,4 +251,4 @@ function publicService(service) {
   return rest;
 }
 
-module.exports = { detectServices, classifyVar, cloudinarySets, publicService, PROVIDERS, SECRET_NAME, LIMIT_NAME };
+module.exports = { detectServices, classifyVar, cloudinarySets, publicService, schemeOwner, hostLabel, PROVIDERS, SECRET_NAME, LIMIT_NAME };

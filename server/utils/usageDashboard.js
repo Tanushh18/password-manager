@@ -18,7 +18,7 @@ const providerCache = new Map();
 const USAGE_HINT = {
   groq: "Groq has no usage API. Requests, tokens and rate limits per model are in the Groq console under Settings → Limits / Usage.",
   firebase: "Firebase usage (reads, writes, FCM sends) is in the Firebase console → Usage and billing.",
-  redis: "Upstash shows commands and storage per database in its console; its REST token can’t read account usage.",
+  redis: "Add a redis:// / rediss:// URL, or the Upstash REST URL and token, as environment variables to read memory use.",
   livekit: "LiveKit Cloud shows participant minutes and bandwidth in the project dashboard → Usage.",
   cartesia: "Cartesia shows credits used in its dashboard → Usage.",
   sms: "Check the SMS gateway’s own dashboard for remaining balance and daily sends.",
@@ -31,7 +31,28 @@ const USAGE_HINT = {
   github: "GitHub token rate limits reset hourly; nothing to track here.",
   render: "Render platform keys — see the Render page.",
   google: "See Google Cloud console → APIs & Services → Quotas.",
-  sentry: "See Sentry → Settings → Subscription → Usage."
+  sentry: "See Sentry → Settings → Subscription → Usage.",
+  mongodb: "Add a connection string (mongodb:// or mongodb+srv://) as an environment variable to read storage.",
+  postgres: "Usage can’t be read from this service (no connection string found).",
+  mysql: "Usage can’t be read from this service (no connection string found).",
+  turso: "Turso needs both the database URL (libsql://…) and its auth token set as environment variables.",
+  elasticsearch: "Elasticsearch needs an https URL plus an API key (or username and password) set as environment variables.",
+  aws: "Storage usage needs the access key, secret, bucket name (and region or endpoint) as environment variables, with permission to list the bucket.",
+  imagekit: "ImageKit shows bandwidth and storage in its dashboard → Usage.",
+  uploadthing: "UploadThing shows storage used in its dashboard → Usage.",
+  vercelblob: "Vercel Blob usage is in the Vercel dashboard → Storage.",
+  b2: "Check the bucket’s usage in your Backblaze / DigitalOcean / Wasabi console.",
+  algolia: "Algolia shows search requests and records in its dashboard → Usage.",
+  search: "Check the Meilisearch / Typesense cloud dashboard for usage.",
+  queue: "Check the queue provider’s dashboard (CloudAMQP, Upstash Kafka, SQS) for message counts and limits.",
+  clerk: "Clerk shows monthly active users in its dashboard → Usage.",
+  auth0: "Auth0 shows active users in the dashboard → Monitoring.",
+  cloudflare: "See the Cloudflare dashboard for requests and R2 / KV usage.",
+  whatsapp: "Check the WhatsApp provider’s dashboard for conversation counts.",
+  maps: "Google Maps / Mapbox usage is in their consoles (billing → usage).",
+  analytics: "Analytics events and limits are in the analytics provider’s dashboard.",
+  elevenlabs: "Add the ElevenLabs API key as an environment variable to read your character quota.",
+  sendgrid: "Add the SendGrid API key as an environment variable to read your credits."
 };
 
 const fingerprint = (key, creds) => key + ":" + crypto.createHash("sha256").update(JSON.stringify(creds)).digest("hex").slice(0, 24);

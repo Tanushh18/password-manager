@@ -13,6 +13,11 @@ const matchers = (actual, negate = false) =>
         toHaveLength: (n) => check(actual && actual.length === n, `expected length ${n}, got ${actual && actual.length}`),
         toMatch: (re) => check(re.test(String(actual)), `expected ${actual} to match ${re}`),
         toContain: (s) => check(String(actual).includes(s), `expected to contain ${s}`),
+        // every key of `v` must match (recursively for plain objects); extra keys in `actual` are fine
+        toMatchObject: (v) => {
+            const subset = (a, b) => b && typeof b === "object" && !Array.isArray(b) ? a && typeof a === "object" && Object.keys(b).every((k) => subset(a[k], b[k])) : JSON.stringify(a) === JSON.stringify(b);
+            check(subset(actual, v), `expected ${JSON.stringify(actual)} to match ${JSON.stringify(v)}`);
+        },
         toThrow: () => check((() => { try { actual(); return false; } catch (e) { return true; } })(), "expected to throw")
     };
 };

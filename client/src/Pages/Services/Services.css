@@ -103,3 +103,5 @@
 .sv-acct small { font-weight: 400; color: var(--text-muted); }
 .sv-metricname { display: block; }
 .sv-err { color: var(--danger, #dc2626); font-size: .8rem; }
+
+.sv-limits { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .8rem 1.2rem; margin-bottom: .8rem; }

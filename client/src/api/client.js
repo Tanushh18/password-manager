@@ -198,9 +198,7 @@ export const twoFactorRecoveryCodes = (data) => instance.post("/2fa/recovery-cod
 // Health probe used by the live status indicators (and by the cron job server side).
 export const checkHealth = () => instance.get("/health", { withCredentials: false });
 
-export const errorMessage = (err, fallback = "Something went wrong. Please try again.") =>
-    err?.response?.data?.error ||
-    (!err?.response ? "We can't reach the vault right now. The free server may be waking up — try again in a moment." : fallback);
+export { errorMessage } from "../lib/errors.js";
 
 /* ── Render dashboard (all requests use Stashr's authenticated session) ── */
 export const getRenderAccounts = () => instance.get("/render/accounts").then((r) => r.data);

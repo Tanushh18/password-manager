@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
+import AuthError from "../../Components/AuthError/AuthError";
 import AuthShell from "../../Components/AuthShell/AuthShell";
 import Field from "../../Components/Field/Field";
 import { Arrow, ShieldCheck } from "../../Components/Icons/Icons";
@@ -14,21 +15,23 @@ export default function Forgot() {
   const [step, setStep] = useState("email"); // email | code
   const [form, setForm] = useState({ email: "", code: "", password: "", confirm: "", twoFactorCode: "" });
   const [errors, setErrors] = useState({});
+  const [formError, setFormError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [needs2fa, setNeeds2fa] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   useEffect(() => { if (!cooldown) return undefined; const t = setTimeout(() => setCooldown((c) => c - 1), 1000); return () => clearTimeout(t); }, [cooldown]);
-  const set = (k) => (e) => { setForm((f) => ({ ...f, [k]: k === "code" ? e.target.value.replace(/\D/g, "").slice(0, 6) : e.target.value })); setErrors((x) => ({ ...x, [k]: "" })); };
+  const set = (k) => (e) => { setForm((f) => ({ ...f, [k]: k === "code" ? e.target.value.replace(/\D/g, "").slice(0, 6) : e.target.value })); setErrors((x) => ({ ...x, [k]: "" })); setFormError(null); };
 
   const sendCode = async (e) => {
     e?.preventDefault();
+    setFormError(null);
     if (!EMAIL_RE.test(form.email.trim())) { setErrors({ email: "That email doesn't look right" }); return; }
     setLoading(true);
     try {
       const r = await api.forgotPassword(form.email.trim());
       toast.success(r.message || "Check your email for the code.");
       setStep("code"); setCooldown(60);
-    } catch (err) { toast.error(api.errorMessage(err, "Could not send the code.")); }
+    } catch (err) { setFormError({ title: "The code was not sent", message: api.errorMessage(err, "Could not send the code."), hint: err?.response?.status === 503 ? "Email sending is not set up on the server yet." : undefined }); }
     finally { setLoading(false); }
   };
 
@@ -48,7 +51,7 @@ export default function Forgot() {
       navigate("/signin", { replace: true });
     } catch (err) {
       if (err?.response?.data?.twoFactorRequired) { setNeeds2fa(true); setErrors({ twoFactorCode: err.response.data.error }); }
-      else toast.error(api.errorMessage(err, "Could not change the password."));
+      else setFormError({ title: "The password was not changed", message: api.errorMessage(err, "Could not change the password."), hint: "Check the 6-digit code from the email (it expires), or send a new one." });
     } finally { setLoading(false); }
   };
 
@@ -58,6 +61,7 @@ export default function Forgot() {
         <form onSubmit={sendCode} noValidate>
           <h1 className="auth__title">Forgot your <em className="serif-em">password?</em></h1>
           <p className="auth__sub">Enter your account email. We'll send a 6-digit code to reset it. Your saved passwords and projects stay exactly as they are.</p>
+          <AuthError error={formError} />
           <Field id="forgot-email" label="Email address" type="email" value={form.email} onChange={set("email")} placeholder="you@example.com" autoComplete="username" error={errors.email} disabled={loading} />
           <button type="submit" className="btn btn--primary btn--block auth__submit" disabled={loading}>
             <span className="btn__sheen" />{loading ? <span className="spinner" /> : null}{loading ? "Sending…" : "Send code"}{!loading ? <Arrow size={16} /> : null}
@@ -68,6 +72,7 @@ export default function Forgot() {
         <form onSubmit={reset} noValidate>
           <h1 className="auth__title">Check your <em className="serif-em">email.</em></h1>
           <p className="auth__sub">We sent a 6-digit code to <b>{form.email}</b>. It is valid for 10 minutes.</p>
+          <AuthError error={formError} />
           <Field id="forgot-code" label="6-digit code" value={form.code} onChange={set("code")} placeholder="123456" inputMode="numeric" autoComplete="one-time-code" autoFocus error={errors.code} disabled={loading} />
           <Field id="forgot-pass" label="New password" secret value={form.password} onChange={set("password")} placeholder="At least 8 characters" autoComplete="new-password" error={errors.password} disabled={loading} />
           <Field id="forgot-confirm" label="Repeat new password" secret value={form.confirm} onChange={set("confirm")} placeholder="Same again" autoComplete="new-password" error={errors.confirm} disabled={loading} />

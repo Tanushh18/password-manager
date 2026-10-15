@@ -4,13 +4,17 @@ const { loadRenderServices } = require("./projectStatus");
 const { buildLiveDashboard, appendSnapshot } = require("./usageDashboard");
 const { makeProviders } = require("./usageProviders");
 
-const DEFAULTS = { enabled: false, mongoLimitMb: 512, disabled: {} };
+/* Plan limits (MB) you tell Stashr about, because most providers do not report the limit of your plan. */
+const LIMIT_KEYS = ["mongodb", "postgres", "mysql", "redis", "turso", "elasticsearch", "aws"];
+const DEFAULTS = { enabled: false, mongoLimitMb: 512, limitsMb: {}, disabled: {} };
 let providers = null;
 const getProviders = () => {
   if (!providers) {
-    let MongoClient = null;
+    let MongoClient = null, Pg = null, mysqlCreate = null;
     try { ({ MongoClient } = require("mongodb")); } catch { /* driver unavailable: Mongo usage is skipped */ }
-    providers = makeProviders({ MongoClient });
+    try { ({ Client: Pg } = require("pg")); } catch { /* PostgreSQL usage is skipped */ }
+    try { mysqlCreate = require("mysql2/promise").createConnection; } catch { /* MySQL usage is skipped */ }
+    providers = makeProviders({ MongoClient, Pg, mysqlCreate });
   }
   return providers;
 };
@@ -35,9 +39,20 @@ const normalizeSettings = (input = {}, prev = DEFAULTS) => {
   const disabled = {};
   const src = input.disabled && typeof input.disabled === "object" ? input.disabled : prev.disabled || {};
   for (const [k, v] of Object.entries(src)) if (v === true && /^[A-Za-z0-9_|-]{1,200}$/.test(k)) disabled[k] = true;
+  const limitsMb = { ...(prev.limitsMb || {}) };
+  if (input.limitsMb && typeof input.limitsMb === "object") {
+    for (const key of LIMIT_KEYS) {
+      if (!(key in input.limitsMb)) continue;
+      const value = Number(input.limitsMb[key]);
+      if (input.limitsMb[key] === "" || input.limitsMb[key] === null) delete limitsMb[key];
+      else if (Number.isFinite(value) && value >= 1 && value <= 1048576) limitsMb[key] = Math.round(value);
+    }
+  }
+  const mongoLimitMb = Number.isFinite(mb) && mb >= 1 && mb <= 1048576 ? Math.round(mb) : prev.mongoLimitMb || 512;
+  limitsMb.mongodb = input.limitsMb && "mongodb" in input.limitsMb && limitsMb.mongodb ? limitsMb.mongodb : mongoLimitMb;
   return {
     enabled: input.enabled === undefined ? Boolean(prev.enabled) : input.enabled === true,
-    mongoLimitMb: Number.isFinite(mb) && mb >= 1 && mb <= 1048576 ? Math.round(mb) : prev.mongoLimitMb || 512,
+    mongoLimitMb: limitsMb.mongodb, limitsMb,
     disabled
   };
 };

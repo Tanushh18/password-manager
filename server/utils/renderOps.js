@@ -287,9 +287,10 @@ async function listEveryService(user, dataKey) {
  */
 const healthRouteTried = new Map();
 const HEALTH_ROUTE_RETRY_MS = 24 * 60 * 60 * 1000;
+const HEALTH_ROUTE_PR_RETRY_MS = 7 * 24 * 60 * 60 * 1000; // an open pull request is waiting for a human: do not nag
 async function ensureHealthRoute({ user, dataKey, key, result }) {
   const prior = healthRouteTried.get(key);
-  if (prior && Date.now() - prior.at < HEALTH_ROUTE_RETRY_MS) return prior.outcome;
+  if (prior && Date.now() - prior.at < (prior.outcome?.status === "pr_open" ? HEALTH_ROUTE_PR_RETRY_MS : HEALTH_ROUTE_RETRY_MS)) return prior.outcome;
   let outcome;
   try {
     const accounts = loadGithubAccounts(user, dataKey);
@@ -298,7 +299,8 @@ async function ensureHealthRoute({ user, dataKey, key, result }) {
     else {
       const applied = await applyHealthRoute({ accounts, repoUrl: result.repo, rootDir: result.rootDir, merge: true });
       const body = applied.body || {};
-      if (applied.status === 200 && body.ok && !body.already) outcome = { status: body.merged ? "added" : "pr_open", file: body.file, prUrl: body.prUrl, message: body.merged ? "Added GET /health to " + body.file + " (merged). Render is redeploying." : "Opened a pull request adding GET /health: " + body.prUrl, notify: "➕ " + result.name + ": added GET /health (" + body.file + ")" + (body.merged ? " and merged it, so Render redeploys." : ".") + "\n" + (body.prUrl || "") };
+      if (applied.status === 200 && body.pending) outcome = { status: "pr_open", file: body.file, prUrl: body.prUrl, message: "A pull request adding GET /health is already open and waiting to be merged: " + body.prUrl };
+      else if (applied.status === 200 && body.ok && !body.already) outcome = { status: body.merged ? "added" : "pr_open", file: body.file, prUrl: body.prUrl, message: body.merged ? "Added GET /health to " + body.file + " (merged). Render is redeploying." : "Opened a pull request adding GET /health: " + body.prUrl, notify: "➕ " + result.name + ": added GET /health (" + body.file + ")" + (body.merged ? " and merged it, so Render redeploys." : ".") + "\n" + (body.prUrl || "") };
       else if (body.already) outcome = { status: "already", message: "The repository already has a /health route; the running app will pick it up after its next deploy." };
       else outcome = { status: "manual", message: String(body.error || "Could not add the /health route.").slice(0, 240) };
     }
@@ -306,6 +308,24 @@ async function ensureHealthRoute({ user, dataKey, key, result }) {
   if (healthRouteTried.size > 500) healthRouteTried.clear();
   healthRouteTried.set(key, { at: Date.now(), outcome });
   return outcome;
+}
+
+/*
+ * The incident log keeps the newest INCIDENT_LIMIT events, so on a busy account an old incident that is still open
+ * could be pushed off the end and vanish. Before that can happen, finished incidents (resolved for over 3 days) are
+ * removed whole; open incidents and recent history are never touched.
+ */
+const COMPACT_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
+async function compactIncidents(user, dataKey, now = Date.now()) {
+  const rows = (user.renderIncidents || []).map((entry) => ({ entry, fields: asEntry(entry, dataKey) })).filter((r) => r.fields);
+  const keyOf = (e) => [e.groupId, e.serviceKey, e.type].join(":");
+  const latest = new Map();
+  [...rows].sort((a, b) => (Date.parse(a.fields.at || a.fields.openedAt || 0) || 0) - (Date.parse(b.fields.at || b.fields.openedAt || 0) || 0)).forEach((r) => latest.set(keyOf(r.fields), r.fields));
+  const finished = new Set([...latest].filter(([, e]) => e.state === "resolved" && now - (Date.parse(e.at) || now) > COMPACT_AFTER_MS).map(([key]) => key));
+  const drop = rows.filter((r) => finished.has(keyOf(r.fields))).map((r) => r.entry._id);
+  if (!drop.length) return { removed: 0 };
+  await User.updateOne({ _id: user._id }, { $pull: { renderIncidents: { _id: { $in: drop } } } });
+  return { removed: drop.length };
 }
 
 async function runUserMonitoring(user, options = {}) {
@@ -606,6 +626,7 @@ async function runUserMonitoring(user, options = {}) {
     createdAt: new Date(), updatedAt: new Date()
   }));
   await saveEncryptedList(user._id, "renderMetricHistory", sealMany(pendingHistory), HISTORY_LIMIT);
+  if ((user.renderIncidents || []).length + pendingIncidents.length > INCIDENT_LIMIT * 0.8) { try { await compactIncidents(user, dataKey, now); } catch { /* housekeeping only */ } }
   await saveEncryptedList(user._id, "renderIncidents", sealMany(pendingIncidents), INCIDENT_LIMIT);
 
   const notifications = [];
@@ -673,5 +694,5 @@ function verifySecret(candidate, expected) {
 module.exports = {
   defaultConfig, normalizeConfig, readConfig, saveConfig, publicConfig,
   runUserMonitoring, runAllEnabledMonitoring, listEveryService, normalizePings, DEFAULT_PING_MINUTES, resolveIncidents, clearClosedIncidents, sendTelegram, encryptedList, verifySecret, renderRequest, accountApiKey, incidentButtons,
-  HISTORY_LIMIT, INCIDENT_LIMIT, probeService
+  HISTORY_LIMIT, INCIDENT_LIMIT, probeService, compactIncidents
 };

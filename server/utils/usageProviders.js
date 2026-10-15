@@ -1,4 +1,5 @@
 const { monthPeriod } = require("./usageProjection");
+const { makeMoreProviders } = require("./usageProvidersMore");
 
 /*
  * Read-only usage readers for providers that expose usage with the keys your apps already hold.
@@ -56,7 +57,7 @@ function mongoDbName(uri) {
   return m && m[1] ? decodeURIComponent(m[1]) : "test";
 }
 
-function makeProviders({ fetchImpl = globalThis.fetch, MongoClient, now = () => new Date() } = {}) {
+function makeProviders({ fetchImpl = globalThis.fetch, MongoClient, Pg, mysqlCreate, redisCall, lookup, now = () => new Date() } = {}) {
   const getJson = async (url, headers) => {
     try {
       const response = await fetchImpl(url, { headers: { Accept: "application/json", ...headers }, signal: AbortSignal.timeout(TIMEOUT_MS) });
@@ -66,7 +67,10 @@ function makeProviders({ fetchImpl = globalThis.fetch, MongoClient, now = () => 
   };
   const basic = (user, pass) => "Basic " + Buffer.from(user + ":" + pass).toString("base64");
 
+  const more = makeMoreProviders({ fetchImpl, getJson, fail, httpError, isPrivateHost, drivers: { Pg, mysqlCreate, redisCall, lookup }, now });
+
   return {
+    ...more,
     mongodb: {
       async run({ uri }, { settings = {} } = {}) {
         if (!MongoClient) return fail("unsupported", "MongoDB driver is not available on this server.");

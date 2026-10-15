@@ -60,7 +60,11 @@ beforeEach(() => {
         renderOps: [seal(config)], renderAccounts: [{ _id: ACCOUNT_ID, ...seal({ name: "main", apiKey: "rnd_key" }) }],
         renderIncidents: [], renderMetricHistory: [], githubAccounts: []
     };
-    User.updateOne = async (_filter, update) => { for (const [field, spec] of Object.entries(update.$push || {})) user[field].push(...spec.$each); return {}; };
+    User.updateOne = async (_filter, update) => {
+        for (const [field, spec] of Object.entries(update.$push || {})) user[field].push(...spec.$each);
+        for (const [field, spec] of Object.entries(update.$pull || {})) { const drop = new Set(spec._id.$in.map(String)); user[field] = user[field].filter((e) => !drop.has(String(e._id))); }
+        return {};
+    };
     installFakes();
 });
 afterEach(() => { Date.now = realNow; global.fetch = realFetch; User.updateOne = realUpdate; });
@@ -174,4 +178,18 @@ describe("monitor, end to end", () => {
         expect(closing.resolvedBy).toBe("auto");
         expect(telegram.length).toBe(before);
     });
+
+    test("a busy log is compacted without ever losing an open incident or recent history", async () => {
+        const at = (days) => new Date(clock - days * 86400e3).toISOString();
+        const event = (serviceKey, state, days, id) => ({ id, groupId: "auto-old", groupName: "old", serviceKey, serviceName: serviceKey, type: "health", severity: "critical", state, message: "x", openedAt: at(days), at: at(days) });
+        // 60 finished incidents from 10 days ago (open + resolved), one resolved yesterday, and one still open from 9 days ago
+        for (let n = 0; n < 60; n += 1) { user.renderIncidents.push(seal(event("a:old" + n, "open", 10, "o" + n)), seal(event("a:old" + n, "resolved", 10, "r" + n))); }
+        user.renderIncidents.push(seal(event("a:recent", "open", 1.1, "recent-o")), seal(event("a:recent", "resolved", 1, "recent-r")), seal(event("a:stillopen", "open", 9, "still-open")));
+        const removed = await renderOps.compactIncidents(user, dataKey, clock);
+        expect(removed.removed).toBe(120);
+        const left = await incidents();
+        expect(left.map((e) => e.id).sort()).toEqual(["recent-o", "recent-r", "still-open"]);
+        expect((await openNow()).map((e) => e.id)).toEqual(["still-open"]);
+    });
 });
+

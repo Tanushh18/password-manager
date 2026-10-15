@@ -40,6 +40,11 @@ async function applyHealthRoute({ accounts, repoUrl, rootDir = "", merge = false
     const plan = planHealthPatch({ files, pkg, requirements: reqFile?.text || "", rootDir: dir });
     if (plan.error) return { status: plan.already ? 200 : 422, body: { ok: Boolean(plan.already), already: Boolean(plan.already), error: plan.error } };
 
+    // A pull request from an earlier attempt that is still open (merge refused, branch protection, ...): do not open another one.
+    const open = await githubGet(used.token, base + "/pulls?state=open&per_page=50");
+    const pending = open.ok && Array.isArray(open.body) ? open.body.find((pr) => String(pr?.head?.ref || "").startsWith("stashr/health-route-")) : null;
+    if (pending) return { status: 200, body: { ok: true, pending: true, prUrl: pending.html_url, prNumber: pending.number, file: plan.path, framework: plan.framework, merged: false, repo: repo.full_name, branch: branchBase } };
+
     const ref = await githubGet(used.token, base + "/git/ref/heads/" + enc(branchBase));
     if (!ref.ok) return { status: 502, body: { error: "Could not read the " + branchBase + " branch." } };
     const branch = "stashr/health-route-" + Date.now().toString(36);

@@ -254,3 +254,9 @@
   .auth__aside { padding: 1.9rem 1.3rem; }
   .auth__seal { width: 56px; height: 56px; }
 }
+
+/* Errors that stay on the page (a toast disappears in seconds and is easy to miss) */
+.auth__error { display: flex; gap: .65rem; align-items: flex-start; margin: 0 0 1rem; padding: .8rem .9rem; border-radius: var(--r-md, 12px); line-height: 1.4; }
+.auth__error > svg { flex: none; margin-top: .15rem; }
+.auth__error strong { display: block; margin-bottom: .1rem; }
+.auth__error small { display: block; margin-top: .3rem; opacity: .85; }

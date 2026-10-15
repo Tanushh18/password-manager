@@ -16,6 +16,7 @@ beforeEach(() => {
         const method = init.method || "GET";
         if (url === "/user") return json({ login: "o" }, 200, { "x-oauth-scopes": opts.scopes });
         if (url === "/repos/o/demo") return json({ full_name: "o/demo", default_branch: "main", owner: { login: "o" }, name: "demo" });
+        if (method === "GET" && url.startsWith("/repos/o/demo/pulls")) return json(opts.openPulls || []);
         if (url.startsWith("/repos/o/demo/git/ref/heads/main")) return json({ object: { sha: "abc123" } });
         if (method === "GET" && url.startsWith("/repos/o/demo/contents/")) {
             const path = decodeURIComponent(url.slice("/repos/o/demo/contents/".length).split("?")[0]);
@@ -63,6 +64,15 @@ describe("adding a missing /health route to the repository", () => {
         repoFiles = { "package.json": JSON.stringify({ main: "server.js", dependencies: { express: "^4" } }), "server.js": 'const app = express();\napp.get("/health", h);\n' };
         const r = await applyHealthRoute({ accounts, repoUrl: "https://github.com/o/demo", merge: true });
         expect(r.body.already).toBe(true);
+        expect(writes).toHaveLength(0);
+    });
+
+    test("an earlier Stashr pull request that is still open is reused, not duplicated", async () => {
+        opts.openPulls = [{ number: 3, html_url: "https://github.com/o/demo/pull/3", head: { ref: "stashr/health-route-abc" } }];
+        repoFiles = { "package.json": JSON.stringify({ main: "server.js", dependencies: { express: "^4" } }), "server.js": "const app = express();\n" };
+        const r = await applyHealthRoute({ accounts, repoUrl: "https://github.com/o/demo", merge: true });
+        expect(r.body.pending).toBe(true);
+        expect(r.body.prUrl).toBe("https://github.com/o/demo/pull/3");
         expect(writes).toHaveLength(0);
     });
 

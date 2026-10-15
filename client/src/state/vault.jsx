@@ -98,7 +98,10 @@ export function VaultProvider({ children }) {
         await api.loginUser({ email, password, code: code || undefined });
       } catch (e) {
         if (e?.response?.data?.twoFactorRequired) return { twoFactorRequired: true, error: code ? api.errorMessage(e) : null };
-        throw new Error(api.errorMessage(e, "That email and password don't match."));
+        const status = e?.response?.status;
+        const error = new Error(api.errorMessage(e, "That email and password don't match."));
+        error.kind = !e?.response ? "network" : status === 429 ? "limited" : status >= 500 ? "server" : status === 400 || status === 401 ? "credentials" : "other";
+        throw error;
       }
       await loadProfile();
       setStatus("ready");
@@ -111,7 +114,9 @@ export function VaultProvider({ children }) {
     try {
       await api.signupUser({ name, email, password, cpassword: password });
     } catch (e) {
-      throw new Error(api.errorMessage(e, "We couldn't create your account."));
+      const error = new Error(api.errorMessage(e, "We couldn't create your account."));
+      error.kind = !e?.response ? "network" : e.response.status === 429 ? "limited" : e.response.status >= 500 ? "server" : "invalid";
+      throw error;
     }
   }, []);
 

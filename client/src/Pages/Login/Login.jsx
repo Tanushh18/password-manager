@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import AuthShell from "../../Components/AuthShell/AuthShell";
 import Field from "../../Components/Field/Field";
 import { Arrow, ShieldCheck } from "../../Components/Icons/Icons";
+import AuthError from "../../Components/AuthError/AuthError";
 import { useVault } from "../../state/vault";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -17,10 +18,12 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [stepTwo, setStepTwo] = useState(false);
   const [message, setMessage] = useState("");
+  const [formError, setFormError] = useState(null); // stays on screen until the next attempt
 
   const set = (k) => (e) => {
     setForm((f) => ({ ...f, [k]: e.target.value }));
     setErrors((x) => ({ ...x, [k]: "" }));
+    setFormError(null);
   };
 
   const submit = async (e) => {
@@ -31,6 +34,7 @@ export default function Login() {
     if (!form.password) found.password = "Enter your password";
     if (stepTwo && !form.code.trim()) found.code = "Enter the 6-digit code or a recovery code";
     setErrors(found);
+    setFormError(null);
     if (Object.keys(found).length) return;
 
     try {
@@ -47,7 +51,13 @@ export default function Login() {
       navigate(location.state?.from || "/passwords", { replace: true });
     } catch (err) {
       setMessage("");
-      toast.error(err.message);
+      if (err.kind === "credentials") {
+        setFormError({ title: stepTwo ? "That code didn't work" : "Email or password is wrong", message: err.message, hint: stepTwo ? "Use the newest code from your authenticator app, or one of your recovery codes." : "Check both fields. Passwords are case-sensitive. New here? Create your vault, or use “Forgot password?”." });
+        if (!stepTwo) setErrors({ password: "Email or password is wrong" });
+      } else if (err.kind === "limited") setFormError({ title: "Too many attempts", message: err.message, hint: "This protects your account. Wait a few minutes, then try again." });
+      else if (err.kind === "network") setFormError({ title: "Can't reach the server", message: err.message, hint: "Free servers sleep when idle and take up to a minute to wake. Your data is safe." });
+      else if (err.kind === "server") setFormError({ title: "The server had a problem", message: err.message });
+      else setFormError({ title: "Couldn't sign in", message: err.message });
     } finally {
       setLoading(false);
     }
@@ -73,7 +83,8 @@ export default function Login() {
             : "Sign in with your email and password to see your saved passwords."}
         </p>
 
-        {message ? <div className="notice auth__message">{message}</div> : null}
+        {message ? <div className="notice auth__message" role="status">{message}</div> : null}
+        <AuthError error={formError} />
 
         {!stepTwo ? (
           <>
