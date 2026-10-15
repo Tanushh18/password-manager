@@ -350,7 +350,7 @@ export function serviceSeries(history) {
       const entry = map.get(r.key);
       if (entry.points.length && entry.points[entry.points.length - 1].t === point.t) continue;
       entry.points.push(point);
-      entry.last = { ...point, status: r.health?.status, deploy: r.latestDeploy || null, suspended: Boolean(r.suspended) };
+      entry.last = { ...point, status: r.health?.status, deploy: r.latestDeploy || null, suspended: Boolean(r.suspended), verdict: r.verdict || "", healthRoute: r.healthRoute || null, cause: r.health?.cause || "" };
     }
   }
   for (const entry of map.values()) entry.points = entry.points.slice(-48);

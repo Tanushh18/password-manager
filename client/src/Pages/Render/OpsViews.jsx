@@ -5,7 +5,7 @@ import {
   getRenderMetrics, getRenderLogs, getRenderEnvVars, getRenderDeploys, triggerRenderDeploy, getRenderEvents,
   restartRenderService, checkRenderHealth
 } from "../../api/client";
-import { Kpi, Section, Skeleton, Empty, LineChart } from "./RenderUi";
+import { Kpi, Section, Skeleton, Empty, LineChart, Sparkline } from "./RenderUi";
 import { usePolling } from "./renderHooks";
 import {
   serviceKind, serviceKey, normalizeList, sumMetricPoints, peakOf, rangeStart, timeAgo, formatNumber, formatDateTime,
@@ -401,6 +401,44 @@ export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, 
 const PAGE = 40;
 const RESOLVED_BY = { recovered: "Recovered on its own", manual: "Closed manually", auto: "Closed automatically", check: "Verified by a check" };
 
+/* ====================================================================== Incident details */
+
+const clock = (value) => (value ? new Date(value).toISOString().slice(11, 16) + " UTC" : "—");
+const pctText = (value) => (value == null ? "—" : value + "%");
+
+/** Everything known about one incident: cause, timeline, load at the time, the deploy it followed, and what to do next. */
+function IncidentDetails({ event }) {
+  const d = event?.details || {};
+  const t = d.timeline || {};
+  const load = d.load || {};
+  const trend = d.trend || [];
+  const hasLoad = load.cpuPct != null || load.memoryPct != null || load.latencyMs != null;
+  return (
+    <div className="rd-inc__details">
+      {d.hints?.length ? <ul className="rd-inc__hints">{d.hints.map((h) => <li key={h}>💡 {h}</li>)}</ul> : null}
+      <dl className="rd-kv rd-inc__facts">
+        {t.lastHealthyAt && <div><dt>Last healthy</dt><dd>{clock(t.lastHealthyAt)}</dd></div>}
+        {t.firstFailureAt && <div><dt>First failure</dt><dd>{clock(t.firstFailureAt)}</dd></div>}
+        <div><dt>Incident opened</dt><dd>{clock(t.openedAt || event.openedAt)}</dd></div>
+        {t.peakAt && <div><dt>Load peaked</dt><dd>{clock(t.peakAt)}</dd></div>}
+        {d.probe && <div className="rd-kv__wide"><dt>Last probe</dt><dd>{d.probe.state}{d.probe.status ? " · HTTP " + d.probe.status : ""}{d.probe.path ? " on " + d.probe.path : ""}{d.probe.latencyMs != null ? " · " + d.probe.latencyMs + " ms" : ""}</dd></div>}
+        {hasLoad && <div className="rd-kv__wide"><dt>Load then</dt><dd>CPU {pctText(load.cpuPct)} (peak {pctText(load.cpuPeakPct)}) · memory {pctText(load.memoryPct)} (peak {pctText(load.memoryPeakPct)}){load.latencyMs != null ? " · " + load.latencyMs + " ms" : ""}</dd></div>}
+        {d.deploy && <div className="rd-kv__wide"><dt>Latest deploy</dt><dd>{String(d.deploy.status).replace(/_/g, " ")}{d.deploy.ageMinutes != null ? " · " + formatDuration(d.deploy.ageMinutes * 60000) + " before" : ""}{d.deploy.commitMessage ? " · “" + d.deploy.commitMessage + "”" : ""}</dd></div>}
+        {d.plan && <div><dt>Plan</dt><dd>{d.plan}</dd></div>}
+        {d.flapsLastHour > 0 && <div><dt>Flapping</dt><dd>{d.flapsLastHour} earlier in the last hour</dd></div>}
+      </dl>
+      {trend.length > 1 && (
+        <div className="rd-inc__trend" aria-label="The last checks before and during the incident">
+          <div className="rd-inc__dots" role="img" aria-label="Health of the last checks">{trend.map((p, n) => <i key={n} className={"is-" + (p.state === "healthy" ? "ok" : p.state === "unhealthy" || p.state === "timeout" ? "bad" : "mid")} title={clock(p.at) + " · " + (p.state || "unknown")} />)}</div>
+          <div><span>CPU</span><Sparkline values={trend.map((p) => p.cpuPct)} max={100} label="CPU before and during the incident" /></div>
+          <div><span>Memory</span><Sparkline values={trend.map((p) => p.memoryPct)} max={100} label="Memory before and during the incident" /></div>
+          <div><span>Latency</span><Sparkline values={trend.map((p) => p.latencyMs)} label="Latency before and during the incident" /></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Incident management: real incidents (not raw events), stale ones flagged, and every state closable. */
 export function IncidentsView({ ops, incidents, projectOf, onSample, askConfirm, onOpenService, onGoMonitoring }) {
   const { loading, running, groups, monitor } = ops;
@@ -413,6 +451,7 @@ export function IncidentsView({ ops, incidents, projectOf, onSample, askConfirm,
   const [limit, setLimit] = useState(PAGE);
   const [checks, setChecks] = useState({}); // incident id -> { at, ok, text } (latest check result)
   const [checking, setChecking] = useState([]);
+  const [expanded, setExpanded] = useState({}); // incident id -> details open
 
   const open = useMemo(() => incidents.filter((i) => i.status === "open" && !i.stale), [incidents]);
   const stale = useMemo(() => incidents.filter((i) => i.status === "open" && i.stale), [incidents]);
@@ -577,6 +616,8 @@ export function IncidentsView({ ops, incidents, projectOf, onSample, askConfirm,
                     <strong>{i.message || incidentTypeLabel(i.type)}</strong>
                     <span className={"rd-sev is-" + i.severity}>{i.severity}</span>
                     <span className="rd-inc__type">{incidentTypeLabel(i.type)}</span>
+                    {i.event?.causeLabel ? <span className="rd-inc__cause" title="Why Stashr thinks this happened, from the evidence at the time">{i.event.causeLabel}</span> : null}
+                    {(i.event?.labels || []).filter((l) => l !== i.event?.cause).map((l) => <span key={l} className="rd-tag">{l}</span>)}
                   </div>
                   <small>
                     {i.serviceKey !== "group-budget" && onOpenService && state !== "stale"
@@ -587,6 +628,8 @@ export function IncidentsView({ ops, incidents, projectOf, onSample, askConfirm,
                     {state === "resolved" && " · " + (RESOLVED_BY[i.resolvedBy] || "Resolved") + " after " + formatDuration(i.durationMs)}
                     {state === "stale" && " · " + i.staleReason}
                   </small>
+                  {i.event?.details ? <button type="button" className="rd-btn rd-btn--link rd-inc__toggle" aria-expanded={Boolean(expanded[i.id])} onClick={() => setExpanded((old) => ({ ...old, [i.id]: !old[i.id] }))}>{expanded[i.id] ? "Hide details ▴" : "Details: cause, timeline, load ▾"}</button> : null}
+                  {expanded[i.id] && i.event ? <IncidentDetails event={i.event} /> : null}
                   {checks[i.id] && state !== "resolved" && <small className={"rd-inc__check " + (checks[i.id].ok ? "is-ok" : "is-bad")}>{checks[i.id].ok ? "✓" : "✕"} Checked {timeAgo(checks[i.id].at)}: {checks[i.id].text}</small>}
                 </div>
                 <div className="rd-inc__actions">
@@ -635,6 +678,7 @@ export function AlertPolicyView({ ops, askConfirm }) {
         <div className="rd-formgrid">
           <label>Sampling interval<select value={monitor.intervalMinutes || 5} onChange={(e) => setMonitor((o) => ({ ...o, intervalMinutes: Number(e.target.value) }))}><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option></select></label>
           <label className="rd-check rd-check--box"><input type="checkbox" checked={monitor.checkHealth !== false} onChange={(e) => setMonitor((o) => ({ ...o, checkHealth: e.target.checked }))} /> Probe service URLs for health</label>
+          <label className="rd-check rd-check--box" title="When a server answers but has no /health route, Stashr adds one to its GitHub repository (a pull request that is merged, so Render redeploys) instead of raising an incident. Needs a GitHub token with the repo scope."><input type="checkbox" checked={monitor.autoHealthRoute !== false} onChange={(e) => setMonitor((o) => ({ ...o, autoHealthRoute: e.target.checked }))} /> Add a missing /health route automatically</label>
           <label className="rd-check rd-check--box" title="Watches every running service in every connected account, grouped by app. Your own groups are still used for the services in them."><input type="checkbox" checked={monitor.autoAll !== false} onChange={(e) => setMonitor((o) => ({ ...o, autoAll: e.target.checked }))} /> Watch every running service automatically</label>
           <label>CPU alert (%)<input className="rd-field" type="number" min="1" max="100" value={monitor.thresholds?.cpu ?? 85} onChange={setThreshold("cpu", 1, 100)} /></label>
           <label>Memory alert (%)<input className="rd-field" type="number" min="1" max="100" value={monitor.thresholds?.memory ?? 90} onChange={setThreshold("memory", 1, 100)} /></label>

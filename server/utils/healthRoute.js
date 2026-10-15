@@ -6,6 +6,11 @@
 const NODE_CANDIDATES = ["server.js", "index.js", "app.js", "src/server.js", "src/index.js", "src/app.js", "server/server.js", "server/index.js", "server/app.js", "backend/server.js", "backend/index.js", "backend/app.js", "api/index.js"];
 const PY_CANDIDATES = ["main.py", "app.py", "server.py", "app/main.py", "src/main.py", "api/main.py", "backend/main.py", "backend/app.py"];
 
+// Next.js: a layout file tells us which router the app uses; the health route is a new file, not a patch.
+const NEXT_LAYOUTS = ["app/layout.js", "app/layout.jsx", "app/layout.tsx", "src/app/layout.js", "src/app/layout.jsx", "src/app/layout.tsx"];
+const NEXT_PAGES = ["pages/_app.js", "pages/_app.jsx", "pages/_app.tsx", "pages/index.js", "pages/index.jsx", "pages/index.tsx", "src/pages/index.js", "src/pages/index.jsx", "src/pages/index.tsx", "src/pages/_app.js", "src/pages/_app.tsx"];
+const NEXT_HEALTH = ["app/health/route.js", "app/health/route.ts", "src/app/health/route.js", "src/app/health/route.ts", "pages/api/health.js", "pages/api/health.ts", "src/pages/api/health.js", "src/pages/api/health.ts"];
+
 const join = (dir, file) => (dir ? dir.replace(/^\/+|\/+$/g, "") + "/" : "") + file.replace(/^\.?\//, "");
 const hasHealth = (text) => /["'`]\/health["'`]/.test(text);
 
@@ -21,7 +26,24 @@ function candidateFiles(rootDir = "", pkg = null) {
   }
   const node = dirs.flatMap((d) => [...fromPkg, ...NODE_CANDIDATES].map((f) => join(d, f)));
   const py = dirs.flatMap((d) => PY_CANDIDATES.map((f) => join(d, f)));
-  return [...new Set([...node, ...py])];
+  const next = dirs.flatMap((d) => [...NEXT_LAYOUTS, ...NEXT_PAGES, ...NEXT_HEALTH].map((f) => join(d, f)));
+  return [...new Set([...node, ...py, ...next])];
+}
+
+/** Next.js: where the new health route file goes, from which files exist. Returns { path, content } or null. */
+function planNext(files, rootDir = "") {
+  const has = (f) => typeof files[join(rootDir, f)] === "string";
+  const ts = [...NEXT_LAYOUTS, ...NEXT_PAGES].some((f) => has(f) && /\.tsx$/.test(f));
+  const prefix = (dir) => join(rootDir, dir);
+  const appRoute = 'export function GET() {\n  return Response.json({ status: "ok" });\n}\n';
+  const pagesRoute = ts
+    ? 'import type { NextApiRequest, NextApiResponse } from "next";\n\nexport default function handler(req: NextApiRequest, res: NextApiResponse) {\n  res.status(200).json({ status: "ok" });\n}\n'
+    : 'export default function handler(req, res) {\n  res.status(200).json({ status: "ok" });\n}\n';
+  if (NEXT_LAYOUTS.filter((f) => f.startsWith("app/")).some(has)) return { path: prefix("app/health/route." + (ts ? "ts" : "js")), content: appRoute };
+  if (NEXT_LAYOUTS.filter((f) => f.startsWith("src/app/")).some(has)) return { path: prefix("src/app/health/route." + (ts ? "ts" : "js")), content: appRoute };
+  if (["pages/_app.js", "pages/_app.jsx", "pages/_app.tsx", "pages/index.js", "pages/index.jsx", "pages/index.tsx"].some(has)) return { path: prefix("pages/api/health." + (ts ? "ts" : "js")), content: pagesRoute };
+  if (NEXT_PAGES.filter((f) => f.startsWith("src/")).some(has)) return { path: prefix("src/pages/api/health." + (ts ? "ts" : "js")), content: pagesRoute };
+  return null;
 }
 
 function detectFramework({ pkg = null, requirements = "" }) {
@@ -63,7 +85,11 @@ function patchPython(text, framework) {
 function planHealthPatch({ files = {}, pkg = null, requirements = "", rootDir = "" }) {
   const framework = detectFramework({ pkg, requirements });
   if (!framework) return { error: "Could not tell the framework (supports Express, FastAPI and Flask). Add a GET /health route by hand." };
-  if (framework === "next") return { error: "Next.js app: add app/health/route.js (or pages/api/health.js) by hand." };
+  if (framework === "next") {
+    if (NEXT_HEALTH.some((f) => typeof files[join(rootDir, f)] === "string")) return { error: "This app already has a /health route.", already: true };
+    const plan = planNext(files, rootDir);
+    return plan ? { ...plan, framework: "next" } : { error: "Could not tell whether this Next.js app uses the app/ or pages/ router. Add a GET /health route by hand." };
+  }
   const order = candidateFiles(rootDir, pkg).filter((p) => framework === "express" ? /\.[cm]?[jt]s$/.test(p) : p.endsWith(".py"));
   if (order.some((p) => typeof files[p] === "string" && hasHealth(files[p]))) return { error: "This app already has a /health route.", already: true };
   for (const path of order) {
@@ -75,4 +101,4 @@ function planHealthPatch({ files = {}, pkg = null, requirements = "", rootDir = 
   return { error: "Could not find where the " + framework + " app is created. Add a GET /health route by hand." };
 }
 
-module.exports = { planHealthPatch, candidateFiles, detectFramework };
+module.exports = { planHealthPatch, candidateFiles, detectFramework, planNext };

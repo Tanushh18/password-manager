@@ -2,6 +2,10 @@ const crypto = require("crypto");
 const mongoose = require("mongoose");
 const User = require("../models/schema");
 const { resourceChecks } = require("./renderMetrics");
+const { probeService, controlReachable } = require("./healthProbe");
+const rules = require("./healthRules");
+const { applyHealthRoute } = require("./healthRouteApply");
+const { loadGithubAccounts } = require("./githubClient");
 
 const METRICS = {
   cpu: "cpu",
@@ -112,6 +116,8 @@ function normalizeConfig(input, previous = defaultConfig()) {
       enabled: sourceMonitor.enabled === undefined ? Boolean(priorMonitor.enabled) : sourceMonitor.enabled === true,
       intervalMinutes: [5, 10, 15].includes(Number(sourceMonitor.intervalMinutes)) ? Number(sourceMonitor.intervalMinutes) : Number(priorMonitor.intervalMinutes) || 5,
       checkHealth: sourceMonitor.checkHealth === undefined ? priorMonitor.checkHealth !== false : sourceMonitor.checkHealth === true,
+      // Add GET /health to a repository that answers but has no health route, instead of raising an incident. On by default.
+      autoHealthRoute: sourceMonitor.autoHealthRoute === undefined ? priorMonitor.autoHealthRoute !== false : sourceMonitor.autoHealthRoute === true,
       // Watch every running service automatically (grouped by app), not only the groups you made. On by default.
       autoAll: sourceMonitor.autoAll === undefined ? priorMonitor.autoAll !== false : sourceMonitor.autoAll === true,
       thresholds: {
@@ -190,7 +196,15 @@ async function clearClosedIncidents(user) {
   return { removed: drop.length };
 }
 
-async function sendTelegram(config, message, { silent = false } = {}) {
+/** Inline buttons under an incident alert: Check, Restart (only where a restart can help), Resolve. */
+function incidentButtons(incident) {
+  const row = [{ text: "🔍 Check", callback_data: "i:c:" + incident.id }];
+  if (["health", "cpu", "memory", "latency"].includes(incident.type)) row.push({ text: "🔄 Restart", callback_data: "i:x:" + incident.id });
+  row.push({ text: "✓ Resolve", callback_data: "i:r:" + incident.id });
+  return [row];
+}
+
+async function sendTelegram(config, message, { silent = false, buttons = null } = {}) {
   const token = config?.notifications?.telegramBotToken;
   const chatId = config?.notifications?.telegramChatId;
   if (!token || !chatId) return { sent: false, reason: "not_configured" };
@@ -198,7 +212,7 @@ async function sendTelegram(config, message, { silent = false } = {}) {
     const response = await fetch("https://api.telegram.org/bot" + token + "/sendMessage", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text: String(message).slice(0, 3500), disable_web_page_preview: true, disable_notification: silent }),
+      body: JSON.stringify({ chat_id: chatId, text: String(message).slice(0, 3500), disable_web_page_preview: true, disable_notification: silent, ...(buttons ? { reply_markup: { inline_keyboard: buttons } } : {}) }),
       signal: AbortSignal.timeout(8000)
     });
     const result = await response.json().catch(() => ({}));
@@ -237,56 +251,10 @@ function extractPoints(payload) {
     .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
 }
 
-/*
- * Is the service up? Any answer below 5xx proves the process is running: an API that returns 404 for "/" or 429 when
- * rate limiting is alive, not down. Only no answer (after a retry for free-tier cold starts), a 5xx, or Render's own
- * "no server here" page (deleted / suspended service) counts as down.
- */
-const FALLBACK_HEALTH_PATHS = ["/health", "/healthz", "/api/health", "/ping"];
-const PROBE_HEADERS = { "User-Agent": "Stashr-Render-Monitor/1.0", "Cache-Control": "no-cache" };
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const retryable = (r) => Boolean(r.error) || [502, 503, 504].includes(r.status);
-const renderHasNoServer = (routing) => /no-server|suspend/i.test(routing || "");
-
-async function attemptProbe(url, timeoutMs) {
-  try {
-    const response = await fetch(url, { method: "GET", redirect: "manual", signal: AbortSignal.timeout(timeoutMs), headers: PROBE_HEADERS });
-    await response.body?.cancel();
-    return { status: response.status, routing: response.headers?.get?.("x-render-routing") || "" };
-  } catch (error) {
-    return { error: error.name === "TimeoutError" || error.name === "AbortError" ? "timeout" : "unreachable" };
-  }
-}
-
-async function probeService(service) {
-  if (service?.suspended === "suspended") return { state: "suspended", checkedAt: nowIso() };
-  const rawUrl = service?.serviceDetails?.url;
-  if (!rawUrl) return { state: "unknown", checkedAt: nowIso(), message: "No Render-provided public URL." };
-  let target;
-  try { target = new URL(rawUrl); } catch { return { state: "unknown", checkedAt: nowIso(), message: "Invalid service URL." }; }
-  if (target.protocol !== "https:" || target.username || target.password || !target.hostname.toLowerCase().endsWith(".onrender.com")) {
-    return { state: "unsupported", checkedAt: nowIso(), message: "Only Render-provided HTTPS *.onrender.com URLs are probed." };
-  }
-  const started = Date.now();
-  const done = (fields) => ({ latencyMs: Date.now() - started, checkedAt: nowIso(), ...fields });
-
-  let probe = await attemptProbe(target.toString(), 8000);
-  // A sleeping free instance needs a while to wake: ask once more, with patience, before calling it down.
-  if (retryable(probe)) { await sleep(1000); probe = await attemptProbe(target.toString(), 20000); }
-
-  if (probe.error) return done({ state: probe.error === "timeout" ? "timeout" : "unhealthy" });
-  if (renderHasNoServer(probe.routing)) return done({ state: "unhealthy", status: probe.status, message: "Render has no running server at this URL (deleted, suspended or never deployed)." });
-  if (probe.status >= 200 && probe.status < 400) return done({ state: "healthy", status: probe.status });
-  if (probe.status < 500) {
-    if (probe.status === 404) {
-      for (const path of FALLBACK_HEALTH_PATHS) {
-        const next = await attemptProbe(new URL(path, target).toString(), 8000);
-        if (next.status >= 200 && next.status < 400) return done({ state: "healthy", status: next.status, path });
-      }
-    }
-    return done({ state: "healthy", status: probe.status, message: "Answered HTTP " + probe.status + "; the server is up (no health route on /)." });
-  }
-  return done({ state: "unhealthy", status: probe.status });
+/** The Render API key of one connected account (or null). */
+function accountApiKey(user, dataKey, accountId) {
+  const entry = (user.renderAccounts || []).find((item) => String(item._id) === String(accountId) && item.enc === "udk");
+  return asEntry(entry, dataKey)?.apiKey || null;
 }
 
 function encryptedList(user, field, dataKey, limit = 100) {
@@ -312,6 +280,34 @@ async function listEveryService(user, dataKey) {
   return { services, complete };
 }
 
+/*
+ * A service that answers but has no health route is healthy, not broken. Instead of raising an incident, Stashr adds
+ * GET /health to its repository (pull request, merged, so Render redeploys) once a day at most. Unsupported setups
+ * are reported on the server card as "needs a /health route" with the reason, never as an incident.
+ */
+const healthRouteTried = new Map();
+const HEALTH_ROUTE_RETRY_MS = 24 * 60 * 60 * 1000;
+async function ensureHealthRoute({ user, dataKey, key, result }) {
+  const prior = healthRouteTried.get(key);
+  if (prior && Date.now() - prior.at < HEALTH_ROUTE_RETRY_MS) return prior.outcome;
+  let outcome;
+  try {
+    const accounts = loadGithubAccounts(user, dataKey);
+    if (!result.repo) outcome = { status: "manual", message: "This service has no GitHub repository, so Stashr cannot add a /health route. Add GET /health by hand." };
+    else if (!accounts.length) outcome = { status: "manual", message: "Connect a GitHub token (Projects → GitHub) and Stashr will add the /health route for you." };
+    else {
+      const applied = await applyHealthRoute({ accounts, repoUrl: result.repo, rootDir: result.rootDir, merge: true });
+      const body = applied.body || {};
+      if (applied.status === 200 && body.ok && !body.already) outcome = { status: body.merged ? "added" : "pr_open", file: body.file, prUrl: body.prUrl, message: body.merged ? "Added GET /health to " + body.file + " (merged). Render is redeploying." : "Opened a pull request adding GET /health: " + body.prUrl, notify: "➕ " + result.name + ": added GET /health (" + body.file + ")" + (body.merged ? " and merged it, so Render redeploys." : ".") + "\n" + (body.prUrl || "") };
+      else if (body.already) outcome = { status: "already", message: "The repository already has a /health route; the running app will pick it up after its next deploy." };
+      else outcome = { status: "manual", message: String(body.error || "Could not add the /health route.").slice(0, 240) };
+    }
+  } catch { outcome = { status: "manual", message: "Could not add the /health route automatically." }; }
+  if (healthRouteTried.size > 500) healthRouteTried.clear();
+  healthRouteTried.set(key, { at: Date.now(), outcome });
+  return outcome;
+}
+
 async function runUserMonitoring(user, options = {}) {
   const config = await readConfig(user);
   if (!options.force && !config.monitor?.enabled) return { skipped: true, groupsChecked: 0, samplesSaved: 0, incidentsOpened: 0 };
@@ -325,6 +321,19 @@ async function runUserMonitoring(user, options = {}) {
     }
   }
   const priorIncidents = encryptedList(user, "renderIncidents", dataKey, INCIDENT_LIMIT);
+  // Recent samples per service (oldest first): decide "failed twice in a row", show the trend, find the last healthy time.
+  const trendOf = new Map();
+  for (const sample of encryptedList(user, "renderMetricHistory", dataKey, 40).sort((a, b) => Date.parse(a.sampledAt) - Date.parse(b.sampledAt))) {
+    for (const r of sample.services || []) {
+      if (!r?.key) continue;
+      const load = rules.loadOf(r.metrics);
+      if (!trendOf.has(r.key)) trendOf.set(r.key, []);
+      trendOf.get(r.key).push({ at: sample.sampledAt, state: r.health?.state, verdict: r.verdict, cpuPct: load.cpuPct, memoryPct: load.memoryPct, latencyMs: load.latencyMs });
+    }
+  }
+  const healthRouteNotices = [];
+  let controlProbe = null; // is Stashr's own network up? asked at most once per run, only when something looks down
+  const controlOk = async () => (controlProbe ??= controlReachable());
   const pendingHistory = [];
   const pendingIncidents = [];
   let groupsChecked = 0;
@@ -398,6 +407,9 @@ async function runUserMonitoring(user, options = {}) {
         result.type = String(service?.type || "unknown");
         result.suspended = service?.suspended === "suspended";
         result.status = String(service?.serviceDetails?.runtime || service?.status || "");
+        result.plan = String(service?.serviceDetails?.plan || "");
+        result.repo = String(service?.repo || "");
+        result.rootDir = String(service?.rootDir || "");
         if (config.monitor?.checkHealth && service && service.suspended !== "suspended") result.health = await probeService(service);
       } catch (error) {
         result.name = member.serviceId;
@@ -460,34 +472,78 @@ async function runUserMonitoring(user, options = {}) {
         const latest = latestIncidentFor(type);
         return latest?.state === "open" ? latest : null;
       };
-      const checks = [];
-      if (result.health?.state === "unhealthy" || result.health?.state === "timeout") {
-        checks.push({ type: "health", severity: "critical", message: result.name + " health check " + result.health.state + (result.health.status ? " (HTTP " + result.health.status + ")" : "") });
-      }
-      const deployStatus = String(result.latestDeploy?.status || "").toLowerCase();
-      if (["build_failed", "update_failed", "pre_deploy_failed"].includes(deployStatus)) {
-        checks.push({ type: "deploy_failure", severity: "critical", message: result.name + " latest deployment failed (" + deployStatus + ")." });
-      }
-      checks.push(...resourceChecks(result, config.monitor.thresholds));
+      // ---- one verdict per service, then one decision per incident type ----
+      const trend = trendOf.get(member.key) || []; // this service's recent samples, oldest first
+      const thresholds = config.monitor.thresholds;
+      const manual = Boolean(options.force);
+      let verdict = rules.verdictFor({ result, checkHealth: config.monitor?.checkHealth !== false });
+      if (verdict === "down" && result.health.cause === "no_response" && !(await controlOk())) verdict = "unknown"; // Stashr's own network is down
+      result.verdict = verdict;
 
-      const activeTypes = new Set(checks.map((item) => item.type));
-      const priorTypes = new Set(priorIncidents.filter((item) => item.groupId === group.id && item.serviceKey === member.key).map((item) => item.type));
-      for (const type of priorTypes) {
-        const latest = latestIncidentFor(type);
-        if (latest?.state !== "open" || activeTypes.has(type)) continue;
-        pendingIncidents.push({
-          id: crypto.randomUUID(), groupId: group.id, groupName: group.name, serviceKey: member.key,
-          serviceName: result.name, type, severity: latest.severity || "warning",
-          state: "resolved", message: result.gone ? "Closed automatically: " + (latest.serviceName || result.name) + " no longer exists on Render." : result.name + " " + type + " condition recovered.",
-          openedAt: latest.openedAt || latest.at, at: endTime, ...(result.gone ? { resolvedBy: "auto" } : {})
-        });
+      const load = rules.loadOf(result.metrics);
+      const deploy = rules.deployContext(result.latestDeploy, now);
+      const confirmedDown = manual || rules.previousBad(trend, now);
+      if (verdict === "down" && !openFor("health") && !confirmedDown) result.verdict = "suspect"; // failed once: confirm on the next round
+      const failureStart = rules.firstFailureAt(trend, now, endTime);
+      const consecutive = verdict === "down" ? 1 + rules.consecutiveBad(trend) : 0;
+      const sample = { at: endTime, state: result.health?.state, verdict: result.verdict, cpuPct: load.cpuPct, memoryPct: load.memoryPct, latencyMs: load.latencyMs };
+      const tail = [...trend, sample].slice(-12);
+
+      // A server that answers but has no /health route is NOT an incident: add the route to its repository instead.
+      if (verdict === "up" && result.health?.cause === "no_health_route" && config.monitor?.autoHealthRoute !== false) {
+        result.healthRoute = await ensureHealthRoute({ user, dataKey, key: member.key, result });
+        if (result.healthRoute?.notify) healthRouteNotices.push(result.healthRoute.notify);
       }
-      for (const check of checks) {
-        if (result.gone || openFor(check.type)) continue;
+
+      const resource = Object.fromEntries(resourceChecks(result, thresholds).map((check) => [check.type, check]));
+      const failingNow = {
+        health: verdict === "down",
+        deploy_failure: rules.FAILED_DEPLOY.has(String(result.latestDeploy?.status || "").toLowerCase()),
+        cpu: Boolean(resource.cpu), memory: Boolean(resource.memory), latency: Boolean(resource.latency)
+      };
+      for (const type of ["health", "deploy_failure", "cpu", "memory", "latency"]) {
+        const open = openFor(type);
+        if (result.gone) {
+          if (open) pendingIncidents.push({
+            id: crypto.randomUUID(), groupId: group.id, groupName: group.name, serviceKey: member.key, serviceName: result.name, type,
+            severity: open.severity || "warning", state: "resolved", message: "Closed automatically: " + (open.serviceName || result.name) + " no longer exists on Render.",
+            openedAt: open.openedAt || open.at, at: endTime, resolvedBy: "auto"
+          });
+          continue;
+        }
+        if (open) {
+          // Only a definite "fine" resolves. Unknown, deploying, suspended or missing metrics freeze the incident.
+          if (!failingNow[type] && rules.canJudge(type, result)) {
+            const minutes = Math.max(1, Math.round((now - Date.parse(open.openedAt || open.at)) / 60000));
+            pendingIncidents.push({
+              id: crypto.randomUUID(), groupId: group.id, groupName: group.name, serviceKey: member.key, serviceName: result.name, type,
+              severity: open.severity || "warning", state: "resolved", message: type === "health"
+                ? result.name + " is healthy again" + (result.health.status ? " (HTTP " + result.health.status + ")" : "") + " after " + minutes + " min."
+                : result.name + " " + type.replace("_", " ") + " is back to normal after " + minutes + " min.",
+              openedAt: open.openedAt || open.at, at: endTime, cause: open.cause, causeLabel: open.causeLabel, labels: open.labels,
+              details: { probe: result.health ? { state: result.health.state, status: result.health.status, path: result.health.path, latencyMs: result.health.latencyMs } : undefined, load, trend: tail, durationMinutes: minutes }
+            });
+          }
+          continue;
+        }
+        if (!failingNow[type]) continue;
+        // Confirmation: health needs two failed rounds in a row; a resource alert needs two over-threshold rounds (a manual check counts at once).
+        if (type === "health" ? !confirmedDown : !(manual || rules.sustained(trend, type, thresholds)) && type !== "deploy_failure") continue;
+        const classified = rules.classify({ type, health: result.health, load, deploy, firstFailure: failureStart, plan: result.plan, now });
+        const flaps = rules.flapCount(priorIncidents, [group.id, member.key, type].join(":"), now);
+        const labels = flaps ? [...classified.labels, "flapping"] : classified.labels;
         const incident = {
           id: crypto.randomUUID(), groupId: group.id, groupName: group.name, serviceKey: member.key,
-          serviceName: result.name, type: check.type, severity: check.severity, state: "open",
-          message: check.message, openedAt: endTime, at: endTime
+          serviceName: result.name, type, severity: type === "health" || type === "deploy_failure" ? "critical" : "warning", state: "open",
+          message: rules.describe({ type, name: result.name, health: result.health, cause: classified.cause, consecutive, lastHealthy: rules.lastHealthyAt(trend), deploy, load, thresholds }),
+          openedAt: endTime, at: endTime,
+          cause: classified.cause, causeLabel: classified.causeLabel, labels,
+          details: {
+            hints: classified.hints, plan: result.plan || "", flapsLastHour: flaps,
+            timeline: { firstFailureAt: type === "health" ? failureStart : endTime, openedAt: endTime, lastHealthyAt: rules.lastHealthyAt(trend), peakAt: load.peakAt },
+            probe: type === "health" ? { state: result.health.state, status: result.health.status, path: result.health.path, cause: result.health.cause, message: result.health.message, latencyMs: result.health.latencyMs } : undefined,
+            load, deploy, trend: tail
+          }
         };
         pendingIncidents.push(incident);
         incidentsOpened += 1;
@@ -556,12 +612,18 @@ async function runUserMonitoring(user, options = {}) {
   // Down -> alert with sound; recovered -> a quiet follow-up. Automatic clean-ups (deleted services) stay silent.
   for (const incident of pendingIncidents.filter((item) => item.state === "open" || (item.state === "resolved" && item.resolvedBy !== "auto"))) {
     const minutes = incident.state === "resolved" ? Math.max(1, Math.round((Date.parse(incident.at) - Date.parse(incident.openedAt || incident.at)) / 60000)) : 0;
+    const d = incident.details || {};
     const text = incident.state === "open"
-      ? "🚨 " + incident.serviceName + " — " + (incident.severity === "critical" ? "DOWN" : "warning") + "\n" + incident.message + "\nApp: " + incident.groupName + "\nAt: " + new Date(incident.at).toUTCString()
+      ? "🚨 " + incident.serviceName + " — " + (incident.severity === "critical" ? "DOWN" : "warning") + (incident.causeLabel ? " · " + incident.causeLabel : "") + "\n" + incident.message
+        + (d.load && (d.load.cpuPct != null || d.load.memoryPct != null) ? "\nLoad: CPU " + (d.load.cpuPct ?? "–") + "% · memory " + (d.load.memoryPct ?? "–") + "%" + (d.load.latencyMs != null ? " · " + d.load.latencyMs + " ms" : "") + (d.load.peakAt ? " (peak " + new Date(d.load.peakAt).toISOString().slice(11, 16) + " UTC)" : "") : "")
+        + (d.deploy ? "\nLast deploy: " + d.deploy.status + (d.deploy.ageMinutes != null ? ", " + d.deploy.ageMinutes + " min ago" : "") : "")
+        + (d.hints && d.hints[0] ? "\n💡 " + d.hints[0] : "")
+        + "\nApp: " + incident.groupName + "\nAt: " + new Date(incident.at).toUTCString()
       : "✅ " + incident.serviceName + " recovered after " + minutes + " min\nApp: " + incident.groupName;
-    const result = await sendTelegram(config, text, { silent: incident.state === "resolved" });
+    const result = await sendTelegram(config, text, { silent: incident.state === "resolved", buttons: incident.state === "open" ? incidentButtons(incident) : null });
     notifications.push({ incidentId: incident.id, ...result });
   }
+  for (const notice of healthRouteNotices) await sendTelegram(config, notice, { silent: true });
   return {
     skipped: false, groupsChecked, samplesSaved: pendingHistory.length,
     incidentsOpened, incidentsRecorded: pendingIncidents.length, notifications
@@ -610,6 +672,6 @@ function verifySecret(candidate, expected) {
 
 module.exports = {
   defaultConfig, normalizeConfig, readConfig, saveConfig, publicConfig,
-  runUserMonitoring, runAllEnabledMonitoring, listEveryService, normalizePings, DEFAULT_PING_MINUTES, resolveIncidents, clearClosedIncidents, sendTelegram, encryptedList, verifySecret, renderRequest,
+  runUserMonitoring, runAllEnabledMonitoring, listEveryService, normalizePings, DEFAULT_PING_MINUTES, resolveIncidents, clearClosedIncidents, sendTelegram, encryptedList, verifySecret, renderRequest, accountApiKey, incidentButtons,
   HISTORY_LIMIT, INCIDENT_LIMIT, probeService
 };

@@ -63,6 +63,33 @@ describe("service health probe", () =>
         expect(n).toBe(2);
     });
 
+    test("Render's own health-check path is tried first", async () =>
+    {
+        const calls = stub(() => reply(200));
+        const r = await probeService({ serviceDetails: { url: "https://demo.onrender.com", healthCheckPath: "/api/ping" } });
+        expect(r.state).toBe("healthy");
+        expect(r.path).toBe("/api/ping");
+        expect(calls[0]).toBe("https://demo.onrender.com/api/ping");
+    });
+
+    test("failures say why: 5xx is an app error, silence is no response", async () =>
+    {
+        stub(() => reply(500));
+        const a = await probeService(service);
+        expect(a.cause).toBe("app_error");
+        expect(a.message).toMatch(/HTTP 500/);
+        global.fetch = async () => { throw Object.assign(new Error("t"), { name: "TimeoutError" }); };
+        expect((await probeService(service)).cause).toBe("no_response");
+    });
+
+    test("a live server with no health route anywhere is flagged so the route can be added, not reported as down", async () =>
+    {
+        stub(() => reply(404));
+        const r = await probeService(service);
+        expect(r.state).toBe("healthy");
+        expect(r.cause).toBe("no_health_route");
+    });
+
     test("only Render-provided HTTPS URLs are probed", async () =>
     {
         const calls = stub(() => reply(200));

@@ -8,6 +8,7 @@ const { runUsage, runAllUsage, readSettings, saveSettings } = require("../utils/
 const { pushProjectEnv } = require("../utils/renderEnvPush");
 const { provision } = require("../utils/provision");
 const { createRepo, checkRepo, repoReadyError } = require("../utils/repoFlow");
+const { probeService, renderOrigin } = require("../utils/healthProbe");
 const { parseGithubRepo } = require("../utils/github");
 const { groupKey, mergeProjects } = require("../utils/projectMerge");
 const { syncAllProjects } = require("../utils/projectSyncAll");
@@ -714,28 +715,17 @@ router.get("/render/accounts/:accountId/services/:serviceId/health", async (req,
   try {
     const payload = await renderRequest(saved.account.apiKey, servicePath(req.params.serviceId));
     const service = payload?.service || payload;
-    const rawUrl = service?.serviceDetails?.url;
-    if (!rawUrl) return res.status(200).json({ state: service?.suspended === "suspended" ? "suspended" : "unknown", checkedAt: new Date().toISOString(), message: "Render did not provide a public URL for this service." });
-    let target;
-    try { target = new URL(rawUrl); } catch { return res.status(200).json({ state: "unknown", checkedAt: new Date().toISOString(), message: "The service URL is invalid." }); }
-    if (target.protocol !== "https:" || target.username || target.password || !target.hostname.toLowerCase().endsWith(".onrender.com")) {
-      return res.status(200).json({ state: "unsupported", checkedAt: new Date().toISOString(), message: "Only Render-provided HTTPS service URLs on *.onrender.com can be probed." });
-    }
-    const controller = new AbortController();
-    const started = Date.now();
-    const timer = setTimeout(() => controller.abort(), 8000);
-    try {
-      const response = await fetch(target.toString(), { method: "GET", redirect: "manual", signal: controller.signal, headers: { "User-Agent": "Stashr-Render-Healthcheck/1.0", "Cache-Control": "no-cache" } });
-      const status = response.status;
-      await response.body?.cancel();
-      const healthy = status >= 200 && status < 400;
-      const result = { state: healthy ? "healthy" : "unhealthy", status, latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), url: target.origin + target.pathname, message: healthy ? "Endpoint responded successfully." : "Endpoint returned HTTP " + status + "." };
-      await recordAudit(req, "health_check", saved.entry._id, req.params.serviceId, { state: result.state, status, latencyMs: result.latencyMs });
-      res.set("Cache-Control", "no-store");
-      return res.json(result);
-    } finally { clearTimeout(timer); }
+    // The same probe the monitor uses (Render's own health path first, any answer below 5xx = up, one patient retry).
+    const probe = await probeService(service);
+    const target = renderOrigin(service?.serviceDetails?.url || "");
+    const result = {
+      ...probe, url: target ? target.origin + (probe.path || "/") : undefined,
+      message: probe.message || (probe.state === "healthy" ? "Endpoint responded successfully (HTTP " + probe.status + ")." : probe.state === "suspended" ? "The service is suspended." : "No result.")
+    };
+    if (probe.state === "healthy" || probe.state === "unhealthy" || probe.state === "timeout") await recordAudit(req, "health_check", saved.entry._id, req.params.serviceId, { state: result.state, status: result.status, latencyMs: result.latencyMs });
+    res.set("Cache-Control", "no-store");
+    return res.json(result);
   } catch (error) {
-    if (error.name === "AbortError") return res.json({ state: "timeout", checkedAt: new Date().toISOString(), message: "Health check timed out after 8 seconds." });
     return sendUpstreamError(res, error);
   }
 });

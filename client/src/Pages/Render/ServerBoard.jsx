@@ -2,6 +2,9 @@ import React from "react";
 import { StatePill, Sparkline } from "./RenderUi";
 import { serviceKey, serviceKind, serviceState, timeAgo, safeUrl } from "./renderUtils";
 
+// A first failed check ("suspect"), a deploy in progress or an unknown result is not an outage, so it is not red.
+const VERDICT = { suspect: ["mid", "Checking again…"], deploying: ["mid", "Deploying"], unknown: ["mid", "Not sure yet"], up: ["ok", "Healthy"], down: ["bad", "Down"] };
+const ROUTE_NOTE = { added: "Added GET /health to the repository", pr_open: "Pull request open: GET /health", already: "In the repo, waiting for the next deploy", manual: "Needs a /health route" };
 const HEALTH = { healthy: ["ok", "Healthy"], unhealthy: ["bad", "Down"], timeout: ["bad", "Not responding"], suspended: ["mid", "Suspended"], unknown: ["mid", "Not checked yet"], unsupported: ["mid", "No public URL"] };
 const DEPLOY = { live: ["ok", "Deploy live"], build_failed: ["bad", "Build failed"], update_failed: ["bad", "Deploy failed"], build_in_progress: ["mid", "Building"], update_in_progress: ["mid", "Deploying"] };
 const fmt = (v, unit) => (v == null ? "—" : Math.round(v) + unit);
@@ -29,7 +32,7 @@ export default function ServerBoard({ groups, incidentKeys, series, checked, onT
                 const data = series.get(key);
                 const last = data?.last;
                 const suspended = s.suspended === "suspended";
-                const [htone, hlabel] = suspended ? HEALTH.suspended : HEALTH[last?.health] || HEALTH.unknown;
+                const [htone, hlabel] = suspended ? HEALTH.suspended : (last?.verdict && VERDICT[last.verdict]) || HEALTH[last?.health] || HEALTH.unknown;
                 const [dtone, dlabel] = last?.deploy?.status ? (DEPLOY[last.deploy.status] || ["mid", last.deploy.status.replace(/_/g, " ")]) : ["mid", "Deploy —"];
                 const pts = data?.points || [];
                 const isBusy = busy === key;
@@ -45,6 +48,7 @@ export default function ServerBoard({ groups, incidentKeys, series, checked, onT
                       <div><dt>Status checks</dt><dd className={"is-" + (htone === "bad" || dtone === "bad" ? "bad" : htone === "ok" && dtone === "ok" ? "ok" : "mid")}>{suspended ? "Suspended" : last ? [htone === "ok", dtone === "ok"].filter(Boolean).length + "/2 passed" : "Not checked yet"}</dd></div>
                       <div><dt>Health</dt><dd className={"is-" + htone} title={hlabel + (last?.status ? " · HTTP " + last.status : "")}>{hlabel}{last?.status ? " · HTTP " + last.status : ""}{last?.latency != null && !suspended ? " · " + Math.round(last.latency) + " ms" : ""}</dd></div>
                       <div><dt>Last deploy</dt><dd className={"is-" + dtone}>{dlabel}</dd></div>
+                      {last?.healthRoute && !suspended ? <div className="rd-kv__wide"><dt>Health route</dt><dd className={"is-" + (last.healthRoute.status === "manual" ? "mid" : "ok")} title={last.healthRoute.message}>{ROUTE_NOTE[last.healthRoute.status] || last.healthRoute.status}{last.healthRoute.status === "manual" && last.healthRoute.message ? " — " + last.healthRoute.message : ""}</dd></div> : null}
                       <div><dt>Last checked</dt><dd>{last ? timeAgo(last.t) : "—"}</dd></div>
                       <div><dt>Type</dt><dd>{serviceKind(s)}{s.serviceDetails?.runtime || s.serviceDetails?.env ? " · " + (s.serviceDetails.runtime || s.serviceDetails.env) : ""}</dd></div>
                       <div><dt>Plan · region</dt><dd>{[s.serviceDetails?.plan, s.serviceDetails?.region].filter(Boolean).join(" · ") || "—"}</dd></div>

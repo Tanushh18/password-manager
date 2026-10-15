@@ -5,7 +5,7 @@ const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
 const { parseGithubRepo, shapeRepoDetails } = require("../utils/github");
 const { githubGet, githubSend, loadGithubAccounts, resolveRepo, probeScopes } = require("../utils/githubClient");
-const { planHealthPatch, candidateFiles } = require("../utils/healthRoute");
+const { applyHealthRoute } = require("../utils/healthRouteApply");
 
 /*
  * GitHub connection for the Projects page. Tokens are stored like Render API keys: sealed with the
@@ -120,64 +120,11 @@ router.get("/github/repo", async (req, res) => {
  * except Stashr's own temporary branch after a merge.
  */
 router.post("/github/health-route", async (req, res) => {
-  const target = parseGithubRepo(req.body?.repoUrl);
-  if (!target) return res.status(400).json({ error: "This service has no GitHub repository." });
-  const rootDir = typeof req.body?.rootDir === "string" ? req.body.rootDir.replace(/[^A-Za-z0-9._/-]/g, "").slice(0, 120) : "";
-  const merge = req.body?.merge === true;
   let accounts;
   try { accounts = await savedAccounts(req); } catch { return res.status(500).json({ error: "Could not load GitHub connections." }); }
-  if (!accounts.length) return res.status(400).json({ error: "Connect a GitHub token first (Projects → GitHub)." });
-  const resolved = await resolveRepo(accounts, target);
-  if (resolved.error) return res.status(resolved.error.status).json({ error: resolved.error.message });
-  const { repo, used, base } = resolved;
-  if (!(await probeScopes(used.token)).write) return res.status(400).json({ error: "The GitHub token for " + repo.full_name + " is read-only. Add a classic token with the “repo” scope." });
-
-  const branchBase = repo.default_branch || "main";
-  const enc = (path) => path.split("/").map(encodeURIComponent).join("/");
-  const readFile = async (path) => {
-    const r = await githubGet(used.token, base + "/contents/" + enc(path) + "?ref=" + encodeURIComponent(branchBase));
-    if (!r.ok || r.body?.type !== "file" || typeof r.body.content !== "string") return null;
-    return { text: Buffer.from(r.body.content, "base64").toString("utf8"), sha: r.body.sha };
-  };
-  try {
-    const pkgFile = (rootDir && await readFile(rootDir.replace(/\/+$/, "") + "/package.json")) || await readFile("package.json");
-    let pkg = null;
-    try { pkg = pkgFile ? JSON.parse(pkgFile.text) : null; } catch { pkg = null; }
-    const reqFile = (rootDir && await readFile(rootDir.replace(/\/+$/, "") + "/requirements.txt")) || await readFile("requirements.txt");
-    const files = {}, shas = {};
-    for (const path of candidateFiles(rootDir, pkg).slice(0, 40)) {
-      const f = await readFile(path);
-      if (f) { files[path] = f.text; shas[path] = f.sha; }
-    }
-    const plan = planHealthPatch({ files, pkg, requirements: reqFile?.text || "", rootDir });
-    if (plan.error) return res.status(plan.already ? 200 : 422).json({ ok: Boolean(plan.already), already: Boolean(plan.already), error: plan.error });
-
-    const ref = await githubGet(used.token, base + "/git/ref/heads/" + enc(branchBase));
-    if (!ref.ok) return res.status(502).json({ error: "Could not read the " + branchBase + " branch." });
-    const branch = "stashr/health-route-" + Date.now().toString(36);
-    const created = await githubSend(used.token, "POST", base + "/git/refs", { ref: "refs/heads/" + branch, sha: ref.body.object.sha });
-    if (!created.ok) return res.status(502).json({ error: "Could not create a branch (" + created.status + ")." });
-    const commit = await githubSend(used.token, "PUT", base + "/contents/" + enc(plan.path), {
-      message: "Add GET /health route for uptime monitoring", content: Buffer.from(plan.content, "utf8").toString("base64"), sha: shas[plan.path], branch
-    });
-    if (!commit.ok) return res.status(502).json({ error: "Could not commit the change (" + commit.status + ")." });
-    const pr = await githubSend(used.token, "POST", base + "/pulls", {
-      title: "Add /health route", head: branch, base: branchBase,
-      body: "Adds a `GET /health` route to `" + plan.path + "` (" + plan.framework + ") so Stashr and uptime monitors can check the service and keep it awake.\n\nOpened by Stashr."
-    });
-    if (!pr.ok) return res.status(502).json({ error: "Could not open the pull request (" + pr.status + ")." });
-    let merged = false, mergeError = "";
-    if (merge) {
-      const m = await githubSend(used.token, "PUT", base + "/pulls/" + pr.body.number + "/merge", { merge_method: "squash", commit_title: "Add /health route (#" + pr.body.number + ")" });
-      merged = m.ok && m.body?.merged === true;
-      if (merged) await githubSend(used.token, "DELETE", base + "/git/refs/heads/" + enc(branch));
-      else mergeError = m.body?.message ? String(m.body.message).slice(0, 200) : "GitHub refused the merge (" + m.status + ").";
-    }
-    cache.clear();
-    return res.json({ ok: true, framework: plan.framework, file: plan.path, prUrl: pr.body.html_url, prNumber: pr.body.number, merged, mergeError, repo: repo.full_name, branch: branchBase });
-  } catch {
-    return res.status(500).json({ error: "Could not add the health route." });
-  }
+  const result = await applyHealthRoute({ accounts, repoUrl: req.body?.repoUrl, rootDir: req.body?.rootDir, merge: req.body?.merge === true });
+  if (result.status === 200 && result.body.ok && !result.body.already) cache.clear();
+  return res.status(result.status).json(result.body);
 });
 
 module.exports = router;

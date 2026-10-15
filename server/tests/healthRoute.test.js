@@ -27,3 +27,45 @@ test("unknown framework or no app file: a clear message instead of a guess", () 
   expect(Boolean(planHealthPatch({ pkg: { dependencies: { react: "1" } } }).error)).toBe(true);
   expect(Boolean(planHealthPatch({ pkg: { dependencies: { express: "1" } }, files: { "index.js": "module.exports = 1;" } }).error)).toBe(true);
 });
+
+
+const nextPkg = { dependencies: { next: "^15.0.0", react: "^19.0.0" } };
+
+test("next: app router: creates app/health/route.js", () =>
+{
+    const plan = planHealthPatch({ files: { "app/layout.js": "export default function L(){}" }, pkg: nextPkg });
+    expect(plan.path).toBe("app/health/route.js");
+    expect(plan.framework).toBe("next");
+    expect(plan.content).toContain('Response.json({ status: "ok" })');
+});
+
+test("next: TypeScript app under src/ gets a .ts route", () =>
+{
+    const plan = planHealthPatch({ files: { "src/app/layout.tsx": "x" }, pkg: nextPkg });
+    expect(plan.path).toBe("src/app/health/route.ts");
+});
+
+test("next: pages router: creates pages/api/health.js", () =>
+{
+    const plan = planHealthPatch({ files: { "pages/index.js": "x" }, pkg: nextPkg });
+    expect(plan.path).toBe("pages/api/health.js");
+    expect(plan.content).toContain("res.status(200)");
+});
+
+test("next: a rootDir is respected and an existing route is left alone", () =>
+{
+    expect(planHealthPatch({ files: { "web/app/layout.js": "x" }, pkg: nextPkg, rootDir: "web" }).path).toBe("web/app/health/route.js");
+    const again = planHealthPatch({ files: { "app/layout.js": "x", "app/health/route.js": "x" }, pkg: nextPkg });
+    expect(again.already).toBe(true);
+});
+
+test("next: the planner asks for the files it needs", () =>
+{
+    const wanted = candidateFiles("", nextPkg);
+    expect(wanted.includes("app/layout.tsx") && wanted.includes("pages/api/health.js")).toBe(true);
+});
+
+test("next: an app with no recognisable router is reported, not guessed", () =>
+{
+    expect(planHealthPatch({ files: {}, pkg: nextPkg }).error).toMatch(/app\/ or pages\//);
+});

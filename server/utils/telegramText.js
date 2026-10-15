@@ -17,13 +17,16 @@ function parseCommand(text) {
  * services: [{ key, name, url, suspended, type }], health: Map(key -> { state, status, at, deploy }),
  * incidents: open incident events, pings: { key: { ok, status, missingRoute } }
  */
+/* Only a confirmed outage is red. A first failed check ("suspect"), a deploy in progress or an unknown result is not. */
+const isDown = (h) => Boolean(h) && (h.verdict ? h.verdict === "down" : h.state === "unhealthy" || h.state === "timeout");
+
 function summarize({ services = [], health = new Map(), incidents = [], pings = {} }) {
   const running = services.filter((s) => !s.suspended);
   const problems = [];
   for (const s of running) {
     const h = health.get(s.key);
     const p = pings[s.key];
-    if (h && (h.state === "unhealthy" || h.state === "timeout")) problems.push({ name: s.name, text: h.state === "timeout" ? "not responding" : "down" + (h.status ? " (HTTP " + h.status + ")" : "") });
+    if (isDown(h)) problems.push({ name: s.name, text: h.state === "timeout" ? "not responding" : "down" + (h.status ? " (HTTP " + h.status + ")" : "") });
     else if (p && !p.ok && !p.missingRoute) problems.push({ name: s.name, text: "ping failed" + (p.status ? " (HTTP " + p.status + ")" : p.error ? " (" + p.error + ")" : "") });
     if (h?.deploy && /fail/i.test(h.deploy)) problems.push({ name: s.name, text: "last deploy failed" });
   }
@@ -47,7 +50,7 @@ function serversText(services, health, pings, { tz } = {}) {
   if (!services.length) return "No Render services are connected.";
   const rows = [...services].sort((a, b) => Number(a.suspended) - Number(b.suspended) || a.name.localeCompare(b.name)).slice(0, 60).map((s) => {
     const h = health.get(s.key), p = pings[s.key];
-    const icon = s.suspended ? "⏸" : h && (h.state === "unhealthy" || h.state === "timeout") ? "🔴" : p && !p.ok && !p.missingRoute ? "🟠" : "🟢";
+    const icon = s.suspended ? "⏸" : isDown(h) ? "🔴" : p && !p.ok && !p.missingRoute ? "🟠" : "🟢";
     const bits = [s.suspended ? "suspended" : h?.state === "healthy" ? "healthy" + (h.status ? " " + h.status : "") : h?.state || (p ? (p.ok ? "ping ok" : "ping " + (p.status || p.error)) : "not checked yet")];
     if (h?.at) bits.push(hhmm(h.at, tz));
     return icon + " <b>" + esc(s.name) + "</b> — " + esc(bits.join(" · ")) + (s.url ? "\n     " + esc(host(s.url)) : "");

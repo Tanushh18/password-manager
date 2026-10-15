@@ -5,6 +5,7 @@ const renderOps = require("./renderOps");
 const { openEvents } = require("./incidentFold");
 const { pingResults } = require("./pings");
 const T = require("./telegramText");
+const { probeService } = require("./healthProbe");
 
 /*
  * Personal Telegram bot. You paste your bot token in Stashr; Stashr registers a webhook, you press Start in the
@@ -77,7 +78,7 @@ async function connect(user, token) {
     chatId: prior?.botToken === token ? prior.chatId : null, chatName: prior?.botToken === token ? prior.chatName : "",
     digestMinutes: prior?.digestMinutes ?? 10
   };
-  const hook = await tg(token, "setWebhook", { url: base + "/telegram/webhook/" + state.hookId, secret_token: state.hookSecret, allowed_updates: ["message"], drop_pending_updates: true });
+  const hook = await tg(token, "setWebhook", { url: base + "/telegram/webhook/" + state.hookId, secret_token: state.hookSecret, allowed_updates: ["message", "callback_query"], drop_pending_updates: true });
   if (!hook.ok) throw Object.assign(new Error("Could not register the bot webhook: " + hook.error), { status: 502 });
   await tg(token, "setMyCommands", { commands: [["status", "Everything in one message"], ["servers", "Every server and its health"], ["incidents", "Open incidents"], ["projects", "Your projects"], ["project", "One project: /project name"], ["pass", "A password: /pass name PIN"], ["help", "What I can do"]].map(([command, description]) => ({ command, description })) });
   await writeState(user, state);
@@ -122,10 +123,90 @@ async function snapshot(user) {
   const services = listed.services.map((s) => ({ ...s, key: s.accountId + ":" + s.id }));
   const health = new Map();
   const history = renderOps.encryptedList(user, "renderMetricHistory", dataKey, 200).sort((a, b) => Date.parse(a.sampledAt) - Date.parse(b.sampledAt));
-  for (const sample of history) for (const r of sample.services || []) if (r?.key) health.set(r.key, { state: r.health?.state, status: r.health?.status, at: sample.sampledAt, deploy: r.latestDeploy?.status || "" });
+  for (const sample of history) for (const r of sample.services || []) if (r?.key) health.set(r.key, { state: r.health?.state, verdict: r.verdict, status: r.health?.status, at: sample.sampledAt, deploy: r.latestDeploy?.status || "" });
   const incidents = openEvents(renderOps.encryptedList(user, "renderIncidents", dataKey, 200));
   const projects = (user.projects || []).filter((e) => e.enc === "udk").map((e) => User.publicEntry(e, dataKey)).filter((p) => !p.broken);
   return { services, health, incidents, pings: pingResults(user._id), projects, lastTick: history.length ? history[history.length - 1].sampledAt : null };
+}
+
+/* ---------- incident buttons: Check / Restart / Resolve right under the alert ---------- */
+async function audit(user, action, serviceKey, details = {}) {
+  try {
+    const dataKey = await user.getDataKey();
+    const now = new Date();
+    const entry = { _id: new mongoose.Types.ObjectId(), enc: "udk", data: User.sealEntry(dataKey, { action, accountId: String(serviceKey).split(":")[0], serviceId: String(serviceKey).split(":").slice(1).join(":"), details: { ...details, via: "telegram" }, at: now.toISOString() }), createdAt: now, updatedAt: now };
+    await User.updateOne({ _id: user._id }, { $push: { renderAudit: { $each: [entry], $slice: -200 } } });
+  } catch { /* the action already happened: never fail on the audit trail */ }
+}
+
+const NO_KEYBOARD = { inline_keyboard: [] };
+
+async function handleButton(user, state, query) {
+  const token = state.botToken;
+  const chatId = query?.message?.chat?.id;
+  const messageId = query?.message?.message_id;
+  const answer = (text, alert = false) => tg(token, "answerCallbackQuery", { callback_query_id: query.id, text: String(text).slice(0, 190), show_alert: alert });
+  // Only the linked chat may press anything.
+  if (!chatId || String(chatId) !== String(state.chatId)) return void (await answer("This bot is private.", true));
+  const m = /^i:([cxyrn]):([0-9a-f-]{36})$/.exec(String(query.data || ""));
+  if (!m) return void (await answer("That button is no longer valid."));
+  const [, action, incidentId] = m;
+  const original = String(query.message.text || "");
+  const edit = (note, keyboard) => tg(token, "editMessageText", { chat_id: chatId, message_id: messageId, text: (original + (note ? "\n\n" + note : "")).slice(0, 4000), disable_web_page_preview: true, reply_markup: keyboard || NO_KEYBOARD });
+
+  const dataKey = await user.getDataKey();
+  const incident = openEvents(renderOps.encryptedList(user, "renderIncidents", dataKey, renderOps.INCIDENT_LIMIT)).find((e) => e.id === incidentId);
+  if (!incident) { await answer("Already closed."); return void (await edit("Already closed.")); }
+  const mainKeyboard = { inline_keyboard: renderOps.incidentButtons(incident) };
+
+  try {
+    if (action === "r") {
+      await renderOps.resolveIncidents(user, { ids: [incidentId], reason: "Resolved from Telegram.", by: "manual" });
+      await audit(user, "incident_resolved", incident.serviceKey, { type: incident.type });
+      await answer("Resolved.");
+      return void (await edit("✓ Resolved from Telegram."));
+    }
+    const [accountId, ...rest] = String(incident.serviceKey).split(":");
+    const serviceId = rest.join(":");
+    const apiKey = accountId ? renderOps.accountApiKey(user, dataKey, accountId) : null;
+    if (action === "x") { // ask first: a restart interrupts live traffic
+      await answer("Confirm the restart.");
+      return void (await edit("Restart " + incident.serviceName + "? Live requests will be interrupted for a moment.", { inline_keyboard: [[{ text: "✅ Yes, restart", callback_data: "i:y:" + incidentId }, { text: "✖ Cancel", callback_data: "i:n:" + incidentId }]] }));
+    }
+    if (action === "n") { await answer("Cancelled."); return void (await edit("", mainKeyboard)); }
+    if (!apiKey || !/^[A-Za-z0-9_-]{1,160}$/.test(serviceId)) { await answer("This service is not connected any more.", true); return; }
+    if (action === "y") {
+      await renderOps.renderRequest(apiKey, "/v1/services/" + encodeURIComponent(serviceId) + "/restart", { method: "POST" });
+      await audit(user, "service_restart", incident.serviceKey, { incident: incident.type });
+      await answer("Restart requested.");
+      return void (await edit("🔄 Restart requested. Press Check in a minute to verify it is healthy.", mainKeyboard));
+    }
+    if (action === "c") {
+      await answer("Checking…");
+      const raw = await renderOps.renderRequest(apiKey, "/v1/services/" + encodeURIComponent(serviceId));
+      const service = raw?.service || raw;
+      if (incident.type === "health") {
+        const probe = await probeService(service);
+        if (probe.state === "healthy") {
+          await renderOps.resolveIncidents(user, { ids: [incidentId], reason: "Verified healthy by a check from Telegram" + (probe.status ? " (HTTP " + probe.status + ")" : "") + ".", by: "check" });
+          return void (await edit("✅ Verified healthy" + (probe.status ? " (HTTP " + probe.status + ")" : "") + ". Incident closed."));
+        }
+        return void (await edit("❌ Still failing: " + (probe.message || probe.state) + " (" + new Date().toISOString().slice(11, 16) + " UTC)", mainKeyboard));
+      }
+      if (incident.type === "deploy_failure") {
+        const deploys = await renderOps.renderRequest(apiKey, "/v1/services/" + encodeURIComponent(serviceId) + "/deploys?limit=1");
+        const latest = (Array.isArray(deploys) ? deploys : []).map((d) => d?.deploy || d)[0];
+        if (latest?.status === "live") {
+          await renderOps.resolveIncidents(user, { ids: [incidentId], reason: "Verified by a check from Telegram: the latest deploy is live.", by: "check" });
+          return void (await edit("✅ The latest deploy is live. Incident closed."));
+        }
+        return void (await edit("❌ Latest deploy: " + (latest?.status || "unknown"), mainKeyboard));
+      }
+      return void (await edit("ℹ️ This kind of alert closes itself when the next monitor round sees normal load. Press Resolve to close it now.", mainKeyboard));
+    }
+  } catch (error) {
+    await answer("That did not work: " + (error?.message || "Render did not answer."), true);
+  }
 }
 
 /* ---------- incoming messages ---------- */
@@ -135,6 +216,7 @@ async function handleUpdate(hookId, secret, update) {
   if (!user) return;
   const state = await readState(user);
   if (!state || !state.hookSecret || typeof secret !== "string" || secret.length !== state.hookSecret.length || !crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(state.hookSecret))) return;
+  if (update?.callback_query) return void (await handleButton(user, state, update.callback_query));
   const msg = update?.message;
   if (!msg?.chat?.id || typeof msg.text !== "string") return;
   const chatId = msg.chat.id;
@@ -210,7 +292,23 @@ async function sendDigest(user, state, { force = false } = {}) {
   return r.ok;
 }
 
+/* Bots connected before buttons existed only listened for messages: re-register them once per process. */
+let hooksRefreshed = false;
+async function refreshWebhooks() {
+  const base = publicBase();
+  if (hooksRefreshed || !base) return;
+  hooksRefreshed = true;
+  const users = await User.find({ telegramHookId: { $type: "string" } }).limit(500);
+  for (const user of users) {
+    try {
+      const state = await readState(user);
+      if (state?.botToken && state.hookId && state.hookSecret) await tg(state.botToken, "setWebhook", { url: base + "/telegram/webhook/" + state.hookId, secret_token: state.hookSecret, allowed_updates: ["message", "callback_query"] });
+    } catch { /* retried on the next restart */ }
+  }
+}
+
 async function runAllDigests() {
+  await refreshWebhooks().catch(() => {});
   const users = await User.find({ telegramHookId: { $type: "string" } }).limit(500);
   let sent = 0, errors = 0;
   for (const user of users) {
