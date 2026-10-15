@@ -44,6 +44,95 @@ describe("starter templates", () =>
     });
 });
 
+describe("framework templates and presets", () =>
+{
+    test("next.js: next scripts, a /health route, and the Render commands match", () =>
+    {
+        const files = TEMPLATES.nextjs.files("demo");
+        const pkg = JSON.parse(files["package.json"]);
+        expect(pkg.scripts.build).toBe("next build");
+        expect(pkg.scripts.start).toBe("next start");
+        expect(Boolean(pkg.dependencies.next && pkg.dependencies.react)).toBe(true);
+        expect(Object.keys(files)).toContain("app/health/route.js");
+        expect(TEMPLATES.nextjs.render.buildCommand).toBe("npm install && npm run build");
+        expect(TEMPLATES.nextjs.render.startCommand).toBe("npm start");
+        expect(files[".gitignore"]).toContain(".next/");
+    });
+
+    test("static framework templates build into the folder Render publishes", () =>
+    {
+        for (const key of ["react", "vue", "svelte", "astro"])
+        {
+            const t = TEMPLATES[key];
+            const pkg = JSON.parse(t.files("demo")["package.json"]);
+            expect(t.render.type).toBe("static_site");
+            expect(t.render.publishPath).toBe("dist");
+            expect(Boolean(pkg.scripts.build)).toBe(true);
+            expect(t.render.buildCommand).toContain("npm run build");
+        }
+        expect(Object.keys(TEMPLATES.react.files("demo"))).toContain("src/App.jsx");
+        expect(Object.keys(TEMPLATES.vue.files("demo"))).toContain("src/App.vue");
+    });
+
+    test("flask, go and docker starters line up with their start commands", () =>
+    {
+        expect(TEMPLATES.flask.render.startCommand).toBe("gunicorn app:app --bind 0.0.0.0:$PORT");
+        expect(TEMPLATES.flask.files("demo")["requirements.txt"]).toContain("gunicorn");
+        expect(TEMPLATES.go.render.runtime).toBe("go");
+        expect(TEMPLATES.go.files("demo")["go.mod"]).toContain("module demo");
+        expect(TEMPLATES.go.files("demo")["main.go"]).toContain('os.Getenv("PORT")');
+        expect(Object.keys(TEMPLATES.docker.files("demo"))).toContain("Dockerfile");
+        expect(TEMPLATES.docker.render.runtime).toBe("docker");
+    });
+
+    test("every bring-your-own-code preset is a valid Render service type", () =>
+    {
+        const runtimes = new Set(["node", "python", "go", "ruby", "rust", "docker"]);
+        for (const [key, r] of Object.entries(RUNTIMES))
+        {
+            expect(key.length <= 20).toBe(true);
+            if (r.type === "static_site") expect(r.type).toBe("static_site");
+            else expect(runtimes.has(r.runtime)).toBe(true);
+        }
+        for (const key of ["nextjs", "nuxt", "sveltekit", "remix", "nestjs", "flask", "django", "go", "rails", "rust", "docker", "vite", "cra", "angular", "astro"])
+            expect(Boolean(RUNTIMES[key])).toBe(true);
+        expect(RUNTIMES.angular.publishPath).toBe("site");
+    });
+
+    test("presets deploy on the free plan with auto-deploy, whatever the stack", () =>
+    {
+        const opts = { ownerId: "own-1", repoUrl: "https://github.com/o/r", branch: "main" };
+        for (const runtime of Object.keys(RUNTIMES))
+        {
+            const payload = buildRenderPayload(valid({ template: "existing", existingRepoUrl: "https://github.com/o/r", runtime }), opts);
+            expect(payload.autoDeploy).toBe("yes");
+            if (RUNTIMES[runtime].type === "static_site")
+            {
+                expect(payload.type).toBe("static_site");
+                expect(payload.serviceDetails.publishPath).toBe(RUNTIMES[runtime].publishPath || ".");
+            }
+            else
+            {
+                expect(payload.serviceDetails.plan).toBe("free");
+                expect(payload.serviceDetails.runtime).toBe(RUNTIMES[runtime].runtime);
+            }
+        }
+    });
+
+    test("every new template can be created through the orchestration", async () =>
+    {
+        for (const template of ["nextjs", "react", "vue", "svelte", "astro", "flask", "go", "docker"])
+        {
+            const deps = makeDeps();
+            const r = await run(deps, valid({ template }));
+            expect(r.ok).toBe(true);
+            const create = deps.calls.find((c) => c.path === "/v1/services");
+            expect(create.body.type).toBe(TEMPLATES[template].render.type);
+            expect(create.body.autoDeploy).toBe("yes");
+        }
+    });
+});
+
 describe("create & deploy input validation", () =>
 {
     test("accepts a normal request and derives a safe repo name", () =>

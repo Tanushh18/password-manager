@@ -11,17 +11,42 @@ import "../Passwords/Passwords.css";
 import "./Projects.css";
 
 const TEMPLATES = [
+  ["nextjs", "Next.js", "App Router starter with a /health route. Auto-deploys on every push."],
+  ["react", "React (Vite)", "Static single-page app, built and hosted for free."],
+  ["vue", "Vue (Vite)", "Static single-page app, built and hosted for free."],
+  ["svelte", "Svelte (Vite)", "Static single-page app, built and hosted for free."],
+  ["astro", "Astro", "Static site, built and hosted for free."],
   ["node", "Node.js (Express)", "Starter server with a /health check. Ready to deploy."],
   ["python", "Python (FastAPI)", "Starter API with a /health check. Ready to deploy."],
+  ["flask", "Python (Flask)", "Starter API served by gunicorn, with a /health check."],
+  ["go", "Go", "Starter net/http server with a /health check."],
+  ["docker", "Docker (any language)", "Dockerfile starter. Swap in PHP/Laravel, Java/Spring, .NET, Rails, Rust..."],
   ["static", "Static site", "A plain index.html, hosted for free."],
   ["empty", "Empty repo", "Creates an empty repo and shows the git commands to push your own code."],
-  ["existing", "Existing repo", "Deploy a GitHub repository you already have."]
+  ["existing", "Existing repo", "Deploy a GitHub repository you already have, with a framework preset."]
 ];
+// Templates that deploy as a Render static site (no region, no start command).
+const STATIC_TEMPLATES = new Set(["react", "vue", "svelte", "astro", "static"]);
+// Keep in sync with server/utils/templates.js. "Bring your own code" presets: build/start commands per stack.
 const RUNTIMES = {
-  node: { label: "Node.js", build: "npm install", start: "npm start" },
-  python: { label: "Python", build: "pip install -r requirements.txt", start: "uvicorn app.main:app --host 0.0.0.0 --port $PORT" },
-  docker: { label: "Docker", build: "", start: "" },
-  static: { label: "Static site", build: "", start: "" }
+  node: { label: "Node.js (Express, Fastify, ...)", build: "npm install", start: "npm start" },
+  nextjs: { label: "Next.js", build: "npm install && npm run build", start: "npm start" },
+  nuxt: { label: "Nuxt", build: "npm install && npm run build", start: "node .output/server/index.mjs" },
+  sveltekit: { label: "SvelteKit (adapter-node)", build: "npm install && npm run build", start: "node build" },
+  remix: { label: "Remix / React Router", build: "npm install && npm run build", start: "npm start" },
+  nestjs: { label: "NestJS", build: "npm install && npm run build", start: "node dist/main" },
+  python: { label: "Python (FastAPI)", build: "pip install -r requirements.txt", start: "uvicorn app.main:app --host 0.0.0.0 --port $PORT" },
+  flask: { label: "Python (Flask)", build: "pip install -r requirements.txt", start: "gunicorn app:app --bind 0.0.0.0:$PORT" },
+  django: { label: "Python (Django)", build: "pip install -r requirements.txt && python manage.py collectstatic --noinput", start: "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT" },
+  go: { label: "Go", build: "go build -tags netgo -ldflags '-s -w' -o app", start: "./app" },
+  rails: { label: "Ruby on Rails", build: "bundle install && bundle exec rake assets:precompile", start: "bundle exec rails server -b 0.0.0.0" },
+  rust: { label: "Rust", build: "cargo build --release", start: "cargo run --release" },
+  docker: { label: "Docker (PHP/Laravel, Java/Spring, .NET, ...)", build: "", start: "", needsDockerfile: true },
+  vite: { label: "React / Vue / Svelte (Vite) — static", build: "npm install && npm run build", start: "", isStatic: true },
+  cra: { label: "React (Create React App) — static", build: "npm install && npm run build", start: "", isStatic: true },
+  angular: { label: "Angular — static", build: "npm install && npm run build && mkdir -p site && cp -r dist/*/browser/. site/", start: "", isStatic: true },
+  astro: { label: "Astro — static", build: "npm install && npm run build", start: "", isStatic: true },
+  static: { label: "Static site", build: "", start: "", isStatic: true }
 };
 const REGIONS = ["singapore", "oregon", "ohio", "virginia", "frankfurt"];
 const slug = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[-._]+|[-._]+$/g, "").replace(/-{2,}/g, "-").slice(0, 60);
@@ -63,6 +88,7 @@ export default function ProjectDeploy() {
   }, [form.renderAccountId]);
 
   const ownCode = form.template === "empty" || form.template === "existing";
+  const isStatic = ownCode ? Boolean(RUNTIMES[form.runtime]?.isStatic) : STATIC_TEMPLATES.has(form.template);
   const repoName = slug(form.name);
   const ready = form.name.trim() && repoName && form.githubAccountId && form.renderAccountId && (form.template !== "existing" || form.existingRepoUrl.trim()) && (owners.length < 2 || form.ownerId);
 
@@ -180,9 +206,11 @@ export default function ProjectDeploy() {
               <div className="dp-grid">
                 <div className="field"><label className="field__label" htmlFor="dp-runtime">Runtime</label><select id="dp-runtime" className="input" value={form.runtime} onChange={(e) => pickRuntime(e.target.value)}>{Object.entries(RUNTIMES).map(([k, r]) => <option key={k} value={k}>{r.label}</option>)}</select></div>
                 {form.runtime !== "static" ? <Field id="dp-build" label="Build command" value={form.buildCommand} onChange={(e) => set({ buildCommand: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
-                {form.runtime !== "static" && form.runtime !== "docker" ? <Field id="dp-start" label="Start command" value={form.startCommand} onChange={(e) => set({ startCommand: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
+                {!RUNTIMES[form.runtime].isStatic && form.runtime !== "docker" ? <Field id="dp-start" label="Start command" value={form.startCommand} onChange={(e) => set({ startCommand: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
               </div>
             ) : null}
+            {ownCode && RUNTIMES[form.runtime]?.needsDockerfile ? <p className="field__note">Render builds this from a <code>Dockerfile</code> at the root of the repository. Use it for PHP/Laravel, Java/Spring Boot, .NET and anything else without a native runtime.</p> : null}
+            <p className="field__note">Every push to the repository’s default branch redeploys automatically.</p>
           </section>
 
           <section className="card dp-section">
@@ -226,7 +254,7 @@ export default function ProjectDeploy() {
               {owners.length > 1 ? (
                 <div className="field"><label className="field__label" htmlFor="dp-owner">Workspace</label><select id="dp-owner" className="input" value={form.ownerId} onChange={(e) => set({ ownerId: e.target.value })}><option value="">Choose a workspace…</option>{owners.map((o) => <option key={o.id} value={o.id}>{o.name}{o.type ? " (" + o.type + ")" : ""}</option>)}</select></div>
               ) : null}
-              {form.runtime !== "static" && form.template !== "static" ? (
+              {!isStatic ? (
                 <div className="field"><label className="field__label" htmlFor="dp-region">Region</label><select id="dp-region" className="input" value={form.region} onChange={(e) => set({ region: e.target.value })}>{REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}</select></div>
               ) : null}
             </div>
