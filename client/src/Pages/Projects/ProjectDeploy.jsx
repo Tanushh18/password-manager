@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import Field from "../../Components/Field/Field";
@@ -6,7 +6,7 @@ import GithubConnectModal from "../../Components/Project/GithubConnectModal";
 import { Arrow, Check, Copy, Plus, Trash, Alert } from "../../Components/Icons/Icons";
 import { useVault } from "../../state/vault";
 import { parseEnvBlock } from "../../lib/projectItems";
-import { getGithubAccounts, getRenderAccounts, getRenderOwners, provisionProject } from "../../api/client";
+import { checkRepoCode, createRepo, deployProject, getGithubAccounts, getRenderAccounts, getRenderOwners } from "../../api/client";
 import "../Passwords/Passwords.css";
 import "./Projects.css";
 
@@ -25,8 +25,6 @@ const TEMPLATES = [
   ["empty", "Empty repo", "Creates an empty repo and shows the git commands to push your own code."],
   ["existing", "Existing repo", "Deploy a GitHub repository you already have, with a framework preset."]
 ];
-// Templates that deploy as a Render static site (no region, no start command).
-const STATIC_TEMPLATES = new Set(["react", "vue", "svelte", "astro", "static"]);
 // Keep in sync with server/utils/templates.js. "Bring your own code" presets: build/start commands per stack.
 const RUNTIMES = {
   node: { label: "Node.js (Express, Fastify, ...)", build: "npm install", start: "npm start" },
@@ -48,6 +46,8 @@ const RUNTIMES = {
   astro: { label: "Astro — static", build: "npm install && npm run build", start: "", isStatic: true },
   static: { label: "Static site", build: "", start: "", isStatic: true }
 };
+// Which preset a starter template deploys with.
+const TEMPLATE_PRESET = { nextjs: "nextjs", react: "vite", vue: "vite", svelte: "vite", astro: "astro", node: "node", python: "python", flask: "flask", go: "go", docker: "docker", static: "static" };
 const REGIONS = ["singapore", "oregon", "ohio", "virginia", "frankfurt"];
 const slug = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[-._]+|[-._]+$/g, "").replace(/-{2,}/g, "-").slice(0, 60);
 const errorOf = (e, fallback) => e?.response?.data?.error || fallback;
@@ -68,8 +68,11 @@ export default function ProjectDeploy() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [pasteText, setPasteText] = useState("");
+  const [repo, setRepo] = useState(null); // the repository once it exists (created here, or an existing one)
+  const [codeState, setCodeState] = useState({ status: "idle" }); // idle | checking | empty | ready | error
+  const [wait, setWait] = useState(false);
   const [form, setForm] = useState({
-    name: "", description: "", template: "node", existingRepoUrl: "", visibility: "private", githubAccountId: "", renderAccountId: "", ownerId: "",
+    name: "", description: "", template: "node", existingRepoUrl: "", visibility: "public", githubAccountId: "", renderAccountId: "", ownerId: "",
     region: "singapore", runtime: "node", buildCommand: RUNTIMES.node.build, startCommand: RUNTIMES.node.start, envVars: [], useExistingRepo: false
   });
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
@@ -88,11 +91,14 @@ export default function ProjectDeploy() {
   }, [form.renderAccountId]);
 
   const ownCode = form.template === "empty" || form.template === "existing";
-  const isStatic = ownCode ? Boolean(RUNTIMES[form.runtime]?.isStatic) : STATIC_TEMPLATES.has(form.template);
+  const isStatic = Boolean(RUNTIMES[form.runtime]?.isStatic);
   const repoName = slug(form.name);
   const ready = form.name.trim() && repoName && form.githubAccountId && form.renderAccountId && (form.template !== "existing" || form.existingRepoUrl.trim()) && (owners.length < 2 || form.ownerId);
 
-  const pickTemplate = (template) => set({ template, useExistingRepo: template === "existing" });
+  const pickTemplate = (template) => {
+    const preset = TEMPLATE_PRESET[template];
+    set({ template, useExistingRepo: template === "existing", ...(preset ? { runtime: preset, buildCommand: RUNTIMES[preset].build, startCommand: RUNTIMES[preset].start } : {}) });
+  };
   const pickRuntime = (runtime) => set({ runtime, buildCommand: RUNTIMES[runtime].build, startCommand: RUNTIMES[runtime].start });
   const setEnv = (i, patch) => set({ envVars: form.envVars.map((row, idx) => (idx === i ? { ...row, ...patch } : row)) });
   const applyPaste = () => {
@@ -104,18 +110,58 @@ export default function ProjectDeploy() {
     toast.success(parsed.length + " variable" + (parsed.length === 1 ? "" : "s") + " added.");
   };
 
-  const submit = async (event, overrides = {}) => {
+  const privateChosen = form.visibility === "private" && form.template !== "existing";
+  const locked = Boolean(repo); // the project / GitHub choices are fixed once the repository exists
+
+  /* Step 1: create the (public) repository, or just point at an existing one. */
+  const submit = async (event) => {
     event?.preventDefault();
-    if (!ready || busy) return;
+    if (!ready || busy || privateChosen) return;
     setBusy(true); setError(""); setResult(null);
     try {
-      const data = await provisionProject({ ...form, repoName, ...overrides });
+      if (form.template === "existing") {
+        setRepo({ url: form.existingRepoUrl.trim(), existing: true });
+        setCodeState({ status: "idle" });
+        void checkCode(form.existingRepoUrl.trim());
+      } else {
+        const data = await createRepo({ ...form, repoName, visibility: "public" });
+        setRepo({ ...data.repo, hasStarter: data.hasStarter });
+        setCodeState(data.hasStarter ? { status: "ready" } : { status: "empty" });
+        toast.success("Repository created. Now push your code.");
+        setWait(!data.hasStarter);
+      }
+    } catch (e) { setError(errorOf(e, "Could not create the repository.")); } finally { setBusy(false); }
+  };
+
+  /* Step 2: has any code arrived in the repository? */
+  const checkCode = useCallback(async (url) => {
+    setCodeState((old) => (old.status === "ready" ? old : { status: "checking" }));
+    try {
+      const data = await checkRepoCode({ githubAccountId: form.githubAccountId, repoUrl: url });
+      setCodeState({ status: data.hasCode ? "ready" : "empty", branch: data.branch });
+      if (data.hasCode) setWait(false);
+    } catch (e) { setCodeState({ status: "error", message: errorOf(e, "Could not check the repository.") }); setWait(false); }
+  }, [form.githubAccountId]);
+
+  // While the repository is empty, look again every few seconds so the Deploy button unlocks by itself.
+  useEffect(() => {
+    if (!repo || !wait) return undefined;
+    const timer = setInterval(() => void checkCode(repo.url), 6000);
+    return () => clearInterval(timer);
+  }, [repo, wait, checkCode]);
+
+  /* Step 3: deploy on Render once the code is there. */
+  const deploy = async () => {
+    if (!repo || busy || codeState.status !== "ready") return;
+    setBusy(true); setError(""); setResult(null);
+    try {
+      const data = await deployProject({ ...form, repoName, template: "existing", useExistingRepo: true, existingRepoUrl: repo.url, visibility: "public" });
       setResult(data);
       void refreshProfile();
-      toast.success(data.firstDeploy === "waiting-for-code" ? "Project created on the free plan. Push your code to deploy it." : "Project created and deploying on the free plan.");
+      toast.success("Project created and deploying on the free plan.");
     } catch (e) {
       const data = e?.response?.data;
-      if (data?.steps) setResult(data); else setError(errorOf(e, "Could not create the project."));
+      if (data?.steps) setResult(data); else setError(errorOf(e, "Could not deploy the project."));
     } finally { setBusy(false); }
   };
 
@@ -137,7 +183,7 @@ export default function ProjectDeploy() {
             {!ok && result.repo ? <p className="field__note">Nothing was deleted. Your repository is still at <a href={result.repo.url} target="_blank" rel="noreferrer noopener">{result.repo.url}</a>.</p> : null}
             {!ok && result.canReuseRepo ? (
               <div className="gh-panel__row">
-                <button type="button" className="btn btn--primary btn--sm" disabled={busy} onClick={() => void submit(null, { useExistingRepo: true })}>{busy ? "Retrying…" : "Retry using the existing repository"}</button>
+                <button type="button" className="btn btn--primary btn--sm" disabled={busy} onClick={() => { setResult(null); void deploy(); }}>{busy ? "Retrying…" : "Retry deploy"}</button>
                 <button type="button" className="btn btn--ghost btn--sm" onClick={() => setResult(null)}>Change settings</button>
               </div>
             ) : !ok ? <div className="gh-panel__row"><button type="button" className="btn btn--ghost btn--sm" onClick={() => setResult(null)}>Back</button></div> : null}
@@ -160,7 +206,7 @@ export default function ProjectDeploy() {
                 </p>
               </section>
 
-              {result.firstDeploy === "waiting-for-code" || form.template === "empty" ? (
+              {result.firstDeploy === "waiting-for-code" ? (
                 <section className="card dp-section">
                   <h2>Push your code from the terminal</h2>
                   <p className="field__note">Run these inside your project folder. Sign in to GitHub the way you normally do (<code>gh auth login</code>, a credential manager, or an SSH key) — Stashr never puts its token in the URL.</p>
@@ -172,7 +218,7 @@ export default function ProjectDeploy() {
                   </div>
                 </section>
               ) : null}
-              <div className="gh-panel__row"><Link className="btn btn--ghost" to="/projects/deploy" onClick={() => { setResult(null); set({ name: "", description: "", envVars: [], existingRepoUrl: "" }); }}>Create another</Link></div>
+              <div className="gh-panel__row"><Link className="btn btn--ghost" to="/projects/deploy" onClick={() => { setResult(null); setRepo(null); setCodeState({ status: "idle" }); set({ name: "", description: "", envVars: [], existingRepoUrl: "" }); }}>Create another</Link></div>
             </>
           ) : null}
         </div>
@@ -187,9 +233,10 @@ export default function ProjectDeploy() {
       <div className="shell proj-shell">
         <Link to="/projects" className="proj-back"><Arrow size={14} style={{ transform: "rotate(180deg)" }} /> All projects</Link>
         <h1 className="vault__title">Create &amp; deploy</h1>
-        <p className="vault__count">A new GitHub repository, a free Render service with your environment variables, and a linked Stashr project — in one step.</p>
+        <p className="vault__count">1) Create a public GitHub repository (or use one you already have). 2) Push your code. 3) Deploy it on Render’s free plan with your environment variables, linked to a Stashr project.</p>
 
         <form className="dp-form" onSubmit={submit}>
+          <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: "contents" }}>
           <section className="card dp-section">
             <h2>1 · Project</h2>
             <div className="dp-grid">
@@ -202,15 +249,6 @@ export default function ProjectDeploy() {
               ))}
             </div>
             {form.template === "existing" ? <Field id="dp-existing" label="Existing repository URL" placeholder="https://github.com/you/your-repo" value={form.existingRepoUrl} onChange={(e) => set({ existingRepoUrl: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
-            {ownCode ? (
-              <div className="dp-grid">
-                <div className="field"><label className="field__label" htmlFor="dp-runtime">Runtime</label><select id="dp-runtime" className="input" value={form.runtime} onChange={(e) => pickRuntime(e.target.value)}>{Object.entries(RUNTIMES).map(([k, r]) => <option key={k} value={k}>{r.label}</option>)}</select></div>
-                {form.runtime !== "static" ? <Field id="dp-build" label="Build command" value={form.buildCommand} onChange={(e) => set({ buildCommand: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
-                {!RUNTIMES[form.runtime].isStatic && form.runtime !== "docker" ? <Field id="dp-start" label="Start command" value={form.startCommand} onChange={(e) => set({ startCommand: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
-              </div>
-            ) : null}
-            {ownCode && RUNTIMES[form.runtime]?.needsDockerfile ? <p className="field__note">Render builds this from a <code>Dockerfile</code> at the root of the repository. Use it for PHP/Laravel, Java/Spring Boot, .NET and anything else without a native runtime.</p> : null}
-            <p className="field__note">Every push to the repository’s default branch redeploys automatically.</p>
           </section>
 
           <section className="card dp-section">
@@ -230,18 +268,27 @@ export default function ProjectDeploy() {
                 <div className="field">
                   <span className="field__label">Visibility</span>
                   <div className="dp-templates" role="group" aria-label="Repository visibility">
-                    {[["private", "Private"], ["public", "Public"]].map(([id, label]) => <button key={id} type="button" className="dp-template" aria-pressed={form.visibility === id} onClick={() => set({ visibility: id })}><strong>{label}</strong></button>)}
+                    {[["public", "Public"], ["private", "Private"]].map(([id, label]) => <button key={id} type="button" className="dp-template" aria-pressed={form.visibility === id} onClick={() => set({ visibility: id })}><strong>{label}</strong></button>)}
                   </div>
                 </div>
               ) : null}
             </div>
             <div className="gh-panel__row"><button type="button" className="btn btn--ghost btn--sm" onClick={() => setConnectOpen(true)}>Manage GitHub tokens</button></div>
-            {form.visibility === "private" && form.template !== "existing" ? <p className="field__note">Private repositories need Render’s GitHub app installed for the repository (one-time, in Render). Public repositories deploy without it.</p> : null}
+            {privateChosen ? <div className="notice notice--err" role="alert"><Alert size={15} /> Private repositories are not supported on the free tier. Choose Public.</div> : <p className="field__note">The repository is public: the free tier deploys public GitHub repositories only.</p>}
           </section>
+
+          </fieldset>
 
           <section className="card dp-section">
             <h2>3 · Render</h2>
             <div className="dp-free"><Check size={16} /><span><strong>Free plan only.</strong> Stashr always creates the service on Render’s free plan; there is no option to choose a paid one. Free services sleep after about 15 minutes without traffic and wake on the next request.</span></div>
+            <div className="dp-grid">
+              <div className="field"><label className="field__label" htmlFor="dp-runtime">Framework / runtime</label><select id="dp-runtime" className="input" value={form.runtime} onChange={(e) => pickRuntime(e.target.value)}>{Object.entries(RUNTIMES).map(([k, r]) => <option key={k} value={k}>{r.label}</option>)}</select></div>
+              {form.runtime !== "static" ? <Field id="dp-build" label="Build command" value={form.buildCommand} onChange={(e) => set({ buildCommand: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
+              {!RUNTIMES[form.runtime].isStatic && form.runtime !== "docker" ? <Field id="dp-start" label="Start command" value={form.startCommand} onChange={(e) => set({ startCommand: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
+            </div>
+            {RUNTIMES[form.runtime]?.needsDockerfile ? <p className="field__note">Render builds this from a <code>Dockerfile</code> at the root of the repository. Use it for PHP/Laravel, Java/Spring Boot, .NET and anything else without a native runtime.</p> : null}
+            <p className="field__note">Every push to the repository’s default branch redeploys automatically.</p>
             <div className="dp-grid">
               <div className="field">
                 <label className="field__label" htmlFor="dp-render">Render account</label>
@@ -278,10 +325,39 @@ export default function ProjectDeploy() {
           </section>
 
           {error ? <div className="notice notice--err" role="alert"><Alert size={15} /> {error}</div> : null}
-          <div className="gh-panel__row">
-            <button type="submit" className="btn btn--primary btn--lg" disabled={!ready || busy}>{busy ? <><span className="spinner" /> Creating… this can take up to a minute</> : "Create & deploy"}</button>
-            <Link to="/projects" className="btn btn--ghost btn--lg">Cancel</Link>
-          </div>
+
+          {repo ? (
+            <section className="card dp-section" aria-live="polite">
+              <h2>5 · Push your code, then deploy</h2>
+              <p className="field__note">Repository: <a href={repo.url} target="_blank" rel="noreferrer noopener">{repo.url}</a></p>
+              {!repo.existing ? (
+                <>
+                  <p className="field__note">{repo.hasStarter ? "Starter files are already in the repository. Clone it, add your code and push:" : "The repository is empty. Run these in your project folder to push your code (sign in to GitHub the way you normally do; Stashr never puts its token in the URL):"}</p>
+                  <pre className="dp-code">{repo.commands.join("\n")}</pre>
+                  <div className="gh-panel__row">
+                    <Copyable text={repo.commands.join("\n")} label="Copy commands" />
+                    <Copyable text={repo.https} label="Copy HTTPS URL" />
+                    <Copyable text={repo.ssh} label="Copy SSH URL" />
+                  </div>
+                </>
+              ) : null}
+              <div className={"notice " + (codeState.status === "ready" ? "notice--ok" : codeState.status === "error" ? "notice--err" : "")} role="status">
+                {codeState.status === "ready" ? <><Check size={15} /> Code found{codeState.branch ? " on " + codeState.branch : ""}. You can deploy.</>
+                  : codeState.status === "checking" ? "Checking the repository for code…"
+                  : codeState.status === "error" ? <><Alert size={15} /> {codeState.message}</>
+                  : "No code in the repository yet. This page checks again every few seconds, or press “Check again” after you push."}
+              </div>
+              <div className="gh-panel__row">
+                <button type="button" className="btn btn--ghost btn--sm" disabled={codeState.status === "checking"} onClick={() => { setWait(true); void checkCode(repo.url); }}>Check again</button>
+                <button type="button" className="btn btn--primary btn--lg" disabled={busy || codeState.status !== "ready" || !ready} onClick={() => void deploy()}>{busy ? <><span className="spinner" /> Deploying… this can take up to a minute</> : "Deploy to Render"}</button>
+              </div>
+            </section>
+          ) : (
+            <div className="gh-panel__row">
+              <button type="submit" className="btn btn--primary btn--lg" disabled={!ready || busy || privateChosen}>{busy ? <><span className="spinner" /> Working…</> : form.template === "existing" ? "Check repository" : "Create repository"}</button>
+              <Link to="/projects" className="btn btn--ghost btn--lg">Cancel</Link>
+            </div>
+          )}
         </form>
       </div>
       <GithubConnectModal open={connectOpen} onClose={() => setConnectOpen(false)} onChange={() => void loadGithub()} />

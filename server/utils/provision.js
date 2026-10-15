@@ -25,7 +25,7 @@ function pushInstructions({ owner, repo, branch = "main" }) {
   };
 }
 
-async function provision({ input, github, render, ownerId: chosenOwner, saveProject, audit }) {
+async function provision({ input, github, render, ownerId: chosenOwner, saveProject, audit, precheck }) {
   const steps = [];
 
   /* 1. repository */
@@ -37,6 +37,10 @@ async function provision({ input, github, render, ownerId: chosenOwner, saveProj
     const found = await github.send("GET", "/repos/" + encodeURIComponent(target.owner) + "/" + encodeURIComponent(target.repo));
     if (!found.ok) return failure(steps, "github-repo", found.status === 404 ? "Repository not found, or this GitHub token has no access to it." : "Could not read that repository from GitHub.");
     owner = found.body.owner?.login || target.owner; repo = found.body.name || target.repo; branch = found.body.default_branch || "main";
+    if (precheck) {
+      const refused = await precheck({ github, owner, repo });
+      if (refused) return failure(steps, "github-repo", refused);
+    }
     skip(steps, "github-repo", "Using existing repository " + owner + "/" + repo);
   } else {
     const created = await github.send("POST", "/user/repos", { name: input.repoName, private: input.visibility === "private", description: input.description || undefined, auto_init: false });

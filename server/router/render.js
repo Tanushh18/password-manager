@@ -7,6 +7,8 @@ const { getProjectStatuses, runAllAutoLink, clearServicesCache } = require("../u
 const { runUsage, runAllUsage, readSettings, saveSettings } = require("../utils/usageIO");
 const { pushProjectEnv } = require("../utils/renderEnvPush");
 const { provision } = require("../utils/provision");
+const { createRepo, checkRepo, repoReadyError } = require("../utils/repoFlow");
+const { parseGithubRepo } = require("../utils/github");
 const { groupKey, mergeProjects } = require("../utils/projectMerge");
 const { syncAllProjects } = require("../utils/projectSyncAll");
 const { autoSyncProjects } = require("../utils/projectAutoSync");
@@ -850,8 +852,8 @@ router.get("/render/accounts/:accountId/owners", async (req, res) => {
 
 /* One-click create & deploy: GitHub repo + starter files + FREE Render service + env vars + linked Stashr project. */
 const provisionLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 10, message: "Too many create requests. Please wait a few minutes." });
-router.post("/render/provision", provisionLimiter, async (req, res) => {
-  const parsed = validateProvisionInput(req.body);
+const runProvision = async (req, res, body, { requireCode = false } = {}) => {
+  const parsed = validateProvisionInput(body);
   if (!parsed.value) return res.status(400).json({ ok: false, error: parsed.error });
   const input = parsed.value;
   try {
@@ -870,6 +872,7 @@ router.post("/render/provision", provisionLimiter, async (req, res) => {
       github: { login: githubAccount.login, send: (method, path, body) => githubSend(githubAccount.token, method, path, body) },
       render: { request: (path, options = {}) => renderRequest(renderAccount.apiKey, path, options) },
       ownerId: input.ownerId || undefined,
+      precheck: requireCode ? repoReadyError : undefined,
       saveProject: async (fields) => {
         const now = new Date();
         // Deploying a repo that already has a project adds the new service to that project instead of a duplicate.
@@ -891,6 +894,51 @@ router.post("/render/provision", provisionLimiter, async (req, res) => {
     return res.status(result.ok ? 201 : 422).json(result);
   } catch (error) {
     return res.status(500).json({ ok: false, error: "Could not create the project. Nothing was deleted; check GitHub and Render for anything already created." });
+  }
+};
+router.post("/render/provision", provisionLimiter, (req, res) => runProvision(req, res, req.body));
+
+/* Step 2 of the guided flow: deploy a repository that already has code. Public repositories with pushed code only. */
+router.post("/render/deploy", provisionLimiter, (req, res) => runProvision(req, res, { ...req.body, template: "existing", visibility: "public" }, { requireCode: true }));
+
+/* Steps for the guided flow: a connected GitHub account that is allowed to read (and optionally create repositories). */
+const githubFor = async (req, res, accountId, { write = false } = {}) => {
+  const dataKey = await req.rootUser.getDataKey();
+  const account = loadGithubAccounts(req.rootUser, dataKey).find((a) => a.id === String(accountId || ""));
+  if (!account) { res.status(400).json({ ok: false, error: "Choose a connected GitHub account." }); return null; }
+  const caps = await probeScopes(account.token);
+  if (!caps.valid) { res.status(400).json({ ok: false, error: "This GitHub token is no longer valid. Reconnect it in Projects → GitHub." }); return null; }
+  if (write && !caps.write) { res.status(400).json({ ok: false, error: "This GitHub connection is read-only. Add a classic token with the “repo” scope to create repositories." }); return null; }
+  return { login: account.login, send: (method, path, payload) => githubSend(account.token, method, path, payload) };
+};
+
+/* Step 1: create the (public) repository and return the commands to push code into it. */
+router.post("/render/repo/create", provisionLimiter, async (req, res) => {
+  const parsed = validateProvisionInput({ ...req.body, visibility: req.body?.visibility || "public" });
+  if (!parsed.value) return res.status(400).json({ ok: false, error: parsed.error });
+  try {
+    const github = await githubFor(req, res, parsed.value.githubAccountId, { write: true });
+    if (!github) return undefined;
+    const result = await createRepo({ input: parsed.value, github });
+    res.set("Cache-Control", "no-store");
+    return res.status(result.ok ? 201 : 422).json(result);
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: "Could not create the repository." });
+  }
+});
+
+/* Has any code been pushed to this repository yet? */
+router.post("/render/repo/check", async (req, res) => {
+  const target = parseGithubRepo(req.body?.repoUrl);
+  if (!target) return res.status(400).json({ ok: false, error: "That is not a GitHub repository URL." });
+  try {
+    const github = await githubFor(req, res, req.body?.githubAccountId);
+    if (!github) return undefined;
+    const result = await checkRepo({ github, owner: target.owner, repo: target.repo });
+    res.set("Cache-Control", "no-store");
+    return res.status(result.ok ? 200 : (result.status === 404 ? 404 : 422)).json(result);
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: "Could not check the repository." });
   }
 });
 
