@@ -26,6 +26,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
   const [tab, setTab] = useState("overview");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const fail = (e, fallback) => { const message = errorMessage(e, fallback); setError(message); return message; };
 
   // Health
@@ -292,14 +293,14 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
     const suspendedNow = service.suspended === "suspended";
     const ok = await askConfirm({ title: suspendedNow ? "Resume service?" : "Suspend service?", message: suspendedNow ? "Resume " + service.name + "? This may trigger a deployment or startup." : "Suspend " + service.name + "? It will become unavailable until resumed.", confirmLabel: suspendedNow ? "Resume" : "Suspend", danger: !suspendedNow });
     if (!ok) return;
-    setBusy(true);
+    setLifecycleBusy(true);
     try {
       if (suspendedNow) await resumeRenderService(ref.accountId, ref.id); else await suspendRenderService(ref.accountId, ref.id);
       toast.success((suspendedNow ? "Resume" : "Suspend") + " requested.");
       await onRefresh();
       void onAudit();
     } catch (e) { fail(e, "Could not change service state."); }
-    finally { setBusy(false); }
+    finally { setLifecycleBusy(false); }
   };
 
   const deleteService = async () => {
@@ -405,7 +406,11 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
         <button type="button" className="rd-btn rd-btn--primary" disabled={busy} onClick={() => void deploy(false)}>Deploy latest</button>
         <button type="button" className="rd-btn rd-btn--quiet" disabled={busy} onClick={() => void deploy(true)}>Deploy + clear cache</button>
         <button type="button" className="rd-btn rd-btn--quiet" disabled={busy || kind === "Cron job" || service.suspended === "suspended"} onClick={() => void restart()}>↻ Restart</button>
-        <button type="button" className="rd-btn rd-btn--quiet" disabled={busy} onClick={() => void toggleSuspend()}>{service.suspended === "suspended" ? "▶ Resume" : "Ⅱ Suspend"}</button>
+        <label className={"rd-service-toggle rd-service-toggle--detail" + (service.suspended === "suspended" ? " is-off" : "")} title={service.suspended === "suspended" ? "Turn on to resume this Render service" : "Turn off to suspend this Render service"}>
+          <input type="checkbox" role="switch" checked={service.suspended !== "suspended"} disabled={busy || lifecycleBusy} aria-label={(service.suspended === "suspended" ? "Resume " : "Suspend ") + service.name} onChange={() => void toggleSuspend()} />
+          <span className="rd-service-toggle__track" aria-hidden="true"><span className="rd-service-toggle__knob" /></span>
+          <span className="rd-service-toggle__label">{lifecycleBusy ? "Working…" : service.suspended === "suspended" ? "Suspended" : "Running"}</span>
+        </label>
         <button type="button" className="rd-btn rd-btn--danger-quiet rd-detail__delete" disabled={busy} onClick={() => void deleteService()}>🗑 Delete service…</button>
       </div>
 
