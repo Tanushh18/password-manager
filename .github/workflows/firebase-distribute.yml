@@ -38,7 +38,7 @@ jobs:
           echo "$CREDENTIALS" | python3 -c 'import json,sys; json.load(sys.stdin)' || { echo "::error::The service account secret is not valid JSON. Paste the whole file, from { to }"; exit 1; }
 
       - name: Download the built APK
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: android-preview-apk
           run-id: ${{ inputs.runId }}
