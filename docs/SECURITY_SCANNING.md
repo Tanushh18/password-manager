@@ -3,7 +3,7 @@
 ## Run a scan
 
 1. Open **Actions → Security Scan** in the GitHub repository.
-2. Select **Run workflow** on the default branch. Keep the full scan enabled.
+2. Select **Run workflow** on the default branch. The workflow runs its full configured scan automatically.
 3. Wait for dependency audit, CodeQL, Gitleaks, Trivy and (on PRs) dependency review to finish.
 4. Open each failed job and read the finding summary. Download the JSON/SARIF artifacts from the workflow run.
 5. Review the Code scanning / Security tab for uploaded SARIF findings, where repository settings support it.
