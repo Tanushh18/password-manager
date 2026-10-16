@@ -6,7 +6,7 @@ const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 
 test("security center reads live workflow and job status from GitHub", async () => {
   const page = await read("../src/Pages/Security/Security.jsx");
-  for (const phrase of ["Dependency vulnerabilities", "Static code analysis", "Secret leakage", "LIVE FROM GITHUB ACTIONS", "Recent runs", "Refresh status"]) {
+  for (const phrase of ["Dependency vulnerabilities", "Static code analysis", "Secret leakage", "Staging DAST", "LIVE FROM GITHUB ACTIONS", "Recent runs", "Refresh status"]) {
     assert.ok(page.toLowerCase().includes(phrase.toLowerCase()), `missing security center coverage: ${phrase}`);
   }
   assert.ok(page.includes("actions/workflows/security-scan.yml"));
@@ -24,7 +24,7 @@ test("security center route is protected by both vault authentication and admin 
 
 test("security workflow covers dependency, static, secret, filesystem and PR dependency scans", async () => {
   const workflow = await read("../../.github/workflows/security-scan.yml");
-  for (const phrase of ["workflow_dispatch", "schedule:", "npm audit --audit-level=high", "gitleaks/gitleaks-action", "github/codeql-action/init", "aquasecurity/trivy-action", "actions/dependency-review-action"]) {
+  for (const phrase of ["workflow_dispatch", "schedule:", "npm audit --audit-level=high", "gitleaks/gitleaks-action", "github/codeql-action/init", "aquasecurity/trivy-action", "actions/dependency-review-action", "zaproxy/action-baseline", "STAGING_BASE_URL"]) {
     assert.ok(workflow.includes(phrase), `missing workflow scan gate: ${phrase}`);
   }
   assert.ok(workflow.includes("directory: [server, client, mobile]"));
