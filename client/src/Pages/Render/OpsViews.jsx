@@ -120,6 +120,7 @@ export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, 
   const [groupLogs, setGroupLogs] = useState([]);
   const [logsBusy, setLogsBusy] = useState(false);
   const [logSearch, setLogSearch] = useState("");
+  const [simpleGroupLogs, setSimpleGroupLogs] = useState(true);
   const [drift, setDrift] = useState([]);
   const [driftBusy, setDriftBusy] = useState(false);
   useEffect(() => { setGroupLogs([]); setDrift([]); }, [group?.id]);
@@ -242,7 +243,17 @@ export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, 
     try { await persist({ groups: groups.filter((g) => g.id !== group.id) }); onSelectGroup(""); } catch { /* toast already shown */ }
   };
 
-  const errorLogs = groupLogs.filter(isErrorLog);
+  const errorLogs = groupLogs.filter(isErrorLog);  const displayGroupLogs = useMemo(() => {
+    if (!simpleGroupLogs) return groupLogs.map((entry) => ({ ...entry, repeatCount: 1 }));
+    const rows = [];
+    for (const entry of groupLogs) {
+      const normalized = String(entry.message || "(empty log entry)").replace(/\s+/g, " ").trim();
+      const previous = rows[rows.length - 1];
+      if (previous && previous.serviceId === entry.serviceId && previous.normalized === normalized) previous.repeatCount += 1;
+      else rows.push({ ...entry, normalized, repeatCount: 1 });
+    }
+    return rows;
+  }, [groupLogs, simpleGroupLogs]);
   const combined = snapshot?.combined || [];
   const latest = combined[combined.length - 1];
   const peak = peakOf(combined);
@@ -353,9 +364,9 @@ export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, 
 
         {extras.findings && (groupLogs.length > 0 || drift.length > 0) && <Section title="Findings" subtitle="Best-effort scan of the last hour of application logs and variable names. Missing data is not treated as healthy.">
           {groupLogs.length > 0 && <>
-            <div className="rd-toolrow"><strong>{errorLogs.length} error line(s) across {new Set(groupLogs.map((l) => l.serviceId)).size} service(s)</strong><span className="rd-spacer" /><input className="rd-field rd-field--inline" type="search" placeholder="Search all logs…" aria-label="Search group logs" value={logSearch} onChange={(e) => setLogSearch(e.target.value)} /></div>
+            <div className="rd-toolrow"><strong>{errorLogs.length} error line(s) across {new Set(groupLogs.map((l) => l.serviceId)).size} service(s)</strong><span className="rd-spacer" /><input className="rd-field rd-field--inline" type="search" placeholder="Search all logs…" aria-label="Search group logs" value={logSearch} onChange={(e) => setLogSearch(e.target.value)} /><button type="button" className={"rd-btn rd-btn--quiet" + (simpleGroupLogs ? " is-active" : "")} aria-pressed={simpleGroupLogs} onClick={() => setSimpleGroupLogs((v) => !v)}>{simpleGroupLogs ? "Simple view" : "Raw lines"}</button></div>
             <div className="rd-logs" role="log" aria-label="Group logs">
-              {groupLogs.filter((l) => !logSearch.trim() || (String(l.message || "") + " " + l.serviceName).toLowerCase().includes(logSearch.trim().toLowerCase())).map((l, i) => <div key={l.serviceId + "-" + (l.id || i)} className={"rd-log" + (isErrorLog(l) ? " is-error" : "")}><time>{l.timestamp ? new Date(l.timestamp).toLocaleTimeString() : "—"} · {l.serviceName}</time><code>{l.message || "(empty log entry)"}</code></div>)}
+              {displayGroupLogs.filter((l) => !logSearch.trim() || (String(l.message || "") + " " + l.serviceName).toLowerCase().includes(logSearch.trim().toLowerCase())).map((l, i) => <div key={l.serviceId + "-" + (l.id || i)} className={"rd-log" + (isErrorLog(l) ? " is-error" : "")}><time>{l.timestamp ? new Date(l.timestamp).toLocaleTimeString() : "—"} · {l.serviceName}</time><code>{l.message || "(empty log entry)"}</code>{l.repeatCount > 1 && <span className="rd-log__repeat">×{l.repeatCount}</span>}</div>)}
             </div>
           </>}
           {drift.length > 0 && <div className="rd-drift">{drift.map((item) => <article key={item.key}><strong>{item.name}</strong><small>{item.error || item.keys.length + " variable names"}</small>{item.missing.length > 0 ? <span className="rd-warn">Missing: {item.missing.join(", ")}</span> : !item.error && <span className="rd-ok">In sync</span>}</article>)}</div>}

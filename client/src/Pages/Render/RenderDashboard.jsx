@@ -18,7 +18,7 @@ import { serviceProjectIndex } from "../../lib/serviceProjects";
 
 const VIEWS = [["overview", "Overview"], ["services", "Services"], ["monitoring", "Monitoring"], ["incidents", "Incidents"], ["settings", "Settings"]];
 const PAGE_SIZE = 15;
-const REFRESH_MS = 30000;
+const REFRESH_MS = 15000;
 const FAV_KEY = "stashr_render_favorites";
 const viewFromHash = () => { const h = window.location.hash.replace("#", ""); return VIEWS.some(([id]) => id === h) ? h : "overview"; };
 
@@ -96,8 +96,8 @@ export default function RenderDashboard() {
 
   useEffect(() => { void loadAccounts(); void loadAudit(); void refreshOps(); }, [loadAccounts, loadAudit, refreshOps]);
   usePolling(() => loadAccounts({ quiet: true }), REFRESH_MS, auto);
-  usePolling(() => ops.refreshIncidents(), 60000, view === "incidents" || view === "overview");
-  usePolling(() => refreshOps(), 120000, view === "monitoring" || view === "settings");
+  // Keep inventory, monitoring history, incidents and scheduler status in sync while visible.
+  usePolling(() => ops.refreshLive(), 15000, auto);
   useEffect(() => { writeStored("stashr_render_auto_refresh", auto); }, [auto]);
   useEffect(() => { writeStored(FAV_KEY, favorites); }, [favorites]);
   useEffect(() => { writeStored("stashr_render_layout", layout); }, [layout]);
@@ -329,7 +329,7 @@ export default function RenderDashboard() {
           </div>
           <div className="rd-topbar__tools">
             <span className="rd-sync" role="status" aria-live="polite">{loading ? "Loading…" : lastSync ? "Synced " + timeAgo(lastSync.toISOString()) : "Not synced"}</span>
-            <label className="rd-check" title="Re-reads every connected Render account every 30 seconds while this tab is visible, so new, deleted and suspended services show up on their own"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> Live sync</label>
+            <label className="rd-check" title="Syncs services, monitoring history and incidents every 15 seconds while this tab is visible"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> Live sync</label>
             <button type="button" className="rd-btn rd-btn--quiet" onClick={() => void refreshAll()} disabled={refreshing || loading}>{refreshing ? "Refreshing…" : "↻ Refresh"}</button>
             <button type="button" className="rd-btn rd-btn--primary" onClick={() => { setConnectError(""); setConnectOpen(true); }}>＋ Connect account</button>
           </div>

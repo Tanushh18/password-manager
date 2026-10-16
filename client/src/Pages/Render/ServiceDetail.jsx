@@ -66,6 +66,8 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
   const [snapshotBusy, setSnapshotBusy] = useState(false);
   // Deploys
   const [deploys, setDeploys] = useState([]);
+  const [clockNow, setClockNow] = useState(Date.now());
+  const [simpleLogs, setSimpleLogs] = useState(true);
   const [deployBusy, setDeployBusy] = useState(false);
   // Database
   const [dbExports, setDbExports] = useState([]);
@@ -92,7 +94,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
   }, [ref.accountId, ref.id, alertsEnabled, service.name, onAudit]);
 
   useEffect(() => { if (tab === "overview") void runHealth(true); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
-  usePolling(() => runHealth(true), 60000, tab === "overview");
+  usePolling(() => runHealth(true), 30000, tab === "overview");
 
   const enableAlerts = async () => {
     if (!("Notification" in window)) { toast.error("Browser notifications are not supported here."); return; }
@@ -138,11 +140,24 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
   }, [ref.accountId, ref.id, service.ownerId, logType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   usePolling(() => loadLogs(logType, true), 15000, tab === "logs" && follow);
+  usePolling(() => loadMetrics(metric, range), 30000, tab === "metrics");
 
   const visibleLogs = useMemo(() => {
     const needle = logSearch.trim().toLowerCase();
     return logs.filter((l) => (!needle || String(l.message || "").toLowerCase().includes(needle)) && (!errorsOnly || isErrorLog(l)));
   }, [logs, logSearch, errorsOnly]);
+  // Simple mode groups adjacent duplicate lines without hiding unique errors.
+  const displayLogs = useMemo(() => {
+    if (!simpleLogs) return visibleLogs.map((entry) => ({ ...entry, repeatCount: 1 }));
+    const rows = [];
+    for (const entry of visibleLogs) {
+      const normalized = String(entry.message || "(empty log entry)").replace(/\s+/g, " ").trim();
+      const previous = rows[rows.length - 1];
+      if (previous && previous.normalized === normalized) previous.repeatCount += 1;
+      else rows.push({ ...entry, normalized, repeatCount: 1 });
+    }
+    return rows;
+  }, [visibleLogs, simpleLogs]);
 
   const copyLogs = async () => {
     try {
@@ -269,6 +284,21 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
     catch (e) { fail(e, "Could not load deployment history."); }
     finally { setDeployBusy(false); }
   }, [ref.accountId, ref.id]);
+  const activeDeploys = deploys.filter((d) => IN_PROGRESS.includes(String(d.status || "").toLowerCase()));
+  const typicalDeployMs = useMemo(() => {
+    const durations = deploys.filter((d) => d.status === "live" && d.createdAt && (d.finishedAt || d.updatedAt))
+      .map((d) => Date.parse(d.finishedAt || d.updatedAt) - Date.parse(d.createdAt))
+      .filter((ms) => Number.isFinite(ms) && ms >= 5000 && ms <= 2 * 60 * 60 * 1000)
+      .sort((a, b) => a - b);
+    return durations.length ? durations[Math.floor(durations.length / 2)] : null;
+  }, [deploys]);
+  const countdown = (ms) => {
+    const seconds = Math.max(0, Math.ceil(ms / 1000));
+    return Math.floor(seconds / 60) + "m " + String(seconds % 60).padStart(2, "0") + "s";
+  };
+  usePolling(() => setClockNow(Date.now()), 1000, tab === "deploys" && activeDeploys.length > 0);
+  usePolling(() => { void loadDeploys(); }, 5000, tab === "deploys" && activeDeploys.length > 0);
+  usePolling(() => { if (!dirty.length) void loadEnv(); }, 30000, tab === "env" && dirty.length === 0);
 
   const deploy = async (clearCache) => {
     const ok = await askConfirm({ title: clearCache ? "Deploy with cache cleared?" : "Deploy latest commit?", message: (clearCache ? "Trigger a new deploy of " : "Trigger a deploy of the latest commit for ") + service.name + (clearCache ? " with the build cache cleared." : "."), confirmLabel: "Deploy" });
@@ -496,6 +526,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
           <div className="rd-toolrow">
             <input className="rd-field" type="search" placeholder="Filter log messages…" aria-label="Filter log messages" value={logSearch} onChange={(e) => setLogSearch(e.target.value)} />
             <label className="rd-check"><input type="checkbox" checked={errorsOnly} onChange={(e) => setErrorsOnly(e.target.checked)} /> Errors only</label>
+            <button type="button" className={"rd-btn rd-btn--quiet" + (simpleLogs ? " is-active" : "")} aria-pressed={simpleLogs} onClick={() => setSimpleLogs((v) => !v)}>{simpleLogs ? "Simple view" : "Raw lines"}</button>
             <button type="button" className="rd-btn rd-btn--quiet" disabled={!visibleLogs.length} onClick={() => void copyLogs()}>Copy</button>
             <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setDiagnosis(diagnoseLogText(logs).join("\n\n"))}>✦ Diagnose</button>
             <button type="button" className="rd-btn rd-btn--quiet" disabled={aiBusy || !logs.length || !opsConfig?.aiDiagnosisAvailable} title={opsConfig?.aiDiagnosisAvailable ? "Sends redacted log text to Groq after confirmation." : "Set GROQ_API_KEY on the Stashr API to enable AI diagnosis."} onClick={() => void diagnoseWithAI()}>{aiBusy ? "Asking Groq…" : "AI diagnosis ↗"}</button>
@@ -503,7 +534,16 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
           {diagnosis && <pre className="rd-diagnosis" aria-live="polite">{diagnosis}</pre>}
           {logBusy && !logs.length ? <Skeleton lines={6} /> : (
             <div className="rd-logs" role="log" aria-label="Service logs">
-              {visibleLogs.map((l, i) => <div className={"rd-log" + (isErrorLog(l) ? " is-error" : "")} key={l.id || i}><time dateTime={l.timestamp}>{l.timestamp ? new Date(l.timestamp).toLocaleTimeString() : "—"}</time><code>{l.message || "(empty log entry)"}</code></div>)}
+              {displayLogs.map((l, i) => {
+                const message = String(l.message || "(empty log entry)");
+                const severity = isErrorLog(l) ? "ERROR" : /\bwarn(?:ing)?\b/i.test(message) ? "WARN" : /\bdebug\b/i.test(message) ? "DEBUG" : "INFO";
+                return <div className={"rd-log" + (isErrorLog(l) ? " is-error" : "")} key={l.id || i}>
+                  <time dateTime={l.timestamp}>{l.timestamp ? new Date(l.timestamp).toLocaleTimeString() : "—"}</time>
+                  <span className={"rd-log__severity is-" + severity.toLowerCase()}>{severity}</span>
+                  <code>{message}</code>
+                  {l.repeatCount > 1 && <span className="rd-log__repeat">×{l.repeatCount}</span>}
+                </div>;
+              })}
               {!visibleLogs.length && <Empty icon="≡" title={logs.length ? "No matching log lines" : "No logs returned"}>{logs.length ? "Adjust the filter or turn off “Errors only”." : "Render returned nothing for the last hour for this log type."}</Empty>}
             </div>
           )}
@@ -554,6 +594,11 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
                   <div>
                     <strong>{d.commit?.message?.split("\n")[0] || d.id}</strong>
                     <small className="rd-mono">{d.commit?.id ? d.commit.id.slice(0, 8) + " · " : ""}{d.trigger || ""}</small>
+                    {IN_PROGRESS.includes(String(d.status || "").toLowerCase()) && d.createdAt && <small className="rd-deploy__timer" aria-live="polite">
+                      Elapsed {countdown(clockNow - Date.parse(d.createdAt))}
+                      {typicalDeployMs != null ? (typicalDeployMs > clockNow - Date.parse(d.createdAt) ? " · estimated ~" + countdown(typicalDeployMs - (clockNow - Date.parse(d.createdAt))) + " remaining" : " · past typical duration") : " · ETA available after a completed deployment"}
+                      <span>Estimate uses this service’s previous successful deploys.</span>
+                    </small>}
                     <div className="rd-deploy__actions">
                       {IN_PROGRESS.includes(d.status) && <button type="button" className="rd-btn rd-btn--quiet" disabled={busy} onClick={() => void cancelDeploy(d)}>Cancel</button>}
                       {d.status === "live" && <button type="button" className="rd-btn rd-btn--quiet" disabled={busy} onClick={() => void rollback(d)}>Roll back to this</button>}

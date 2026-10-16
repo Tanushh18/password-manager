@@ -514,3 +514,15 @@
 .rd-detail__service-url strong { overflow-wrap: anywhere; font-size: .84rem; font-weight: 600; }
 .rd-detail__service-url:hover strong { text-decoration: underline; }
 
+
+
+/* Simplified logs and deployment ETA/countdown. */
+.rd-log { grid-template-columns: minmax(70px, auto) 3.8rem minmax(0, 1fr) auto; align-items: start; }
+.rd-log__severity { display: inline-flex; justify-content: center; width: fit-content; min-width: 2.8rem; border-radius: 999px; padding: .08rem .35rem; font: 700 .61rem/1.5 var(--font-mono); color: var(--text-muted); background: var(--tint); }
+.rd-log__severity.is-error { color: var(--danger); background: rgba(var(--danger-rgb), .12); }
+.rd-log__severity.is-warn { color: var(--rd-warn); background: rgba(var(--rd-warn-rgb), .14); }
+.rd-log__severity.is-debug { opacity: .7; }
+.rd-log__repeat { justify-self: end; white-space: nowrap; border-radius: 999px; padding: .08rem .35rem; background: var(--tint); color: var(--text-muted); font-size: .65rem; font-weight: 700; }
+.rd-deploy__timer { display: grid; gap: .15rem; margin-top: .35rem; color: var(--accent) !important; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rd-deploy__timer span { color: var(--text-faint); font-weight: 500; font-size: .65rem; }
+@media (max-width: 620px) { .rd-log { grid-template-columns: 1fr auto; gap: .2rem .5rem; } .rd-log time { grid-column: 1 / -1; } .rd-log code { grid-column: 1 / -1; } }

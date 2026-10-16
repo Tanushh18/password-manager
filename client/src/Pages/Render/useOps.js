@@ -60,6 +60,17 @@ export function useOps() {
       setIncidents(Array.isArray(result.incidents) ? result.incidents : []);
     } catch { /* the next poll retries */ }
   }, []);
+  // Quiet realtime refresh: sync monitoring samples, incidents and scheduler status without replacing unsaved settings.
+  const refreshLive = useCallback(async () => {
+    try {
+      const [historyResult, incidentResult, statusResult] = await Promise.all([
+        getRenderOpsHistory(200), getRenderOpsIncidents(200), getRenderOpsStatus()
+      ]);
+      setHistory(Array.isArray(historyResult.history) ? historyResult.history : []);
+      setIncidents(Array.isArray(incidentResult.incidents) ? incidentResult.incidents : []);
+      setStatus(statusResult);
+    } catch { /* keep last good snapshot and retry next tick */ }
+  }, []);
 
   const resolveIncidents = useCallback(async ({ ids, all, verified, reason } = {}) => {
     try {
@@ -142,6 +153,6 @@ export function useOps() {
   return {
     config, groups, monitor, setMonitor, telegramBotToken, setTelegramBotToken, telegramChatId, setTelegramChatId,
     history, incidents, openIncidents: open, status, loading, saving, running, loadError,
-    refresh, refreshIncidents, resolveIncidents, clearHistory, persist, sampleNow, testTelegram, clearTelegram, exportReport
+    refresh, refreshLive, refreshIncidents, resolveIncidents, clearHistory, persist, sampleNow, testTelegram, clearTelegram, exportReport
   };
 }
