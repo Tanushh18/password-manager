@@ -143,7 +143,7 @@ jobs:
         run: |
           node -e 'const u = new URL(process.env.STAGING_BASE_URL); if (u.protocol !== "https:" || u.username || u.password) process.exit(1); console.log("Validated HTTPS staging target:", u.origin)'
       - name: Run OWASP ZAP baseline scan (passive checks only)
-        uses: zaproxy/action-baseline@v0.14.0
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: ${{ vars.STAGING_BASE_URL }}
           fail_action: true
