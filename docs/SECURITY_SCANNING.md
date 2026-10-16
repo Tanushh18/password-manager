@@ -17,7 +17,7 @@ The workflow also runs on push/pull requests and weekly. It is a static/dependen
 - CodeQL extended JavaScript/TypeScript static analysis.
 - Gitleaks secret detection.
 - Trivy library/OS vulnerability, secret and configuration misconfiguration scan.
-- Dependency Review for pull requests; blocks newly introduced high-severity dependencies.
+- Optional pull-request Dependency Review blocks newly introduced high-severity dependencies when GitHub Dependency Graph is enabled and repository Actions variable `ENABLE_DEPENDENCY_REVIEW=true`. Until then, full `npm audit` runs on all three package roots.
 
 ## Response and handling
 
