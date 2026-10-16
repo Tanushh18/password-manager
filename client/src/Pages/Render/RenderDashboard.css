@@ -526,3 +526,45 @@
 .rd-deploy__timer { display: grid; gap: .15rem; margin-top: .35rem; color: var(--accent) !important; font-weight: 700; font-variant-numeric: tabular-nums; }
 .rd-deploy__timer span { color: var(--text-faint); font-weight: 500; font-size: .65rem; }
 @media (max-width: 620px) { .rd-log { grid-template-columns: 1fr auto; gap: .2rem .5rem; } .rd-log time { grid-column: 1 / -1; } .rd-log code { grid-column: 1 / -1; } }
+
+/* ═════════ Cyber mode: the whole control center in the Robot HQ look (always dark, neon accents) ═════════ */
+.rd-page--cyber {
+  --bg: #070a12; --bg-rgb: 7, 10, 18;
+  --surface: rgba(16, 22, 38, 0.86); --surface-2: rgba(22, 30, 50, 0.9);
+  --text: #d9f5ea; --text-muted: #8aa3b5; --text-faint: #5f7385;
+  --heading: #f1fff8; --heading-2: #d9f5ea;
+  --line: rgba(122, 255, 196, 0.14); --line-strong: rgba(122, 255, 196, 0.28);
+  --accent: #39ff9c; --accent-rgb: 57, 255, 156; --accent-deep: #1fd47d;
+  --accent-3: #ffd447; --accent-3-rgb: 255, 212, 71;
+  --danger: #ff4d6d; --danger-rgb: 255, 77, 109; --danger-deep: #e0304f;
+  --ok: #39ff9c;
+  background:
+    radial-gradient(1000px 420px at 0% -10%, rgba(200, 107, 255, 0.16), transparent 60%),
+    radial-gradient(800px 420px at 100% 0%, rgba(57, 255, 156, 0.12), transparent 60%),
+    linear-gradient(rgba(122, 255, 196, 0.05) 1px, transparent 1px) 0 0 / 36px 36px,
+    linear-gradient(90deg, rgba(122, 255, 196, 0.05) 1px, transparent 1px) 0 0 / 36px 36px,
+    #070a12;
+  color: var(--text);
+}
+.rd-page--cyber .rd-topbar { background: rgba(5, 8, 16, 0.88); border-bottom-color: rgba(57, 255, 156, 0.25); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35); }
+.rd-page--cyber .rd-topbar__title h1 { color: #f1fff8; text-shadow: 0 0 18px rgba(57, 255, 156, 0.35); }
+.rd-page--cyber .rd-eyebrow { font-family: ui-monospace, Menlo, Consolas, monospace; text-shadow: 0 0 10px rgba(57, 255, 156, 0.6); }
+.rd-page--cyber .rd-nav button { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.02em; }
+.rd-page--cyber .rd-nav button.is-active { text-shadow: 0 0 10px rgba(57, 255, 156, 0.7); box-shadow: inset 0 -2px 0 var(--accent), 0 6px 16px -10px var(--accent); }
+.rd-page--cyber .rd-btn { background: rgba(255, 255, 255, 0.04); }
+.rd-page--cyber .rd-btn--primary { background: linear-gradient(135deg, #39ff9c, #1fd4c8); border-color: transparent; color: #04140c; box-shadow: 0 0 18px rgba(57, 255, 156, 0.35); }
+.rd-page--cyber .rd-btn--primary:hover:not(:disabled) { color: #04140c; filter: brightness(1.08); }
+.rd-page--cyber .rd-field, .rd-page--cyber select { background: rgba(3, 6, 12, 0.85); }
+/* Every card / panel gets the neon frame */
+.rd-page--cyber .rd-card, .rd-page--cyber .rd-kpi, .rd-page--cyber .rd-board__app, .rd-page--cyber .rd-tablewrap {
+  background: var(--surface); border-color: var(--line-strong);
+  box-shadow: inset 0 0 0 1px rgba(57, 255, 156, 0.04), 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+.rd-page--cyber .rd-kpi { position: relative; overflow: hidden; }
+.rd-page--cyber .rd-kpi::after { content: ""; position: absolute; inset: auto 0 0 0; height: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.6; }
+.rd-page--cyber .rd-kpi strong, .rd-page--cyber .rd-kpi b { font-family: ui-monospace, Menlo, Consolas, monospace; }
+.rd-page--cyber table th { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.06em; color: var(--text-muted); }
+.rd-page--cyber .rd-badge { background: rgba(57, 255, 156, 0.16); box-shadow: 0 0 8px rgba(57, 255, 156, 0.25); }
+.rd-page--cyber .rd-badge--danger { background: rgba(255, 77, 109, 0.2); box-shadow: 0 0 8px rgba(255, 77, 109, 0.35); }
+.rd-page--cyber ::selection { background: rgba(57, 255, 156, 0.3); }
+.rd-page--cyber .rd-dialog { background: #0c1220; border-color: rgba(57, 255, 156, 0.35); box-shadow: 0 0 0 1px rgba(57, 255, 156, 0.08), 0 30px 80px rgba(0, 0, 0, 0.6); }

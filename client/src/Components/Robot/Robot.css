@@ -2,62 +2,124 @@
 .bot {
   --bot-main: #39ff9c;
   --bot-glow: rgba(57, 255, 156, 0.45);
-  --bot-face: #06140d;
+  --bot-face: #04140c;
+  --bot-metal-hi: #2b3550;
+  --bot-metal-lo: #0d1220;
   position: relative;
   flex: none;
   color: var(--bot-main);
   filter: drop-shadow(0 0 10px var(--bot-glow));
 }
-.bot--warm { --bot-main: #ffd447; --bot-glow: rgba(255, 212, 71, 0.45); }
-.bot--sweaty { --bot-main: #ffd447; --bot-glow: rgba(255, 212, 71, 0.45); }
+/* One colour per emotion */
+.bot--sweaty, .bot--warm { --bot-main: #ffd447; --bot-glow: rgba(255, 212, 71, 0.45); }
 .bot--fire { --bot-main: #ff4d6d; --bot-glow: rgba(255, 77, 109, 0.6); }
-.bot--dead { --bot-main: #8a8f98; --bot-glow: rgba(0, 0, 0, 0); }
+.bot--angry { --bot-main: #ff6a3d; --bot-glow: rgba(255, 106, 61, 0.6); }
+.bot--dead { --bot-main: #8a8f98; --bot-glow: rgba(0, 0, 0, 0); --bot-metal-hi: #262a33; }
 .bot--sleeping { --bot-main: #7f8cff; --bot-glow: rgba(127, 140, 255, 0.35); }
 .bot--transforming { --bot-main: #c86bff; --bot-glow: rgba(200, 107, 255, 0.65); }
 .bot--confused { --bot-main: #5ad1ff; --bot-glow: rgba(90, 209, 255, 0.35); }
+.bot--celebrating { --bot-main: #b8ff3d; --bot-glow: rgba(184, 255, 61, 0.55); }
+.bot--starstruck { --bot-main: #7cf8ff; --bot-glow: rgba(124, 248, 255, 0.6); }
+.bot--bored { --bot-main: #93a4b8; --bot-glow: rgba(147, 164, 184, 0.25); }
+.bot--tired { --bot-main: #b9a3ff; --bot-glow: rgba(185, 163, 255, 0.35); }
+.bot--scared { --bot-main: #6fb7ff; --bot-glow: rgba(111, 183, 255, 0.45); }
+.bot--dizzy { --bot-main: #ff7ad9; --bot-glow: rgba(255, 122, 217, 0.5); }
 
 .bot-svg { display: block; overflow: visible; }
-.bot-head, .bot-torso, .bot-ear, .bot-arm { fill: #121826; stroke: var(--bot-main); stroke-width: 2.5; }
-.bot-visor { fill: var(--bot-main); opacity: 0.92; }
+.bot-metal__hi { stop-color: var(--bot-metal-hi); }
+.bot-metal__lo { stop-color: var(--bot-metal-lo); }
+.bot-visor__hi { stop-color: var(--bot-main); stop-opacity: 1; }
+.bot-visor__lo { stop-color: var(--bot-main); stop-opacity: 0.62; }
+.bot-shell, .bot-arm { stroke: var(--bot-main); stroke-width: 2.2; }
+.bot-seam { stroke: var(--bot-main); stroke-width: 1; opacity: 0.35; fill: none; }
+.bot-plate { fill: rgba(0, 0, 0, 0.35); stroke: var(--bot-main); stroke-width: 1; stroke-opacity: 0.5; }
+.bot-neck { fill: var(--bot-metal-lo); stroke: var(--bot-main); stroke-width: 1.5; }
 .bot-eyes { color: var(--bot-face); }
-.bot-line { stroke: var(--bot-main); stroke-width: 2.5; }
+.bot-eye__glow { fill: #fff; opacity: 0.18; }
+.bot-eye__shine { fill: #fff; opacity: 0.75; }
+.bot-line { stroke: var(--bot-main); stroke-width: 2.4; }
 .bot-light { fill: var(--bot-main); }
 .bot-meter { fill: rgba(255, 255, 255, 0.08); }
 .bot-meter__fill { fill: var(--bot-main); }
+.bot-flame { fill: var(--bot-main); opacity: 0.85; }
 
-.bot-svg, .bot-body, .bot-arm, .bot-light, .bot-eye, .bot-fx { transform-box: fill-box; transform-origin: center; }
+.bot-svg, .bot-body, .bot-arm, .bot-light, .bot-eye, .bot-fx, .bot-flame, .bot-yawn { transform-box: fill-box; transform-origin: center; }
 .bot-svg { transform-origin: 50% 100%; }
+.bot-arm--l { transform-origin: 100% 50%; }
+.bot-arm--r { transform-origin: 0% 50%; }
+.bot-flame { transform-origin: 50% 0%; animation: bot-flame-jet 0.35s ease-in-out infinite alternate; }
 
-/* chill: a slow bob and a blinking antenna */
+/* chill: slow hover and a blinking antenna */
 .bot--chill .bot-svg { animation: bot-bob 3.2s ease-in-out infinite; }
-.bot--chill .bot-light { animation: bot-blink 2.4s steps(2, start) infinite; }
+.bot--chill .bot-antenna { animation: bot-blink 2.4s steps(2, start) infinite; }
 .bot--chill .bot-eye { animation: bot-wink 5s ease-in-out infinite; }
-/* sweaty: faster bob, a falling drop */
+/* sweaty: faster bob, wiping its brow */
 .bot--sweaty .bot-svg { animation: bot-bob 1.4s ease-in-out infinite; }
-.bot--sweaty .bot-arm--r { animation: bot-wave 0.9s ease-in-out infinite; transform-origin: 0% 50%; }
-/* fire: shaking robot, flames on top */
+.bot--sweaty .bot-arm--r { animation: bot-wave 0.9s ease-in-out infinite; }
+/* fire: shaking, arms flailing */
 .bot--fire .bot-svg { animation: bot-shake 0.28s linear infinite; }
 .bot--fire .bot-arm { animation: bot-panic 0.3s ease-in-out infinite alternate; }
+.bot--fire .bot-flame { animation-duration: 0.15s; }
+/* angry: stomping */
+.bot--angry .bot-svg { animation: bot-stomp 0.6s ease-in-out infinite; }
+.bot--angry .bot-arm { animation: bot-fist 0.6s ease-in-out infinite; }
 /* dead: tipped over, no motion */
 .bot--dead .bot-svg { transform: rotate(-14deg) translateY(6px); }
 .bot--dead .bot-visor { opacity: 0.45; }
 /* sleeping: breathing */
 .bot--sleeping .bot-svg { animation: bot-breathe 4s ease-in-out infinite; }
 .bot--sleeping .bot-visor { opacity: 0.5; }
-/* transforming: a glow pulse and a spinning ring */
+/* transforming: glow pulse, arms working */
 .bot--transforming .bot-svg { animation: bot-pulse 1s ease-in-out infinite; }
-.bot--transforming .bot-arm--l { animation: bot-wave 0.6s ease-in-out infinite; transform-origin: 100% 50%; }
-.bot--transforming .bot-arm--r { animation: bot-wave 0.6s ease-in-out infinite reverse; transform-origin: 0% 50%; }
+.bot--transforming .bot-arm--l { animation: bot-wave 0.6s ease-in-out infinite; }
+.bot--transforming .bot-arm--r { animation: bot-wave 0.6s ease-in-out infinite reverse; }
 /* confused: tilting head */
 .bot--confused .bot-svg { animation: bot-tilt 3s ease-in-out infinite; }
+/* celebrating: dancing with both arms up */
+.bot--celebrating .bot-svg { animation: bot-dance 0.8s ease-in-out infinite; }
+.bot--celebrating .bot-arm { animation: bot-cheer 0.4s ease-in-out infinite alternate; }
+/* starstruck: happy bounce, twinkling eyes */
+.bot--starstruck .bot-svg { animation: bot-bounce 1.2s cubic-bezier(.3, 1.6, .5, 1) infinite; }
+.bot--starstruck .bot-eye--star { animation: bot-twinkle 1.2s ease-in-out infinite; }
+/* bored: slow sway */
+.bot--bored .bot-svg { animation: bot-tilt 6s ease-in-out infinite; }
+.bot--bored .bot-flame { animation-duration: 1.4s; opacity: 0.4; }
+/* tired: sagging, yawning */
+.bot--tired .bot-svg { animation: bot-sag 3.5s ease-in-out infinite; }
+.bot--tired .bot-yawn { animation: bot-yawn 3.5s ease-in-out infinite; }
+.bot--tired .bot-flame { animation-duration: 1s; opacity: 0.5; }
+/* scared: shivering, darting pupils */
+.bot--scared .bot-svg { animation: bot-shiver 0.12s linear infinite; }
+.bot--scared .bot-eye--dart { animation: bot-dart 1.6s steps(1) infinite; }
+/* dizzy: wobbling, spinning eyes */
+.bot--dizzy .bot-svg { animation: bot-wobble 2s ease-in-out infinite; }
+.bot--dizzy .bot-eye--spin { animation: bot-spin 1.4s linear infinite; }
 
+/* Effects around the robot */
 .bot-fx { position: absolute; left: 50%; pointer-events: none; line-height: 1; }
-.bot-fx--fire { top: -18%; font-size: 28px; transform: translateX(-50%); animation: bot-flame 0.5s ease-in-out infinite alternate; }
-.bot-fx--zzz { top: -4%; left: 72%; font: 700 16px/1 ui-monospace, monospace; color: var(--bot-main); animation: bot-float 2.6s ease-in-out infinite; }
+.bot-fx--fire { top: -16%; font-size: 26px; transform: translateX(-50%); animation: bot-flame 0.5s ease-in-out infinite alternate; }
+.bot-fx--zzz { top: -2%; left: 72%; font: 700 16px/1 ui-monospace, monospace; color: var(--bot-main); animation: bot-float 2.6s ease-in-out infinite; }
 .bot-fx--zzz small { font-size: 0.75em; margin-left: 1px; }
-.bot-fx--drop { top: 14%; left: 82%; font-size: 14px; animation: bot-drop 1.4s ease-in infinite; }
-.bot-fx--q { top: -6%; left: 74%; font: 800 20px/1 system-ui, sans-serif; color: var(--bot-main); animation: bot-float 2.2s ease-in-out infinite; }
-.bot-fx--ring { top: 2%; left: 0; width: 100%; height: 100%; border-radius: 50%; border: 2px dashed var(--bot-main); opacity: 0.7; animation: bot-spin 2.4s linear infinite; }
+.bot-fx--small { font-size: 12px; }
+.bot-fx--drop { top: 12%; left: 84%; font-size: 14px; animation: bot-drop 1.4s ease-in infinite; }
+.bot-fx--q { top: -4%; left: 74%; font: 800 20px/1 system-ui, sans-serif; color: var(--bot-main); animation: bot-float 2.2s ease-in-out infinite; }
+.bot-fx--alert { animation-duration: 0.7s; }
+.bot-fx--ring { top: 0; left: 0; width: 100%; height: 76%; border-radius: 50%; border: 2px dashed var(--bot-main); opacity: 0.7; animation: bot-spin 2.4s linear infinite; }
+.bot-fx--party { top: -10%; left: 76%; font-size: 20px; animation: bot-pop 0.8s ease-in-out infinite alternate; }
+.bot-fx--spark { top: -8%; left: 18%; font-size: 18px; animation: bot-twinkle 1.4s ease-in-out infinite; }
+.bot-fx--dots { top: 0; left: 74%; font: 800 20px/1 system-ui, sans-serif; color: var(--bot-main); animation: bot-blink 2s steps(3, start) infinite; }
+.bot-fx--anger { top: -4%; left: 76%; font-size: 18px; animation: bot-pop 0.35s ease-in-out infinite alternate; }
+.bot-fx--dizzy { top: -12%; left: 50%; font-size: 18px; animation: bot-orbit 1.8s linear infinite; }
+
+/* Visor scan beam, HUD ticks and a chest core that beats with the load */
+.bot-scan { fill: rgba(255, 255, 255, 0.55); mix-blend-mode: overlay; transform-box: view-box; animation: bot-scan 2.6s linear infinite; }
+.bot--fire .bot-scan, .bot--angry .bot-scan { animation-duration: 0.9s; }
+.bot--transforming .bot-scan { animation-duration: 0.6s; }
+.bot--bored .bot-scan, .bot--tired .bot-scan { animation-duration: 5s; }
+.bot-hud line { stroke: var(--bot-face); stroke-width: 1.5; opacity: 0.45; }
+.bot-core { animation: bot-beat var(--bot-beat, 2s) ease-in-out infinite; }
+.bot-core__ring { fill: none; stroke: var(--bot-main); stroke-width: 1.2; opacity: 0; transform-box: fill-box; transform-origin: center; animation: bot-ring var(--bot-beat, 2s) ease-out infinite; }
+.bot--dead .bot-core, .bot--dead .bot-core__ring, .bot--sleeping .bot-core__ring { animation: none; opacity: 0.25; }
 
 @keyframes bot-bob { 50% { transform: translateY(-5px); } }
 @keyframes bot-blink { 50% { opacity: 0.25; } }
@@ -65,13 +127,38 @@
 @keyframes bot-wave { 50% { transform: rotate(-28deg); } }
 @keyframes bot-shake { 25% { transform: translate(-2px, 1px) rotate(-2deg); } 75% { transform: translate(2px, -1px) rotate(2deg); } }
 @keyframes bot-panic { to { transform: translateY(-9px) rotate(-30deg); } }
+@keyframes bot-stomp { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-4px) rotate(-3deg); } 60% { transform: translateY(1px) rotate(3deg); } }
+@keyframes bot-fist { 50% { transform: translateY(-6px); } }
 @keyframes bot-breathe { 50% { transform: scale(0.97) translateY(2px); } }
 @keyframes bot-pulse { 50% { transform: scale(1.05); opacity: 0.85; } }
 @keyframes bot-tilt { 25% { transform: rotate(-6deg); } 75% { transform: rotate(6deg); } }
+@keyframes bot-dance { 25% { transform: rotate(-8deg) translateY(-3px); } 75% { transform: rotate(8deg) translateY(-3px); } }
+@keyframes bot-cheer { to { transform: translateY(-12px) rotate(-40deg); } }
+@keyframes bot-bounce { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-9px); } }
+@keyframes bot-twinkle { 50% { transform: scale(1.25) rotate(12deg); opacity: 0.7; } }
+@keyframes bot-sag { 50% { transform: translateY(3px) scaleY(0.97); } }
+@keyframes bot-yawn { 0%, 60%, 100% { transform: scale(0.5); } 75% { transform: scale(1.15); } }
+@keyframes bot-shiver { 25% { transform: translateX(-1px); } 75% { transform: translateX(1px); } }
+@keyframes bot-dart { 0% { transform: translateX(-2px); } 50% { transform: translateX(2px); } }
+@keyframes bot-wobble { 25% { transform: rotate(-9deg) translateX(-2px); } 75% { transform: rotate(9deg) translateX(2px); } }
 @keyframes bot-flame { to { transform: translateX(-50%) scale(1.18) translateY(-3px); } }
+@keyframes bot-flame-jet { from { transform: scaleY(0.75); opacity: 0.6; } to { transform: scaleY(1.15); opacity: 0.95; } }
 @keyframes bot-float { 50% { transform: translateY(-8px); opacity: 0.6; } }
 @keyframes bot-drop { from { transform: translateY(0); opacity: 1; } to { transform: translateY(26px); opacity: 0; } }
 @keyframes bot-spin { to { transform: rotate(360deg); } }
+@keyframes bot-pop { to { transform: scale(1.25) rotate(-10deg); } }
+@keyframes bot-orbit { from { transform: translateX(-50%) rotate(0deg) translateX(18px) rotate(0deg); } to { transform: translateX(-50%) rotate(360deg) translateX(18px) rotate(-360deg); } }
+@keyframes bot-scan { from { transform: translateY(-8px); } to { transform: translateY(44px); } }
+@keyframes bot-beat { 50% { opacity: 0.35; } }
+@keyframes bot-ring { 0% { transform: scale(0.6); opacity: 0.8; } 100% { transform: scale(1.9); opacity: 0; } }
+
+/* Live numbers on the body */
+.bot-belly { transform-box: fill-box; transform-origin: 50% 0%; transform: scaleX(var(--bot-belly, 1)); transition: transform 0.8s ease; }
+.bot-heat { fill: #ff3b3b; opacity: calc(var(--bot-heat, 0) * 0.5); mix-blend-mode: screen; pointer-events: none; transition: opacity 0.8s ease; }
+.bot-jet { transform-box: fill-box; transform-origin: 50% 0%; transform: scaleY(var(--bot-jet, 1)); transition: transform 0.8s ease; }
+.bot-meter__fill--mem { fill: #c86bff; }
+.bot.is-hot { filter: drop-shadow(0 0 14px rgba(255, 80, 60, 0.55)); }
+.bot-fx--steam { top: -6%; left: 26%; font-size: 15px; color: #ffb199; animation: bot-float 1.6s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   .bot *, .bot-fx { animation: none !important; }

@@ -4,7 +4,7 @@ import { connectRenderAccount, deleteRenderAccount, bulkDeleteRenderServices, de
 import { Modal, StatePill, Skeleton, Empty, Kpi, Section, FleetBar, useConfirm } from "./RenderUi";
 import ServiceDetail from "./ServiceDetail";
 import ServerBoard from "./ServerBoard";
-import RobotArmy from "./RobotArmy";
+import RobotArmy, { RobotSquad } from "./RobotArmy";
 import { MonitoringView, IncidentsView, AlertPolicyView } from "./OpsViews";
 import { usePolling } from "./renderHooks";
 import { useOps } from "./useOps";
@@ -17,7 +17,7 @@ import { Link } from "react-router-dom";
 import { useVault } from "../../state/vault";
 import { serviceProjectIndex } from "../../lib/serviceProjects";
 
-const VIEWS = [["overview", "Overview"], ["services", "Servers"], ["monitoring", "Monitoring"], ["incidents", "Incidents"], ["settings", "Settings"]];
+const VIEWS = [["overview", "🛰️ Overview"], ["services", "🤖 Servers"], ["monitoring", "📡 Monitoring"], ["incidents", "🚨 Incidents"], ["settings", "⚙️ Settings"]];
 const PAGE_SIZE = 15;
 const REFRESH_MS = 30000;
 const FAV_KEY = "stashr_render_favorites";
@@ -324,12 +324,12 @@ export default function RenderDashboard() {
   );
 
   return (
-    <main className="rd-page">
+    <main className="rd-page rd-page--cyber">
       <header className="rd-topbar">
         <div className="rd-shell rd-topbar__inner">
           <div className="rd-topbar__title">
-            <div className="rd-eyebrow"><span />INFRASTRUCTURE</div>
-            <h1>Render Control Center</h1>
+            <div className="rd-eyebrow"><span />ROBOT HQ · INFRASTRUCTURE</div>
+            <h1>🤖 Render Control Center</h1>
           </div>
           <div className="rd-topbar__tools">
             <span className="rd-sync" role="status" aria-live="polite">{loading ? "Loading…" : lastSync ? "Synced " + timeAgo(lastSync.toISOString()) : "Not synced"}</span>
@@ -354,11 +354,12 @@ export default function RenderDashboard() {
 
         {view === "overview" && (
           <div className="rd-stack">
+            {!loading && services.length > 0 && <RobotSquad services={services} series={series} onOpen={setSelectedKey} title="Robot HQ · all units" />}
             <div className="rd-kpis">
-              <Kpi label="Apps" value={loading ? "–" : appCount} hint={fleet.total + " servers · " + accounts.length + " account" + (accounts.length === 1 ? "" : "s")} onClick={() => go("services")} />
-              <Kpi label="Active" value={loading ? "–" : fleet.active} tone="ok" hint="Listed as not suspended" onClick={() => { clearFilters(); setStateFilter("active"); go("services"); }} />
-              <Kpi label="Open incidents" value={openNow.length} tone={openNow.length ? "danger" : undefined} hint={openNow.length ? "Review and fix" : staleCount ? staleCount + " stale to close" : "None open"} onClick={() => go("incidents")} />
-              <Kpi label="Suspended" value={loading ? "–" : fleet.suspended} tone={fleet.suspended ? "warn" : undefined} hint="May need attention" onClick={() => { clearFilters(); setStateFilter("suspended"); go("services"); }} />
+              <Kpi label="Squads (apps)" value={loading ? "–" : appCount} hint={fleet.total + " servers · " + accounts.length + " account" + (accounts.length === 1 ? "" : "s")} onClick={() => go("services")} />
+              <Kpi label="Bots awake" value={loading ? "–" : fleet.active} tone="ok" hint="Listed as not suspended" onClick={() => { clearFilters(); setStateFilter("active"); go("services"); }} />
+              <Kpi label="Bots in trouble" value={openNow.length} tone={openNow.length ? "danger" : undefined} hint={openNow.length ? "Review and fix" : staleCount ? staleCount + " stale to close" : "None open"} onClick={() => go("incidents")} />
+              <Kpi label="Bots sleeping" value={loading ? "–" : fleet.suspended} tone={fleet.suspended ? "warn" : undefined} hint="May need attention" onClick={() => { clearFilters(); setStateFilter("suspended"); go("services"); }} />
             </div>
 
             <div className="rd-grid">
