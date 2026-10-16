@@ -23,7 +23,7 @@ export default function Security() {
           <a className="btn btn--primary" href={workflowUrl} target="_blank" rel="noopener noreferrer">Open scan workflow ↗</a>
           <a className="btn btn--ghost" href={securityUrl} target="_blank" rel="noopener noreferrer">View GitHub Security ↗</a>
         </div>
-        <p className="security-note">To start a scan: open the workflow, choose <strong>Run workflow</strong>, keep the full scan enabled, and review every job. The scan also runs on pushes, pull requests and weekly. This page does not claim a scan is clean unless GitHub reports the results.</p>
+        <p className="security-note">To start a scan: open the workflow, choose <strong>Run workflow</strong>, the workflow runs its full configured scan automatically. Review every job. The scan also runs on pushes, pull requests and weekly. This page does not claim a scan is clean unless GitHub reports the results.</p>
       </header>
 
       <section className="security-section">
