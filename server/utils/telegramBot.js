@@ -187,6 +187,15 @@ async function handleButton(user, state, query) {
     await answer("Saved");
     return void (await tg(token, "editMessageText", { chat_id: chatId, message_id: messageId, ...updatesMessage(state) }));
   }
+  const pick = /^p:([0-9a-f]{24})$/.exec(String(query.data || ""));
+  if (pick) {
+    if (passwordsOff(state)) return void (await answer("Passwords over Telegram are off.", true));
+    const item = (await savedLogins(user)).find((i) => i._id === pick[1]);
+    if (!item) return void (await answer("That login is gone."));
+    await setPending(user, state, { kind: "pin", itemId: item._id });
+    await answer("Now send your PIN");
+    return void (await send(token, chatId, "🔐 <b>" + T.esc(item.name) + "</b> — send your PIN now. I delete it right away."));
+  }
   const m = /^i:([cxyrn]):([0-9a-f-]{36})$/.exec(String(query.data || ""));
   if (!m) return void (await answer("That button is no longer valid."));
   const [, action, incidentId] = m;
@@ -276,6 +285,16 @@ async function handleUpdate(hookId, secret, update) {
   if (String(chatId) !== String(state.chatId)) { await send(token, chatId, "This bot is private."); return; }
 
   try {
+    // Plain text while the bot is waiting for something: a PIN, or the name of a login.
+    const text = msg.text.trim();
+    const pend = pendingOf(state);
+    if (!cmd && /^\d{4,8}$/.test(text)) {
+      if (pend?.kind === "pin") return void (await completePassword(user, state, msg, pend));
+      wipe(state, msg.message_id, 500); // a PIN typed by itself is never left in the chat
+      return void (await send(token, chatId, "I wasn't waiting for a PIN. Tap 🔑 Passwords to look up a login."));
+    }
+    if (!cmd && pend?.kind === "name") return void (await startPassword(user, state, text));
+    if (cmd && cmd !== "pass" && pend) await setPending(user, state, null);
     if (cmd === "start" || cmd === "help" || cmd === "menu" || !cmd) return void (await send(token, chatId, T.HELP, { reply_markup: T.MENU_KEYBOARD }));
     if (cmd === "updates") return void (await send(token, chatId, "", updatesMessage(state)));
     if (cmd === "status") { const s = await snapshot(user); return void (await send(token, chatId, T.digestText(T.summarize(s), { projects: s.projects.filter((p) => p.status !== "archived").length, lastTick: s.lastTick }))); }
@@ -295,31 +314,87 @@ async function handleUpdate(hookId, secret, update) {
   } catch { await send(token, chatId, "Something went wrong reading your data. Try again in a minute."); }
 }
 
-async function handlePassword(user, state, msg, args) {
+/*
+ * Passwords, in three taps: 🔑 Passwords -> type a name -> pick the login (if several) -> send your PIN.
+ * The bot remembers what it is waiting for ("pending", 3 minutes), so the name and the PIN never share a message.
+ * `/pass name PIN` in one line still works. The PIN message and the reply are deleted.
+ */
+const PENDING_MS = 3 * 60 * 1000;
+const pendingOf = (state) => (state.pending && Date.now() < state.pending.expires ? state.pending : null);
+async function setPending(user, state, pending) {
+  state.pending = pending ? { ...pending, expires: Date.now() + PENDING_MS } : null;
+  await writeState(user, state);
+}
+const wipe = (state, messageId, ms = 0) => setTimeout(() => { void tg(state.botToken, "deleteMessage", { chat_id: state.chatId, message_id: messageId }); }, ms).unref?.();
+const passwordsOff = (state) => !state.passwordsAllowed || !state.pinHash;
+const OFF_TEXT = "🔒 Passwords over Telegram are off. Turn them on (with a PIN) in Stashr → Settings → Telegram.";
+
+async function savedLogins(user) {
+  const dataKey = await user.getDataKey();
+  return (user.passwords || []).filter((e) => e.enc === "udk").map((e) => ({ ...User.publicEntry(e, dataKey), _id: String(e._id) })).filter((i) => !i.broken);
+}
+
+/** True when the PIN is right. Wrong tries are counted and lock passwords for 15 minutes after five. */
+async function checkPin(user, state, pin) {
   const { botToken: token, chatId } = state;
-  const wipe = (messageId, ms = 0) => setTimeout(() => { void tg(token, "deleteMessage", { chat_id: chatId, message_id: messageId }); }, ms).unref?.();
-  wipe(msg.message_id, 1000); // the message may contain the PIN: never leave it in the chat
-  if (!state.passwordsAllowed || !state.pinHash) return void (await send(token, chatId, "🔒 Passwords over Telegram are off. Turn them on (with a PIN) in Stashr → Settings → Telegram."));
-  if (Date.now() < (state.pinLockedUntil || 0)) return void (await send(token, chatId, "🔒 Too many wrong PINs. Try again after " + new Date(state.pinLockedUntil).toISOString().slice(11, 16) + " UTC."));
-  const pin = args.length > 1 && /^\d{4,8}$/.test(args[args.length - 1]) ? args[args.length - 1] : "";
-  const query = (pin ? args.slice(0, -1) : args).join(" ");
-  if (!query || !pin) return void (await send(token, chatId, "Usage: /pass <i>name</i> <i>PIN</i> — for example /pass gmail 1234"));
+  if (Date.now() < (state.pinLockedUntil || 0)) { await send(token, chatId, "🔒 Too many wrong PINs. Try again after " + new Date(state.pinLockedUntil).toISOString().slice(11, 16) + " UTC."); return false; }
   const good = crypto.timingSafeEqual(Buffer.from(hashPin(pin, state.pinSalt), "hex"), Buffer.from(state.pinHash, "hex"));
   if (!good) {
     state.pinFails = (state.pinFails || 0) + 1;
     if (state.pinFails >= PIN_MAX_FAILS) { state.pinLockedUntil = Date.now() + PIN_LOCK_MS; state.pinFails = 0; }
     await writeState(user, state);
-    return void (await send(token, chatId, "❌ Wrong PIN." + (state.pinLockedUntil > Date.now() ? " Passwords are locked for 15 minutes." : "")));
+    await send(token, chatId, "❌ Wrong PIN." + (state.pinLockedUntil > Date.now() ? " Passwords are locked for 15 minutes." : ""));
+    return false;
   }
   if (state.pinFails) { state.pinFails = 0; await writeState(user, state); }
-  const dataKey = await user.getDataKey();
-  const items = (user.passwords || []).filter((e) => e.enc === "udk").map((e) => User.publicEntry(e, dataKey)).filter((i) => !i.broken);
-  const hits = T.findByName(items, query);
+  return true;
+}
+
+async function revealLogin(state, item) {
+  const reply = await send(state.botToken, state.chatId, "🔑 <b>" + T.esc(item.name) + "</b>" + (item.url ? "\n" + T.esc(item.url) : "") + (item.username ? "\nUser: <code>" + T.esc(item.username) + "</code>" : "") + "\nPassword: <tg-spoiler><code>" + T.esc(item.password) + "</code></tg-spoiler>\n\n<i>This message deletes itself in 60 seconds.</i>", { protect_content: true });
+  if (reply.ok) wipe(state, reply.result.message_id, PASSWORD_TTL_MS);
+}
+
+/** A name was given: no match, a button per match, or straight to asking for the PIN. */
+async function startPassword(user, state, query) {
+  const { botToken: token, chatId } = state;
+  const hits = T.findByName(await savedLogins(user), query);
+  if (!hits.length) { await setPending(user, state, { kind: "name" }); return void (await send(token, chatId, "No saved login matches “" + T.esc(query) + "”. Try another name:")); }
+  if (hits.length > 1) {
+    await setPending(user, state, { kind: "name" });
+    return void (await send(token, chatId, "Which one?", { reply_markup: { inline_keyboard: hits.slice(0, 8).map((i) => [{ text: i.name + (i.username ? " · " + i.username : ""), callback_data: "p:" + i._id }]) } }));
+  }
+  await setPending(user, state, { kind: "pin", itemId: hits[0]._id });
+  await send(token, chatId, "🔐 <b>" + T.esc(hits[0].name) + "</b> — send your PIN now. I delete it right away.");
+}
+
+/** The PIN arrived while a login was chosen. */
+async function completePassword(user, state, msg, pend) {
+  wipe(state, msg.message_id, 500);
+  const pin = msg.text.trim();
+  if (passwordsOff(state)) return void (await send(state.botToken, state.chatId, OFF_TEXT));
+  if (!(await checkPin(user, state, pin))) return;
+  const item = (await savedLogins(user)).find((i) => i._id === pend.itemId);
+  await setPending(user, state, null);
+  if (!item) return void (await send(state.botToken, state.chatId, "That login is gone. Tap 🔑 Passwords to search again."));
+  await revealLogin(state, item);
+}
+
+/** 🔑 Passwords or /pass [name] [PIN]. */
+async function handlePassword(user, state, msg, args) {
+  const { botToken: token, chatId } = state;
+  if (passwordsOff(state)) { wipe(state, msg.message_id, 1000); return void (await send(token, chatId, OFF_TEXT)); }
+  const pin = args.length > 1 && /^\d{4,8}$/.test(args[args.length - 1]) ? args[args.length - 1] : "";
+  const query = (pin ? args.slice(0, -1) : args).join(" ").trim();
+  if (!query) { await setPending(user, state, { kind: "name" }); return void (await send(token, chatId, "🔑 Which login? Type a name, for example <i>gmail</i>.")); }
+  if (!pin) return void (await startPassword(user, state, query));
+  // One-line form: /pass name PIN
+  wipe(state, msg.message_id, 1000);
+  if (!(await checkPin(user, state, pin))) return;
+  const hits = T.findByName(await savedLogins(user), query);
   if (!hits.length) return void (await send(token, chatId, "No saved login matches “" + T.esc(query) + "”."));
   if (hits.length > 1) return void (await send(token, chatId, "Several match — be more specific:\n" + hits.slice(0, 10).map((i) => "• " + T.esc(i.name) + (i.username ? " (" + T.esc(i.username) + ")" : "")).join("\n")));
-  const item = hits[0];
-  const reply = await send(token, chatId, "🔑 <b>" + T.esc(item.name) + "</b>" + (item.url ? "\n" + T.esc(item.url) : "") + (item.username ? "\nUser: <code>" + T.esc(item.username) + "</code>" : "") + "\nPassword: <tg-spoiler><code>" + T.esc(item.password) + "</code></tg-spoiler>\n\n<i>This message deletes itself in 60 seconds.</i>", { protect_content: true });
-  if (reply.ok) wipe(reply.result.message_id, PASSWORD_TTL_MS);
+  await revealLogin(state, hits[0]);
 }
 
 /* ---------- digests (scheduler) ---------- */

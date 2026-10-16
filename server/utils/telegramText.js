@@ -84,9 +84,9 @@ function projectText(p) {
 }
 
 /* Buttons of the menu under the chat box -> the command they run. */
-const MENU_BUTTONS = { "📊 Status": "status", "🖥 Servers": "servers", "🚨 Incidents": "incidents", "📁 Projects": "projects", "🔔 Updates": "updates", "❓ Help": "help" };
+const MENU_BUTTONS = { "📊 Status": "status", "🖥 Servers": "servers", "🚨 Incidents": "incidents", "📁 Projects": "projects", "🔑 Passwords": "pass", "🔔 Updates": "updates", "❓ Help": "help" };
 const MENU_KEYBOARD = {
-  keyboard: [["📊 Status", "🖥 Servers"], ["🚨 Incidents", "📁 Projects"], ["🔔 Updates", "❓ Help"]].map((row) => row.map((text) => ({ text }))),
+  keyboard: [["📊 Status", "🖥 Servers"], ["🚨 Incidents", "📁 Projects"], ["🔑 Passwords", "🔔 Updates"], ["❓ Help"]].map((row) => row.map((text) => ({ text }))),
   resize_keyboard: true, is_persistent: true, input_field_placeholder: "Tap a button or type /help"
 };
 
@@ -105,7 +105,7 @@ const HELP = [
   "/incidents — open incidents",
   "/projects — your projects",
   "/project <i>name</i> — one project in detail",
-  "/pass <i>name</i> <i>PIN</i> — a saved password (if turned on in Stashr; the reply deletes itself after 60 s)",
+  "🔑 Passwords (or /pass <i>name</i>) — a saved login. I ask for your PIN; the PIN and the reply both delete themselves",
   "/updates — choose when I message you on my own",
   "/menu — show the buttons again"
 ].join("\n");

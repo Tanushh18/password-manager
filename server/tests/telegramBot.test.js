@@ -133,10 +133,62 @@ describe("telegram: when the bot speaks on its own", () => {
   test("the menu buttons run their commands, and /menu brings the keyboard back", async () => {
     users = [makeUser({ chatId: 777 })];
     await bot.handleUpdate(HOOK, SECRET, msg("❓ Help"));
-    expect(sent[0].reply_markup.keyboard.flat().map((b) => b.text)).toEqual(["📊 Status", "🖥 Servers", "🚨 Incidents", "📁 Projects", "🔔 Updates", "❓ Help"]);
+    expect(sent[0].reply_markup.keyboard.flat().map((b) => b.text)).toEqual(["📊 Status", "🖥 Servers", "🚨 Incidents", "📁 Projects", "🔑 Passwords", "🔔 Updates", "❓ Help"]);
     await bot.handleUpdate(HOOK, SECRET, msg("🔔 Updates"));
     expect(sent[1].text.includes("When should I message you")).toBe(true);
     await bot.handleUpdate(HOOK, SECRET, msg("/menu"));
-    expect(sent[2].reply_markup.keyboard.length).toBe(3);
+    expect(sent[2].reply_markup.keyboard.length).toBe(4);
+  });
+});
+
+describe("telegram: passwords in three taps", () => {
+  const ready = (extra = {}) => makeUser({ chatId: 777, passwordsAllowed: true, pinHash, pinSalt: salt, ...extra });
+  const two = () => { const u = ready(); u.passwords.push({ _id: "b".repeat(24), enc: "udk", fields: { name: "Gmail work", username: "w@x.com", password: "work-pass" } }); u.passwords[0]._id = "a".repeat(24); return u; };
+
+  test("🔑 Passwords asks for a name, then for the PIN, then shows the login; the PIN message is deleted", async () => {
+    users = [ready()]; users[0].passwords[0]._id = "a".repeat(24);
+    await bot.handleUpdate(HOOK, SECRET, msg("🔑 Passwords"));
+    expect(sent[0].text.includes("Which login")).toBe(true);
+    await bot.handleUpdate(HOOK, SECRET, msg("gmail"));
+    expect(sent[1].text.includes("send your PIN")).toBe(true);
+    expect(sent.some((m) => m.text.includes("hunter2"))).toBe(false);
+    await bot.handleUpdate(HOOK, SECRET, { message: { message_id: 42, chat: { id: 777 }, text: "4321" } });
+    expect(sent[sent.length - 1].text.includes("hunter2")).toBe(true);
+    expect(sent[sent.length - 1].protect_content).toBe(true);
+    await new Promise((r) => setTimeout(r, 700));
+    expect(deleted.includes(42)).toBe(true);
+  });
+
+  test("several matches become buttons, and tapping one asks for the PIN", async () => {
+    users = [two()];
+    await bot.handleUpdate(HOOK, SECRET, msg("/pass mail"));
+    const buttons = sent[0].reply_markup.inline_keyboard.flat();
+    expect(buttons.map((b) => b.callback_data)).toEqual(["p:" + "a".repeat(24), "p:" + "b".repeat(24)]);
+    await bot.handleUpdate(HOOK, SECRET, { callback_query: { id: "q", data: "p:" + "b".repeat(24), message: { chat: { id: 777 }, message_id: 8, text: "x" } } });
+    expect(sent[1].text.includes("Gmail work")).toBe(true);
+    await bot.handleUpdate(HOOK, SECRET, msg("4321"));
+    expect(sent[sent.length - 1].text.includes("work-pass")).toBe(true);
+  });
+
+  test("a wrong PIN shows nothing; a PIN sent with no login chosen is deleted and ignored; the old one-line form still works", async () => {
+    users = [ready()]; users[0].passwords[0]._id = "a".repeat(24);
+    await bot.handleUpdate(HOOK, SECRET, msg("/pass gmail"));
+    await bot.handleUpdate(HOOK, SECRET, msg("0000"));
+    expect(sent[sent.length - 1].text.includes("Wrong PIN")).toBe(true);
+    expect(sent.some((m) => m.text.includes("hunter2"))).toBe(false);
+    users = [ready()]; users[0].passwords[0]._id = "a".repeat(24); sent = []; deleted = [];
+    await bot.handleUpdate(HOOK, SECRET, { message: { message_id: 61, chat: { id: 777 }, text: "4321" } });
+    expect(sent[0].text.includes("wasn't waiting")).toBe(true);
+    expect(sent.some((m) => m.text.includes("hunter2"))).toBe(false);
+    await new Promise((r) => setTimeout(r, 700));
+    expect(deleted.includes(61)).toBe(true);
+    await bot.handleUpdate(HOOK, SECRET, msg("/pass gmail 4321"));
+    expect(sent[sent.length - 1].text.includes("hunter2")).toBe(true);
+  });
+
+  test("with passwords off, the menu button just says so", async () => {
+    users = [makeUser({ chatId: 777 })];
+    await bot.handleUpdate(HOOK, SECRET, msg("🔑 Passwords"));
+    expect(sent[0].text.includes("off")).toBe(true);
   });
 });

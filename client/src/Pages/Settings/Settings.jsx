@@ -170,14 +170,25 @@ function TelegramBot() {
           </div>
         )}
       </Row>
-      <Row label="Passwords over Telegram" hint="Off by default. When on, /pass name PIN returns a login; the reply and your PIN message are deleted after 60 seconds. Telegram chats are not end-to-end encrypted.">
-        <Toggle checked={state.passwordsAllowed} onChange={(v) => void run("p", () => api.saveTelegram({ passwordsAllowed: v }), v ? "Passwords on — keep your PIN private." : "Passwords off.")} label="" />
-      </Row>
-      <Row label={state.pinSet ? "Change PIN" : "Set a PIN (needed for passwords)"} hint="4 to 8 digits. 5 wrong tries lock passwords for 15 minutes.">
-        <form className="settings__inline" onSubmit={(e) => { e.preventDefault(); void run("pin", () => api.saveTelegram({ pin }), "PIN saved."); setPin(""); }}>
-          <input className="input" type="password" inputMode="numeric" pattern="[0-9]{4,8}" placeholder="••••" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))} aria-label="PIN" style={{ width: "7rem" }} />
-          <button className="btn btn--ghost btn--sm" disabled={pin.length < 4 || Boolean(busy)}>Save PIN</button>
-        </form>
+      <Row label="Passwords over Telegram" hint={state.passwordsAllowed ? "On. In Telegram tap 🔑 Passwords, type a name, then send your PIN. Your PIN message and the reply delete themselves after 60 seconds." : "Off. Pick a 4 to 8 digit PIN and turn it on. Telegram chats are not end-to-end encrypted, so keep the PIN private."} block>
+        {state.passwordsAllowed ? (
+          <div className="settings__inline">
+            <span className="srow__hint">✅ On</span>
+            <button type="button" className="btn btn--ghost btn--sm" disabled={Boolean(busy)} onClick={() => void run("p", () => api.saveTelegram({ passwordsAllowed: false }), "Passwords off.")}>Turn off</button>
+            <details className="settings__pin">
+              <summary>Change PIN</summary>
+              <form className="settings__inline" onSubmit={(e) => { e.preventDefault(); void run("pin", () => api.saveTelegram({ pin }), "PIN saved."); setPin(""); }}>
+                <input className="input" type="password" inputMode="numeric" pattern="[0-9]{4,8}" placeholder="New PIN" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))} aria-label="New PIN" style={{ width: "8rem" }} />
+                <button className="btn btn--ghost btn--sm" disabled={pin.length < 4 || Boolean(busy)}>Save PIN</button>
+              </form>
+            </details>
+          </div>
+        ) : (
+          <form className="settings__inline" onSubmit={(e) => { e.preventDefault(); void run("pin", () => api.saveTelegram(pin ? { pin, passwordsAllowed: true } : { passwordsAllowed: true }), "Passwords on — keep your PIN private."); setPin(""); }}>
+            <input className="input" type="password" inputMode="numeric" pattern="[0-9]{4,8}" placeholder={state.pinSet ? "PIN (saved — or set a new one)" : "Choose a PIN"} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))} aria-label="PIN" style={{ width: "11rem" }} />
+            <button className="btn btn--primary btn--sm" disabled={(pin.length < 4 && !state.pinSet) || (pin.length > 0 && pin.length < 4) || Boolean(busy)}>Turn on</button>
+          </form>
+        )}
       </Row>
     </>
   );
