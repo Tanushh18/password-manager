@@ -212,3 +212,14 @@ test("unknown providers are auto-detected by name prefix, with no secrets expose
   expect(JSON.stringify(r)).not.toContain("secretvalue");
   expect(r.other.map((v) => v.name).sort()).toEqual(["DAILY_LIMIT", "RANDOM_THING"]);
 });
+
+test("Cloudinary: a NEXT_PUBLIC_ cloud name and server-side key + secret are one account", () => {
+  const { sets, incomplete } = cloudinaryAnalysis(new Map(Object.entries({
+    NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: "shop", CLOUDINARY_API_KEY: "k", CLOUDINARY_API_SECRET: "s"
+  })));
+  expect(sets).toEqual([{ label: "default", cloudName: "shop", apiKey: "k", apiSecret: "s" }]);
+  expect(incomplete).toEqual([]);
+  // Split across two different naming styles, still one account.
+  const split = cloudinaryAnalysis(new Map(Object.entries({ CLOUD_NAME_SHOP: "shop", CLOUDINARY_KEY: "k", CLOUDINARY_SECRET: "s" })));
+  expect(split.sets.map((s) => s.cloudName)).toEqual(["shop"]);
+});

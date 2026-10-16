@@ -19,6 +19,8 @@ const CACHE_MAX = 100;
 const cache = new Map(); // "owner/repo" -> { at, ttl, data | null, promise }
 
 const SKIP_DIR = /(^|\/)(node_modules|dist|build|out|\.next|\.nuxt|vendor|venv|\.venv|env|__pycache__|coverage|\.git|test|tests|__tests__|spec|e2e|stories|migrations|public|assets|static|docs?)\//i;
+// Frontend folders: the browser bundle never holds a service's server-side credentials, so they are not read.
+const FRONTEND_DIR = /(^|\/)(client|frontend|front-end|web|webapp|ui|www|mobile|android|ios)\//i;
 const MANIFEST = /(^|\/)(package\.json|requirements[^/]*\.txt|pyproject\.toml|Pipfile)$/;
 const SOURCE = /\.(?:[cm]?jsx?|tsx?|py)$/i;
 const INTERESTING = /(config|env|service|client|lib|util|provider|integration|upload|mail|email|sms|storage|db|database|auth|api|server|app|index|main|settings|cloud|media|payment|notify)/i;
@@ -27,9 +29,9 @@ const INTERESTING = /(config|env|service|client|lib|util|provider|integration|up
 function pickFiles(tree) {
   const files = (Array.isArray(tree) ? tree : []).filter((f) => f && f.type === "blob" && typeof f.path === "string" && f.sha);
   const depth = (p) => p.split("/").length;
-  const manifests = files.filter((f) => MANIFEST.test(f.path) && !SKIP_DIR.test(f.path) && (f.size || 0) <= 400 * 1024)
+  const manifests = files.filter((f) => MANIFEST.test(f.path) && !SKIP_DIR.test(f.path) && !FRONTEND_DIR.test(f.path) && (f.size || 0) <= 400 * 1024)
     .sort((a, b) => depth(a.path) - depth(b.path)).slice(0, MAX_MANIFESTS);
-  const sources = files.filter((f) => SOURCE.test(f.path) && !SKIP_DIR.test(f.path) && !/\.(test|spec|d)\.[a-z]+$/i.test(f.path) && (f.size || 0) > 0 && (f.size || 0) <= MAX_FILE_BYTES)
+  const sources = files.filter((f) => SOURCE.test(f.path) && !SKIP_DIR.test(f.path) && !FRONTEND_DIR.test(f.path) && !/\.(test|spec|d)\.[a-z]+$/i.test(f.path) && (f.size || 0) > 0 && (f.size || 0) <= MAX_FILE_BYTES)
     .sort((a, b) => (INTERESTING.test(b.path) ? 1 : 0) - (INTERESTING.test(a.path) ? 1 : 0) || depth(a.path) - depth(b.path) || a.path.localeCompare(b.path))
     .slice(0, MAX_SOURCES);
   return [...manifests, ...sources];

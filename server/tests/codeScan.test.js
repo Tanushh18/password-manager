@@ -7,7 +7,7 @@ test("pickFiles takes manifests first and skips vendored, test and huge files", 
     { type: "blob", path: "package.json", sha: "a", size: 500 }, { type: "blob", path: "node_modules/x/package.json", sha: "b", size: 10 },
     { type: "blob", path: "server/utils/upload.js", sha: "c", size: 900 }, { type: "blob", path: "server/tests/upload.test.js", sha: "d", size: 900 },
     { type: "blob", path: "src/big.js", sha: "e", size: 900000 }, { type: "blob", path: "README.md", sha: "f", size: 100 },
-    { type: "tree", path: "server", sha: "g" }, { type: "blob", path: "app.py", sha: "h", size: 300 }
+    { type: "tree", path: "server", sha: "g" }, { type: "blob", path: "app.py", sha: "h", size: 300 }, { type: "blob", path: "client/src/upload.js", sha: "i", size: 300 }, { type: "blob", path: "client/package.json", sha: "j", size: 300 }
   ];
   expect(pickFiles(tree).map((f) => f.path)).toEqual(["package.json", "app.py", "server/utils/upload.js"]);
 });

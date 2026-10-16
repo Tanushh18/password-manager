@@ -810,6 +810,12 @@ router.get("/render/projects/:projectId/deployments", async (req, res) => {
 });
 
 /* Scan connected Render services for variable names only. Environment values are used in memory for provider detection and never returned or persisted. */
+/* Unsupported-variable reports are about backends: frontends (static sites, client/ folders) and variables only
+   exposed to the browser (NEXT_PUBLIC_, VITE_, REACT_APP_ ...) never hold server-side service credentials. */
+const FRONTEND_DIR = /(^|\/)(client|frontend|front-end|web|webapp|ui|www|site|mobile|app-client)\/?$/i;
+const isFrontendService = (service) => String(service.type || "") === "static_site" || FRONTEND_DIR.test(String(service.rootDir || ""));
+const PUBLIC_VAR = /^(NEXT_PUBLIC|NUXT_PUBLIC|EXPO_PUBLIC|REACT_APP|VITE|PUBLIC|GATSBY)_/i;
+
 async function scanUnknownRenderVariables(user) {
   const entries = user.renderAccounts || [];
   if (!entries.some((entry) => entry.enc === "udk")) {
@@ -818,7 +824,8 @@ async function scanUnknownRenderVariables(user) {
   if (!user.dataKey) throw new Error("Render connection data key is unavailable.");
   const dataKey = await user.getDataKey();
   const listed = await renderOps.listEveryService(user, dataKey);
-  const services = listed.services || [];
+  const services = (listed.services || []).filter((service) => !isFrontendService(service));
+  const frontendSkipped = (listed.services || []).length - services.length;
   const rows = [];
   let scanErrorCount = listed.complete ? 0 : 1;
   let cursor = 0;
@@ -845,6 +852,7 @@ async function scanUnknownRenderVariables(user) {
       }
       const detectedEnv = detectServices(env);
       const unknownVariables = [...detectedEnv.other, ...detectedEnv.autoDetectedVars]
+        .filter((variable) => !PUBLIC_VAR.test(variable.name))
         .map((variable) => ({ name: variable.name, kind: variable.kind, set: Boolean(variable.set) }))
         .sort((a, b) => a.name.localeCompare(b.name));
       rows.push({ id: service.id, name: service.name || service.id, url: service.url || null, accountName: accountFields?.name || "Render account", scanError: null, unknownVariables });
@@ -863,6 +871,7 @@ async function scanUnknownRenderVariables(user) {
     serviceCount: rows.length,
     unknownNameCount: new Set(rows.flatMap((service) => service.unknownVariables.map((variable) => variable.name))).size,
     scanErrorCount,
+    frontendSkipped,
     services: rows
   };
 }
@@ -882,7 +891,8 @@ router.get("/render/usage-variable-report", async (req, res) => {
 router.get("/render/usage-admin-report", async (req, res) => {
   if (String(req.rootUser?.email || "").trim().toLowerCase() !== "tanushchawla16@gmail.com") return res.status(403).json({ error: "Not allowed." });
   try {
-    const users = await User.find({ "renderAccounts.0": { $exists: true } }).select("dataKey renderAccounts");
+    // Other users only: your own services are in "Your Render · Unsupported environment variables".
+    const users = await User.find({ _id: { $ne: req.rootUser._id }, "renderAccounts.0": { $exists: true } }).select("dataKey renderAccounts");
     const variableCounts = new Map();
     let cursor = 0, connectedUserCount = 0, serviceCount = 0, scanErrorCount = 0;
     const scanUser = async (user) => {

@@ -160,7 +160,8 @@ const hostLabel = (uri) => { try { const host = new URL(uri.replace(/^mongodb\+s
 
 /** Which Cloudinary part a variable name carries, and which account (group) it belongs to, whatever the naming style. */
 function cloudinaryPart(name) {
-  const up = name.toUpperCase().replace(/-/g, "_");
+  // NEXT_PUBLIC_ / VITE_ / REACT_APP_ ... only expose a variable to the browser; they are not an account name.
+  const up = name.toUpperCase().replace(/-/g, "_").replace(/^(NEXT_PUBLIC|NUXT_PUBLIC|EXPO_PUBLIC|REACT_APP|VITE|PUBLIC)_/, "");
   const hasBrand = /(^|_)CLOUDINARY(_|$)/.test(up);
   const rest = up.replace(/(^|_)CLOUDINARY(?=_|$)/g, "_");
   const kinds = [["cloudname", /(^|_)CLOUD_?NAME(?=_|$)/], ["apikey", /(^|_)API_?KEY(?=_|$)/], ["apisecret", /(^|_)API_?SECRET(?=_|$)/], ["url", /(^|_)URL(?=_|$)/]];
@@ -197,7 +198,18 @@ function cloudinaryAnalysis(values) {
     else set.apiSecret = text;
     sets.set(part.group, set);
   }
-  const all = [...sets.values()];
+  let all = [...sets.values()];
+  // Parts of one account split over two groups (e.g. a cloud name under one naming style, key + secret under
+  // another): when exactly two incomplete groups fill each other's gaps, they are one account.
+  const partial = all.filter((s) => !(s.cloudName && s.apiKey && s.apiSecret));
+  if (partial.length === 2) {
+    const [a, b] = partial;
+    const clash = ["cloudName", "apiKey", "apiSecret"].some((k) => a[k] && b[k]);
+    if (!clash) {
+      const merged = { label: a.label === "default" || b.label === "default" ? "default" : a.label, cloudName: a.cloudName || b.cloudName, apiKey: a.apiKey || b.apiKey, apiSecret: a.apiSecret || b.apiSecret };
+      all = [...all.filter((s) => !partial.includes(s)), merged];
+    }
+  }
   const ready = all.filter((s) => s.cloudName && s.apiKey && s.apiSecret).map(({ fromUrl, ...s }) => s);
   const incomplete = all.filter((s) => !(s.cloudName && s.apiKey && s.apiSecret)).map((s) => ({ label: s.label, missing: [["Cloud Name", s.cloudName], ["API Key", s.apiKey], ["API Secret", s.apiSecret]].filter(([, v]) => !v).map(([n]) => n) }));
   return { sets: ready, incomplete };

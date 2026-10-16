@@ -147,7 +147,7 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
     const code = codeScan && service.repo ? {
       state: scanState(service.repo), files: hints?.files || 0, truncated: Boolean(hints?.truncated),
       // Variables the code reads that this deployment does not define: a missing or misspelled setting.
-      missingEnv: hints ? (hints.envNames || []).filter((n) => !env.has(n) && !COMMON_ENV.test(n)).slice(0, 40) : []
+      missingEnv: hints ? (hints.envNames || []).filter((n) => !env.has(n) && !COMMON_ENV.test(n) && !/^(NEXT_PUBLIC|NUXT_PUBLIC|EXPO_PUBLIC|REACT_APP|VITE|PUBLIC|GATSBY)_/i.test(n)).slice(0, 40) : []
     } : null;
     const items = [];
     for (const svc of detected.services) {

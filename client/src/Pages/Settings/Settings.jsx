@@ -98,7 +98,7 @@ function UserVariablePanel() {
           <button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => void load()}>{busy ? "Scanning…" : "↻ Scan again"}</button>
         </div>
         {error && <p className="settings-admin__error" role="alert">{error}</p>}
-        {report && <div className="settings-admin__stats"><div><strong>{report.serviceCount ?? 0}</strong><span>Services scanned</span></div><div><strong>{report.unknownNameCount ?? 0}</strong><span>Unique unsupported names</span></div><div><strong>{report.scanErrorCount ?? 0}</strong><span>Scan issues</span></div></div>}
+        {report && <div className="settings-admin__stats"><div><strong>{report.serviceCount ?? 0}</strong><span>Backend services scanned{report.frontendSkipped ? " (" + report.frontendSkipped + " frontend skipped)" : ""}</span></div><div><strong>{report.unknownNameCount ?? 0}</strong><span>Unique unsupported names</span></div><div><strong>{report.scanErrorCount ?? 0}</strong><span>Scan issues</span></div></div>}
         {!report && busy && <p className="srow__hint">Reading environment-variable names from your Render services…</p>}
         {report && <div className="settings-admin__unknown-head"><h3>Unsupported variable names by service</h3><input className="input" type="search" placeholder="Filter variable or service…" aria-label="Filter unsupported variables" value={query} onChange={(e) => setQuery(e.target.value)} /></div>}
         {report && <VariableServiceRows services={report.services} query={query} />}
@@ -126,7 +126,7 @@ function AdminUsagePanel() {
   return (
     <Group title="Admin · Cross-user usage & variable diagnostics">
       <div className="settings-admin">
-        <div className="settings-admin__head"><div><strong>Unsupported variable discovery</strong><p className="srow__hint">Scans connected Render accounts across users. Only aggregate variable-name counts are shown here—no user emails, account names, service names, values or secrets.</p></div><button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => void load()}>{busy ? "Scanning all users…" : report ? "↻ Scan all users again" : "Scan all users"}</button></div>
+        <div className="settings-admin__head"><div><strong>Unsupported variable discovery</strong><p className="srow__hint">Scans other users’ connected Render accounts (your own are in the section above). Only backend services are read — static sites, client/frontend folders and browser-only variables (NEXT_PUBLIC_, VITE_, REACT_APP_ …) are skipped. Only aggregate variable-name counts are shown — no user emails, account names, service names, values or secrets.</p></div><button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => void load()}>{busy ? "Scanning all users…" : report ? "↻ Scan all users again" : "Scan all users"}</button></div>
         {error && <p className="settings-admin__error" role="alert">{error}</p>}
         {report && <div className="settings-admin__stats"><div><strong>{report.connectedUserCount ?? 0}</strong><span>Connected users scanned</span></div><div><strong>{report.serviceCount ?? 0}</strong><span>Services scanned</span></div><div><strong>{report.unknownNameCount ?? 0}</strong><span>Unique unsupported names</span></div><div><strong>{report.scanErrorCount ?? 0}</strong><span>Scan issues</span></div></div>}
         <h3>Providers with live usage readers</h3>
