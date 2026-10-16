@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "exceptions": [
+    {
+      "package": "braces",
+      "advisoryIds": [
+        "CVE-2026-93687",
+        "GHSA-vfj7-8cjw-p6xm"
+      ],
+      "severity": "high",
+      "approvedBy": "Tanushh18 (repository owner)",
+      "approvedAt": "2026-10-16",
+      "expiresAt": "2026-10-30",
+      "reason": "The published braces advisory currently has no patched release; the lockfile resolves braces 3.0.3. Owner-approved time-limited exception only for this exact package and advisory.",
+      "compensatingControls": [
+        "Keep the finding visible in SARIF and the workflow artifact; do not suppress it in the scanner.",
+        "Do not pass attacker-controlled patterns into brace expansion; use fixed, trusted patterns in build tooling.",
+        "Recheck upstream release/advisory status during the exception window and remove this entry as soon as a patched release is available."
+      ]
+    },
+    {
+      "package": "node-forge",
+      "advisoryIds": [
+        "CVE-2026-85393",
+        "GHSA-86w9-cpqp-85rv"
+      ],
+      "severity": "high",
+      "approvedBy": "Tanushh18 (repository owner)",
+      "approvedAt": "2026-10-16",
+      "expiresAt": "2026-10-30",
+      "reason": "The published node-forge advisory affects the currently resolved 1.4.0 release and currently has no patched release. Owner-approved time-limited exception only for this exact package and advisory.",
+      "compensatingControls": [
+        "Keep the finding visible in SARIF and the workflow artifact; do not suppress it in the scanner.",
+        "Do not trust signatures from untrusted keys or accept unsigned update payloads; verify update signing configuration before production release.",
+        "Review whether the vulnerable verification path is reachable in the shipped runtime; remove this entry immediately when a patched release is available or reachability changes."
+      ]
+    }
+  ]
+}

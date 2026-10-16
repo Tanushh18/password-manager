@@ -13,7 +13,7 @@ const { parseGithubRepo } = require("../utils/github");
 const { groupKey, mergeProjects } = require("../utils/projectMerge");
 const { syncAllProjects } = require("../utils/projectSyncAll");
 const { autoSyncProjects } = require("../utils/projectAutoSync");
-const { runTick, lastTick } = require("../utils/scheduler");
+const { runTick, getSchedulerStatus } = require("../utils/scheduler");
 const { runUserPings, pingResults, scanHealthRoutes } = require("../utils/pings");
 const { getProjectDeployments } = require("../utils/projectDeployments");
 const { findUrlReferences, replaceUrlReferences } = require("../utils/urlRefs");
@@ -181,9 +181,18 @@ router.put("/render/ops/config", async (req, res) => {
 
 /* When the background upkeep last ran (no user data), so the UI can say whether monitoring is alive. */
 router.get("/render/ops/status", async (req, res) => {
-  const t = lastTick();
-  res.set("Cache-Control", "no-store");
-  return res.json({ lastTick: t ? { source: t.source, startedAt: t.startedAt, completedAt: t.completedAt, usersChecked: t.usersChecked || 0, groupsChecked: t.groupsChecked || 0, incidentsOpened: t.incidentsOpened || 0 } : null, schedulerEnabled: String(process.env.INTERNAL_SCHEDULER).toLowerCase() !== "false", serverStartedAt: new Date(Date.now() - process.uptime() * 1000).toISOString() });
+  try {
+    const persisted = await getSchedulerStatus(10);
+    res.set("Cache-Control", "no-store");
+    return res.json({
+      ...persisted,
+      schedulerEnabled: String(process.env.INTERNAL_SCHEDULER).toLowerCase() !== "false",
+      schedulerIntervalMinutes: Math.max(1, Math.min(60, Number(process.env.TICK_MINUTES) || 5)),
+      serverStartedAt: new Date(Date.now() - process.uptime() * 1000).toISOString()
+    });
+  } catch {
+    return res.status(500).json({ error: "Could not load scheduler status." });
+  }
 });
 
 /* Ping jobs (Stashr's cron): latest result per job, run all now, and a one-off /health scan of every server. */

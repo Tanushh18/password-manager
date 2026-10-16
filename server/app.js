@@ -104,6 +104,22 @@ app.get("/health", healthHandler);
 app.head("/health", (req, res) => res.status(200).end());
 app.get("/healthz", healthHandler);
 app.get("/api/health", healthHandler);
+
+// Liveness is process-only; readiness also requires the primary database connection.
+app.get("/livez", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.status(200).json({ status: "ok", service: "password-manager-api", uptime: Number(process.uptime().toFixed(2)), timestamp: new Date().toISOString() });
+});
+app.get("/readyz", (req, res) => {
+  const ready = mongoose.connection?.readyState === 1;
+  res.set("Cache-Control", "no-store");
+  return res.status(ready ? 200 : 503).json({
+    status: ready ? "ready" : "not_ready",
+    service: "password-manager-api",
+    dependencies: { database: ready ? "connected" : "unavailable" },
+    timestamp: new Date().toISOString()
+  });
+});
 app.get("/ping", (req, res) =>
 {
   res.set("Cache-Control", "no-store");

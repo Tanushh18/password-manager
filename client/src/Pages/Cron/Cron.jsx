@@ -175,11 +175,34 @@ export default function Cron() {
       </header>
       <div className="rd-shell rd-content cr-stack">
         <div className="cr-kpis">
-          <div><span>Background scheduler</span><b className={lastTickAge != null && lastTickAge < 15 * 60000 ? "is-ok" : "is-warn"}>{status?.lastTick ? "Ran " + timeAgo(status.lastTick.completedAt) : status?.schedulerEnabled === false ? "Off" : "Starting…"}</b><small>{status?.lastTick ? "every 5 min · monitoring, sync, pings" : "first run ~90 s after the server starts"}</small></div>
+          <div><span>Background scheduler</span><b className={lastTickAge != null && lastTickAge < 15 * 60000 ? "is-ok" : "is-warn"}>{status?.lastTick ? "Ran " + timeAgo(status.lastTick.completedAt) : status?.schedulerEnabled === false ? "Off" : "Starting…"}</b><small>{status?.lastTick ? (status.lastTick.status === "success" ? "All scheduler steps completed" : "Review recent step results below") : "first run ~90 s after the server starts"}</small></div>
           <div><span>Ping jobs</span><b>{enabledCount}</b><small>of {web.length} running web services</small></div>
           <div><span>/health routes</span><b className={missing.length ? "is-warn" : ""}>{scan ? (scan.length - (scan.filter((r) => r.missingRoute).length)) + " / " + scan.length : "—"}</b><small>{scan ? missing.length + " missing" : "run a scan below"}</small></div>
           <div><span>Render cron jobs</span><b>{crons.length}</b><small>across all accounts</small></div>
         </div>
+
+        <Section title="Recent scheduler runs" subtitle="Run history is persisted in the existing MongoDB database and survives a server restart." className="cr-run-history">
+          {!status?.recentRuns?.length ? (
+            <p className="cr-dim">No completed scheduler runs have been recorded yet. The first run normally starts about 90 seconds after the API boots.</p>
+          ) : (
+            <div className="rd-tablewrap">
+              <table className="rd-table cr-runs-table">
+                <thead><tr><th>Started</th><th>Duration</th><th>Trigger</th><th>Result</th><th>Steps</th></tr></thead>
+                <tbody>{status.recentRuns.map((run) => (
+                  <tr key={run.id || run.startedAt}>
+                    <td><strong>{timeAgo(run.startedAt)}</strong><small>{new Date(run.startedAt).toLocaleString()}</small></td>
+                    <td>{(run.durationMs / 1000).toFixed(1)}s</td>
+                    <td>{run.persisted === false ? "Memory fallback" : run.source === "external" ? "External cron" : "In-process"}</td>
+                    <td><span className={"cr-run-status cr-run-status--" + run.status}>{run.status === "success" ? "Success" : run.status === "partial" ? "Partial" : "Failed"}</span></td>
+                    <td><div className="cr-run-steps">{(run.steps || []).map((step) => (
+                      <span key={step.name} className={"cr-run-step cr-run-step--" + step.status} title={step.name + " · " + step.durationMs + "ms"}>{step.name} · {step.status}</span>
+                    ))}</div></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </Section>
 
         <Section title="Ping jobs" subtitle="Stashr calls each server's URL on a schedule: it keeps free Render services awake and shows straight away if one stops answering." className="rd-card--flush"
           actions={<label className="cr-switch cr-switch--main" title="New servers are added automatically"><input type="checkbox" checked={pingAll} disabled={saving} onChange={(e) => void toggleAll(e.target.checked)} /><span>Ping every server by default (every 10 min)</span></label>}>
