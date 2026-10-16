@@ -86,6 +86,20 @@ function AdminUsagePanel() {
   );
 }
 
+function UsageVariableSharing() {
+  const [enabled, setEnabled] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  useEffect(() => { api.getUsageVariableSharing().then((r) => setEnabled(r.enabled === true)).catch(() => {}); }, []);
+  const change = async (next) => {
+    setBusy(true); setMessage("");
+    try { const result = await api.setUsageVariableSharing(next); setEnabled(result.enabled === true); setMessage(next ? "Variable names shared." : "Sharing disabled and saved names cleared."); }
+    catch (e) { setMessage(api.errorMessage(e) || "Could not update sharing."); }
+    finally { setBusy(false); }
+  };
+  return <Group title="Help improve service detection"><Row label="Share unknown variable names" hint="Optional. Shares only unrecognized environment-variable names from your connected Render services. Values and account identities are not shared." block><Toggle checked={enabled} onChange={change} label={enabled ? "On" : "Off"} />{busy && <p className="srow__hint">Working…</p>}{message && <p className="srow__hint">{message}</p>}{enabled && <button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => void change(true)}>Rescan & share</button>}</Row></Group>;
+}
+
 /* Telegram bot: paste the token, press Start in the bot, done. */
 function TelegramBot() {
   const [state, setState] = useState(null);
@@ -578,6 +592,8 @@ export default function Settings() {
             <TwoFactor />
           </Row>
         </Group>
+
+        <UsageVariableSharing />
 
         <Group title="Telegram">
           <TelegramBot />
