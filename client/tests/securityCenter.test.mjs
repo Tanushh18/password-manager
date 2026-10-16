@@ -4,13 +4,15 @@ import { readFile } from "node:fs/promises";
 
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 
-test("security center describes the scanners and does not claim live scan results", async () => {
+test("security center reads live workflow and job status from GitHub", async () => {
   const page = await read("../src/Pages/Security/Security.jsx");
-  for (const phrase of ["Dependency vulnerabilities", "Static code analysis", "Secret leakage", "configuration", "scan is clean"]) {
+  for (const phrase of ["Dependency vulnerabilities", "Static code analysis", "Secret leakage", "LIVE FROM GITHUB ACTIONS", "Recent runs", "Refresh status"]) {
     assert.ok(page.toLowerCase().includes(phrase.toLowerCase()), `missing security center coverage: ${phrase}`);
   }
   assert.ok(page.includes("actions/workflows/security-scan.yml"));
-  assert.ok(page.includes("does not claim a scan is clean"));
+  assert.ok(page.includes("actions/runs/"));
+  assert.ok(page.includes("GitHub API rate limit reached"));
+  assert.ok(page.includes("never as clean"));
 });
 
 test("security center route is protected by both vault authentication and admin guard", async () => {
