@@ -19,8 +19,9 @@ const METRICS = {
 const MAX_GROUPS = 10;
 const MAX_SERVICES_PER_GROUP = 10;
 const MAX_MONITORED_SERVICES_PER_USER = 15;
-const HISTORY_LIMIT = 200;
-const INCIDENT_LIMIT = 200;
+// Bounded so the account document stays small: 96 samples = 8 hours of 5-minute checks per group.
+const HISTORY_LIMIT = 96;
+const INCIDENT_LIMIT = 120;
 const TICK_WINDOW_MS = 10 * 60 * 1000;
 
 const { openEvents, orphanedOpen, closingEvent } = require("./incidentFold");
@@ -54,6 +55,24 @@ const PING_EVERY = [5, 10, 15, 30, 60];
 const DEFAULT_PING_MINUTES = 10;
 const MAX_PINGS = 60;
 /* Ping jobs ("cron"): GET <service url><path> every N minutes. Only Render-provided https *.onrender.com URLs. */
+/*
+ * A ping URL may be any public https address (a Render URL or your own domain). Local, private and cloud-metadata
+ * addresses are refused so the scheduler can never be pointed at the server's own network.
+ */
+function isPublicHttps(url) {
+  if (url.protocol !== "https:" || url.username || url.password) return false;
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (!host.includes(".") || /(^|\.)(localhost|local|internal|intranet|lan|home|corp|svc|cluster\.local)$/.test(host)) return false;
+  if (/^metadata(\.|$)/.test(host)) return false;
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    if (a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224) return false;
+  }
+  if (host.includes(":")) return false; // IPv6 literals: refused rather than classified
+  return true;
+}
+
 function normalizePings(list) {
   const out = [];
   for (const p of list.slice(0, MAX_PINGS)) {
@@ -61,7 +80,7 @@ function normalizePings(list) {
     if (!/^[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,160}$/.test(key) || out.some((x) => x.serviceKey === key)) continue;
     let url;
     try { url = new URL(String(p?.url || "")); } catch { continue; }
-    if (url.protocol !== "https:" || url.username || url.password || !url.hostname.toLowerCase().endsWith(".onrender.com")) continue;
+    if (!isPublicHttps(url)) continue;
     const path = /^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{0,120}$/.test(String(p?.path || "")) ? String(p.path) : "/health";
     out.push({ serviceKey: key, name: String(p?.name || "").slice(0, 120), url: url.origin, path, everyMinutes: PING_EVERY.includes(Number(p?.everyMinutes)) ? Number(p.everyMinutes) : 10, enabled: p?.enabled !== false });
   }
@@ -695,5 +714,5 @@ function verifySecret(candidate, expected) {
 module.exports = {
   defaultConfig, normalizeConfig, readConfig, saveConfig, publicConfig,
   runUserMonitoring, runAllEnabledMonitoring, listEveryService, normalizePings, DEFAULT_PING_MINUTES, resolveIncidents, clearClosedIncidents, sendTelegram, encryptedList, verifySecret, renderRequest, accountApiKey, incidentButtons,
-  HISTORY_LIMIT, INCIDENT_LIMIT, probeService, compactIncidents
+  HISTORY_LIMIT, INCIDENT_LIMIT, probeService, compactIncidents, isPublicHttps
 };

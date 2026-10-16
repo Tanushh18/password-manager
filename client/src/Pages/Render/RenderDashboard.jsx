@@ -4,6 +4,7 @@ import { connectRenderAccount, deleteRenderAccount, bulkDeleteRenderServices, de
 import { Modal, StatePill, Skeleton, Empty, Kpi, Section, FleetBar, useConfirm } from "./RenderUi";
 import ServiceDetail from "./ServiceDetail";
 import ServerBoard from "./ServerBoard";
+import RobotArmy from "./RobotArmy";
 import { MonitoringView, IncidentsView, AlertPolicyView } from "./OpsViews";
 import { usePolling } from "./renderHooks";
 import { useOps } from "./useOps";
@@ -44,7 +45,7 @@ export default function RenderDashboard() {
   const [page, setPage] = useState(1);
   const [checked, setChecked] = useState([]);
   const [openGroups, setOpenGroups] = useState([]); // app keys whose server list is expanded
-  const [layout, setLayout] = useState(() => readStored("stashr_render_layout", "board")); // board | table
+  const [layout, setLayout] = useState(() => readStored("stashr_render_layout_v2", "robots")); // robots | board | table
   const [busyKey, setBusyKey] = useState("");
   const [bulkBusy, setBulkBusy] = useState("");
   const [favorites, setFavorites] = useState(() => readStored(FAV_KEY, []));
@@ -103,7 +104,7 @@ export default function RenderDashboard() {
   usePolling(() => ops.refreshLive(), 60000, auto);
   useEffect(() => { writeStored("stashr_render_auto_refresh", auto); }, [auto]);
   useEffect(() => { writeStored(FAV_KEY, favorites); }, [favorites]);
-  useEffect(() => { writeStored("stashr_render_layout", layout); }, [layout]);
+  useEffect(() => { writeStored("stashr_render_layout_v2", layout); }, [layout]);
 
   // A service deleted or suspended elsewhere must not linger in selections or open panels.
   useEffect(() => {
@@ -402,7 +403,7 @@ export default function RenderDashboard() {
               <button type="button" className={"rd-btn rd-btn--quiet" + (favoriteOnly ? " is-active" : "")} aria-pressed={favoriteOnly} onClick={() => setFavoriteOnly((v) => !v)}>{favoriteOnly ? "★" : "☆"} Favorites</button>
               <label className="rd-check"><input type="checkbox" checked={hideSuspended} onChange={(e) => setHideSuspended(e.target.checked)} /> Hide suspended</label>
               {filtersActive && <button type="button" className="rd-btn rd-btn--link" onClick={clearFilters}>Clear filters</button>}
-              <span className="rd-layout-toggle" role="group" aria-label="Layout">{[["board", "▦ Board"], ["table", "☰ Table"]].map(([id, label]) => <button key={id} type="button" aria-pressed={layout === id} className={layout === id ? "is-active" : ""} onClick={() => setLayout(id)}>{label}</button>)}</span>
+              <span className="rd-layout-toggle" role="group" aria-label="Layout">{[["robots", "🤖 Robots"], ["board", "▦ Board"], ["table", "☰ Table"]].map(([id, label]) => <button key={id} type="button" aria-pressed={layout === id} className={layout === id ? "is-active" : ""} onClick={() => setLayout(id)}>{label}</button>)}</span>
             </div>
             {checked.length > 0 && (
               <div className="rd-selectbar" role="region" aria-label="Selection actions">
@@ -414,6 +415,10 @@ export default function RenderDashboard() {
 
               </div>
             )}
+            {layout === "robots" && (loading ? <div className="rd-board"><Skeleton lines={4} height={120} /></div> : (
+              <RobotArmy groups={groups} series={series} onOpen={setSelectedKey} busy={busyKey} onAction={(kind, s) => void runAction(kind, [s])} />
+            ))}
+            {layout === "robots" && !loading && !groups.length && <Empty icon="🤖" title={services.length ? "Koi robot match nahi hua" : "Robot army ready hai"}>{services.length ? "Search ya filters badal ke dekho." : "Render API key connect karo, robots aa jayenge."}</Empty>}
             {layout === "board" && (loading ? <div className="rd-board"><Skeleton lines={4} height={120} /></div> : (
               <ServerBoard groups={groups} incidentKeys={fleet.incidentKeys} series={series} checked={checked}
                 onToggle={toggleChecked} onToggleApp={(keys, all) => setChecked((old) => (all ? old.filter((k) => !keys.includes(k)) : [...new Set([...old, ...keys])]))}

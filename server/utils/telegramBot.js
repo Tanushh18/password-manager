@@ -136,7 +136,7 @@ async function audit(user, action, serviceKey, details = {}) {
     const dataKey = await user.getDataKey();
     const now = new Date();
     const entry = { _id: new mongoose.Types.ObjectId(), enc: "udk", data: User.sealEntry(dataKey, { action, accountId: String(serviceKey).split(":")[0], serviceId: String(serviceKey).split(":").slice(1).join(":"), details: { ...details, via: "telegram" }, at: now.toISOString() }), createdAt: now, updatedAt: now };
-    await User.updateOne({ _id: user._id }, { $push: { renderAudit: { $each: [entry], $slice: -200 } } });
+    await User.updateOne({ _id: user._id }, { $push: { renderAudit: { $each: [entry], $slice: -100 } } });
   } catch { /* the action already happened: never fail on the audit trail */ }
 }
 

@@ -8,7 +8,10 @@ import { Link } from "react-router-dom";
 import { useVault } from "../../state/vault";
 import { serviceProjectIndex } from "../../lib/serviceProjects";
 import { formatAmount, forecastText, summarize, projectSummary, metricRows, accountRows, STATUS_LABEL } from "./servicesUtils";
+import Robot from "../../Components/Robot/Robot";
+import { usageMood } from "../../lib/robots";
 import "../Render/RenderDashboard.css";
+import "../Render/RobotArmy.css";
 import "./Services.css";
 
 /* Plan limits you tell Stashr about: most providers do not report the limit of your plan. */
@@ -67,6 +70,40 @@ function shortForecast(m) {
 /** The Stashr project a dashboard entry (one app, maybe several servers) belongs to. */
 const projectFor = (index, entry) => [entry.id, ...(entry.deployments || []).map((d) => d.id)].map((id) => index.get(id)).find(Boolean) || null;
 
+/* ---------------------------------------------------------------- Service bots */
+
+/** One robot per app: its mood follows the provider limit it is closest to running out of. */
+function ServiceBots({ rows, onOpen }) {
+  if (!rows.length) return null;
+  const bots = rows.map(({ p, s }) => ({
+    p, s, stats: usageMood({ name: p.name, percent: s.worst?.percent ?? null, status: s.status, errors: s.issues, tracked: (p.services || []).filter((x) => x.state === "ok").length })
+  }));
+  const order = { fire: 0, dead: 1, sweaty: 2, chill: 3, confused: 4 };
+  bots.sort((a, b) => (order[a.stats.mood] ?? 9) - (order[b.stats.mood] ?? 9) || a.p.name.localeCompare(b.p.name));
+  return (
+    <div className="ra">
+      <div className="ra-grid">
+        {bots.map(({ p, s, stats }) => (
+          <article key={p.id} className={"ra-card is-" + stats.tone}>
+            <div className="ra-card__bot"><Robot mood={stats.mood} load={stats.load} size={70} /></div>
+            <div className="ra-card__body">
+              <button type="button" className="ra-card__name" onClick={() => onOpen(p.id)}>{p.name}</button>
+              <span className="ra-card__mood">{stats.face} {stats.title} · {s.services} service{s.services === 1 ? "" : "s"}</span>
+              <p className="ra-card__line">{stats.line}</p>
+              <div className="ra-bar" title={s.worst ? s.worst.service + " · " + s.worst.label : "No limit data"}>
+                <span>Limit</span>
+                <div className={"ra-bar__track is-" + (s.worst == null ? "idle" : s.worst.percent >= 90 ? "hot" : s.worst.percent >= 70 ? "warm" : "ok")}><i style={{ transform: "scaleX(" + Math.min(100, s.worst?.percent ?? 0) / 100 + ")" }} /></div>
+                <b>{s.worst ? Math.round(s.worst.percent) + "%" : "—"}</b>
+              </div>
+              <div className="ra-card__meta"><span>{s.worst ? s.worst.service + " · " + s.worst.label : "Koi limit data nahi"}</span><span>{shortForecast(s.worst || {})}</span></div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------- Overview */
 
 function Overview({ data, onOpen, projectOf }) {
@@ -80,6 +117,8 @@ function Overview({ data, onOpen, projectOf }) {
         <div className={summary.critical ? "is-critical" : summary.warn ? "is-warn" : ""}><span>Needs attention</span><b>{summary.warn + summary.critical}</b><small>{summary.critical ? summary.critical + " almost out" : summary.warn ? summary.warn + " getting low" : "All within limits"}</small></div>
         <div><span>Soonest to run out</span><b>{summary.soonest ? new Date(summary.soonest.at).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "—"}</b><small>{summary.soonest ? summary.soonest.project + " · " + summary.soonest.label : "Nothing projected"}</small></div>
       </div>
+
+      <ServiceBots rows={rows} onOpen={onOpen} />
 
       <section className="sv-panel">
         <header className="sv-panel__head"><h2>Projects</h2><span className="sv-dim">Click a project for its full breakdown</span></header>

@@ -10,7 +10,7 @@ const { parseGithubRepo } = require("./github");
  * project when each limit runs out. Secrets never leave the server: only masked variables and numbers are returned.
  */
 const PROVIDER_TTL_MS = 10 * 60 * 1000;
-const HISTORY_MAX = 600;                   // snapshots kept per user
+const HISTORY_MAX = 336;                   // snapshots kept per user: two weeks of hourly points
 const SNAPSHOT_MIN_GAP_MS = 55 * 60 * 1000; // at most one snapshot an hour
 const providerCache = new Map();
 

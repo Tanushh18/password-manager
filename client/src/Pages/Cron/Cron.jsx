@@ -16,6 +16,7 @@ import "./Cron.css";
 const EVERY = [5, 10, 15, 30, 60];
 const isWeb = (s) => /web|static/i.test(String(s.type || "")) && Boolean(s.serviceDetails?.url);
 
+const bareOrigin = (u) => { try { return new URL(safeUrl(u)).origin; } catch { return String(u || "").replace(/\/$/, ""); } };
 const bare = (u) => String(u || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
 
 /** The base URL and the exact URL that is pinged (base + path), both clickable. */
@@ -99,7 +100,15 @@ export default function Cron() {
 
   const save = async (next, message) => {
     setSaving(true);
-    try { const r = await saveRenderOpsConfig({ pings: next }); setPings(r.config?.pings || next); if (message) toast.success(message); }
+    try {
+      const r = await saveRenderOpsConfig({ pings: next });
+      const saved = r.config?.pings || next;
+      setPings(saved);
+      // The server drops a job whose URL it refuses (not https, or a local / private address).
+      const dropped = next.filter((p) => !saved.some((x) => x.serviceKey === p.serviceKey));
+      if (dropped.length) toast.error("Not saved for " + dropped.map((p) => p.name).join(", ") + ": the URL must be a public https address.");
+      else if (message) toast.success(message);
+    }
     catch (e) { toast.error(errorMessage(e, "Could not save.")); }
     finally { setSaving(false); }
   };
@@ -110,6 +119,16 @@ export default function Cron() {
     return existing ? list.map((p) => (p.serviceKey === key ? job : p)) : [...list, job];
   };
   const setFor = (targets, patch, message) => void save(targets.reduce((list, s) => upsert(list, s, patch), pings), message);
+  // A ping can target your own domain instead of the Render address (https only, no private addresses).
+  const saveUrl = async (s, job, input) => {
+    const raw = input.value.trim();
+    const current = job?.url || bareOrigin(s.serviceDetails.url);
+    if (!raw || raw.replace(/\/+$/, "") === current) { input.value = current; return; }
+    let url;
+    try { url = new URL(/^https?:\/\//i.test(raw) ? raw : "https://" + raw); } catch { toast.error("That isn't a valid URL."); input.value = current; return; }
+    if (url.protocol !== "https:") { toast.error("Use an https:// address."); input.value = current; return; }
+    setFor([s], { url: url.origin, ...(url.pathname && url.pathname !== "/" ? { path: url.pathname.replace(/\/+$/, "") } : {}) }, "Server URL saved.");
+  };
   const remove = (targets) => void save(pings.filter((p) => !targets.some((s) => serviceKey(s) === p.serviceKey)), "Ping job removed.");
   const runNow = async () => {
     setRunning(true);
@@ -228,7 +247,16 @@ export default function Cron() {
                   return (
                     <tr key={key} id={"svc-" + key}>
                       <td className="rd-col-check"><input type="checkbox" checked={selected.includes(key)} onChange={() => setSelected((o) => (o.includes(key) ? o.filter((k) => k !== key) : [...o, key]))} aria-label={"Select " + s.name} /></td>
-                      <td><strong>{s.name}</strong><Urls base={s.serviceDetails.url} path={job?.path || "/health"} /><small className="cr-dim">{s.accountName}</small></td>
+                      <td>
+                        <strong>{s.name}</strong>
+                        <Urls base={job?.url || s.serviceDetails.url} path={job?.path || "/health"} />
+                        <span className="cr-urledit">
+                          <input key={(job?.url || "") + key} className="rd-field cr-url" defaultValue={job?.url || bareOrigin(s.serviceDetails.url)} disabled={saving} aria-label={"Server URL pinged for " + s.name}
+                            onBlur={(e) => void saveUrl(s, job, e.target)} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+                          {job?.url && job.url !== bareOrigin(s.serviceDetails.url) && <button type="button" className="rd-btn rd-btn--link" disabled={saving} onClick={() => setFor([s], { url: bareOrigin(s.serviceDetails.url) }, "URL reset to the Render address.")}>Reset</button>}
+                        </span>
+                        <small className="cr-dim">{s.accountName}</small>
+                      </td>
                       <td>{project ? <Link className="rd-project" to={"/projects/" + project.id}>{project.name}</Link> : <span className="cr-dim">—</span>}</td>
                       <td><label className="cr-switch"><input type="checkbox" checked={Boolean(job?.enabled)} disabled={saving} onChange={(e) => setFor([s], { enabled: e.target.checked }, e.target.checked ? "Ping job on for " + s.name + "." : "Paused.")} /><span>{job?.enabled ? (job.auto ? "On · default" : "On") : job ? "Paused" : "Off"}</span></label></td>
                       <td><input className="rd-field cr-path" defaultValue={job?.path || "/health"} disabled={saving} onBlur={(e) => { const v = e.target.value.trim() || "/health"; if (v !== (job?.path || "/health")) setFor([s], { path: v.startsWith("/") ? v : "/" + v }, "Path saved."); }} aria-label={"Path for " + s.name} /></td>

@@ -634,7 +634,7 @@ async function recordAudit(req, action, accountId, serviceId, details = {}) {
     };
     await User.updateOne(
       { _id: req.rootUser._id },
-      { $push: { renderAudit: { $each: [entry], $slice: -200 } } }
+      { $push: { renderAudit: { $each: [entry], $slice: -100 } } }
     );
   } catch (error) {
     // Audit failure must not expose secrets or turn a successful upstream action into a false failure.

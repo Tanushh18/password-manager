@@ -40,3 +40,6 @@
 .cr-run-step--partial { color: var(--rd-warn); }
 .cr-run-step--failed { color: var(--danger); }
 @media (max-width: 760px) { .cr-runs-table { min-width: 760px; } }
+
+.cr-urledit { display: flex; gap: 6px; align-items: center; margin: 4px 0 2px; }
+.cr-url { min-width: 0; width: 100%; max-width: 320px; font-size: 12px; }
