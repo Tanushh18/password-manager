@@ -7,6 +7,7 @@ const plural = (n, word) => n + " " + word + (n === 1 ? "" : "s");
 /** "/pass gmail 1234" -> { cmd: "pass", args: ["gmail", "1234"] }. Bot mentions (/status@MyBot) are stripped. */
 function parseCommand(text) {
   const t = String(text || "").trim();
+  if (MENU_BUTTONS[t]) return { cmd: MENU_BUTTONS[t], args: [] };
   if (!t.startsWith("/")) return { cmd: "", args: t ? t.split(/\s+/) : [] };
   const [head, ...args] = t.split(/\s+/);
   return { cmd: head.slice(1).split("@")[0].toLowerCase(), args };
@@ -82,14 +83,31 @@ function projectText(p) {
   return lines.join("\n");
 }
 
+/* Buttons of the menu under the chat box -> the command they run. */
+const MENU_BUTTONS = { "📊 Status": "status", "🖥 Servers": "servers", "🚨 Incidents": "incidents", "📁 Projects": "projects", "🔔 Updates": "updates", "❓ Help": "help" };
+const MENU_KEYBOARD = {
+  keyboard: [["📊 Status", "🖥 Servers"], ["🚨 Incidents", "📁 Projects"], ["🔔 Updates", "❓ Help"]].map((row) => row.map((text) => ({ text }))),
+  resize_keyboard: true, is_persistent: true, input_field_placeholder: "Tap a button or type /help"
+};
+
+/* What the bot sends on its own. "alerts" is the default: no timed updates. */
+const UPDATE_MODES = {
+  ask: "🔕 Only when I ask — no automatic messages, not even alerts",
+  alerts: "🚨 Alerts only — a message when something breaks (no timed updates)",
+  timer: "⏱ Alerts + a status update every few minutes"
+};
+
 const HELP = [
   "<b>Stashr bot</b>",
+  "Use the buttons below the chat box, or:",
   "/status — everything in one message",
   "/servers — every server and its health",
   "/incidents — open incidents",
   "/projects — your projects",
   "/project <i>name</i> — one project in detail",
-  "/pass <i>name</i> <i>PIN</i> — a saved password (if turned on in Stashr; the reply deletes itself after 60 s)"
+  "/pass <i>name</i> <i>PIN</i> — a saved password (if turned on in Stashr; the reply deletes itself after 60 s)",
+  "/updates — choose when I message you on my own",
+  "/menu — show the buttons again"
 ].join("\n");
 
 /** Best matches for a name among items/projects: exact, then starts-with, then contains. */
@@ -104,4 +122,4 @@ function findByName(list, query, field = "name") {
   return list.filter((x) => value(x).includes(q) || String(x?.url || "").toLowerCase().includes(q));
 }
 
-module.exports = { esc, parseCommand, summarize, digestText, serversText, incidentsText, projectsText, projectText, findByName, HELP };
+module.exports = { MENU_BUTTONS, MENU_KEYBOARD, UPDATE_MODES, esc, parseCommand, summarize, digestText, serversText, incidentsText, projectsText, projectText, findByName, HELP };

@@ -142,20 +142,33 @@ function TelegramBot() {
   );
   return (
     <>
-      <Row icon={<Alert size={15} />} label={"Connected to @" + state.botUsername} hint={"Chat: " + (state.chatName || "you") + (state.lastDigestAt ? " · last update " + new Date(state.lastDigestAt).toLocaleTimeString() : "")}>
+      <Row icon={<Alert size={15} />} label={"Connected to @" + state.botUsername} hint={"Chat: " + (state.chatName || "you") + (state.updates === "timer" && state.lastDigestAt ? " · last update " + new Date(state.lastDigestAt).toLocaleTimeString() : "")}>
         <div className="settings__inline">
           <button type="button" className="btn btn--ghost btn--sm" disabled={Boolean(busy)} onClick={() => void run("test", api.testTelegramBot, "Status sent to Telegram.")}>Send status now</button>
           <button type="button" className="btn btn--ghost btn--sm" disabled={Boolean(busy)} onClick={() => { if (window.confirm("Disconnect the Telegram bot? Alerts stop.")) void run("off", api.disconnectTelegram, "Disconnected."); }}>Disconnect</button>
         </div>
       </Row>
-      <Row label="Status update" hint="A short message: all OK, or what is wrong. OK updates arrive silently; problems ring.">
-        <div className="settings__inline">
-          <select className="input settings__select" value={state.digestMinutes} onChange={(e) => void run("d", () => api.saveTelegram({ digestMinutes: Number(e.target.value) }))}>
-            {[5, 10, 15, 30, 60].map((m) => <option key={m} value={m}>Every {m} min</option>)}
-            <option value={0}>Off</option>
-          </select>
-          <label className="srow__hint"><input type="checkbox" checked={state.digestQuietWhenOk} onChange={(e) => void run("q", () => api.saveTelegram({ digestQuietWhenOk: e.target.checked }))} /> Only when something is wrong</label>
+      <Row label="When should the bot message me?" hint="Off by default: it stays quiet unless you ask. You can always ask in Telegram with the menu buttons under the chat box, or /updates." block>
+        <div className="settings__modes" role="radiogroup" aria-label="When the bot messages you">
+          {[
+            ["ask", "🔕 Only when I ask", "No automatic messages at all, not even alerts."],
+            ["alerts", "🚨 Alerts only", "A message when something breaks. No timed updates."],
+            ["timer", "⏱ Alerts + a timed update", "A short status every few minutes (you choose how often)."]
+          ].map(([id, title, text]) => (
+            <label key={id} className={"settings__mode" + (state.updates === id ? " is-on" : "")}>
+              <input type="radio" name="tg-updates" checked={state.updates === id} disabled={Boolean(busy)} onChange={() => void run("u", () => api.saveTelegram({ updates: id }), id === "ask" ? "The bot only answers when you ask." : id === "alerts" ? "Alerts only." : "Timed updates on.")} />
+              <span><strong>{title}</strong><small>{text}</small></span>
+            </label>
+          ))}
         </div>
+        {state.updates === "timer" && (
+          <div className="settings__inline settings__modes-more">
+            <select className="input settings__select" value={state.digestMinutes} onChange={(e) => void run("d", () => api.saveTelegram({ digestMinutes: Number(e.target.value) }))} aria-label="How often">
+              {[5, 10, 15, 30, 60].map((m) => <option key={m} value={m}>Every {m} min</option>)}
+            </select>
+            <label className="srow__hint"><input type="checkbox" checked={state.digestQuietWhenOk} onChange={(e) => void run("q", () => api.saveTelegram({ digestQuietWhenOk: e.target.checked }))} /> Only when something is wrong</label>
+          </div>
+        )}
       </Row>
       <Row label="Passwords over Telegram" hint="Off by default. When on, /pass name PIN returns a login; the reply and your PIN message are deleted after 60 seconds. Telegram chats are not end-to-end encrypted.">
         <Toggle checked={state.passwordsAllowed} onChange={(v) => void run("p", () => api.saveTelegram({ passwordsAllowed: v }), v ? "Passwords on — keep your PIN private." : "Passwords off.")} label="" />

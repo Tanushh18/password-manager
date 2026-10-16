@@ -115,3 +115,12 @@
   .settings-admin__head, .settings-admin__unknown-head { flex-direction: column; align-items: stretch; }
   .settings-admin__unknown-head input { max-width: none; width: 100%; }
 }
+
+/* Telegram: when the bot may message you */
+.settings__modes { display: grid; gap: 8px; }
+.settings__mode { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: var(--r-md, 10px); border: 1px solid var(--line, rgba(127, 127, 127, 0.3)); cursor: pointer; }
+.settings__mode input { margin-top: 4px; }
+.settings__mode span { display: grid; gap: 2px; }
+.settings__mode small { opacity: 0.7; }
+.settings__mode.is-on { border-color: var(--accent, #2a9d8f); background: color-mix(in srgb, var(--accent, #2a9d8f) 9%, transparent); }
+.settings__modes-more { margin-top: 10px; }

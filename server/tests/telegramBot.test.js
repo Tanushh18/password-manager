@@ -87,3 +87,56 @@ describe("telegram bot security", () => {
     await wait();
   });
 });
+
+describe("telegram: when the bot speaks on its own", () => {
+  test("timed updates are off by default; only the 'timer' mode sends them", async () => {
+    for (const updates of [undefined, "alerts", "ask"]) {
+      users = [makeUser({ chatId: 777, ...(updates ? { updates } : {}) })];
+      sent = [];
+      const r = await bot.runAllDigests();
+      expect(r.sent).toBe(0);
+      expect(sent.length).toBe(0);
+    }
+    users = [makeUser({ chatId: 777, updates: "timer", digestMinutes: 30 })];
+    sent = [];
+    expect((await bot.runAllDigests()).sent).toBe(1);
+    expect(sent.length).toBe(1);
+    // not again inside the chosen interval (the first run recorded when it sent)
+    expect((await bot.runAllDigests()).sent).toBe(0);
+  });
+
+  test("the mode is validated, and older settings read as 'alerts'", async () => {
+    expect(bot.modeOf({})).toBe("alerts");
+    expect(bot.modeOf({ updates: "nonsense" })).toBe("alerts");
+    expect(bot.modeOf({ updates: "ask" })).toBe("ask");
+    users = [makeUser({ chatId: 777 })];
+    const s = await bot.updateSettings(users[0], { updates: "timer", digestMinutes: 17 });
+    expect(s.updates).toBe("timer");
+    expect(s.digestMinutes).toBe(10); // 17 is not a choice
+    expect((await bot.updateSettings(users[0], { updates: "bogus" })).updates).toBe("alerts");
+  });
+
+  test("/updates shows the choices, and the buttons change the mode", async () => {
+    users = [makeUser({ chatId: 777 })];
+    await bot.handleUpdate(HOOK, SECRET, msg("/updates"));
+    const kb = sent[0].reply_markup.inline_keyboard;
+    expect(sent[0].text.includes("Alerts only")).toBe(true);
+    expect(kb.flat().map((b) => b.callback_data)).toEqual(["u:ask", "u:alerts", "u:timer:10", "u:timer:30", "u:timer:60"]);
+    await bot.handleUpdate(HOOK, SECRET, { callback_query: { id: "q1", data: "u:timer:30", message: { chat: { id: 777 }, message_id: 8, text: "x" } } });
+    expect(stored.data.sealed.updates).toBe("timer");
+    expect(stored.data.sealed.digestMinutes).toBe(30);
+    // another chat cannot press them
+    await bot.handleUpdate(HOOK, SECRET, { callback_query: { id: "q2", data: "u:ask", message: { chat: { id: 1 }, message_id: 8, text: "x" } } });
+    expect(stored.data.sealed.updates).toBe("timer");
+  });
+
+  test("the menu buttons run their commands, and /menu brings the keyboard back", async () => {
+    users = [makeUser({ chatId: 777 })];
+    await bot.handleUpdate(HOOK, SECRET, msg("❓ Help"));
+    expect(sent[0].reply_markup.keyboard.flat().map((b) => b.text)).toEqual(["📊 Status", "🖥 Servers", "🚨 Incidents", "📁 Projects", "🔔 Updates", "❓ Help"]);
+    await bot.handleUpdate(HOOK, SECRET, msg("🔔 Updates"));
+    expect(sent[1].text.includes("When should I message you")).toBe(true);
+    await bot.handleUpdate(HOOK, SECRET, msg("/menu"));
+    expect(sent[2].reply_markup.keyboard.length).toBe(3);
+  });
+});

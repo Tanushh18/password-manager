@@ -18,7 +18,12 @@ const API = "https://api.telegram.org/bot";
 const PASSWORD_TTL_MS = 60 * 1000;
 const PIN_MAX_FAILS = 5;
 const PIN_LOCK_MS = 15 * 60 * 1000;
-const DIGEST_CHOICES = [0, 5, 10, 15, 30, 60];
+const DIGEST_CHOICES = [5, 10, 15, 30, 60];
+const MODES = ["ask", "alerts", "timer"];
+/* When the bot messages on its own. Timed updates are off unless chosen ("timer"); older settings count as "alerts". */
+const modeOf = (s) => (MODES.includes(s?.updates) ? s.updates : "alerts");
+const COMMANDS = [["status", "Everything in one message"], ["servers", "Every server and its health"], ["incidents", "Open incidents"], ["projects", "Your projects"], ["project", "One project: /project name"], ["updates", "When I message you on my own"], ["menu", "Show the buttons"], ["pass", "A password: /pass name PIN"], ["help", "What I can do"]];
+const setCommands = (token) => tg(token, "setMyCommands", { commands: COMMANDS.map(([command, description]) => ({ command, description })) });
 
 async function tg(token, method, body) {
   try {
@@ -47,7 +52,7 @@ async function writeState(user, state) {
 const publicState = (s) => s ? {
   connected: Boolean(s.chatId), botUsername: s.botUsername || "", chatName: s.chatName || "", linkedAt: s.linkedAt || null,
   linkUrl: !s.chatId && s.linkCode && Date.now() < (s.linkExpires || 0) ? "https://t.me/" + s.botUsername + "?start=" + s.linkCode : "",
-  digestMinutes: s.digestMinutes ?? 10, digestQuietWhenOk: Boolean(s.digestQuietWhenOk),
+  updates: modeOf(s), digestMinutes: DIGEST_CHOICES.includes(s.digestMinutes) ? s.digestMinutes : 10, digestQuietWhenOk: Boolean(s.digestQuietWhenOk),
   passwordsAllowed: Boolean(s.passwordsAllowed), pinSet: Boolean(s.pinHash), lastDigestAt: s.lastDigestAt || null
 } : { connected: false };
 
@@ -62,6 +67,12 @@ const publicBase = () => {
   const raw = String(process.env.SELF_URL || process.env.RENDER_EXTERNAL_URL || "").trim().replace(/\/+$/, "");
   return raw ? (/^https?:\/\//.test(raw) ? raw : "https://" + raw) : "";
 };
+
+/* Alerts reach the chat unless the user chose "only when I ask". */
+async function applyMode(user, state) {
+  if (!state?.chatId || modeOf(state) === "ask") await syncAlertChannel(user, null, null);
+  else await syncAlertChannel(user, state.botToken, state.chatId);
+}
 
 /* ---------- connect / settings ---------- */
 async function connect(user, token) {
@@ -81,9 +92,9 @@ async function connect(user, token) {
   };
   const hook = await tg(token, "setWebhook", { url: base + "/telegram/webhook/" + state.hookId, secret_token: state.hookSecret, allowed_updates: ["message", "callback_query"], drop_pending_updates: true });
   if (!hook.ok) throw Object.assign(new Error("Could not register the bot webhook: " + hook.error), { status: 502 });
-  await tg(token, "setMyCommands", { commands: [["status", "Everything in one message"], ["servers", "Every server and its health"], ["incidents", "Open incidents"], ["projects", "Your projects"], ["project", "One project: /project name"], ["pass", "A password: /pass name PIN"], ["help", "What I can do"]].map(([command, description]) => ({ command, description })) });
+  await setCommands(token);
   await writeState(user, state);
-  if (state.chatId) await syncAlertChannel(user, token, state.chatId);
+  if (state.chatId) await applyMode(user, state);
   return publicState(state);
 }
 
@@ -101,6 +112,8 @@ const hashPin = (pin, salt) => crypto.scryptSync(String(pin), salt, 32).toString
 async function updateSettings(user, input) {
   const state = await readState(user);
   if (!state) throw Object.assign(new Error("Connect the bot first."), { status: 400 });
+  const before = modeOf(state);
+  if (input.updates !== undefined) state.updates = MODES.includes(input.updates) ? input.updates : "alerts";
   if (input.digestMinutes !== undefined) state.digestMinutes = DIGEST_CHOICES.includes(Number(input.digestMinutes)) ? Number(input.digestMinutes) : 10;
   if (input.digestQuietWhenOk !== undefined) state.digestQuietWhenOk = input.digestQuietWhenOk === true;
   if (input.pin !== undefined) {
@@ -114,6 +127,7 @@ async function updateSettings(user, input) {
     state.passwordsAllowed = input.passwordsAllowed === true;
   }
   await writeState(user, state);
+  if (modeOf(state) !== before) await applyMode(user, state);
   return publicState(state);
 }
 
@@ -142,6 +156,21 @@ async function audit(user, action, serviceKey, details = {}) {
 
 const NO_KEYBOARD = { inline_keyboard: [] };
 
+/* The /updates message: the current choice and one button per option. */
+function updatesMessage(state) {
+  const mode = modeOf(state), every = DIGEST_CHOICES.includes(state.digestMinutes) ? state.digestMinutes : 10;
+  const mark = (on) => (on ? "✅ " : "");
+  return {
+    parse_mode: "HTML",
+    text: "<b>When should I message you on my own?</b>\nNow: " + T.UPDATE_MODES[mode] + (mode === "timer" ? " (" + every + " min)" : "") + "\n\nYou can always ask with the buttons below the chat box.",
+    reply_markup: { inline_keyboard: [
+      [{ text: mark(mode === "ask") + "🔕 Only when I ask", callback_data: "u:ask" }],
+      [{ text: mark(mode === "alerts") + "🚨 Alerts only", callback_data: "u:alerts" }],
+      [10, 30, 60].map((n) => ({ text: mark(mode === "timer" && every === n) + "⏱ " + n + " min", callback_data: "u:timer:" + n }))
+    ] }
+  };
+}
+
 async function handleButton(user, state, query) {
   const token = state.botToken;
   const chatId = query?.message?.chat?.id;
@@ -149,6 +178,15 @@ async function handleButton(user, state, query) {
   const answer = (text, alert = false) => tg(token, "answerCallbackQuery", { callback_query_id: query.id, text: String(text).slice(0, 190), show_alert: alert });
   // Only the linked chat may press anything.
   if (!chatId || String(chatId) !== String(state.chatId)) return void (await answer("This bot is private.", true));
+  const u = /^u:(ask|alerts|timer)(?::(\d{1,2}))?$/.exec(String(query.data || ""));
+  if (u) {
+    state.updates = u[1];
+    if (u[2] && DIGEST_CHOICES.includes(Number(u[2]))) state.digestMinutes = Number(u[2]);
+    await writeState(user, state);
+    await applyMode(user, state);
+    await answer("Saved");
+    return void (await tg(token, "editMessageText", { chat_id: chatId, message_id: messageId, ...updatesMessage(state) }));
+  }
   const m = /^i:([cxyrn]):([0-9a-f-]{36})$/.exec(String(query.data || ""));
   if (!m) return void (await answer("That button is no longer valid."));
   const [, action, incidentId] = m;
@@ -230,15 +268,16 @@ async function handleUpdate(hookId, secret, update) {
       state.chatId = chatId; state.chatName = [msg.chat.first_name, msg.chat.last_name].filter(Boolean).join(" ") || msg.chat.title || "";
       state.linkedAt = new Date().toISOString(); state.linkCode = null;
       await writeState(user, state);
-      await syncAlertChannel(user, token, chatId);
-      await send(token, chatId, "✅ <b>Connected to Stashr.</b>\nYou will get incident alerts here and a status update every " + (state.digestMinutes || 10) + " minutes.\n\n" + T.HELP);
+      await applyMode(user, state);
+      await send(token, chatId, "✅ <b>Connected to Stashr.</b>\n" + T.UPDATE_MODES[modeOf(state)] + ". Change it any time with /updates.\n\n" + T.HELP, { reply_markup: T.MENU_KEYBOARD });
     } else await send(token, chatId, "This bot is private. Open the link from Stashr → Settings → Telegram to connect it.");
     return;
   }
   if (String(chatId) !== String(state.chatId)) { await send(token, chatId, "This bot is private."); return; }
 
   try {
-    if (cmd === "start" || cmd === "help" || !cmd) return void (await send(token, chatId, T.HELP));
+    if (cmd === "start" || cmd === "help" || cmd === "menu" || !cmd) return void (await send(token, chatId, T.HELP, { reply_markup: T.MENU_KEYBOARD }));
+    if (cmd === "updates") return void (await send(token, chatId, "", updatesMessage(state)));
     if (cmd === "status") { const s = await snapshot(user); return void (await send(token, chatId, T.digestText(T.summarize(s), { projects: s.projects.filter((p) => p.status !== "archived").length, lastTick: s.lastTick }))); }
     if (cmd === "servers") { const s = await snapshot(user); return void (await send(token, chatId, T.serversText(s.services, s.health, s.pings))); }
     if (cmd === "incidents") { const s = await snapshot(user); return void (await send(token, chatId, T.incidentsText(s.incidents))); }
@@ -303,7 +342,10 @@ async function refreshWebhooks() {
   for (const user of users) {
     try {
       const state = await readState(user);
-      if (state?.botToken && state.hookId && state.hookSecret) await tg(state.botToken, "setWebhook", { url: base + "/telegram/webhook/" + state.hookId, secret_token: state.hookSecret, allowed_updates: ["message", "callback_query"] });
+      if (state?.botToken && state.hookId && state.hookSecret) {
+        await tg(state.botToken, "setWebhook", { url: base + "/telegram/webhook/" + state.hookId, secret_token: state.hookSecret, allowed_updates: ["message", "callback_query"] });
+        await setCommands(state.botToken);
+      }
     } catch { /* retried on the next restart */ }
   }
 }
@@ -315,8 +357,9 @@ async function runAllDigests() {
   for (const user of users) {
     try {
       const state = await readState(user);
-      if (!state?.chatId || !state.digestMinutes) continue;
-      if (state.lastDigestAt && Date.now() - Date.parse(state.lastDigestAt) < state.digestMinutes * 60000 - 60000) continue;
+      if (!state?.chatId || modeOf(state) !== "timer") continue;
+      const every = DIGEST_CHOICES.includes(state.digestMinutes) ? state.digestMinutes : 10;
+      if (state.lastDigestAt && Date.now() - Date.parse(state.lastDigestAt) < every * 60000 - 60000) continue;
       if (await sendDigest(user, state)) sent += 1;
       state.lastDigestAt = new Date().toISOString();
       await writeState(user, state);
@@ -331,4 +374,4 @@ async function sendTest(user) {
   return sendDigest(user, state, { force: true });
 }
 
-module.exports = { connect, disconnect, updateSettings, readState, publicState, handleUpdate, runAllDigests, sendTest, DIGEST_CHOICES, isValidHookId: (id) => mongoose.isValidObjectId(id) || /^[a-f0-9]{32}$/.test(String(id)) };
+module.exports = { modeOf, MODES, connect, disconnect, updateSettings, readState, publicState, handleUpdate, runAllDigests, sendTest, DIGEST_CHOICES, isValidHookId: (id) => mongoose.isValidObjectId(id) || /^[a-f0-9]{32}$/.test(String(id)) };
