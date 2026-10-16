@@ -26,9 +26,18 @@ const limitsPatch = (limits) => ({ limitsMb: Object.fromEntries(LIMIT_FIELDS.map
 
 const STATE_TEXT = {
   "no-credentials": "Keys needed to read usage aren’t set on this service",
+  "in-code": "Used in the code, but no credentials are set",
   "no-reader": "No usage API",
   disabled: "Tracking off",
   error: "Couldn’t read usage"
+};
+
+const FOUND_BY = { name: "variable name", value: "variable value", code: "app code" };
+/** How a service was recognised: its variable names, what the values look like, or what the app's code does. */
+const foundBy = (svc) => {
+  const how = (svc.detectedBy || []).map((k) => FOUND_BY[k]).filter(Boolean);
+  if (!how.length) return "";
+  return "Found by " + how.join(" + ") + (svc.packages?.length ? " (" + svc.packages.slice(0, 3).join(", ") + ")" : "");
 };
 
 const detailText = (m) => m.label.replace(/ this month$/i, "") + " " + formatAmount(m.used, m.unit);
@@ -151,7 +160,7 @@ function ProjectDetail({ project, onToggle, projectOf }) {
       {project.envReadFailed && <div className="rd-alert rd-alert--error" role="alert"><span aria-hidden="true">!</span><div>Couldn’t read this service’s environment variables from Render.</div></div>}
 
       <div className="sv-stats">
-        <div><span>Services used</span><b>{s.services}</b><small>detected from env vars</small></div>
+        <div><span>Services used</span><b>{s.services}</b><small>found by variable names, values and code</small></div>
         <div><span>Live usage data</span><b>{withData.length}</b><small>{s.metrics} metric(s)</small></div>
         <div className={s.worst ? "is-" + s.worst.status : ""}><span>Highest usage</span><b>{s.worst ? Math.round(s.worst.percent) + "%" : "—"}</b><small>{s.worst ? s.worst.service + " · " + s.worst.label : "No limit data"}</small></div>
         <div><span>Runs out first</span><b>{soonest ? new Date(soonest.exhaustsAt).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "—"}</b><small>{soonest ? soonest.label : "Nothing projected"}</small></div>
@@ -210,7 +219,7 @@ function ProjectDetail({ project, onToggle, projectOf }) {
               <thead><tr><th>Service</th><th>Category</th><th>Limits set in env</th><th>Usage / where to check</th><th /></tr></thead>
               <tbody>{without.map((svc) => (
                 <tr key={svc.key}>
-                  <td><strong>{svc.label}</strong>{svc.host ? <small className="sv-sub">{svc.host}</small> : null}</td>
+                  <td><strong>{svc.label}</strong>{svc.host ? <small className="sv-sub">{svc.host}</small> : null}{foundBy(svc) ? <small className="sv-sub">{foundBy(svc)}</small> : null}</td>
                   <td>{svc.category}</td>
                   <td>{svc.configuredLimits.length ? svc.configuredLimits.map((l) => <code key={l.name} className="sv-tag">{l.name} = {l.value}{l.period ? " / " + l.period : ""}</code>) : <span className="sv-dim">—</span>}</td>
                   <td>
@@ -229,6 +238,15 @@ function ProjectDetail({ project, onToggle, projectOf }) {
               ))}</tbody>
             </table>
           </div>
+        </section>
+      )}
+
+      {project.code && (
+        <section className="sv-panel">
+          <header className="sv-panel__head"><h2>Code scan</h2><span className="sv-dim">{project.code.state === "scanned" ? "Read " + project.code.files + " files from the repository" + (project.code.truncated ? " (large repo: partial)" : "") : project.code.state === "pending" ? "Scanning the repository in the background…" : "The repository could not be read — check the GitHub connection"}</span></header>
+          {project.code.missingEnv?.length > 0
+            ? <p className="rd-note">The code reads these variables, but this Render service does not define them: <span className="sv-mono">{project.code.missingEnv.join(", ")}</span></p>
+            : project.code.state === "scanned" ? <p className="rd-note">Every variable the code reads is defined on this service.</p> : null}
         </section>
       )}
 
@@ -270,10 +288,10 @@ export default function Services() {
   const [selected, setSelected] = useState("overview");
   const [showSettings, setShowSettings] = useState(false);
 
-  const load = useCallback(async (refresh = false, quiet = false) => {
+  const load = useCallback(async (refresh = false, quiet = false, rescan = false) => {
     if (!quiet) { setLoading(true); setError(""); }
     try {
-      const result = await getLiveDashboard({ refresh });
+      const result = await getLiveDashboard({ refresh, rescan });
       setData(result);
       if (result?.settings) setLimits(limitsFrom(result.settings));
       if (quiet) setError("");
@@ -309,6 +327,7 @@ export default function Services() {
           <div className="rd-topbar__tools">
             <span className="rd-sync" role="status" aria-live="polite">{loading ? "Loading…" : data?.generatedAt ? "Updated " + timeAgo(data.generatedAt) : ""}</span>
             {data?.enabled && <button type="button" className="rd-btn rd-btn--quiet" aria-expanded={showSettings} onClick={() => setShowSettings((v) => !v)}>⚙ Settings</button>}
+            {data?.enabled && <button type="button" className="rd-btn rd-btn--quiet" disabled={loading} title="Read each app's repository again for the services its code uses (normally cached for 6 hours)" onClick={() => void load(true, false, true)}>⟳ Rescan code</button>}
             <button type="button" className="rd-btn rd-btn--primary" disabled={loading} onClick={() => void load(true)}>{loading ? "Refreshing…" : "↻ Refresh"}</button>
           </div>
         </div>

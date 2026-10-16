@@ -29,9 +29,9 @@ async function deployBrief(accounts, service) {
 const savedUrls = (doc, app) => (doc && doc.urls && doc.urls.length ? doc.urls : DEFAULTS[app]);
 
 /** Per-app sync view for the admin Servers page. */
-async function buildRegistrySync(user) {
+async function buildRegistrySync(user, { refresh = false } = {}) {
   const dataKey = await user.getDataKey();
-  const { services, accounts } = await loadRenderServices(user, dataKey);
+  const { services, accounts } = await loadRenderServices(user, dataKey, { refresh });
   const docs = await Registry.find({}).lean();
   const byApp = new Map(docs.map((d) => [d.app, d]));
   const apps = [];

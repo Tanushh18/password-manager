@@ -55,7 +55,9 @@ const NEEDS = [
     [/^\/render\/ops\/incidents$/, "GET", ["renderIncidents"]],
     [/^\/render\/audit$/, "GET", ["renderAudit"]],
     [/^\/render\/usage-settings$/, null, []],
-    [/^\/render\/live-dashboard$/, "GET", ["usageHistory"]]
+    [/^\/render\/live-dashboard$/, "GET", ["usageHistory"]],
+    [/^\/render\/registry-sync(\/|$)/, null, []],
+    [/^\/render\/projects\/status$/, "GET", ["renderIncidents"]]
 ];
 const PATH = (req) => String(req.originalUrl || req.url || "").split("?")[0].replace(/\/+$/, "") || "/";
 const historyFieldsFor = (req) =>

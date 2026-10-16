@@ -278,7 +278,7 @@ export const pushProjectRenderEnv = (projectId, options = {}) => instance.post("
 
 /* Automatic upkeep: live project health/drift (auto-links to Render first) and Servers-tab sync. */
 export const getProjectStatuses = ({ id, refresh } = {}) => instance.get("/render/projects/status", { params: { ...(id ? { id } : {}), ...(refresh ? { refresh: 1 } : {}) }, timeout: 30000 }).then((r) => r.data);
-export const getRegistrySync = () => instance.get("/render/registry-sync", { timeout: 30000 }).then((r) => r.data);
+export const getRegistrySync = ({ refresh } = {}) => instance.get("/render/registry-sync", { params: refresh ? { refresh: 1 } : {}, timeout: 30000 }).then((r) => r.data);
 export const setRegistryAutoSync = (app, autoSync) => instance.put("/render/registry-sync/" + encodeURIComponent(app), { autoSync }).then((r) => r.data);
 
 /* GitHub connections for the Projects page (tokens stay encrypted server-side). */
@@ -320,7 +320,7 @@ export const getRenderOpsReport = (format = "json") => instance.get("/render/ops
 export const diagnoseRenderLogs = (serviceName, logs, allowExternalProcessing = false) => instance.post("/render/ops/diagnose", { serviceName, logs, allowExternalProcessing }).then((r) => r.data);
 
 /* Live-services usage dashboard (running Render services only; read-only provider checks). */
-export const getLiveDashboard = ({ refresh } = {}) => instance.get("/render/live-dashboard", { params: refresh ? { refresh: 1 } : {}, timeout: 45000 }).then((r) => r.data);
+export const getLiveDashboard = ({ refresh, rescan } = {}) => instance.get("/render/live-dashboard", { params: { ...(refresh || rescan ? { refresh: 1 } : {}), ...(rescan ? { rescan: 1 } : {}) }, timeout: rescan ? 90000 : 45000 }).then((r) => r.data);
 export const getUsageVariableReport = () => instance.get("/render/usage-variable-report", { timeout: 90000 }).then((r) => r.data);
 export const getUsageAdminReport = () => instance.get("/render/usage-admin-report", { timeout: 300000 }).then((r) => r.data);
 export const getUsageSettings = () => instance.get("/render/usage-settings").then((r) => r.data);

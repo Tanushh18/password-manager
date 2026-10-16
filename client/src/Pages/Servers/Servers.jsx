@@ -186,8 +186,8 @@ export default function Servers() {
   const [sync, setSync] = useState({}); // app -> Render sync info (automatic; optional)
   const [error, setError] = useState("");
 
-  const loadSync = useCallback(() => {
-    api.getRegistrySync()
+  const loadSync = useCallback((refresh = false) => {
+    api.getRegistrySync({ refresh })
       .then((data) => setSync(Object.fromEntries((data.apps || []).map((a) => [a.app, a]))))
       .catch(() => { /* sync info is optional; the list still works */ });
   }, []);
@@ -213,6 +213,7 @@ export default function Servers() {
           <p className="vault__count">
             Change a backend URL here and every app picks it up the next time it starts — no code change, no redeploy.
           </p>
+          <button type="button" className="btn btn--ghost btn--sm" onClick={() => loadSync(true)}>↻ Refresh Render sync</button>
         </header>
 
         {error && <p className="servers__error">{error}</p>}

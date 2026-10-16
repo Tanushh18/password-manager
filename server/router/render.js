@@ -910,7 +910,7 @@ router.get("/render/usage-admin-report", async (req, res) => {
 router.get("/render/live-dashboard", async (req, res) => {
   try {
     const dataKey = await req.rootUser.getDataKey();
-    const data = await runUsage(req.rootUser, dataKey, { refresh: req.query.refresh === "1" });
+    const data = await runUsage(req.rootUser, dataKey, { refresh: req.query.refresh === "1", rescan: req.query.rescan === "1" });
     res.set("Cache-Control", "no-store");
     return res.json(data);
   } catch { return res.status(500).json({ error: "Could not build the services dashboard." }); }
@@ -929,7 +929,7 @@ router.put("/render/usage-settings", async (req, res) => {
 /* Servers tab sync (admin only): each registry URL matched to its Render service, plus suggestions. */
 router.get("/render/registry-sync", async (req, res) => {
   if (!isAdminUser(req.rootUser)) return res.status(403).json({ error: "Not allowed." });
-  try { res.set("Cache-Control", "no-store"); return res.json(await buildRegistrySync(req.rootUser)); }
+  try { res.set("Cache-Control", "no-store"); return res.json(await buildRegistrySync(req.rootUser, { refresh: req.query.refresh === "1" })); }
   catch { return res.status(500).json({ error: "Could not load Render sync for the server list." }); }
 });
 

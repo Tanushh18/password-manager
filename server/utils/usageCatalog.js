@@ -3,6 +3,8 @@
  * variables, and masks them for display. No I/O. Secrets and credentials in URLs are NEVER part of any output.
  */
 
+const { valueOwner } = require("./serviceSignals");
+
 const SECRET_NAME = /(KEY|SECRET|TOKEN|PASSWORD|PASS|PWD|CREDENTIAL|PRIVATE|SESSION|SALT|HASH|AUTH|COOKIE|CERT|DSN|SID|SIGNATURE|CA_BASE64)/i;
 const URL_VALUE = /^[a-z][a-z0-9+.-]*:\/\//i;
 const TOKEN_LIKE = /^[A-Za-z0-9+/=_-]{20,}$/;
@@ -123,14 +125,23 @@ function schemeOwner(text) {
   return null;
 }
 
-function ownerOf(name, values) {
+/** Which service owns a variable, and how we know: its name, its value, or what the app's code does with it. */
+function ownerInfo(name, values, hints) {
   const text = typeof values.get(name) === "string" ? values.get(name).trim() : "";
   const bySchema = schemeOwner(text);
-  if (bySchema) return bySchema;
-  if (/^DATABASE_URL$/i.test(name)) return "database";
-  for (const p of PROVIDERS) if (p.vars.test(name)) return p.key;
-  return null;
+  if (bySchema) return { owner: bySchema, via: "value" };
+  if (/^DATABASE_URL$/i.test(name)) return { owner: "database", via: "name" };
+  for (const p of PROVIDERS) if (p.vars.test(name)) return { owner: p.key, via: "name" };
+  // The name says nothing: look at the value, then at the code that reads the variable.
+  if (!INTERNAL.test(name)) {
+    const byValue = valueOwner(text);
+    if (byValue) return { owner: byValue, via: "value" };
+    const byCode = hints?.envLinks?.[name];
+    if (byCode) return { owner: byCode, via: "code" };
+  }
+  return { owner: null, via: null };
 }
+const ownerOf = (name, values, hints) => ownerInfo(name, values, hints).owner;
 
 const lookup = (values, ...patterns) => {
   for (const [name, value] of values) for (const p of patterns) if (p.test(name) && typeof value === "string" && value.trim()) return { name, value: value.trim() };
@@ -173,7 +184,9 @@ function cloudinaryAnalysis(values) {
   const sets = new Map();
   for (const [name, value] of values) {
     if (typeof value !== "string" || !value.trim()) continue;
-    const part = cloudinaryPart(name);
+    let part = cloudinaryPart(name);
+    // A cloudinary:// connection string is recognised by its value, under any variable name.
+    if (!part && /^cloudinary:\/\//i.test(value.trim())) part = { kind: "url", group: name.toLowerCase().replace(/[^a-z0-9]+/g, "_") };
     if (!part) continue;
     const text = value.trim();
     const set = sets.get(part.group) || { label: part.group || "default" };
@@ -191,6 +204,9 @@ function cloudinaryAnalysis(values) {
 }
 
 const cloudinarySets = (values) => cloudinaryAnalysis(values).sets;
+
+/* Providers whose usage needs only one API key: a key recognised by its value works under any variable name. */
+const KEY_ONLY = new Set(["brevo", "sendgrid", "pinecone"]);
 
 const CREDENTIALS = {
   mongodb: (values) => {
@@ -286,7 +302,7 @@ function autoGroup(other) {
  * values: Map(name -> value). Returns { services, internal, other, unassigned } with masked variables only,
  * plus `credentials` (kept separate, for server-side use ONLY and never serialised to a client).
  */
-function detectServices(values) {
+function detectServices(values, { hints } = {}) {
   const map = values instanceof Map ? values : new Map(Object.entries(values || {}));
   // Bare API_KEY / API_SECRET only mean Cloudinary when CLOUD_NAME is also present.
   const hasCloudName = [...map.keys()].some((n) => /^CLOUD_NAME$/i.test(n));
@@ -294,12 +310,12 @@ function detectServices(values) {
   const internal = [];
   const other = [];
   for (const [name, value] of map) {
-    let owner = ownerOf(name, map);
-    if (!owner && hasCloudName && /^API_(KEY|SECRET)$/i.test(name)) owner = "cloudinary";
+    let { owner, via } = ownerInfo(name, map, hints);
+    if (!owner && hasCloudName && /^API_(KEY|SECRET)$/i.test(name)) { owner = "cloudinary"; via = "name"; }
     if (!owner && INTERNAL.test(name)) { internal.push(classifyVar(name, value)); continue; }
     if (!owner) { other.push({ ...classifyVar(name, value), _raw: value }); continue; }
     if (!groups.has(owner)) groups.set(owner, []);
-    groups.get(owner).push({ ...classifyVar(name, value), _raw: value });
+    groups.get(owner).push({ ...classifyVar(name, value), _raw: value, _via: via });
   }
   const auto = autoGroup(other);
   for (const [owner, vars] of auto.groups) groups.set(owner, vars);
@@ -307,15 +323,26 @@ function detectServices(values) {
   for (const [owner, vars] of groups) {
     const def = PROVIDERS.find((p) => p.key === owner) || (owner.startsWith("auto-") ? { label: titleCase(owner.slice(5).toUpperCase()), category: "Auto-detected" } : null) || ({ postgres: { label: "PostgreSQL", category: "Database" }, mysql: { label: "MySQL", category: "Database" }, database: { label: "Database", category: "Database" } })[owner] || { label: owner, category: "Other" };
     const limits = vars.filter((v) => LIMIT_NAME.test(v.name) && NUMBERISH.test(String(v._raw))).map((v) => ({ name: v.name, value: Number(String(v._raw).trim()) }));
-    const creds = CREDENTIALS[owner] ? CREDENTIALS[owner](map) : null;
+    let creds = CREDENTIALS[owner] ? CREDENTIALS[owner](map) : null;
+    if (!creds && KEY_ONLY.has(owner)) { const hit = vars.find((v) => v._via === "value" && typeof v._raw === "string"); if (hit) creds = { apiKey: hit._raw.trim() }; }
+    const detectedBy = [...new Set(vars.map((v) => v._via).filter(Boolean))];
+    if (hints?.deps?.[owner]) detectedBy.push("code");
     const host = creds?.uri ? hostLabel(creds.uri) : "";
     services.push({
       key: owner, label: def.label, host: host || "", category: def.category, console: consoleLink[owner] || null,
-      vars: vars.map(({ _raw, ...safe }) => safe), configuredLimits: limits,
+      vars: vars.map(({ _raw, _via, ...safe }) => safe), configuredLimits: limits,
+      detectedBy: [...new Set(detectedBy.length ? detectedBy : ["name"])], packages: hints?.deps?.[owner] || undefined,
       hasCredentials: Boolean(creds), credentials: creds,
       autoDetected: owner.startsWith("auto-") || undefined,
       incompleteAccounts: owner === "cloudinary" ? cloudinaryAnalysis(map).incomplete : undefined
     });
+  }
+  // Services the code depends on that have no variables at all in this deployment.
+  for (const [key, packages] of Object.entries(hints?.deps || {})) {
+    if (groups.has(key)) continue;
+    const def = PROVIDERS.find((p) => p.key === key);
+    if (!def) continue;
+    services.push({ key, label: def.label, host: "", category: def.category, console: consoleLink[key] || null, vars: [], configuredLimits: [], hasCredentials: false, credentials: null, detectedBy: ["code"], packages, inCodeOnly: true });
   }
   const order = ["Database", "Media", "SMS / Voice", "Voice / speech", "Email", "Messaging", "AI", "Realtime", "Auth", "APIs", "Monitoring", "DevOps", "Auto-detected", "Other"];
   services.sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category) || a.label.localeCompare(b.label));
@@ -329,4 +356,4 @@ function publicService(service) {
   return rest;
 }
 
-module.exports = { detectServices, classifyVar, cloudinarySets, cloudinaryAnalysis, publicService, schemeOwner, hostLabel, PROVIDERS, SECRET_NAME, LIMIT_NAME };
+module.exports = { ownerInfo, detectServices, classifyVar, cloudinarySets, cloudinaryAnalysis, publicService, schemeOwner, hostLabel, PROVIDERS, SECRET_NAME, LIMIT_NAME };

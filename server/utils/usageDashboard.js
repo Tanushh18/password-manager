@@ -14,6 +14,24 @@ const HISTORY_MAX = 600;                   // snapshots kept per user
 const SNAPSHOT_MIN_GAP_MS = 55 * 60 * 1000; // at most one snapshot an hour
 const providerCache = new Map();
 
+/* Per-service lookups that rarely change. The page re-syncs every minute; without these every sync made two Render API
+   calls per service. They are only used when the caller passes `cache: true` (the live page), never in unit tests. */
+const LIVE_TTL_MS = 3 * 60 * 1000;
+const ENV_TTL_MS = 5 * 60 * 1000;
+const liveCache = new Map();
+const envCache = new Map();
+const cached = (store, key, ttl, now, load) => {
+  const hit = store.get(key);
+  if (hit && now - hit.at < ttl) return hit.promise;
+  const promise = Promise.resolve().then(load);
+  store.set(key, { at: now, promise });
+  promise.catch(() => store.delete(key));
+  return promise;
+};
+/* Variables almost every app reads that say nothing about a missing setting. */
+const COMMON_ENV = /^(NODE_ENV|PORT|HOST|HOSTNAME|PWD|HOME|PATH|USER|SHELL|CI|DEBUG|TZ|LANG|TERM|NODE_OPTIONS|PYTHONPATH|FLASK_[A-Z_]+|DJANGO_[A-Z_]+|npm_[a-z_]+|RENDER(_[A-Z_]+)?|VERCEL(_[A-Z_]+)?|PUBLIC_URL|BASE_URL|MODE|DEV|PROD|SSR)$/i;
+const clearServiceCaches = () => { providerCache.clear(); liveCache.clear(); envCache.clear(); };
+
 /* Where to see usage for providers that have no usage API Stashr can call with an app key. */
 const USAGE_HINT = {
   groq: "Groq has no usage API. Requests, tokens and rate limits per model are in the Groq console under Settings → Limits / Usage.",
@@ -99,11 +117,14 @@ function runProvider(providers, svc, settings, nowMs) {
   return promise;
 }
 
-async function buildLiveDashboard({ services, accounts, request, providers, settings = {}, history = [], now = Date.now(), refresh = false }) {
-  if (refresh) providerCache.clear();
+async function buildLiveDashboard({ services, accounts, request, providers, settings = {}, history = [], now = Date.now(), refresh = false, cache = false, codeScan = null, scanState = () => "no-repo" }) {
+  if (refresh) clearServiceCaches();
+  const key = (s) => s.accountId + "|" + s.id;
+  const isLiveCached = (s) => (cache ? cached(liveCache, key(s), LIVE_TTL_MS, now, () => isLive(s, (path) => request(s.accountId, path))) : isLive(s, (path) => request(s.accountId, path)));
+  const readEnvCached = (s) => (cache ? cached(envCache, key(s), ENV_TTL_MS, now, () => readEnv(s, (path) => request(s.accountId, path))) : readEnv(s, (path) => request(s.accountId, path)));
   const accountName = (id) => accounts.get(id)?.name || "";
   const candidates = services.filter((s) => !s.suspended);
-  const liveFlags = await mapLimit(candidates, 4, async (s) => (await isLive(s, (path) => request(s.accountId, path))));
+  const liveFlags = await mapLimit(candidates, 6, async (s) => (await isLiveCached(s)));
   const live = candidates.filter((_, i) => liveFlags[i]);
   // Services deployed from the same GitHub repo are one project; its id is the smallest service id (stable).
   const groupKey = (s) => repoKey(s.repo) || "id:" + s.id;
@@ -115,18 +136,27 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
 
   const out = [];
   const values = {};
-  await mapLimit(live, 3, async (service) => {
+  await mapLimit(live, 5, async (service) => {
     let env = new Map();
     let envError = false;
-    try { env = await readEnv(service, (path) => request(service.accountId, path)); } catch { envError = true; }
-    const detected = detectServices(env);
+    try { env = await readEnvCached(service); } catch { envError = true; }
+    // What the app's own code says (SDKs it depends on, variables it reads); null until the repo has been scanned.
+    let hints = null;
+    if (codeScan && service.repo) { try { hints = await codeScan(service); } catch { hints = null; } }
+    const detected = detectServices(env, { hints });
+    const code = codeScan && service.repo ? {
+      state: scanState(service.repo), files: hints?.files || 0, truncated: Boolean(hints?.truncated),
+      // Variables the code reads that this deployment does not define: a missing or misspelled setting.
+      missingEnv: hints ? (hints.envNames || []).filter((n) => !env.has(n) && !COMMON_ENV.test(n)).slice(0, 40) : []
+    } : null;
     const items = [];
     for (const svc of detected.services) {
       const groupId = groupIds.get(groupKey(service));
       const disabled = Boolean(settings.disabled?.[groupId + "|" + svc.key] || settings.disabled?.[service.id + "|" + svc.key]);
       const entry = { ...publicService(svc), fp: fingerprint(svc.key, svc.credentials), usage: null, reports: [], state: "no-credentials", error: null, usageHint: USAGE_HINT[svc.key] || (providers[svc.key] ? "" : "Stashr found this service from the app’s environment variables. It has no usage API that works with an app key, so check the provider’s own dashboard for usage and limits.") };
       entry.configuredLimits = svc.configuredLimits.map((l) => ({ ...l, period: limitPeriod(l.name) }));
-      if (disabled) entry.state = "disabled";
+      if (svc.inCodeOnly) entry.state = "in-code";
+      else if (disabled) entry.state = "disabled";
       else if (svc.hasCredentials && providers[svc.key]) {
         const res = await runProvider(providers, svc, settings, now);
         if (res.ok) {
@@ -142,7 +172,9 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
           }));
         } else { entry.state = "error"; entry.error = { code: res.code, message: res.error, detail: res.detail || "", hint: res.hint || "" }; }
       } else if (!providers[svc.key]) entry.state = "no-reader";
-      if (entry.state === "ok") {
+      if (entry.state === "in-code") {
+        entry.diagnosis = "The app's code uses " + (svc.packages || []).join(", ") + ", but no credentials for it were found in this service's environment variables, so nothing can be tracked yet. It may be configured in another place, or only used in some environments.";
+      } else if (entry.state === "ok") {
         entry.diagnosis = "Live usage was read successfully using this service’s configured credentials." + (svc.incompleteAccounts?.length ? " Not tracked (incomplete variables): " + svc.incompleteAccounts.map((a) => (a.label || "default") + " is missing " + a.missing.join(", ")).join("; ") + "." : "");
       } else if (entry.state === "disabled") {
         entry.diagnosis = "Usage tracking is switched off for this provider in Services & Usage settings.";
@@ -162,7 +194,7 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
     out.push({
       id: service.id, name: service.name, type: service.type, plan: service.plan, url: service.url, dashboardUrl: service.dashboardUrl,
       accountId: service.accountId, accountName: accountName(service.accountId), repo: service.repo,
-      envReadFailed: envError, services: items, internalVars: detected.internal, otherVars: detected.other
+      envReadFailed: envError, code, services: items, internalVars: detected.internal, otherVars: detected.other
     });
   });
   out.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
@@ -190,6 +222,7 @@ function mergeByRepo(entries, idOf) {
     }
     g.deployments.push(deployment);
     g.envReadFailed = g.envReadFailed || e.envReadFailed;
+    if (!g.code && e.code) g.code = e.code;
     g.internalVars = unionVars(g.internalVars, e.internalVars);
     g.otherVars = unionVars(g.otherVars, e.otherVars);
     for (const svc of e.services) {
@@ -219,4 +252,4 @@ function appendSnapshot(history, values, now = Date.now()) {
   return list.slice(-HISTORY_MAX);
 }
 
-module.exports = { buildLiveDashboard, mergeByRepo, appendSnapshot, limitPeriod, providerCache };
+module.exports = { buildLiveDashboard, mergeByRepo, appendSnapshot, limitPeriod, providerCache, clearServiceCaches };
