@@ -835,14 +835,37 @@ router.put("/render/usage-variable-sharing", async (req, res) => {
 router.get("/render/usage-admin-report", async (req, res) => {
   if (String(req.rootUser?.email || "").trim().toLowerCase() !== "tanushchawla16@gmail.com") return res.status(403).json({ error: "Not allowed." });
   try {
-    const sharedUsers = await User.find({ usageVariableSharing: true }).select("usageVariableNames usageVariableScanErrors").lean().exec();
-    const counts = new Map();
-    for (const user of sharedUsers) for (const name of new Set(user.usageVariableNames || [])) counts.set(name, (counts.get(name) || 0) + 1);
-    const variableNames = [...counts.entries()].map(([name, occurrences]) => ({ name, occurrences })).sort((a, b) => a.name.localeCompare(b.name));
-    const scanErrorCount = sharedUsers.reduce((sum, user) => sum + Math.max(0, Number(user.usageVariableScanErrors || 0)), 0);
+    const dataKey = await req.rootUser.getDataKey();
+    const { services, accounts } = await loadRenderServices(req.rootUser, dataKey, { refresh: true });
+    const rows = [];
+    let cursor = 0, scanErrorCount = 0;
+    const scanOne = async (service) => {
+      const account = accounts.get(String(service.accountId));
+      if (!account?.apiKey) {
+        scanErrorCount++;
+        rows.push({ id: service.id, name: service.name || service.serviceName || service.id, url: service.url || null, accountName: account?.name || "Render account", scanError: "Render account credentials unavailable", unknownVariables: [] });
+        return;
+      }
+      try {
+        const payload = await renderOps.renderRequest(account.apiKey, "/v1/services/" + encodeURIComponent(service.id) + "/env-vars?limit=100");
+        const list = Array.isArray(payload) ? payload : Array.isArray(payload?.items) ? payload.items : Array.isArray(payload?.envVars) ? payload.envVars : [];
+        const env = new Map();
+        for (const row of list) { const v = row?.envVar || row; if (v && typeof v.key === "string") env.set(v.key, typeof v.value === "string" ? v.value : ""); }
+        const unknownVariables = detectServices(env).other.map((v) => ({ name: v.name, kind: v.kind, set: Boolean(v.set) })).sort((a, b) => a.name.localeCompare(b.name));
+        rows.push({ id: service.id, name: service.name || service.serviceName || service.id, url: service.url || null, accountName: account.name || "Render account", scanError: null, unknownVariables });
+      } catch {
+        scanErrorCount++;
+        rows.push({ id: service.id, name: service.name || service.serviceName || service.id, url: service.url || null, accountName: account.name || "Render account", scanError: "Could not read this service's environment-variable names", unknownVariables: [] });
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, services.length) }, async () => {
+      while (cursor < services.length) await scanOne(services[cursor++]);
+    }));
+    rows.sort((a, b) => a.name.localeCompare(b.name));
+    const uniqueNames = new Set(rows.flatMap((s) => s.unknownVariables.map((v) => v.name)));
     res.set("Cache-Control", "no-store");
-    return res.json({ scannedAt: new Date().toISOString(), reportingUsers: sharedUsers.length, unknownNameCount: variableNames.length, scanErrorCount, variableNames, ...getUsageCapabilityCatalog() });
-  } catch { return res.status(500).json({ error: "Could not read aggregated variable names." }); }
+    return res.json({ scannedAt: new Date().toISOString(), serviceCount: rows.length, unknownNameCount: uniqueNames.size, scanErrorCount, services: rows, ...getUsageCapabilityCatalog() });
+  } catch { return res.status(500).json({ error: "Could not scan your Render variable names." }); }
 });
 
 /* Live-services usage dashboard: only running Render services, with provider usage, limits and projections. */
