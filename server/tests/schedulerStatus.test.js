@@ -50,3 +50,15 @@ test("authenticated scheduler status returns recent persisted runs without sensi
   assert.equal(JSON.stringify(response.body).includes("test-secret"), false);
   assert.equal(JSON.stringify(response.body).includes("test-password"), false);
 });
+
+
+test("liveness is process-only while readiness requires MongoDB", async () => {
+  const live = await request(app).get("/livez");
+  assert.equal(live.status, 200);
+  assert.equal(live.body.status, "ok");
+  const ready = await request(app).get("/readyz");
+  assert.equal(ready.status, 200);
+  assert.equal(ready.body.status, "ready");
+  assert.equal(ready.body.dependencies.database, "connected");
+  assert.equal(JSON.stringify(ready.body).includes("scheduler-status-test-secret"), false);
+});
