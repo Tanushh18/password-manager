@@ -49,3 +49,10 @@ Dynamic scans must run only against an explicitly approved staging target with a
 - Gitleaks or scanner upstream action changes can affect the workflow; keep actions reviewed and pinned according to repository supply-chain policy.
 - Public vulnerability feeds and registry outages can make a scan unavailable. Re-run after the upstream service recovers.
 - Reports are retained for 30 days in workflow artifacts; use the GitHub Security tab and your retention policy for longer-term tracking.
+
+
+## Known dependency-audit blockers from the upgrade branch
+
+The mobile audit has reported high-severity advisories in `braces` and `node-forge`, plus a moderate `uuid` advisory in the Xcode/Expo toolchain. The current public package versions do not provide a straightforward compatible upgrade path for all of these: the `braces` advisory currently has no patched npm release, and the `node-forge` advisory affects the published version currently resolved by Expo. Forcing npm's suggested Expo downgrade is not acceptable because it would introduce a major SDK regression. Do not mark these findings fixed, suppress them broadly, or merge as security-clean.
+
+Compatible overrides were added for `shell-quote@1.11.0`, `source-map-js@1.2.2`, and `decode-uri-component@0.5.0`; these remove the corresponding known vulnerable versions from the mobile lockfile. The remaining findings must stay release-blocking until a compatible upstream fix is available, a tested vendor patch is reviewed, or the repository owner explicitly approves a narrow, time-bounded exception with compensating controls. Re-run `npm audit` and Trivy after every lockfile change and attach the exact report.
