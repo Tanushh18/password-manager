@@ -29,6 +29,7 @@ function publicRun(run) {
   return {
     id: run._id ? String(run._id) : run.id || null,
     source: run.source === "external" ? "external" : "internal",
+    persisted: typeof run.persisted === "boolean" ? run.persisted : Boolean(run._id),
     status: ["success", "partial", "failed"].includes(run.status) ? run.status : "partial",
     startedAt: new Date(run.startedAt).toISOString(),
     completedAt: new Date(run.completedAt).toISOString(),
