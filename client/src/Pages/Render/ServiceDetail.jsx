@@ -4,7 +4,7 @@ import {
   getRenderLogs, getRenderEnvVars, getRenderDeploys, getRenderMetrics, getRenderSnapshots, getRenderEnvGroups,
   getRenderDbExports, createRenderDbExport, createRenderSnapshot, restoreRenderSnapshot, updateRenderEnvVar,
   deleteRenderEnvVar, triggerRenderDeploy, restartRenderService, suspendRenderService, resumeRenderService,
-  rollbackRenderDeploy, cancelRenderDeploy, deleteRenderService, checkRenderHealth, diagnoseRenderLogs
+  rollbackRenderDeploy, cancelRenderDeploy, deleteRenderService, checkRenderHealth, diagnoseRenderLogs, renameRenderService
 } from "../../api/client";
 import { Modal, StatePill, Skeleton, Empty, LineChart, Section } from "./RenderUi";
 import { usePolling, useRequestGate } from "./renderHooks";
@@ -27,6 +27,9 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(service.name || "");
+  const [renameBusy, setRenameBusy] = useState(false);
   const fail = (e, fallback) => { const message = errorMessage(e, fallback); setError(message); return message; };
 
   // Health
@@ -289,6 +292,25 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
     finally { setBusy(false); }
   };
 
+  const saveServiceName = async () => {
+    const name = nameDraft.trim();
+    if (name.length < 2 || name.length > 100) {
+      setError("Service name must be between 2 and 100 characters.");
+      return;
+    }
+    if (name === service.name) { setEditingName(false); return; }
+    setRenameBusy(true);
+    setError("");
+    try {
+      await renameRenderService(ref.accountId, ref.id, name);
+      toast.success("Render service name updated.");
+      setEditingName(false);
+      await onRefresh();
+      void onAudit();
+    } catch (e) { fail(e, "Could not rename the Render service."); }
+    finally { setRenameBusy(false); }
+  };
+
   const toggleSuspend = async () => {
     const suspendedNow = service.suspended === "suspended";
     const ok = await askConfirm({ title: suspendedNow ? "Resume service?" : "Suspend service?", message: suspendedNow ? "Resume " + service.name + "? This may trigger a deployment or startup." : "Suspend " + service.name + "? It will become unavailable until resumed.", confirmLabel: suspendedNow ? "Resume" : "Suspend", danger: !suspendedNow });
@@ -392,8 +414,18 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
       <header className="rd-detail__head">
         <div>
           <div className="rd-eyebrow"><span />{kind.toUpperCase()}</div>
-          <h2 id="rd-detail-title">{service.name} <StatePill state={state} /></h2>
+          {editingName ? (
+            <form className="rd-detail__rename" onSubmit={(e) => { e.preventDefault(); void saveServiceName(); }}>
+              <label className="rd-sr" htmlFor="rd-service-name">Server name</label>
+              <input id="rd-service-name" value={nameDraft} maxLength={100} autoFocus onChange={(e) => setNameDraft(e.target.value)} disabled={renameBusy} />
+              <button type="submit" className="rd-btn rd-btn--primary" disabled={renameBusy || nameDraft.trim().length < 2}>{renameBusy ? "Saving…" : "Save"}</button>
+              <button type="button" className="rd-btn rd-btn--quiet" disabled={renameBusy} onClick={() => { setNameDraft(service.name || ""); setEditingName(false); }}>Cancel</button>
+            </form>
+          ) : (
+            <h2 id="rd-detail-title">{service.name} <StatePill state={state} /><button type="button" className="rd-btn rd-btn--quiet rd-detail__edit-name" onClick={() => { setNameDraft(service.name || ""); setEditingName(true); }} disabled={renameBusy} aria-label={"Edit name for " + service.name}>✎ Edit name</button></h2>
+          )}
           <p className="rd-muted rd-mono">{service.accountName} · {service.id}</p>
+          {service.serviceDetails?.url && <a className="rd-detail__service-url" href={safeUrl(service.serviceDetails.url)} target="_blank" rel="noreferrer noopener"><span>Server URL</span><strong>{service.serviceDetails.url}</strong><span aria-hidden="true">↗</span></a>}
         </div>
         <div className="rd-detail__tools">
           <button type="button" className={"rd-icon-btn" + (isFavorite ? " is-on" : "")} aria-pressed={isFavorite} aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"} onClick={onToggleFavorite}>{isFavorite ? "★" : "☆"}</button>
