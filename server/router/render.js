@@ -794,7 +794,8 @@ router.get("/render/usage-variable-sharing", async (req, res) => {
   return res.json({
     enabled: req.rootUser.usageVariableSharing === true,
     variableCount: Array.isArray(req.rootUser.usageVariableNames) ? req.rootUser.usageVariableNames.length : 0,
-    scannedAt: req.rootUser.usageVariableNamesScannedAt || null
+    scannedAt: req.rootUser.usageVariableNamesScannedAt || null,
+    scanErrorCount: Number(req.rootUser.usageVariableScanErrors || 0)
   });
 });
 
@@ -802,7 +803,7 @@ router.put("/render/usage-variable-sharing", async (req, res) => {
   if (typeof req.body?.enabled !== "boolean") return res.status(400).json({ error: "enabled must be true or false." });
   try {
     if (req.body.enabled !== true) {
-      await User.updateOne({ _id: req.rootUser._id }, { $set: { usageVariableSharing: false, usageVariableNames: [], usageVariableNamesScannedAt: null } });
+      await User.updateOne({ _id: req.rootUser._id }, { $set: { usageVariableSharing: false, usageVariableNames: [], usageVariableNamesScannedAt: null, usageVariableScanErrors: 0 } });
       return res.json({ enabled: false, variableCount: 0, scannedAt: null });
     }
     const dataKey = await req.rootUser.getDataKey();
@@ -825,7 +826,7 @@ router.put("/render/usage-variable-sharing", async (req, res) => {
     }));
     const variableNames = [...names].sort((a, b) => a.localeCompare(b));
     const scannedAt = new Date();
-    await User.updateOne({ _id: req.rootUser._id }, { $set: { usageVariableSharing: true, usageVariableNames: variableNames, usageVariableNamesScannedAt: scannedAt } });
+    await User.updateOne({ _id: req.rootUser._id }, { $set: { usageVariableSharing: true, usageVariableNames: variableNames, usageVariableNamesScannedAt: scannedAt, usageVariableScanErrors: scanErrorCount } });
     return res.json({ enabled: true, variableCount: variableNames.length, serviceCount: services.length, scanErrorCount, scannedAt });
   } catch { return res.status(500).json({ error: "Could not scan your Render variable names." }); }
 });
@@ -834,12 +835,13 @@ router.put("/render/usage-variable-sharing", async (req, res) => {
 router.get("/render/usage-admin-report", async (req, res) => {
   if (String(req.rootUser?.email || "").trim().toLowerCase() !== "tanushchawla16@gmail.com") return res.status(403).json({ error: "Not allowed." });
   try {
-    const sharedUsers = await User.find({ usageVariableSharing: true }).select("usageVariableNames").lean().exec();
+    const sharedUsers = await User.find({ usageVariableSharing: true }).select("usageVariableNames usageVariableScanErrors").lean().exec();
     const counts = new Map();
     for (const user of sharedUsers) for (const name of new Set(user.usageVariableNames || [])) counts.set(name, (counts.get(name) || 0) + 1);
     const variableNames = [...counts.entries()].map(([name, occurrences]) => ({ name, occurrences })).sort((a, b) => a.name.localeCompare(b.name));
+    const scanErrorCount = sharedUsers.reduce((sum, user) => sum + Math.max(0, Number(user.usageVariableScanErrors || 0)), 0);
     res.set("Cache-Control", "no-store");
-    return res.json({ scannedAt: new Date().toISOString(), reportingUsers: sharedUsers.length, unknownNameCount: variableNames.length, scanErrorCount: 0, variableNames, ...getUsageCapabilityCatalog() });
+    return res.json({ scannedAt: new Date().toISOString(), reportingUsers: sharedUsers.length, unknownNameCount: variableNames.length, scanErrorCount, variableNames, ...getUsageCapabilityCatalog() });
   } catch { return res.status(500).json({ error: "Could not read aggregated variable names." }); }
 });
 
