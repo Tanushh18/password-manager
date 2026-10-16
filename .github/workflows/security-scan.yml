@@ -122,6 +122,29 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+  dast-staging:
+    name: Passive DAST against explicitly configured staging
+    if: vars.STAGING_BASE_URL != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Validate staging target is HTTPS
+        env:
+          STAGING_BASE_URL: ${{ vars.STAGING_BASE_URL }}
+        run: |
+          node -e 'const u = new URL(process.env.STAGING_BASE_URL); if (u.protocol !== "https:" || u.username || u.password) process.exit(1); console.log("Validated HTTPS staging target:", u.origin)'
+      - name: Run OWASP ZAP baseline scan (passive checks only)
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: ${{ vars.STAGING_BASE_URL }}
+          fail_action: true
+          allow_issue_writing: false
+          artifact_name: zap-staging-baseline-report
+      - name: Record target-scope reminder
+        if: always()
+        run: echo "This job uses the repository STAGING_BASE_URL variable. Do not point it at production or a target without explicit authorization."
+
   dependency-review:
     name: Pull request dependency review
     if: github.event_name == 'pull_request' && vars.ENABLE_DEPENDENCY_REVIEW == 'true'
