@@ -110,8 +110,11 @@ schema.pre("save", async function ()
 schema.methods.generateAuthToken = async function (client = "web")
 {
     const token = jwt.sign({ _id: this._id, jti: crypto.randomBytes(12).toString("hex") }, process.env.SECRET_KEY, { expiresIn: TOKEN_TTL });
-    this.tokens = this.tokens.concat({ token, client, createdAt: new Date() }).slice(-MAX_SESSIONS);
-    await this.save();
+    // Atomic push: a whole-document save() races with other writers (monitor, usage history, other logins)
+    // and fails with a VersionError on the tokens array, which made sign-in return a 500.
+    const entry = { token, client, createdAt: new Date() };
+    await this.constructor.updateOne({ _id: this._id }, { $push: { tokens: { $each: [entry], $slice: -MAX_SESSIONS } } });
+    this.tokens = (this.tokens || []).concat(entry).slice(-MAX_SESSIONS);
     return token;
 };
 

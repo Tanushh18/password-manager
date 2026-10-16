@@ -90,6 +90,8 @@ router.post("/login", authLimiter, async (req, res) =>
                 await user.save();
                 return res.status(401).json({ error: "That code didn't work. Try the newest one.", twoFactorRequired: true });
             }
+            // Persist the used step / consumed recovery code atomically (a full save() can hit a VersionError).
+            await User.updateOne({ _id: user._id }, { $set: { "twoFactor.lastStep": user.twoFactor.lastStep, "twoFactor.recoveryCodes": user.twoFactor.recoveryCodes } });
         }
 
         // Only issue a session once every factor is proven.
