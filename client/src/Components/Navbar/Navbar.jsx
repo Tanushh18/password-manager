@@ -14,7 +14,6 @@ function Navbar() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
 
-  /* Sticky nav condenses once the page moves */
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
     onScroll();
@@ -22,14 +21,11 @@ function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  /* Close the drawer on navigation + lock body scroll while it is open */
   useEffect(() => { setOpen(false); }, [location.pathname]);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
+    return () => { document.body.style.overflow = ""; };
   }, [open]);
 
   const links = isAuthenticated
@@ -40,8 +36,8 @@ function Navbar() {
         { to: "/render", label: "Render" },
         { to: "/services", label: "Services" },
         { to: "/cron", label: "Cron" },
+        ...(profile?.isAdmin ? [{ to: "/servers", label: "Servers" }, { to: "/security", label: "Security scans" }] : []),
         { to: "/settings", label: "Settings" },
-        ...(profile?.isAdmin ? [{ to: "/servers", label: "Servers" }] : []),
         { to: "/logout", label: "Sign out" },
       ]
     : [
@@ -58,17 +54,12 @@ function Navbar() {
       <header className={`nav ${scrolled ? "is-scrolled" : ""}`}>
         <div className="nav__inner">
           <div className="nav__brandwrap">
-          <Link to="/" className="nav__brand" aria-label="Stashr home">
-            <span className="nav__mark">
-              <ShieldLine size={19} strokeWidth={1.8} />
-            </span>
-            <span className="nav__wordmark">
-              <span className="nav__name">Stashr</span>
-            </span>
-          </Link>
-          <VersionBadge autoOpen={isAuthenticated} />
+            <Link to="/" className="nav__brand" aria-label="Stashr home">
+              <span className="nav__mark"><ShieldLine size={19} strokeWidth={1.8} /></span>
+              <span className="nav__wordmark"><span className="nav__name">Stashr</span></span>
+            </Link>
+            <VersionBadge autoOpen={isAuthenticated} />
           </div>
-
           <nav className="nav__links" aria-label="Primary">
             {links.map((link) => (
               <NavLink key={link.to} to={link.to} className={({ isActive }) => `nav__link ${isActive ? "is-active" : ""}`} end>
@@ -76,68 +67,34 @@ function Navbar() {
               </NavLink>
             ))}
           </nav>
-
           <div className="nav__actions">
             <ThemeToggle />
-            {isAuthenticated && name && (
-              <span className="nav__greeting">
-                Hello, <em>{name.split(" ")[0]}</em>
-              </span>
-            )}
+            {isAuthenticated && name && <span className="nav__greeting">Hello, <em>{name.split(" ")[0]}</em></span>}
             <Link to={cta.to} className="btn btn--primary btn--sm nav__cta">
-              <span className="btn__sheen" />
-              {cta.label}
-              <Arrow size={14} />
+              <span className="btn__sheen" />{cta.label}<Arrow size={14} />
             </Link>
-            <button
-              className="nav__burger"
-              onClick={() => setOpen(true)}
-              aria-label="Open menu"
-              aria-expanded={open}
-            >
+            <button className="nav__burger" onClick={() => setOpen(true)} aria-label="Open menu" aria-expanded={open}>
               <Menu size={20} />
             </button>
           </div>
         </div>
       </header>
-
-      {/* ── Mobile drawer ── */}
       <div className={`drawer ${open ? "is-open" : ""}`} role="dialog" aria-hidden={!open}>
         <div className="drawer__top">
-          <span className="drawer__brand">
-            <ShieldLine size={18} />
-            Stashr
-          </span>
-          <button className="drawer__close" onClick={() => setOpen(false)} aria-label="Close menu">
-            <Close size={18} />
-          </button>
+          <span className="drawer__brand"><ShieldLine size={18} />Stashr</span>
+          <button className="drawer__close" onClick={() => setOpen(false)} aria-label="Close menu"><Close size={18} /></button>
         </div>
-
         <nav className="drawer__links">
           {links.map((link, i) => (
-            <NavLink
-              key={link.to}
-              to={link.to}
-              className={({ isActive }) => `drawer__link ${isActive ? "is-active" : ""}`}
-              end
-              style={{ transitionDelay: `${0.06 + i * 0.06}s` }}
-            >
+            <NavLink key={link.to} to={link.to} className={({ isActive }) => `drawer__link ${isActive ? "is-active" : ""}`} end style={{ transitionDelay: `${0.06 + i * 0.06}s` }}>
               {link.label}
             </NavLink>
           ))}
-          <NavLink
-            to={cta.to}
-            className="drawer__link drawer__link--cta"
-            style={{ transitionDelay: `${0.06 + links.length * 0.06}s` }}
-          >
-            {cta.label}
-            <Arrow size={15} />
+          <NavLink to={cta.to} className="drawer__link drawer__link--cta" style={{ transitionDelay: `${0.06 + links.length * 0.06}s` }}>
+            {cta.label}<Arrow size={15} />
           </NavLink>
         </nav>
-
-        <p className="drawer__note">
-          <span className="script">Passwords, projects, everything — kept safe.</span>
-        </p>
+        <p className="drawer__note"><span className="script">Passwords, projects, everything — kept safe.</span></p>
       </div>
       <div className={`drawer__scrim ${open ? "is-open" : ""}`} onClick={() => setOpen(false)} />
     </>

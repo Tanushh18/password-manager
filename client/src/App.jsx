@@ -14,7 +14,8 @@ import ProjectForm from "./Pages/Projects/ProjectForm";
 import ProjectDeploy from "./Pages/Projects/ProjectDeploy";
 import Settings from "./Pages/Settings/Settings";
 import Servers from "./Pages/Servers/Servers";
-// Loaded on demand: the dashboard is large and only needed on /render.
+import Security from "./Pages/Security/Security";
+// Loaded on demand: operations screens are large and only needed on their routes.
 const Services = lazy(() => import("./Pages/Services/Services"));
 const Cron = lazy(() => import("./Pages/Cron/Cron"));
 const Forgot = lazy(() => import("./Pages/Forgot/Forgot"));
@@ -26,7 +27,6 @@ import InstallPrompt from "./Components/InstallPrompt/InstallPrompt";
 import Splash from "./Components/Splash/Splash";
 import { useVault } from "./state/vault";
 
-/* Routes that need an open vault. */
 const WAKING = { title: "Waking the server…", body: "Your sign-in is saved. Free servers sleep when idle and can take up to a minute to start." };
 
 function RequireVault({ children }) {
@@ -37,13 +37,11 @@ function RequireVault({ children }) {
   return children;
 }
 
-/* The server list is for the owner's account only (the server enforces this too). */
 function RequireAdmin({ children }) {
   const { profile } = useVault();
   return profile?.isAdmin ? children : <Navigate to="/passwords" replace />;
 }
 
-/* Sign-in pages bounce away once there's a session. */
 function GuestOnly({ children }) {
   const { status, waking } = useVault();
   if (status === "checking") return <Splash {...(waking ? WAKING : {})} />;
@@ -57,7 +55,6 @@ function ScrollToTop() {
   return null;
 }
 
-// Spotlight that follows the pointer across any hoverable card
 function usePointerSpotlight() {
   useEffect(() => {
     const onMove = (e) => {
@@ -93,6 +90,7 @@ export default function App() {
           <Route path="/projects/:id/edit" element={<RequireVault><ProjectForm /></RequireVault>} />
           <Route path="/settings" element={<RequireVault><Settings /></RequireVault>} />
           <Route path="/servers" element={<RequireVault><RequireAdmin><Servers /></RequireAdmin></RequireVault>} />
+          <Route path="/security" element={<RequireVault><RequireAdmin><Security /></RequireAdmin></RequireVault>} />
           <Route path="/services" element={<RequireVault><Suspense fallback={<Splash />}><Services /></Suspense></RequireVault>} />
           <Route path="/cron" element={<RequireVault><Suspense fallback={<Splash />}><Cron /></Suspense></RequireVault>} />
           <Route path="/render" element={<RequireVault><Suspense fallback={<Splash />}><RenderDashboard /></Suspense></RequireVault>} />
