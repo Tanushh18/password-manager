@@ -50,6 +50,65 @@ function Row({ icon, label, hint, children, block }) {
   );
 }
 
+function VariableServiceRows({ services, query = "" }) {
+  const needle = query.trim().toLowerCase();
+  const rows = (services || []).map((service) => ({
+    ...service,
+    unknownVariables: (service.unknownVariables || []).filter((variable) =>
+      !needle || (variable.name + " " + service.name + " " + service.accountName).toLowerCase().includes(needle)
+    )
+  })).filter((service) => service.unknownVariables.length || service.scanError);
+
+  if (!rows.length) return <p className="settings-admin__empty">{needle ? "No variables or services match this filter." : "No unsupported variable names found in readable services."}</p>;
+
+  return rows.map((service) => (
+    <article className="settings-admin__service" key={service.id}>
+      <div className="settings-admin__service-title">
+        <div><strong>{service.name}</strong><small>{service.accountName || "Render account"} · {service.id}</small></div>
+        {service.url && <a href={service.url} target="_blank" rel="noopener noreferrer">Open service ↗</a>}
+      </div>
+      {service.scanError
+        ? <p className="settings-admin__error">{service.scanError}</p>
+        : <div className="settings-admin__vars">{service.unknownVariables.map((variable) => (
+          <span key={variable.name}><code>{variable.name}</code><small>{variable.kind === "empty" ? "empty · value hidden" : variable.set ? "set · value hidden" : "not set"}</small></span>
+        ))}</div>}
+    </article>
+  ));
+}
+
+/* Every user can scan and see unsupported variable names from their own Render connections. */
+function UserVariablePanel() {
+  const [report, setReport] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const load = useCallback(async () => {
+    setBusy(true); setError("");
+    try { setReport(await api.getUsageVariableReport()); }
+    catch (e) { setError(api.errorMessage(e) || "Could not scan your connected Render services."); }
+    finally { setBusy(false); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+
+  return (
+    <Group title="Your Render · Unsupported environment variables">
+      <div className="settings-admin">
+        <div className="settings-admin__head">
+          <div><strong>Environment variable coverage</strong><p className="srow__hint">Shows variable names Stashr does not recognize in your connected Render services. Values and secrets are never displayed or saved by this scan.</p></div>
+          <button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => void load()}>{busy ? "Scanning…" : "↻ Scan again"}</button>
+        </div>
+        {error && <p className="settings-admin__error" role="alert">{error}</p>}
+        {report && <div className="settings-admin__stats"><div><strong>{report.serviceCount ?? 0}</strong><span>Services scanned</span></div><div><strong>{report.unknownNameCount ?? 0}</strong><span>Unique unsupported names</span></div><div><strong>{report.scanErrorCount ?? 0}</strong><span>Scan issues</span></div></div>}
+        {!report && busy && <p className="srow__hint">Reading environment-variable names from your Render services…</p>}
+        {report && <div className="settings-admin__unknown-head"><h3>Unsupported variable names by service</h3><input className="input" type="search" placeholder="Filter variable or service…" aria-label="Filter unsupported variables" value={query} onChange={(e) => setQuery(e.target.value)} /></div>}
+        {report && <VariableServiceRows services={report.services} query={query} />}
+        {report?.scannedAt && <p className="settings-admin__foot">Last scan: {new Date(report.scannedAt).toLocaleString()} · variable values are never displayed.</p>}
+      </div>
+    </Group>
+  );
+}
+
+/* Admin-only aggregate across all users; never shows a user's identity or service names. */
 function AdminUsagePanel() {
   const [report, setReport] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -58,29 +117,29 @@ function AdminUsagePanel() {
   const load = useCallback(async () => {
     setBusy(true); setError("");
     try { setReport(await api.getUsageAdminReport()); }
-    catch (e) { setError(api.errorMessage(e) || "Could not scan Render variables."); }
+    catch (e) { setError(api.errorMessage(e) || "Could not scan connected users' Render services."); }
     finally { setBusy(false); }
   }, []);
-  useEffect(() => { void load(); }, [load]);
   const needle = query.trim().toLowerCase();
-  const serviceRows = (report?.services || []).map((service) => ({ ...service, unknownVariables: (service.unknownVariables || []).filter((v) => !needle || (v.name + " " + service.name + " " + service.accountName).toLowerCase().includes(needle)) })).filter((service) => service.unknownVariables.length || service.scanError);
+  const variables = (report?.unknownVariables || []).filter((variable) => !needle || variable.name.toLowerCase().includes(needle));
+
   return (
-    <Group title="Admin · Usage & variable diagnostics">
+    <Group title="Admin · Cross-user usage & variable diagnostics">
       <div className="settings-admin">
-        <div className="settings-admin__head"><div><strong>Render usage coverage</strong><p className="srow__hint">Scans connected Render services. Only variable names and safe metadata are shown; values and secrets are never returned.</p></div><button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => void load()}>{busy ? "Scanning…" : "↻ Scan again"}</button></div>
+        <div className="settings-admin__head"><div><strong>Unsupported variable discovery</strong><p className="srow__hint">Scans connected Render accounts across users. Only aggregate variable-name counts are shown here—no user emails, account names, service names, values or secrets.</p></div><button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => void load()}>{busy ? "Scanning all users…" : report ? "↻ Scan all users again" : "Scan all users"}</button></div>
         {error && <p className="settings-admin__error" role="alert">{error}</p>}
-        {report && <div className="settings-admin__stats"><div><strong>{report.serviceCount ?? 0}</strong><span>Services scanned</span></div><div><strong>{report.unknownNameCount ?? 0}</strong><span>Unknown variable names</span></div><div><strong>{(report.services || []).filter((v) => v.scanError).length}</strong><span>Scan errors</span></div></div>}
-        <h3>Services with live usage readers</h3>
-        <p className="srow__hint">These providers have a usage reader in Stashr. Actual metrics depend on credentials, permissions and provider API response.</p>
+        {report && <div className="settings-admin__stats"><div><strong>{report.connectedUserCount ?? 0}</strong><span>Connected users scanned</span></div><div><strong>{report.serviceCount ?? 0}</strong><span>Services scanned</span></div><div><strong>{report.unknownNameCount ?? 0}</strong><span>Unique unsupported names</span></div><div><strong>{report.scanErrorCount ?? 0}</strong><span>Scan issues</span></div></div>}
+        <h3>Providers with live usage readers</h3>
+        <p className="srow__hint">Actual usage metrics depend on each provider's API, credentials and permissions.</p>
         <div className="settings-admin__providers">{(report?.usageReaders || []).map((provider) => <span className="settings-admin__provider" key={provider.key}><strong>{provider.label}</strong><small>{provider.category}</small></span>)}</div>
-        <h3>Recognized services without a live usage reader</h3>
-        <p className="srow__hint">Stashr can identify these variable families, but usage may need to be checked in the provider console.</p>
+        <h3>Recognized providers without a live usage reader</h3>
+        <p className="srow__hint">Stashr recognizes these variable families, but usage support may need to be added.</p>
         <div className="settings-admin__providers">{(report?.recognizedServices || []).filter((provider) => !provider.liveUsageSupported).map((provider) => <span className="settings-admin__provider is-muted" key={provider.key}><strong>{provider.label}</strong><small>{provider.category} · console/manual</small></span>)}</div>
-        <div className="settings-admin__unknown-head"><h3>Unrecognized environment variables</h3><input className="input" type="search" placeholder="Filter variable or service…" aria-label="Filter unknown variables" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
-        {!report && busy && <p className="srow__hint">Reading variable names from Render…</p>}
-        {report && !serviceRows.length && <p className="settings-admin__empty">No unrecognized variables found in readable services.</p>}
-        {serviceRows.map((service) => <article className="settings-admin__service" key={service.id}><div className="settings-admin__service-title"><div><strong>{service.name}</strong><small>{service.accountName || "Render account"} · {service.id}</small></div>{service.url && <a href={service.url} target="_blank" rel="noopener noreferrer">Open service ↗</a>}</div>{service.scanError ? <p className="settings-admin__error">{service.scanError}</p> : <div className="settings-admin__vars">{service.unknownVariables.map((v) => <span key={v.name}><code>{v.name}</code><small>{v.kind === "empty" ? "empty" : v.set ? "set · value hidden" : "not set"}</small></span>)}</div>}</article>)}
-        {report?.scannedAt && <p className="settings-admin__foot">Last scan: {new Date(report.scannedAt).toLocaleString()} · {report.services?.length || 0} service records</p>}
+        <div className="settings-admin__unknown-head"><h3>Aggregate unsupported variable names</h3><input className="input" type="search" placeholder="Filter variable name…" aria-label="Filter aggregate unsupported variables" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+        {!report && !busy && <p className="settings-admin__empty">Run a scan to discover variable names used by connected Render services across all users.</p>}
+        {report && !variables.length && <p className="settings-admin__empty">{needle ? "No variable names match this filter." : "No unsupported variable names found in readable services."}</p>}
+        {variables.map((variable) => <article className="settings-admin__service" key={variable.name}><div className="settings-admin__service-title"><div><strong><code>{variable.name}</code></strong><small>Seen in {variable.userCount} user(s) · {variable.serviceCount} service(s)</small></div></div></article>)}
+        {report?.scannedAt && <p className="settings-admin__foot">Last scan: {new Date(report.scannedAt).toLocaleString()} · aggregate counts only; no identifiers or values are shown.</p>}
       </div>
     </Group>
   );
@@ -579,11 +638,13 @@ export default function Settings() {
           </Row>
         </Group>
 
+        
+
         <Group title="Telegram">
           <TelegramBot />
         </Group>
 
-        {String(profile?.email || "").trim().toLowerCase() === ADMIN_EMAIL && <AdminUsagePanel />}
+        <UserVariablePanel />\n        {String(profile?.email || "").trim().toLowerCase() === ADMIN_EMAIL && <AdminUsagePanel />}
 
         <Group title="Security">
           <Row icon={<LockLine size={15} />} label="Lock now" hint="Sign out of this device now. You stay signed in otherwise, until you lock or sign out yourself.">
