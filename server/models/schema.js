@@ -196,6 +196,9 @@ schema.methods.toPublic = function (dataKey)
     };
 };
 
+// Bounded monitoring histories: by far the largest parts of the account document (written every few minutes by the
+// monitor). Requests that do not read them load the account without them.
+schema.statics.HISTORY_FIELDS = ["renderMetricHistory", "renderIncidents", "renderAudit", "usageHistory"];
 schema.statics.publicEntry = publicEntry;
 schema.statics.sealEntry = sealEntry;
 

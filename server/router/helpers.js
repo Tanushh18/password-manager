@@ -12,8 +12,13 @@ const COOKIE_OPTIONS = {
     httpOnly: true,
     secure: true,
     sameSite: "None",
-    path: "/"
+    path: "/",
+    // CHIPS: a partitioned cookie still works when the browser blocks third-party cookies (the site and the API
+    // are on different domains), including in incognito.
+    partitioned: true
 };
+// Cookies set before CHIPS were not partitioned; they have to be cleared with the old attributes.
+const LEGACY_COOKIE_OPTIONS = { httpOnly: true, secure: true, sameSite: "None", path: "/" };
 const COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -21,9 +26,10 @@ const str = (value) => (typeof value === "string" ? value.trim() : "");
 const raw = (value) => (typeof value === "string" ? value : "");
 
 // Exact match first; older accounts may have been stored with mixed case.
+const LEAN = Object.fromEntries(User.HISTORY_FIELDS.map((field) => [field, 0])); // sign-in never reads the monitoring histories
 const findByEmail = async (email) =>
-    (await User.findOne({ email })) ||
-    (await User.findOne({ email: new RegExp(`^${escapeRegex(email)}$`, "i") }));
+    (await User.findOne({ email }, LEAN)) ||
+    (await User.findOne({ email: new RegExp(`^${escapeRegex(email)}$`, "i") }, LEAN));
 
 const isBlob = (value) => typeof value === "string" && value.length <= MAX_BLOB && BLOB_RE.test(value);
 
@@ -70,6 +76,6 @@ const serverError = (res, where, error) =>
 };
 
 module.exports = {
-    EMAIL_RE, COOKIE_OPTIONS, COOKIE_MAX_AGE, str, raw, findByEmail, isBlob, validKdf,
+    EMAIL_RE, COOKIE_OPTIONS, LEGACY_COOKIE_OPTIONS, COOKIE_MAX_AGE, str, raw, findByEmail, isBlob, validKdf,
     wantsToken, checkPassword, checkSecondFactor, serverError
 };

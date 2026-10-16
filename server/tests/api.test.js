@@ -79,6 +79,13 @@ describe("auth", () =>
         const web = await request(app).post("/login").send({ email: "ana@example.com", password: "master-pass" });
         expect(web.body.token).toBeUndefined();
         expect(web.headers["set-cookie"][0]).toMatch(/jwtoken=.*HttpOnly/);
+        expect(web.headers["set-cookie"][0]).toMatch(/Partitioned/);
+
+        // Web fallback for browsers that block the cross-site cookie: the token is returned only when asked for.
+        const fallback = await request(app).post("/login").send({ email: "ana@example.com", password: "master-pass", returnToken: true });
+        expect(fallback.body.token).toBeTruthy();
+        const me = await request(app).get("/authenticate").set("Authorization", "Bearer " + fallback.body.token);
+        expect(me.status).toBe(200);
     });
 
     test("/authenticate never exposes secrets", async () =>

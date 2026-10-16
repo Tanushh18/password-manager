@@ -79,8 +79,16 @@ const instance = axios.create({
     withCredentials: true
 });
 
+// Fallback for browsers that refuse the cross-site session cookie: the sign-in token is kept here and sent as a
+// Bearer header instead. Only used after the cookie was seen to fail; cleared on sign-out or a rejected session.
+const BEARER_KEY = "pm_bearer";
+export const getBearer = () => { try { return localStorage.getItem(BEARER_KEY) || ""; } catch (e) { return ""; } };
+export const setBearer = (token) => { try { if (token) localStorage.setItem(BEARER_KEY, token); else localStorage.removeItem(BEARER_KEY); } catch (e) { /* private mode */ } };
+
 instance.interceptors.request.use((config) =>
 {
+    const bearer = getBearer();
+    if (bearer && !/\/(login|register)$/.test(String(config.url || "").split("?")[0])) config.headers.Authorization = "Bearer " + bearer;
     if (config._server === undefined) config._server = active;
     config.baseURL = SERVERS[config._server];
     return config;
@@ -98,7 +106,7 @@ instance.interceptors.response.use(
         // The server that just signed us in (or confirmed the session) is the one that holds the cookie.
         if (/\/(login|authenticate)$/.test(String(response.config.url || "").split("?")[0]) && SERVERS[response.config._server])
             writeSessionServer(SERVERS[response.config._server]);
-        if (/\/logout$/.test(String(response.config.url || "").split("?")[0])) writeSessionServer("");
+        if (/\/logout$/.test(String(response.config.url || "").split("?")[0])) { writeSessionServer(""); setBearer(""); }
         return response;
     },
     (error) =>

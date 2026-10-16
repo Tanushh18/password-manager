@@ -17,6 +17,33 @@ const readToken = (req) =>
     return (req.cookies && req.cookies.jwtoken) || null;
 };
 
+/*
+ * The account document carries large monitoring histories. Loading them on every request (the Render page polls
+ * several times a minute) is what made sign-in and every page slow, so a request only loads the histories its route
+ * reads. A route not listed here under /render or /telegram loads everything (the safe default).
+ */
+const HISTORY = User.HISTORY_FIELDS;
+const NEEDS = [
+    [/^\/render\/accounts(\/|$)/, null, []],
+    [/^\/render\/ops\/(status|pings|config)$/, "GET", []],
+    [/^\/render\/ops\/history$/, "GET", ["renderMetricHistory"]],
+    [/^\/render\/ops\/incidents$/, "GET", ["renderIncidents"]],
+    [/^\/render\/audit$/, "GET", ["renderAudit"]],
+    [/^\/render\/usage-settings$/, null, []],
+    [/^\/render\/live-dashboard$/, "GET", ["usageHistory"]]
+];
+const historyFieldsFor = (req) =>
+{
+    const path = String(req.originalUrl || req.url || "").split("?")[0].replace(/\/+$/, "") || "/";
+    if (/^\/(render|telegram)(\/|$)/.test(path))
+    {
+        for (const [pattern, method, fields] of NEEDS) if (pattern.test(path) && (!method || method === req.method)) return fields;
+        return HISTORY;
+    }
+    return [];
+};
+const leanProjection = (needed) => Object.fromEntries(HISTORY.filter((field) => !needed.includes(field)).map((field) => [field, 0]));
+
 const authenticate = async (req, res, next) =>
 {
     try
@@ -29,7 +56,8 @@ const authenticate = async (req, res, next) =>
         }
 
         const verify = jwt.verify(token, process.env.SECRET_KEY);
-        const rootUser = await User.findOne({ _id: verify._id, "tokens.token": token });
+        const projection = leanProjection(historyFieldsFor(req));
+        const rootUser = await User.findOne({ _id: verify._id, "tokens.token": token }, Object.keys(projection).length ? projection : undefined);
 
         if (!rootUser)
         {
@@ -57,5 +85,6 @@ const authenticate = async (req, res, next) =>
 };
 
 authenticate.readToken = readToken;
+authenticate.historyFieldsFor = historyFieldsFor;
 
 module.exports = authenticate;

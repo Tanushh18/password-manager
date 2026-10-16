@@ -7,7 +7,7 @@ const rateLimit = require("../middlewares/rateLimit");
 const { encrypt, decrypt } = require("../models/EncDecManager");
 const { estimate } = require("../utils/strength");
 const {
-    EMAIL_RE, COOKIE_OPTIONS, COOKIE_MAX_AGE, str, raw, findByEmail,
+    EMAIL_RE, COOKIE_OPTIONS, LEGACY_COOKIE_OPTIONS, COOKIE_MAX_AGE, str, raw, findByEmail,
     wantsToken, checkPassword, checkSecondFactor, serverError
 } = require("./helpers");
 
@@ -107,7 +107,7 @@ router.post("/login", authLimiter, async (req, res) =>
             email: user.email,
             twoFactorEnabled: Boolean(user.twoFactor && user.twoFactor.enabled)
         };
-        if (client === "mobile") body.token = token;
+        if (client === "mobile" || req.body.returnToken === true) body.token = token; // returnToken: web fallback when the browser blocks the cookie
         console.info(`[auth] login ok user=${user._id} client=${client} origin=${req.headers.origin || "-"} twoFactor=${body.twoFactorEnabled}`);
 
         return res.status(200).json(body);
@@ -143,6 +143,7 @@ router.get("/logout", async (req, res) =>
     }
 
     res.clearCookie("jwtoken", COOKIE_OPTIONS);
+    res.clearCookie("jwtoken", LEGACY_COOKIE_OPTIONS);
     res.status(200).send("Logout");
 });
 

@@ -6,7 +6,7 @@ const rateLimit = require("../middlewares/rateLimit");
 const totp = require("../utils/totp");
 const { seal, unseal } = require("../models/EncDecManager");
 const {
-    COOKIE_OPTIONS, COOKIE_MAX_AGE, str, raw, wantsToken,
+    COOKIE_OPTIONS, LEGACY_COOKIE_OPTIONS, COOKIE_MAX_AGE, str, raw, wantsToken,
     checkPassword, checkSecondFactor, serverError
 } = require("./helpers");
 
@@ -70,7 +70,7 @@ router.post("/account/password", authenticate, sensitiveLimiter, async (req, res
         res.cookie("jwtoken", token, { ...COOKIE_OPTIONS, expires: new Date(Date.now() + COOKIE_MAX_AGE) });
 
         const body = { message: "Password changed. Other devices were signed out." };
-        if (client === "mobile") body.token = token;
+        if (client === "mobile" || req.body.returnToken === true) body.token = token; // returnToken: web fallback when the browser blocks the cookie
         return res.status(200).json(body);
     }
     catch (error)
@@ -105,6 +105,7 @@ router.post("/account/delete", authenticate, sensitiveLimiter, async (req, res) 
         if (!(await reauth(req, res, user))) return undefined;
         await User.deleteOne({ _id: user._id });
         res.clearCookie("jwtoken", COOKIE_OPTIONS);
+        res.clearCookie("jwtoken", LEGACY_COOKIE_OPTIONS);
         return res.status(200).json({ message: "Your account and vault were deleted." });
     }
     catch (error)

@@ -18,7 +18,7 @@ import { serviceProjectIndex } from "../../lib/serviceProjects";
 
 const VIEWS = [["overview", "Overview"], ["services", "Services"], ["monitoring", "Monitoring"], ["incidents", "Incidents"], ["settings", "Settings"]];
 const PAGE_SIZE = 15;
-const REFRESH_MS = 15000;
+const REFRESH_MS = 30000;
 const FAV_KEY = "stashr_render_favorites";
 const viewFromHash = () => { const h = window.location.hash.replace("#", ""); return VIEWS.some(([id]) => id === h) ? h : "overview"; };
 
@@ -100,7 +100,7 @@ export default function RenderDashboard() {
   useEffect(() => { void loadAccounts(); void loadAudit(); void refreshOps(); }, [loadAccounts, loadAudit, refreshOps]);
   usePolling(() => loadAccounts({ quiet: true }), REFRESH_MS, auto);
   // Keep inventory, monitoring history, incidents and scheduler status in sync while visible.
-  usePolling(() => ops.refreshLive(), 15000, auto);
+  usePolling(() => ops.refreshLive(), 60000, auto);
   useEffect(() => { writeStored("stashr_render_auto_refresh", auto); }, [auto]);
   useEffect(() => { writeStored(FAV_KEY, favorites); }, [favorites]);
   useEffect(() => { writeStored("stashr_render_layout", layout); }, [layout]);

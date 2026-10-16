@@ -81,7 +81,7 @@ export function VaultProvider({ children }) {
         .then(() => { if (!cancelled) { setWaking(false); setStatus("ready"); } })
         .catch((error) => {
           if (cancelled) return;
-          if (bootVerdict(error, attempt) === "signedOut") { setWaking(false); setStatus("signedOut"); return; }
+          if (bootVerdict(error, attempt) === "signedOut") { if (error?.response?.status === 401) api.setBearer(""); setWaking(false); setStatus("signedOut"); return; }
           setWaking(true);
           timer = window.setTimeout(run, bootDelay(attempt));
           attempt += 1;
@@ -101,8 +101,9 @@ export function VaultProvider({ children }) {
   /* ── Sign in / up ── */
   const login = useCallback(
     async (email, password, code) => {
+      let loginResponse = null;
       try {
-        await api.loginUser({ email, password, code: code || undefined });
+        loginResponse = await api.loginUser({ email, password, code: code || undefined, returnToken: true });
       } catch (e) {
         if (e?.response?.data?.twoFactorRequired) return { twoFactorRequired: true, error: code ? api.errorMessage(e) : null };
         const status = e?.response?.status;
@@ -111,9 +112,20 @@ export function VaultProvider({ children }) {
         throw error;
       }
       console.info("[stashr] login accepted by", api.API_URL());
+      api.setBearer("");
       try {
-        await loadProfile();
+        try {
+          await loadProfile();
+        } catch (first) {
+          // The browser did not keep the session cookie (cross-site cookies blocked): use the token instead.
+          const token = loginResponse?.data?.token;
+          if (first?.response?.status !== 401 || !token) throw first;
+          console.warn("[stashr] the browser blocked the session cookie, using the token fallback");
+          api.setBearer(token);
+          await loadProfile();
+        }
       } catch (e) {
+        api.setBearer("");
         console.error("[stashr] login worked but the session check failed", { status: e?.response?.status, data: e?.response?.data, server: api.API_URL(), message: e?.message });
         const error = new Error(e?.response?.status === 401
           ? "Signed in, but the browser did not keep the session. Allow third-party cookies / cross-site cookies for this site, then try again."
