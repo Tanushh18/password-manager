@@ -1,0 +1,23 @@
+/* Mascot-only parts; colours and mood animations come from Robot.css (.bot--<mood>). */
+.mascot-dial__ring { fill: rgba(0, 0, 0, 0.35); stroke: var(--bot-main); stroke-width: 2; }
+.mascot-dial__ticks { stroke: var(--bot-main); stroke-width: 2; stroke-linecap: round; }
+.mascot-dial { transform-box: fill-box; transform-origin: center; }
+.bot--transforming .mascot-dial, .bot--celebrating .mascot-dial { animation: bot-spin 1.6s linear infinite; }
+.bot--scared .mascot-dial, .bot--angry .mascot-dial { animation: bot-spin 0.6s linear infinite reverse; }
+.mascot-ticks line { stroke: var(--bot-main); stroke-width: 1.6; }
+.mascot-bells { transform-box: fill-box; transform-origin: 50% 100%; }
+.bot--angry .mascot-bells, .bot--fire .mascot-bells, .bot--scared .mascot-bells, .bot--celebrating .mascot-bells { animation: mascot-ring 0.12s linear infinite; }
+.mascot-check { fill: none; stroke: var(--bot-main); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.bot--scared .mascot-check, .bot--dead .mascot-check { opacity: 0.25; }
+.mascot-gear__teeth { fill: none; stroke: var(--bot-main); stroke-width: 9; stroke-dasharray: 8 6; }
+.mascot-gear { transform-box: fill-box; transform-origin: center; animation: bot-spin 10s linear infinite; }
+.bot--fire .mascot-gear, .bot--transforming .mascot-gear { animation-duration: 2s; }
+.bot--dead .mascot-gear, .bot--sleeping .mascot-gear { animation: none; }
+.mascot-panel { fill: rgba(90, 209, 255, 0.25); stroke: var(--bot-main); stroke-width: 1.5; }
+.mascot-dish { fill: none; }
+.mascot-waves path { fill: none; stroke: var(--bot-main); stroke-width: 2; stroke-linecap: round; }
+.mascot-waves { animation: bot-blink 1.4s ease-in-out infinite; }
+.bot--dead .mascot-waves, .bot--sleeping .mascot-waves { display: none; }
+.mascot-fin { stroke-linejoin: round; }
+@keyframes mascot-ring { 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } }
+@media (prefers-reduced-motion: reduce) { .mascot * { animation: none !important; } }

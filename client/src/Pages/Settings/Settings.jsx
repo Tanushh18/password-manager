@@ -14,6 +14,8 @@ import { estimate } from "../../lib/strength";
 import { useVault } from "../../state/vault";
 import "./Settings.css";
 
+import MascotBanner from "../../Components/Robot/MascotBanner";
+import { accountMood } from "../../lib/pageMoods";
 const download = (name, text, type) => {
   const url = URL.createObjectURL(new Blob([text], { type }));
   const a = document.createElement("a");
@@ -573,6 +575,7 @@ export default function Settings() {
           <p className="vault__count">{profile?.email}</p>
         </header>
 
+        <MascotBanner kind="gear" {...accountMood(profile)} />
         <Group title="Account">
           <Row icon={<User size={15} />} label="Name" hint="How Stashr greets you.">
             <form className="settings__inline" onSubmit={saveName}>

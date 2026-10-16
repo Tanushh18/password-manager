@@ -14,6 +14,8 @@ import { useVault } from "../../state/vault";
 import { domainOf } from "../../lib/items";
 import "./Passwords.css";
 
+import MascotBanner from "../../Components/Robot/MascotBanner";
+import { vaultMood } from "../../lib/pageMoods";
 export default function Passwords() {
   const {
     profile, items, broken, health, breaches, breachProgress, prefs,
@@ -114,6 +116,8 @@ export default function Passwords() {
             <Alert size={15} /> {broken} item{broken === 1 ? "" : "s"} couldn't be decrypted with this key and {broken === 1 ? "is" : "are"} hidden.
           </div>
         ) : null}
+
+        <MascotBanner kind="safe" {...vaultMood(health, items.length)} />
 
         <div className="anim-fade-up d-1">
           <VaultHealth

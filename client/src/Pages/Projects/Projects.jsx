@@ -20,6 +20,8 @@ import "../Passwords/Passwords.css";
 import "../../Components/Project/ProjectTree.css";
 import "./Projects.css";
 
+import MascotBanner from "../../Components/Robot/MascotBanner";
+import { projectsMood } from "../../lib/pageMoods";
 const STATUSES = ["planning", "in_progress", "deployed", "broken", "paused", "archived"];
 
 export default function Projects() {
@@ -120,6 +122,7 @@ export default function Projects() {
             </p>
           </div>
         </header>
+        <MascotBanner kind="rocket" {...projectsMood(projects, statuses)} />
 
         <section className={"pv2-sync" + (syncFailed ? " is-error" : "")} aria-live="polite">
           <span className={"pv2-sync__dot" + (syncing ? " is-busy" : "")} aria-hidden="true" />

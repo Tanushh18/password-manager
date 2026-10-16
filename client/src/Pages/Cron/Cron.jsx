@@ -13,6 +13,8 @@ import { serviceProjectIndex } from "../../lib/serviceProjects";
 import "../Render/RenderDashboard.css";
 import "./Cron.css";
 
+import MascotBanner from "../../Components/Robot/MascotBanner";
+import { cronMood } from "../../lib/pageMoods";
 const EVERY = [5, 10, 15, 30, 60];
 const isWeb = (s) => /web|static/i.test(String(s.type || "")) && Boolean(s.serviceDetails?.url);
 
@@ -193,6 +195,7 @@ export default function Cron() {
         </div>
       </header>
       <div className="rd-shell rd-content cr-stack">
+        {!loading && <MascotBanner kind="clock" {...cronMood(web.length, results)} />}
         <div className="cr-kpis">
           <div><span>Background scheduler</span><b className={lastTickAge != null && lastTickAge < 15 * 60000 ? "is-ok" : "is-warn"}>{status?.lastTick ? "Ran " + timeAgo(status.lastTick.completedAt) : status?.schedulerEnabled === false ? "Off" : "Starting…"}</b><small>{status?.lastTick ? (status.lastTick.status === "success" ? "All scheduler steps completed" : "Review recent step results below") : "first run ~90 s after the server starts"}</small></div>
           <div><span>Ping jobs</span><b>{enabledCount}</b><small>of {web.length} running web services</small></div>

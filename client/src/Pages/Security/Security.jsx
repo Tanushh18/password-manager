@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import "./Security.css";
 
+import MascotBanner from "../../Components/Robot/MascotBanner";
+import { securityMood } from "../../lib/pageMoods";
 const repoUrl = "https://github.com/Tanushh18/password-manager";
 const workflowUrl = repoUrl + "/actions/workflows/security-scan.yml";
 const securityUrl = repoUrl + "/security";
@@ -74,6 +76,7 @@ export default function Security() {
 
   return (
     <main className="security-page container">
+      <MascotBanner kind="shield" {...securityMood({ loading: scanState.loading, hasRun: Boolean(latest), failed: failedJobs, passed: passedJobs, active: activeJobs })} />
       <header className="security-hero">
         <span className="security-kicker">STASHR · SECURITY CENTER</span>
         <h1>Repository security</h1>

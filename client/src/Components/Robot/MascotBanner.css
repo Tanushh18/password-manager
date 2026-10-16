@@ -1,0 +1,26 @@
+/* Page mascot banner: a small neon console, the same on every page. */
+.mbn {
+  --mbn-green: #39ff9c; --mbn-yellow: #ffd447; --mbn-red: #ff4d6d; --mbn-dim: #8aa3b5;
+  display: flex; align-items: center; gap: 16px; padding: 12px 18px; margin: 0 0 18px; border-radius: 16px; color: #e6fff4;
+  background:
+    radial-gradient(500px 160px at 0% 0%, rgba(200, 107, 255, 0.22), transparent 70%),
+    linear-gradient(rgba(122, 255, 196, 0.06) 1px, transparent 1px) 0 0 / 22px 22px,
+    linear-gradient(90deg, rgba(122, 255, 196, 0.06) 1px, transparent 1px) 0 0 / 22px 22px,
+    #070b14;
+  border: 1px solid rgba(57, 255, 156, 0.35); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+.mbn.is-fire, .mbn.is-angry, .mbn.is-scared { border-color: rgba(255, 77, 109, 0.55); }
+.mbn.is-sweaty, .mbn.is-dizzy { border-color: rgba(255, 212, 71, 0.5); }
+.mbn__text { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.mbn__title { font: 800 11px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.14em; color: var(--mbn-green); text-shadow: 0 0 10px rgba(57, 255, 156, 0.55); }
+.mbn__line { margin: 0; font-size: 14.5px; line-height: 1.4; }
+.mbn__stats { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 4px 0 0; font-family: ui-monospace, Menlo, Consolas, monospace; }
+.mbn__stats div { display: grid; gap: 1px; }
+.mbn__stats dt { font-size: 9.5px; letter-spacing: 0.12em; color: var(--mbn-dim); }
+.mbn__stats dd { margin: 0; font-size: 15px; font-weight: 800; }
+.mbn__stats .is-ok dd { color: var(--mbn-green); }
+.mbn__stats .is-mid dd { color: var(--mbn-yellow); }
+.mbn__stats .is-bad dd { color: var(--mbn-red); }
+.mbn__stats .is-idle dd { color: #d9f5ea; }
+.mbn__extra { flex: none; }
+@media (max-width: 560px) { .mbn { align-items: flex-start; padding: 12px; } .mbn__line { font-size: 13.5px; } }

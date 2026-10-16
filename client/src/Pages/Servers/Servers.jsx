@@ -5,6 +5,8 @@ import { Arrow, Trash } from "../../Components/Icons/Icons";
 import * as api from "../../api/client";
 import "./Servers.css";
 
+import MascotBanner from "../../Components/Robot/MascotBanner";
+import { registryMood } from "../../lib/pageMoods";
 /* One app's editable URL list. Saving updates the registry; apps pick it up the next time they start. */
 const ago = (value) => {
   const t = new Date(value).getTime();
@@ -216,6 +218,7 @@ export default function Servers() {
           <button type="button" className="btn btn--ghost btn--sm" onClick={() => loadSync(true)}>↻ Refresh Render sync</button>
         </header>
 
+        {apps && <MascotBanner kind="satellite" {...registryMood(apps)} />}
         {error && <p className="servers__error">{error}</p>}
         {!apps && !error && <p className="servers__hint">Loading…</p>}
         {apps && (

@@ -2,7 +2,7 @@ import React, { useId } from "react";
 import "./Robot.css";
 
 /* Eyes and mouth per mood, inside the visor. Drawn in a 100 x 132 box. */
-function Face({ mood }) {
+export function Face({ mood }) {
   if (mood === "dead") return (
     <g className="bot-face" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
       <path d="M33 39 l10 10 M43 39 l-10 10 M57 39 l10 10 M67 39 l-10 10" />
