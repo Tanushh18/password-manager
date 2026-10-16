@@ -10,6 +10,7 @@ const checks = [
   { title: "Static code analysis", detail: "CodeQL extended queries for JavaScript and TypeScript." },
   { title: "Secret leakage", detail: "Gitleaks checks repository history and current files for exposed credentials." },
   { title: "Configuration and filesystem", detail: "Trivy checks dependency/OS vulnerabilities, secrets and configuration misconfigurations." },
+  { title: "Staging DAST", detail: "Optional OWASP ZAP passive baseline scan runs only when STAGING_BASE_URL points to an explicitly authorized HTTPS staging target." },
   { title: "Pull request dependency review", detail: "Optional GitHub Dependency Review blocks newly introduced high-severity vulnerable dependencies when enabled." },
 ];
 
