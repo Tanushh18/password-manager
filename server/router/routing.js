@@ -76,6 +76,7 @@ router.post("/login", authLimiter, async (req, res) =>
 
         if (!isMatch)
         {
+            console.warn(`[auth] login rejected: ${user ? "wrong password" : "no such email"}`);
             return res.status(400).json({ error: "Invalid Credentials." });
         }
 
@@ -107,6 +108,7 @@ router.post("/login", authLimiter, async (req, res) =>
             twoFactorEnabled: Boolean(user.twoFactor && user.twoFactor.enabled)
         };
         if (client === "mobile") body.token = token;
+        console.info(`[auth] login ok user=${user._id} client=${client} origin=${req.headers.origin || "-"} twoFactor=${body.twoFactorEnabled}`);
 
         return res.status(200).json(body);
     }

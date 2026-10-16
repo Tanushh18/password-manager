@@ -24,6 +24,7 @@ const authenticate = async (req, res, next) =>
         const token = readToken(req);
         if (!token)
         {
+            console.warn(`[auth] 401 ${req.method} ${req.path}: no token (cookie=${Boolean(req.cookies && req.cookies.jwtoken)}, bearer=${/^bearer /i.test(req.headers.authorization || "")}, origin=${req.headers.origin || "-"})`);
             return res.status(401).json({ error: "Access denied. No token provided." });
         }
 
@@ -32,6 +33,7 @@ const authenticate = async (req, res, next) =>
 
         if (!rootUser)
         {
+            console.warn(`[auth] 401 ${req.method} ${req.path}: token is valid but not in this account's sessions (user=${verify._id}, origin=${req.headers.origin || "-"})`);
             return res.status(401).json({ error: "Unauthorised user." });
         }
 
@@ -47,6 +49,7 @@ const authenticate = async (req, res, next) =>
         // hiccup must not look like a sign-out (the client drops the session on a 401), so it is a retryable 503.
         // Never log the token or the signing secret.
         const badToken = error && (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError" || error.name === "NotBeforeError");
+        console.warn(`[auth] ${badToken ? "401" : "503"} ${req.method} ${req.path}: ${error && error.name}: ${error && error.message}`);
         if (badToken) return res.status(401).json({ error: "Unauthorised user." });
         res.set("Retry-After", "5");
         return res.status(503).json({ error: "The server had a temporary problem. Your session is fine; try again in a moment." });

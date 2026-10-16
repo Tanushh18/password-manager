@@ -62,7 +62,7 @@ export function VaultProvider({ children }) {
 
   const lastSig = useRef({ items: null, projects: null });
   const loadProfile = useCallback(async () => {
-    const res = await api.checkAuthenticated();
+    const res = await api.checkAuthenticated().catch((e) => { console.warn("[stashr] /authenticate failed", { status: e?.response?.status, error: e?.response?.data?.error, server: api.API_URL(), code: e?.code }); throw e; });
     const { passwords, projects: projectEntries, ...rest } = res.data;
     setProfile(rest);
     const itemsSig = signature(passwords), projectsSig = signature(projectEntries);
@@ -110,7 +110,17 @@ export function VaultProvider({ children }) {
         error.kind = !e?.response ? "network" : status === 429 ? "limited" : status >= 500 ? "server" : status === 400 || status === 401 ? "credentials" : "other";
         throw error;
       }
-      await loadProfile();
+      console.info("[stashr] login accepted by", api.API_URL());
+      try {
+        await loadProfile();
+      } catch (e) {
+        console.error("[stashr] login worked but the session check failed", { status: e?.response?.status, data: e?.response?.data, server: api.API_URL(), message: e?.message });
+        const error = new Error(e?.response?.status === 401
+          ? "Signed in, but the browser did not keep the session. Allow third-party cookies / cross-site cookies for this site, then try again."
+          : api.errorMessage(e, "Signed in, but your vault could not be loaded."));
+        error.kind = !e?.response ? "network" : e.response.status >= 500 ? "server" : "other";
+        throw error;
+      }
       setStatus("ready");
       return { ok: true };
     },
