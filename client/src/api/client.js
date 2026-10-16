@@ -36,7 +36,7 @@ const cleanList = (urls) =>
         .filter((u) => /^https?:\/\//i.test(u));
 
 const STORAGE_KEY = "pm_active_server";
-const REQUEST_TIMEOUT_MS = 20000;
+const REQUEST_TIMEOUT_MS = 8000;
 
 const readActive = () =>
 {
@@ -122,7 +122,7 @@ instance.interceptors.response.use(
         if (timedOut && !config._woke)
         {
             config._woke = true;
-            config.timeout = Math.max(config.timeout || 0, 75000);
+            config.timeout = Math.max(config.timeout || 0, 25000);
             return instance(config);
         }
         if (SERVERS.length < 2) return Promise.reject(error);
@@ -226,7 +226,7 @@ export { errorMessage } from "../lib/errors.js";
 export const getRenderAccounts = () => instance.get("/render/accounts").then((r) => r.data);
 export const connectRenderAccount = (data) => instance.post("/render/accounts", data).then((r) => r.data);
 export const deleteRenderAccount = (id) => instance.delete("/render/accounts/" + encodeURIComponent(id)).then((r) => r.data);
-export const getRenderServices = (accountId) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/services").then((r) => r.data);
+export const getRenderServices = (accountId) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/services", { timeout: 20000 }).then((r) => r.data);
 export const renameRenderService = (accountId, serviceId, name) => instance.patch(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/name`, { name }).then((r) => r.data);
 export const getRenderLogs = (accountId, params) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/logs?" + new URLSearchParams(params).toString()).then((r) => r.data);
 export const getRenderEnvVars = (accountId, serviceId) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/services/" + encodeURIComponent(serviceId) + "/env-vars").then((r) => r.data);
@@ -262,15 +262,15 @@ export const provisionProject = (body) => instance.post("/render/provision", bod
 export const createRepo = (body) => instance.post("/render/repo/create", body, { timeout: 120000 }).then((r) => r.data);
 export const checkRepoCode = (body) => instance.post("/render/repo/check", body).then((r) => r.data);
 export const deployProject = (body) => instance.post("/render/deploy", body, { timeout: 180000 }).then((r) => r.data);
-export const getProjectDeployments = (projectId) => instance.get("/render/projects/" + encodeURIComponent(projectId) + "/deployments", { timeout: 90000 }).then((r) => r.data);
+export const getProjectDeployments = (projectId) => instance.get("/render/projects/" + encodeURIComponent(projectId) + "/deployments", { timeout: 30000 }).then((r) => r.data);
 export const autoSyncProjects = (force = false) => instance.post("/render/projects/auto-sync", { force }, { timeout: 120000 }).then((r) => r.data);
 export const syncAllProjectsWithRender = () => instance.post("/render/projects/sync-all", {}, { timeout: 120000 }).then((r) => r.data);
 export const mergeProjects = (ids, keepId) => instance.post("/projects/merge", { ids, ...(keepId ? { keepId } : {}) }).then((r) => r.data);
 export const pushProjectRenderEnv = (projectId, options = {}) => instance.post("/render/project-push/" + encodeURIComponent(projectId), options, { timeout: 90000 }).then((r) => r.data);
 
 /* Automatic upkeep: live project health/drift (auto-links to Render first) and Servers-tab sync. */
-export const getProjectStatuses = ({ id, refresh } = {}) => instance.get("/render/projects/status", { params: { ...(id ? { id } : {}), ...(refresh ? { refresh: 1 } : {}) }, timeout: 60000 }).then((r) => r.data);
-export const getRegistrySync = () => instance.get("/render/registry-sync", { timeout: 60000 }).then((r) => r.data);
+export const getProjectStatuses = ({ id, refresh } = {}) => instance.get("/render/projects/status", { params: { ...(id ? { id } : {}), ...(refresh ? { refresh: 1 } : {}) }, timeout: 30000 }).then((r) => r.data);
+export const getRegistrySync = () => instance.get("/render/registry-sync", { timeout: 30000 }).then((r) => r.data);
 export const setRegistryAutoSync = (app, autoSync) => instance.put("/render/registry-sync/" + encodeURIComponent(app), { autoSync }).then((r) => r.data);
 
 /* GitHub connections for the Projects page (tokens stay encrypted server-side). */
@@ -312,7 +312,7 @@ export const getRenderOpsReport = (format = "json") => instance.get("/render/ops
 export const diagnoseRenderLogs = (serviceName, logs, allowExternalProcessing = false) => instance.post("/render/ops/diagnose", { serviceName, logs, allowExternalProcessing }).then((r) => r.data);
 
 /* Live-services usage dashboard (running Render services only; read-only provider checks). */
-export const getLiveDashboard = ({ refresh } = {}) => instance.get("/render/live-dashboard", { params: refresh ? { refresh: 1 } : {}, timeout: 90000 }).then((r) => r.data);
+export const getLiveDashboard = ({ refresh } = {}) => instance.get("/render/live-dashboard", { params: refresh ? { refresh: 1 } : {}, timeout: 45000 }).then((r) => r.data);
 export const getUsageVariableReport = () => instance.get("/render/usage-variable-report", { timeout: 90000 }).then((r) => r.data);
 export const getUsageAdminReport = () => instance.get("/render/usage-admin-report", { timeout: 300000 }).then((r) => r.data);
 export const getUsageSettings = () => instance.get("/render/usage-settings").then((r) => r.data);

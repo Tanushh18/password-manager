@@ -17,7 +17,7 @@ export const errorMessage = (err, fallback = "Something went wrong. Please try a
     return fallback;
 };
 
-const BOOT_RETRY_LIMIT = 20; // ~5 minutes of waiting for a sleeping server before giving up and showing the sign-in page
+const BOOT_RETRY_LIMIT = 4; // ~10 seconds of retrying a slow server before giving up and showing the sign-in page
 
 /**
  * What to do when checking the saved session at start-up fails. Only a 401 means "there is no valid session".
@@ -28,5 +28,5 @@ export function bootVerdict(error, attempt = 0) {
   return attempt >= BOOT_RETRY_LIMIT ? "signedOut" : "retry";
 }
 
-export const bootDelay = (attempt) => Math.min(15000, 2000 + attempt * 2000);
+export const bootDelay = (attempt) => Math.min(3000, 1000 + attempt * 500);
 
