@@ -45,6 +45,7 @@ test("authenticated scheduler status returns recent persisted runs without sensi
   const response = await request(app).get("/render/ops/status").set({ Authorization: "Bearer " + token });
   assert.equal(response.status, 200);
   assert.equal(response.body.lastTick.status, "partial");
+  assert.equal(response.body.lastTick.persisted, true);
   assert.equal(response.body.recentRuns.length, 1);
   assert.equal(response.body.lastTick.steps[1].status, "partial");
   assert.equal(response.body.lastTick.steps[1].counts.errors, 1);
