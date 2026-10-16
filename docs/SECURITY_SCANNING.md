@@ -18,6 +18,7 @@ The workflow also runs on push/pull requests and weekly. It is a static/dependen
 - Gitleaks secret detection.
 - Trivy library/OS vulnerability, secret and configuration misconfiguration scan.
 - Optional pull-request Dependency Review blocks newly introduced high-severity dependencies when GitHub Dependency Graph is enabled and repository Actions variable `ENABLE_DEPENDENCY_REVIEW=true`. Until then, full `npm audit` runs on all three package roots.
+- Optional OWASP ZAP passive baseline DAST runs only when repository variable `STAGING_BASE_URL` is configured. It validates HTTPS and must point to an explicitly authorized staging environment; do not point it at production. The workflow fails on findings according to the baseline action policy.
 
 ## Response and handling
 
