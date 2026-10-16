@@ -25,7 +25,7 @@ const today = new Date().toISOString().slice(0, 10);
 const exceptions = Array.isArray(policy.exceptions) ? policy.exceptions : [];
 const validExceptions = new Map();
 for (const exception of exceptions) {
-  if (!exception.package || !Array.isArray(exception.advisoryIds, || !exception.expiresAt || !exception.approvedBy) {
+  if (!exception.package || !Array.isArray(exception.advisoryIds) || !exception.expiresAt || !exception.approvedBy) {
     fail('malformed exception entry');
     continue;
   }

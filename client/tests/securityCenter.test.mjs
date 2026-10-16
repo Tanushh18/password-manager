@@ -24,8 +24,25 @@ test("security center route is protected by both vault authentication and admin 
 
 test("security workflow covers dependency, static, secret, filesystem and PR dependency scans", async () => {
   const workflow = await read("../../.github/workflows/security-scan.yml");
-  for (const phrase of ["workflow_dispatch", "schedule:", "npm audit --audit-level=high", "gitleaks/gitleaks-action", "github/codeql-action/init", "aquasecurity/trivy-action", "actions/dependency-review-action", "zaproxy/action-baseline", "STAGING_BASE_URL"]) {
+  for (const phrase of ["workflow_dispatch", "schedule:", "npm audit --json", "security-exception-gate.mjs", "security/exceptions.json", "gitleaks/gitleaks-action", "github/codeql-action/init", "aquasecurity/trivy-action", "actions/dependency-review-action", "zaproxy/action-baseline", "STAGING_BASE_URL"]) {
     assert.ok(workflow.includes(phrase), `missing workflow scan gate: ${phrase}`);
   }
   assert.ok(workflow.includes("directory: [server, client, mobile]"));
+});
+
+
+test("security exceptions are narrow, owner-approved and expiring", async () => {
+  const policy = JSON.parse(await read("../../security/exceptions.json"));
+  const gate = await read("../../scripts/security-exception-gate.mjs");
+  assert.equal(policy.exceptions.length, 2);
+  assert.deepEqual(policy.exceptions.map((entry) => entry.package).sort(), ["braces", "node-forge"]);
+  for (const entry of policy.exceptions) {
+    assert.equal(entry.approvedBy, "Tanushh18 (repository owner)");
+    assert.equal(entry.approvedAt, "2026-10-16");
+    assert.equal(entry.expiresAt, "2026-10-30");
+    assert.ok(entry.advisoryIds.length >= 2);
+    assert.ok(entry.compensatingControls.length >= 2);
+  }
+  assert.ok(gate.includes("npm audit report is incomplete"));
+  assert.ok(gate.includes("exception expired"));
 });
