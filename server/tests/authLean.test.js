@@ -32,6 +32,14 @@ describe("authenticate loads only the monitoring histories a route reads", () =>
 
     const accounts = await run(token, "/render/accounts/abc/services?x=1");
     expect(accounts.renderMetricHistory).toBeUndefined();
+    expect(accounts.passwords).toHaveLength(0); // the vault is not loaded for Render routes
+
+    // A stale cookie next to the current one must not win: every token the request carries is tried.
+    const both = await new Promise((resolve) => {
+      const req = { originalUrl: "/authenticate", method: "GET", headers: { cookie: "jwtoken=stale.bad.token; jwtoken=" + token }, cookies: { jwtoken: "stale.bad.token" } };
+      authenticate(req, { status() { return this; }, json: () => resolve(null), set() {} }, () => resolve(req.rootUser));
+    });
+    expect(Boolean(both)).toBe(true);
 
     const history = await run(token, "/render/ops/history?limit=5");
     expect(history.renderMetricHistory).toHaveLength(1);

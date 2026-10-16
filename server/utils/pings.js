@@ -1,4 +1,5 @@
 const User = require("../models/schema");
+const { without } = require("./projection");
 const renderOps = require("./renderOps");
 
 /*
@@ -92,7 +93,7 @@ async function runUserPings(user, { force = false } = {}) {
 }
 
 async function runAllPings() {
-  const users = await User.find({ "renderAccounts.0": { $exists: true } }).limit(500);
+  const users = await User.find({ "renderAccounts.0": { $exists: true } }, without("passwords", "renderMetricHistory", "renderIncidents", "renderAudit", "usageHistory")).limit(500);
   let ran = 0, errors = 0;
   for (const user of users) { try { ran += (await runUserPings(user)).ran; } catch { errors += 1; } }
   return { ran, errors };

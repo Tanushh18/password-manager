@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { without } = require("./projection");
 const User = require("../models/schema");
 const { loadRenderServices, ensureLinks } = require("./projectStatus");
 const { loadGithubAccounts } = require("./githubClient");
@@ -45,7 +46,7 @@ async function patchProject(user, dataKey, id, patch) {
 }
 
 async function run(userId) {
-  const user = await User.findById(userId);
+  const user = await User.findById(userId, without("passwords", "renderMetricHistory", "renderIncidents", "renderAudit", "usageHistory"));
   if (!user) return { created: [], archived: 0, revived: 0, refreshed: 0 };
   const dataKey = await user.getDataKey();
   const now = new Date();
@@ -126,7 +127,7 @@ async function autoSyncProjects(user, { force = false } = {}) {
 /** Background pass for the scheduler tick. One user failing never stops the others. */
 async function runAllProjectSync() {
   const summary = { usersChecked: 0, created: 0, archived: 0, errors: 0 };
-  const users = await User.find({ $or: [{ "githubAccounts.0": { $exists: true } }, { "renderAccounts.0": { $exists: true } }] }).limit(200);
+  const users = await User.find({ $or: [{ "githubAccounts.0": { $exists: true } }, { "renderAccounts.0": { $exists: true } }] }, without("passwords", "renderMetricHistory", "renderIncidents", "renderAudit", "usageHistory")).limit(200);
   for (const user of users) {
     try {
       const r = await autoSyncProjects(user, { force: true });

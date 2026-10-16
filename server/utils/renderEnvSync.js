@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { without } = require("./projection");
 const User = require("../models/schema");
 const { renderRequest } = require("./renderOps");
 const { fetchAllPages } = require("./renderPaging");
@@ -67,7 +68,7 @@ async function syncProjectEnv(user, projectId, { apply = false, resolveConflicts
 /** Background pass for the scheduler tick: refreshes every project that has auto-sync switched on. */
 async function runAllEnvSync() {
   const summary = { usersChecked: 0, projectsSynced: 0, varsAdded: 0, varsUpdated: 0, errors: 0 };
-  const users = await User.find({ "projects.0": { $exists: true }, "renderAccounts.0": { $exists: true } }).limit(1000);
+  const users = await User.find({ "projects.0": { $exists: true }, "renderAccounts.0": { $exists: true } }, without("passwords", "renderMetricHistory", "renderIncidents", "renderAudit", "usageHistory")).limit(1000);
   for (const user of users) {
     let dataKey;
     try { dataKey = await user.getDataKey(); } catch { summary.errors += 1; continue; }

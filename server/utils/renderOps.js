@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { without } = require("./projection");
 const mongoose = require("mongoose");
 const User = require("../models/schema");
 const { resourceChecks } = require("./renderMetrics");
@@ -652,7 +653,7 @@ async function runUserMonitoring(user, options = {}) {
 }
 
 async function runAllEnabledMonitoring() {
-  const users = await User.find({ "renderOps.0": { $exists: true }, "renderAccounts.0": { $exists: true } }).limit(1000);
+  const users = await User.find({ "renderOps.0": { $exists: true }, "renderAccounts.0": { $exists: true } }, without("passwords", "renderAudit", "usageHistory")).limit(1000);
   const summary = { usersChecked: 0, groupsChecked: 0, samplesSaved: 0, incidentsOpened: 0, errors: 0 };
   for (const user of users) {
     try {

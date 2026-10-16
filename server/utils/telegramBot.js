@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { without } = require("./projection");
 const mongoose = require("mongoose");
 const User = require("../models/schema");
 const renderOps = require("./renderOps");
@@ -298,7 +299,7 @@ async function refreshWebhooks() {
   const base = publicBase();
   if (hooksRefreshed || !base) return;
   hooksRefreshed = true;
-  const users = await User.find({ telegramHookId: { $type: "string" } }).limit(500);
+  const users = await User.find({ telegramHookId: { $type: "string" } }, without("passwords", "projects", "renderMetricHistory", "renderIncidents", "renderAudit", "usageHistory")).limit(500);
   for (const user of users) {
     try {
       const state = await readState(user);
@@ -309,7 +310,7 @@ async function refreshWebhooks() {
 
 async function runAllDigests() {
   await refreshWebhooks().catch(() => {});
-  const users = await User.find({ telegramHookId: { $type: "string" } }).limit(500);
+  const users = await User.find({ telegramHookId: { $type: "string" } }, without("passwords", "renderAudit", "usageHistory")).limit(500);
   let sent = 0, errors = 0;
   for (const user of users) {
     try {

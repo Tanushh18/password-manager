@@ -100,6 +100,7 @@ router.post("/login", authLimiter, async (req, res) =>
         const token = await user.generateAuthToken(client);
 
         res.cookie("jwtoken", token, { ...COOKIE_OPTIONS, expires: new Date(Date.now() + COOKIE_MAX_AGE) });
+        res.clearCookie("jwtoken", LEGACY_COOKIE_OPTIONS); // an older non-partitioned cookie would otherwise sit next to the new one
 
         const body = {
             message: "User login successfully.",

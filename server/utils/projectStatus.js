@@ -1,4 +1,5 @@
 const User = require("../models/schema");
+const { without } = require("./projection");
 const renderOps = require("./renderOps");
 const { fetchAllPages } = require("./renderPaging");
 const { mapWithConcurrency } = require("./renderGuards");
@@ -181,7 +182,7 @@ const hasNoRenderAccounts = (user) => !(user.renderAccounts || []).length;
 /** Background pass for the scheduler tick: link + first sync for every user's unlinked projects. */
 async function runAllAutoLink() {
   const summary = { usersChecked: 0, projectsLinked: 0, errors: 0 };
-  const users = await User.find({ "projects.0": { $exists: true }, "renderAccounts.0": { $exists: true } }).limit(1000);
+  const users = await User.find({ "projects.0": { $exists: true }, "renderAccounts.0": { $exists: true } }, without("passwords", "renderMetricHistory", "renderIncidents", "renderAudit", "usageHistory")).limit(1000);
   for (const user of users) {
     try {
       const dataKey = await user.getDataKey();

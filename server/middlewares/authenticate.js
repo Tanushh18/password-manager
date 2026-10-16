@@ -17,6 +17,31 @@ const readToken = (req) =>
     return (req.cookies && req.cookies.jwtoken) || null;
 };
 
+/**
+ * Every session token the request carries, best first. A browser can hold two `jwtoken` cookies at once (an older
+ * non-partitioned one and the current partitioned one) and cookie-parser only exposes the first, which may be stale.
+ */
+const readTokens = (req) =>
+{
+    const list = [];
+    const header = req.headers.authorization || "";
+    if (header.toLowerCase().startsWith("bearer ")) { const bearer = header.slice(7).trim(); if (bearer) list.push(bearer); }
+    const raw = String(req.headers.cookie || "");
+    for (const part of raw.split(";"))
+    {
+        const i = part.indexOf("=");
+        if (i > 0 && part.slice(0, i).trim() === "jwtoken")
+        {
+            let value = part.slice(i + 1).trim();
+            try { value = decodeURIComponent(value); } catch (e) { /* keep as is */ }
+            if (value) list.push(value);
+        }
+    }
+    const parsed = req.cookies && req.cookies.jwtoken;
+    if (parsed) list.push(parsed);
+    return [...new Set(list)];
+};
+
 /*
  * The account document carries large monitoring histories. Loading them on every request (the Render page polls
  * several times a minute) is what made sign-in and every page slow, so a request only loads the histories its route
@@ -32,9 +57,10 @@ const NEEDS = [
     [/^\/render\/usage-settings$/, null, []],
     [/^\/render\/live-dashboard$/, "GET", ["usageHistory"]]
 ];
+const PATH = (req) => String(req.originalUrl || req.url || "").split("?")[0].replace(/\/+$/, "") || "/";
 const historyFieldsFor = (req) =>
 {
-    const path = String(req.originalUrl || req.url || "").split("?")[0].replace(/\/+$/, "") || "/";
+    const path = PATH(req);
     if (/^\/(render|telegram)(\/|$)/.test(path))
     {
         for (const [pattern, method, fields] of NEEDS) if (pattern.test(path) && (!method || method === req.method)) return fields;
@@ -42,34 +68,51 @@ const historyFieldsFor = (req) =>
     }
     return [];
 };
-const leanProjection = (needed) => Object.fromEntries(HISTORY.filter((field) => !needed.includes(field)).map((field) => [field, 0]));
+// Fields a route never reads are not loaded at all (hydrating the document is the main cost on a small server).
+// The vault (`passwords`) is only read by sign-in/vault/extension/telegram routes.
+const excludedFieldsFor = (req) =>
+{
+    const needed = historyFieldsFor(req);
+    const excluded = HISTORY.filter((field) => !needed.includes(field));
+    if (/^\/(render|github|projects)(\/|$)/.test(PATH(req))) excluded.push("passwords");
+    return excluded;
+};
+const leanProjection = (excluded) => Object.fromEntries(excluded.map((field) => [field, 0]));
 
 const authenticate = async (req, res, next) =>
 {
     try
     {
-        const token = readToken(req);
-        if (!token)
+        const tokens = readTokens(req);
+        if (!tokens.length)
         {
             console.warn(`[auth] 401 ${req.method} ${req.path}: no token (cookie=${Boolean(req.cookies && req.cookies.jwtoken)}, bearer=${/^bearer /i.test(req.headers.authorization || "")}, origin=${req.headers.origin || "-"})`);
             return res.status(401).json({ error: "Access denied. No token provided." });
         }
 
-        const verify = jwt.verify(token, process.env.SECRET_KEY);
-        const projection = leanProjection(historyFieldsFor(req));
-        const rootUser = await User.findOne({ _id: verify._id, "tokens.token": token }, Object.keys(projection).length ? projection : undefined);
-
-        if (!rootUser)
+        const projection = leanProjection(excludedFieldsFor(req));
+        let badTokenError = null, staleUser = null;
+        for (const token of tokens)
         {
-            console.warn(`[auth] 401 ${req.method} ${req.path}: token is valid but not in this account's sessions (user=${verify._id}, origin=${req.headers.origin || "-"})`);
-            return res.status(401).json({ error: "Unauthorised user." });
+            let verify;
+            try { verify = jwt.verify(token, process.env.SECRET_KEY); }
+            catch (error) { badTokenError = badTokenError || error; continue; }
+
+            const rootUser = await User.findOne({ _id: verify._id, "tokens.token": token }, Object.keys(projection).length ? projection : undefined);
+            if (!rootUser) { staleUser = verify._id; continue; }
+
+            req.token = token;
+            req.rootUser = rootUser;
+            req.userId = rootUser._id;
+            return next();
         }
 
-        req.token = token;
-        req.rootUser = rootUser;
-        req.userId = rootUser._id;
-
-        next();
+        if (staleUser)
+        {
+            console.warn(`[auth] 401 ${req.method} ${req.path}: token is valid but not in this account's sessions (user=${staleUser}, tokens=${tokens.length}, origin=${req.headers.origin || "-"})`);
+            return res.status(401).json({ error: "Unauthorised user." });
+        }
+        throw badTokenError;
     }
     catch (error)
     {
@@ -85,6 +128,8 @@ const authenticate = async (req, res, next) =>
 };
 
 authenticate.readToken = readToken;
+authenticate.readTokens = readTokens;
 authenticate.historyFieldsFor = historyFieldsFor;
+authenticate.excludedFieldsFor = excludedFieldsFor;
 
 module.exports = authenticate;

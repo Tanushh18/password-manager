@@ -1,4 +1,5 @@
 const User = require("../models/schema");
+const { without } = require("./projection");
 const Registry = require("../models/registry");
 const renderOps = require("./renderOps");
 const { mapWithConcurrency } = require("./renderGuards");
@@ -59,7 +60,7 @@ async function setAutoSync(app, enabled, email) {
 /** Background pass: applies the safe removals for every app with auto-sync on. */
 async function runAllRegistrySync() {
   const summary = { appsChecked: 0, urlsRemoved: 0, errors: 0 };
-  const admins = await User.find({ $expr: { $in: [{ $toLower: "$email" }, ADMINS] }, "renderAccounts.0": { $exists: true } }).limit(5);
+  const admins = await User.find({ $expr: { $in: [{ $toLower: "$email" }, ADMINS] }, "renderAccounts.0": { $exists: true } }, without("passwords", "projects", "renderMetricHistory", "renderIncidents", "renderAudit", "usageHistory")).limit(5);
   if (!admins.length) return summary;
   const services = [];
   for (const admin of admins) {

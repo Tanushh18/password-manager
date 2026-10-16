@@ -1,4 +1,5 @@
 const User = require("../models/schema");
+const { without } = require("./projection");
 const renderOps = require("./renderOps");
 const { loadRenderServices } = require("./projectStatus");
 const { buildLiveDashboard, appendSnapshot } = require("./usageDashboard");
@@ -70,7 +71,7 @@ async function runUsage(user, dataKey, { refresh = false, record = true } = {}) 
   const settings = readSettings(user, dataKey);
   if (!settings.enabled) return { enabled: false, settings };
   // The service list is always read live (one cheap call per account); only provider usage is cached.
-  const { services, accounts } = await loadRenderServices(user, dataKey, { refresh: true });
+  const { services, accounts } = await loadRenderServices(user, dataKey, { refresh });
   const request = (accountId, path) => renderOps.renderRequest(accounts.get(accountId).apiKey, path);
   const history = readEntry(user, "usageHistory", dataKey, { snapshots: [] }).snapshots || [];
   const data = await buildLiveDashboard({ services, accounts, request, providers: getProviders(), settings, history, refresh });
@@ -84,7 +85,7 @@ async function runUsage(user, dataKey, { refresh = false, record = true } = {}) 
 
 /** Scheduler hook: keeps history growing so projections work without anyone opening the page. */
 async function runAllUsage() {
-  const users = await User.find({ "usageSettings.0": { $exists: true }, "renderAccounts.0": { $exists: true } }).limit(1000);
+  const users = await User.find({ "usageSettings.0": { $exists: true }, "renderAccounts.0": { $exists: true } }, without("passwords", "renderMetricHistory", "renderIncidents", "renderAudit")).limit(1000);
   let users_ = 0;
   for (const user of users) {
     try {
