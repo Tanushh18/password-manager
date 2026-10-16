@@ -179,7 +179,7 @@ At the time this plan was drafted, the latest observed CI run had server tests a
 - Scheduler operations: bounded run-history collection in the existing MongoDB, per-step duration/status summaries, safe numeric counters only, retention cap, and an expiring Mongo-backed lease to avoid duplicate ticks across API instances.
 - Operations UI: displays recent scheduler runs and step outcomes.
 - API health: separate `/livez` (process liveness) and `/readyz` (database readiness) endpoints; the existing `/health` remains compatible.
-- Mobile dependency alignment: updates the eight Expo SDK patch versions reported by `expo-doctor` and refreshes the lockfile with package integrity hashes.
+- Mobile dependency alignment: updates the eight Expo SDK patch versions and the Expo base package to the SDK-recommended versions reported by `expo-doctor`; lockfile reconciliation is being verified.
 - Tests: safe scheduler summary, authenticated persisted status endpoint, readiness/liveness, distributed lease, Security Center and scanner workflow coverage.
 
 These are code changes, not release certification. The latest branch CI/security runs must complete successfully. The optional ZAP job is skipped until `STAGING_BASE_URL` is configured to an authorized HTTPS staging target. Provider connectors beyond existing Render/GitHub integrations, production restore drills, and live-provider acceptance still need implementation/evidence before the overall roadmap can be marked complete.
