@@ -789,83 +789,115 @@ router.get("/render/projects/:projectId/deployments", async (req, res) => {
   }
 });
 
-/* A user explicitly opts in before Stashr stores unknown variable names for aggregate diagnostics. */
-router.get("/render/usage-variable-sharing", async (req, res) => {
-  return res.json({
-    enabled: req.rootUser.usageVariableSharing === true,
-    variableCount: Array.isArray(req.rootUser.usageVariableNames) ? req.rootUser.usageVariableNames.length : 0,
-    scannedAt: req.rootUser.usageVariableNamesScannedAt || null,
-    scanErrorCount: Number(req.rootUser.usageVariableScanErrors || 0)
-  });
-});
+/* Scan connected Render services for variable names only. Environment values are used in memory for provider detection and never returned or persisted. */
+async function scanUnknownRenderVariables(user) {
+  const dataKey = await user.getDataKey();
+  const listed = await renderOps.listEveryService(user, dataKey);
+  const services = listed.services || [];
+  const rows = [];
+  let scanErrorCount = listed.complete ? 0 : 1;
+  let cursor = 0;
 
-router.put("/render/usage-variable-sharing", async (req, res) => {
-  if (typeof req.body?.enabled !== "boolean") return res.status(400).json({ error: "enabled must be true or false." });
-  try {
-    if (req.body.enabled !== true) {
-      await User.updateOne({ _id: req.rootUser._id }, { $set: { usageVariableSharing: false, usageVariableNames: [], usageVariableNamesScannedAt: null, usageVariableScanErrors: 0 } });
-      return res.json({ enabled: false, variableCount: 0, scannedAt: null });
+  const scanOne = async (service) => {
+    const apiKey = renderOps.accountApiKey(user, dataKey, service.accountId);
+    const accountEntry = (user.renderAccounts || []).find((item) => String(item._id) === String(service.accountId));
+    const accountFields = accountEntry ? User.publicEntry(accountEntry, dataKey) : null;
+    if (!apiKey) {
+      scanErrorCount++;
+      rows.push({ id: service.id, name: service.name || service.id, url: service.url || null, accountName: accountFields?.name || "Render account", scanError: "Render account credentials unavailable", unknownVariables: [] });
+      return;
     }
-    const dataKey = await req.rootUser.getDataKey();
-    const { services, accounts } = await loadRenderServices(req.rootUser, dataKey, { refresh: true });
-    const names = new Set();
-    let scanErrorCount = 0, cursor = 0;
-    const scanOne = async (service) => {
-      const account = accounts.get(String(service.accountId));
-      if (!account?.apiKey) { scanErrorCount++; return; }
-      try {
-        const payload = await renderOps.renderRequest(account.apiKey, "/v1/services/" + encodeURIComponent(service.id) + "/env-vars?limit=100");
-        const list = Array.isArray(payload) ? payload : Array.isArray(payload?.items) ? payload.items : Array.isArray(payload?.envVars) ? payload.envVars : [];
-        const env = new Map();
-        for (const row of list) { const v = row?.envVar || row; if (v && typeof v.key === "string") env.set(v.key, typeof v.value === "string" ? v.value : ""); }
-        for (const v of detectServices(env).other) names.add(v.name);
-      } catch { scanErrorCount++; }
-    };
-    await Promise.all(Array.from({ length: Math.min(4, services.length) }, async () => {
-      while (cursor < services.length) await scanOne(services[cursor++]);
-    }));
-    const variableNames = [...names].sort((a, b) => a.localeCompare(b));
-    const scannedAt = new Date();
-    await User.updateOne({ _id: req.rootUser._id }, { $set: { usageVariableSharing: true, usageVariableNames: variableNames, usageVariableNamesScannedAt: scannedAt, usageVariableScanErrors: scanErrorCount } });
-    return res.json({ enabled: true, variableCount: variableNames.length, serviceCount: services.length, scanErrorCount, scannedAt });
-  } catch { return res.status(500).json({ error: "Could not scan your Render variable names." }); }
+    try {
+      const listing = await fetchAllPages(
+        (path) => renderOps.renderRequest(apiKey, path),
+        "/v1/services/" + encodeURIComponent(service.id) + "/env-vars"
+      );
+      if (listing.truncated) throw new Error("Environment-variable listing was incomplete.");
+      const env = new Map();
+      for (const row of listing.items) {
+        const variable = row?.envVar || row;
+        if (variable && typeof variable.key === "string") env.set(variable.key, typeof variable.value === "string" ? variable.value : "");
+      }
+      const unknownVariables = detectServices(env).other
+        .map((variable) => ({ name: variable.name, kind: variable.kind, set: Boolean(variable.set) }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      rows.push({ id: service.id, name: service.name || service.id, url: service.url || null, accountName: accountFields?.name || "Render account", scanError: null, unknownVariables });
+    } catch {
+      scanErrorCount++;
+      rows.push({ id: service.id, name: service.name || service.id, url: service.url || null, accountName: accountFields?.name || "Render account", scanError: "Could not read this service's environment-variable names", unknownVariables: [] });
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(4, services.length) }, async () => {
+    while (cursor < services.length) await scanOne(services[cursor++]);
+  }));
+  rows.sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    scannedAt: new Date().toISOString(),
+    serviceCount: rows.length,
+    unknownNameCount: new Set(rows.flatMap((service) => service.unknownVariables.map((variable) => variable.name))).size,
+    scanErrorCount,
+    services: rows
+  };
+}
+
+/* Each user can see unsupported variable names for their own connected Render services. */
+router.get("/render/usage-variable-report", async (req, res) => {
+  try {
+    const report = await scanUnknownRenderVariables(req.rootUser);
+    res.set("Cache-Control", "no-store");
+    return res.json({ ...report, ...getUsageCapabilityCatalog() });
+  } catch {
+    return res.status(500).json({ error: "Could not scan your connected Render variable names." });
+  }
 });
 
-/* Admin-only aggregate view. It reads only reports explicitly shared by their owners. */
+/* Admin-only aggregate scan. It deliberately omits user, account and service identifiers. */
 router.get("/render/usage-admin-report", async (req, res) => {
   if (String(req.rootUser?.email || "").trim().toLowerCase() !== "tanushchawla16@gmail.com") return res.status(403).json({ error: "Not allowed." });
   try {
-    const dataKey = await req.rootUser.getDataKey();
-    const { services, accounts } = await loadRenderServices(req.rootUser, dataKey, { refresh: true });
-    const rows = [];
-    let cursor = 0, scanErrorCount = 0;
-    const scanOne = async (service) => {
-      const account = accounts.get(String(service.accountId));
-      if (!account?.apiKey) {
-        scanErrorCount++;
-        rows.push({ id: service.id, name: service.name || service.serviceName || service.id, url: service.url || null, accountName: account?.name || "Render account", scanError: "Render account credentials unavailable", unknownVariables: [] });
-        return;
-      }
+    const users = await User.find({ "renderAccounts.0": { $exists: true } }).select("dataKey renderAccounts").limit(5000);
+    const variableCounts = new Map();
+    let cursor = 0, connectedUserCount = 0, serviceCount = 0, scanErrorCount = 0;
+    const scanUser = async (user) => {
       try {
-        const payload = await renderOps.renderRequest(account.apiKey, "/v1/services/" + encodeURIComponent(service.id) + "/env-vars?limit=100");
-        const list = Array.isArray(payload) ? payload : Array.isArray(payload?.items) ? payload.items : Array.isArray(payload?.envVars) ? payload.envVars : [];
-        const env = new Map();
-        for (const row of list) { const v = row?.envVar || row; if (v && typeof v.key === "string") env.set(v.key, typeof v.value === "string" ? v.value : ""); }
-        const unknownVariables = detectServices(env).other.map((v) => ({ name: v.name, kind: v.kind, set: Boolean(v.set) })).sort((a, b) => a.name.localeCompare(b.name));
-        rows.push({ id: service.id, name: service.name || service.serviceName || service.id, url: service.url || null, accountName: account.name || "Render account", scanError: null, unknownVariables });
+        const report = await scanUnknownRenderVariables(user);
+        connectedUserCount++;
+        serviceCount += report.serviceCount;
+        scanErrorCount += report.scanErrorCount;
+        const userNames = new Set();
+        for (const service of report.services) {
+          for (const variable of service.unknownVariables) {
+            if (!variableCounts.has(variable.name)) variableCounts.set(variable.name, { name: variable.name, serviceCount: 0, userIds: new Set() });
+            const aggregate = variableCounts.get(variable.name);
+            aggregate.serviceCount++;
+            userNames.add(variable.name);
+          }
+        }
+        for (const name of userNames) variableCounts.get(name).userIds.add(String(user._id));
       } catch {
         scanErrorCount++;
-        rows.push({ id: service.id, name: service.name || service.serviceName || service.id, url: service.url || null, accountName: account.name || "Render account", scanError: "Could not read this service's environment-variable names", unknownVariables: [] });
       }
     };
-    await Promise.all(Array.from({ length: Math.min(4, services.length) }, async () => {
-      while (cursor < services.length) await scanOne(services[cursor++]);
+    await Promise.all(Array.from({ length: Math.min(3, users.length) }, async () => {
+      while (cursor < users.length) await scanUser(users[cursor++]);
     }));
-    rows.sort((a, b) => a.name.localeCompare(b.name));
-    const uniqueNames = new Set(rows.flatMap((s) => s.unknownVariables.map((v) => v.name)));
+    const unknownVariables = [...variableCounts.values()]
+      .map(({ name, serviceCount: affectedServices, userIds }) => ({ name, serviceCount: affectedServices, userCount: userIds.size }))
+      .sort((a, b) => b.userCount - a.userCount || b.serviceCount - a.serviceCount || a.name.localeCompare(b.name));
     res.set("Cache-Control", "no-store");
-    return res.json({ scannedAt: new Date().toISOString(), serviceCount: rows.length, unknownNameCount: uniqueNames.size, scanErrorCount, services: rows, ...getUsageCapabilityCatalog() });
-  } catch { return res.status(500).json({ error: "Could not scan your Render variable names." }); }
+    return res.json({
+      scannedAt: new Date().toISOString(),
+      connectedUserCount,
+      serviceCount,
+      unknownNameCount: unknownVariables.length,
+      scanErrorCount,
+      unknownVariables,
+      ...getUsageCapabilityCatalog()
+    });
+  } catch {
+    return res.status(500).json({ error: "Could not scan connected users' Render variable names." });
+  }
 });
 
 /* Live-services usage dashboard: only running Render services, with provider usage, limits and projections. */
