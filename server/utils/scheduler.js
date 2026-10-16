@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const crypto = require("crypto");
 const SystemJobRun = require("../models/SystemJobRun");
+const SchedulerLease = require("../models/SchedulerLease");
 const { summarizeStep, overallStatus, publicRun } = require("./schedulerState");
 const renderOps = require("./renderOps");
 const { runAllEnvSync } = require("./renderEnvSync");
@@ -12,6 +13,9 @@ const { runAllPings } = require("./pings");
 const { runAllDigests } = require("./telegramBot");
 
 const HISTORY_LIMIT = 100;
+const LEASE_ID = "background-scheduler";
+const LEASE_MS = 10 * 60 * 1000;
+const INSTANCE_ID = crypto.randomUUID();
 let running = null;
 let last = null;
 
@@ -33,6 +37,42 @@ async function persistRun(run) {
   }
 }
 
+async function acquireLease() {
+  if (mongoose.connection.readyState !== 1) return { acquired: false, reason: "database_unavailable" };
+  const now = new Date();
+  try {
+    const lease = await SchedulerLease.findOneAndUpdate(
+      { _id: LEASE_ID, $or: [{ leaseUntil: { $lte: now } }, { owner: INSTANCE_ID }] },
+      { $set: { owner: INSTANCE_ID, leaseUntil: new Date(now.getTime() + LEASE_MS), updatedAt: now } },
+      { new: true, upsert: true }
+    );
+    return lease?.owner === INSTANCE_ID ? { acquired: true } : { acquired: false, reason: "lease_unavailable" };
+  } catch (error) {
+    // Another instance owns the singleton lease; duplicate-key on upsert is expected in that case.
+    return { acquired: false, reason: error?.code === 11000 ? "lease_unavailable" : "lease_check_failed" };
+  }
+}
+
+async function renewLease() {
+  if (mongoose.connection.readyState !== 1) return;
+  try {
+    await SchedulerLease.updateOne(
+      { _id: LEASE_ID, owner: INSTANCE_ID },
+      { $set: { leaseUntil: new Date(Date.now() + LEASE_MS), updatedAt: new Date() } }
+    );
+  } catch { /* lease expires naturally if the database is unavailable */ }
+}
+
+async function releaseLease() {
+  if (mongoose.connection.readyState !== 1) return;
+  try {
+    await SchedulerLease.updateOne(
+      { _id: LEASE_ID, owner: INSTANCE_ID },
+      { $set: { leaseUntil: new Date(0), updatedAt: new Date() } }
+    );
+  } catch { /* lease expiry is the recovery path */ }
+}
+
 async function executeStep(name, fn, steps) {
   const start = Date.now();
   try {
@@ -49,40 +89,49 @@ async function executeStep(name, fn, steps) {
 async function runTick(source = "internal") {
   if (running) return { ...(await running), skipped: "already running" };
   running = (async () => {
-    const started = Date.now();
-    const startedAt = new Date(started).toISOString();
-    const steps = [];
-    const pings = await executeStep("pings", runAllPings, steps);
-    const monitoring = await executeStep("monitoring", () => renderOps.runAllEnabledMonitoring(), steps);
-    const autoLink = await executeStep("autoLink", runAllAutoLink, steps);
-    const projectSync = await executeStep("projectSync", runAllProjectSync, steps);
-    const envSync = await executeStep("envSync", runAllEnvSync, steps);
-    const registrySync = await executeStep("registrySync", runAllRegistrySync, steps);
-    const usage = await executeStep("usage", runAllUsage, steps);
-    const telegram = await executeStep("telegram", runAllDigests, steps);
-    const completedAt = new Date().toISOString();
-    const status = overallStatus(steps);
-    const run = {
-      id: crypto.randomUUID(),
-      ok: status === "success",
-      status,
-      source: source === "external" ? "external" : "internal",
-      startedAt,
-      completedAt,
-      durationMs: Math.max(0, Date.now() - started),
-      steps,
-      ...monitoring,
-      pings,
-      autoLink,
-      projectSync,
-      envSync,
-      registrySync,
-      usage,
-      telegram
-    };
-    last = run;
-    await persistRun(run);
-    return run;
+    const lease = await acquireLease();
+    if (!lease.acquired) return { ok: false, status: "skipped", skipped: lease.reason };
+    const heartbeat = setInterval(() => { void renewLease(); }, 60 * 1000);
+    heartbeat.unref?.();
+    try {
+      const started = Date.now();
+      const startedAt = new Date(started).toISOString();
+      const steps = [];
+      const pings = await executeStep("pings", runAllPings, steps);
+      const monitoring = await executeStep("monitoring", () => renderOps.runAllEnabledMonitoring(), steps);
+      const autoLink = await executeStep("autoLink", runAllAutoLink, steps);
+      const projectSync = await executeStep("projectSync", runAllProjectSync, steps);
+      const envSync = await executeStep("envSync", runAllEnvSync, steps);
+      const registrySync = await executeStep("registrySync", runAllRegistrySync, steps);
+      const usage = await executeStep("usage", runAllUsage, steps);
+      const telegram = await executeStep("telegram", runAllDigests, steps);
+      const completedAt = new Date().toISOString();
+      const status = overallStatus(steps);
+      const run = {
+        id: crypto.randomUUID(),
+        ok: status === "success",
+        status,
+        source: source === "external" ? "external" : "internal",
+        startedAt,
+        completedAt,
+        durationMs: Math.max(0, Date.now() - started),
+        steps,
+        ...monitoring,
+        pings,
+        autoLink,
+        projectSync,
+        envSync,
+        registrySync,
+        usage,
+        telegram
+      };
+      last = run;
+      await persistRun(run);
+      return run;
+    } finally {
+      clearInterval(heartbeat);
+      await releaseLease();
+    }
   })();
   try { return await running; } finally { running = null; }
 }
