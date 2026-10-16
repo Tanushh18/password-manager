@@ -67,7 +67,11 @@ export default function ServerBoard({ groups, incidentKeys, series, checked, onT
                       <button type="button" className="rd-btn rd-btn--quiet" onClick={() => onOpen(key)}>Details &amp; graphs</button>
                       {!suspended && <button type="button" className="rd-btn rd-btn--quiet" disabled={isBusy} onClick={() => onAction("restart", s)}>↻ Restart</button>}
                       <button type="button" className="rd-btn rd-btn--quiet" disabled={isBusy} onClick={() => onAction("deploy", s)}>⇪ Deploy</button>
-                      <button type="button" className="rd-btn rd-btn--quiet" disabled={isBusy} onClick={() => onAction(suspended ? "resume" : "suspend", s)}>{suspended ? "▶ Resume" : "Ⅱ Suspend"}</button>
+                      <label className={"rd-service-toggle" + (suspended ? " is-off" : "")} title={suspended ? "Turn on to resume this Render service" : "Turn off to suspend this Render service"}>
+                        <input type="checkbox" role="switch" checked={!suspended} disabled={isBusy} aria-label={(suspended ? "Resume " : "Suspend ") + s.name} onChange={() => onAction(suspended ? "resume" : "suspend", s)} />
+                        <span className="rd-service-toggle__track" aria-hidden="true"><span className="rd-service-toggle__knob" /></span>
+                        <span className="rd-service-toggle__label">{isBusy ? "Working…" : suspended ? "Suspended" : "Running"}</span>
+                      </label>
                       <button type="button" className="rd-icon-btn rd-icon-btn--danger" disabled={isBusy} aria-label={"Delete " + s.name} onClick={() => onDelete(s)}>🗑</button>
                     </div>
                   </article>
