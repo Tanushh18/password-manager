@@ -503,3 +503,14 @@
 .rd-service-toggle:has(input:disabled) { cursor: wait; opacity: .65; }
 .rd-service-toggle--detail { padding: .45rem .7rem; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); }
 
+/* Service dialog: editable service name and prominent public URL. */
+.rd-detail__head h2 { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.rd-detail__edit-name { font-size: .72rem; padding: .3rem .55rem; }
+.rd-detail__rename { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin: .25rem 0 .5rem; }
+.rd-detail__rename input { min-width: 180px; max-width: 100%; padding: .55rem .7rem; border: 1px solid var(--line-strong); border-radius: var(--r-md); color: var(--heading-2); background: var(--surface); font: inherit; }
+.rd-detail__rename input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rd-detail__service-url { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; width: fit-content; max-width: 100%; margin-top: .65rem; padding: .6rem .75rem; border: 1px solid var(--line-strong); border-radius: var(--r-md); color: var(--heading-2); background: var(--surface); text-decoration: none; }
+.rd-detail__service-url span:first-child { color: var(--muted); font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.rd-detail__service-url strong { overflow-wrap: anywhere; font-size: .84rem; font-weight: 600; }
+.rd-detail__service-url:hover strong { text-decoration: underline; }
+
