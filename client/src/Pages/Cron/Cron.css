@@ -19,3 +19,8 @@
 .cr-res.is-bad { color: var(--danger); }
 .cr-switch { display: inline-flex; align-items: center; gap: .4rem; font-size: .78rem; font-weight: 600; cursor: pointer; }
 .cr-switch--main { padding: .4rem .7rem; border: 1px solid var(--line-strong); border-radius: var(--r-md); }
+
+.cr-details{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.cr-chip{font-size:11px;padding:1px 7px;border-radius:999px;background:rgba(127,127,127,.14)}
+.cr-chip i{font-style:normal;opacity:.65;margin-right:3px}
+.cr-banner{margin:0 0 12px;padding:10px 14px;border-radius:10px;background:rgba(245,166,35,.14);border:1px solid rgba(245,166,35,.4);font-size:13px}

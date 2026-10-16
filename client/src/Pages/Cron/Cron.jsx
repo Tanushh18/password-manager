@@ -16,6 +16,33 @@ import "./Cron.css";
 const EVERY = [5, 10, 15, 30, 60];
 const isWeb = (s) => /web|static/i.test(String(s.type || "")) && Boolean(s.serviceDetails?.url);
 
+const bare = (u) => String(u || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+/** The base URL and the exact URL that is pinged (base + path), both clickable. */
+function Urls({ base, path, target }) {
+  const root = String(base || "").replace(/\/$/, "");
+  const full = target || root + (path || "/health");
+  return (
+    <>
+      <a className="rd-url" href={safeUrl(root)} target="_blank" rel="noreferrer noopener" title="Base URL">{bare(root)}</a>
+      <a className="rd-url" href={safeUrl(full)} target="_blank" rel="noreferrer noopener" title="URL that is pinged">↳ {bare(full)}</a>
+    </>
+  );
+}
+
+const fmtKey = (k) => k.replace(/\./g, " · ").replace(/([a-z])([A-Z])/g, "$1 $2");
+function fmtVal(k, v) {
+  if (typeof v === "number" && /uptime/i.test(k)) return v >= 3600 ? (v / 3600).toFixed(1) + " h" : Math.round(v / 60) + " min";
+  if (typeof v === "number" && /mem|rss|heap/i.test(k) && v > 100000) return Math.round(v / 1048576) + " MB";
+  return String(v);
+}
+/** The facts a server's health route reports (uptime, memory, database …). */
+function Details({ r }) {
+  const rows = Object.entries(r?.details || {}).slice(0, 8);
+  if (!rows.length) return null;
+  return <span className="cr-details">{rows.map(([k, v]) => <span key={k} className="cr-chip"><i>{fmtKey(k)}</i> {fmtVal(k, v)}</span>)}</span>;
+}
+
 function Result({ r }) {
   if (!r) return <span className="cr-dim">Not run yet</span>;
   if (r.ok) return <span className="cr-res is-ok">✓ {r.status} · {r.ms} ms · {timeAgo(r.at)}</span>;
@@ -97,7 +124,15 @@ export default function Cron() {
     catch (e) { toast.error(errorMessage(e, "Could not scan.")); }
     finally { setScanning(false); }
   };
+  useEffect(() => { if (!loading && scan === null && !scanning) void runScan(); }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
   const missing = (scan || []).filter((r) => r.missingRoute && r.repo);
+  const noRepo = (scan || []).filter((r) => r.missingRoute && !r.repo);
+  const useAlt = async (row) => {
+    const svc = services.find((s) => serviceKey(s) === row.serviceKey);
+    if (!svc) return;
+    await save(upsert(pings, svc, { path: row.alt }), "Ping path for " + row.name + " is now " + row.alt + ".");
+    setScan((old) => (old || []).map((r) => (r.serviceKey === row.serviceKey ? { ...r, usedAlt: true } : r)));
+  };
   const fix = async (rows) => {
     const list = rows.filter((r) => r.repo);
     if (!list.length) return;
@@ -170,12 +205,12 @@ export default function Cron() {
                   return (
                     <tr key={key} id={"svc-" + key}>
                       <td className="rd-col-check"><input type="checkbox" checked={selected.includes(key)} onChange={() => setSelected((o) => (o.includes(key) ? o.filter((k) => k !== key) : [...o, key]))} aria-label={"Select " + s.name} /></td>
-                      <td><strong>{s.name}</strong><a className="rd-url" href={safeUrl(s.serviceDetails.url)} target="_blank" rel="noreferrer noopener">{s.serviceDetails.url.replace(/^https?:\/\//, "")}</a><small className="cr-dim">{s.accountName}</small></td>
+                      <td><strong>{s.name}</strong><Urls base={s.serviceDetails.url} path={job?.path || "/health"} /><small className="cr-dim">{s.accountName}</small></td>
                       <td>{project ? <Link className="rd-project" to={"/projects/" + project.id}>{project.name}</Link> : <span className="cr-dim">—</span>}</td>
                       <td><label className="cr-switch"><input type="checkbox" checked={Boolean(job?.enabled)} disabled={saving} onChange={(e) => setFor([s], { enabled: e.target.checked }, e.target.checked ? "Ping job on for " + s.name + "." : "Paused.")} /><span>{job?.enabled ? (job.auto ? "On · default" : "On") : job ? "Paused" : "Off"}</span></label></td>
                       <td><input className="rd-field cr-path" defaultValue={job?.path || "/health"} disabled={saving} onBlur={(e) => { const v = e.target.value.trim() || "/health"; if (v !== (job?.path || "/health")) setFor([s], { path: v.startsWith("/") ? v : "/" + v }, "Path saved."); }} aria-label={"Path for " + s.name} /></td>
                       <td><select className="rd-field" value={job?.everyMinutes || 10} disabled={saving} onChange={(e) => setFor([s], { everyMinutes: Number(e.target.value) }, "Saved.")} aria-label={"Interval for " + s.name}>{EVERY.map((m) => <option key={m} value={m}>{m} min</option>)}</select></td>
-                      <td><Result r={results[key]} /></td>
+                      <td><Result r={results[key]} /><Details r={results[key]} /></td>
                     </tr>
                   );
                 })}</tbody>
@@ -189,16 +224,22 @@ export default function Cron() {
             {missing.length > 0 && <button type="button" className="rd-btn rd-btn--primary" disabled={fixing.length > 0} onClick={() => void fix(missing)}>Fix all missing ({missing.length})</button>}
             <button type="button" className="rd-btn rd-btn--quiet" disabled={scanning} onClick={() => void runScan()}>{scanning ? "Scanning…" : "🔍 Scan all servers"}</button>
           </>}>
-          {!scan ? <p className="cr-dim">Run a scan to see which servers have a /health route.</p> : (
+          {scan && (missing.length > 0 || noRepo.length > 0) && (
+            <div className="cr-banner">
+              <strong>{missing.length + noRepo.length} server{missing.length + noRepo.length === 1 ? " has" : "s have"} no /health route.</strong>
+              <span> {missing.length ? "Create it, push and merge in one click: “Fix all missing”. " : ""}{noRepo.length ? noRepo.length + " have no GitHub repo linked, so add the route by hand. " : ""}Already have another route (like /ping)? Use “Use that path” instead.</span>
+            </div>
+          )}
+          {!scan ? <p className="cr-dim">{scanning ? "Scanning every server…" : "Run a scan to see which servers have a /health route."}</p> : (
             <div className="rd-tablewrap">
               <table className="rd-table cr-table">
                 <thead><tr><th>Service</th><th>GET /health</th><th>Repo</th><th /></tr></thead>
                 <tbody>{scan.map((r) => (
                   <tr key={r.serviceKey}>
-                    <td><strong>{r.name}</strong><small className="cr-dim">{r.url.replace(/^https?:\/\//, "")}</small></td>
-                    <td><Result r={r} /></td>
+                    <td><strong>{r.name}</strong><Urls base={r.url} path="/health" target={r.target} /></td>
+                    <td><Result r={r} /><Details r={r} />{r.missingRoute && r.alt ? <small className="cr-dim">Answers on {r.alt}</small> : null}</td>
                     <td>{r.repo ? <a href={safeUrl(r.repo)} target="_blank" rel="noreferrer noopener">{r.repo.replace(/^https:\/\/github\.com\//, "")}</a> : <span className="cr-dim">no repo</span>}{r.rootDir ? <small className="cr-dim">root: {r.rootDir}</small> : null}</td>
-                    <td className="cr-right">{r.missingRoute && r.repo ? <button type="button" className="rd-btn rd-btn--primary" disabled={fixing.includes(r.serviceKey)} onClick={() => void fix([r])}>{fixing.includes(r.serviceKey) ? "Adding…" : "Add /health + merge"}</button> : r.ok ? <span className="cr-res is-ok">Has /health</span> : null}</td>
+                    <td className="cr-right">{r.missingRoute && r.alt && !r.usedAlt ? <button type="button" className="rd-btn rd-btn--quiet" disabled={saving} onClick={() => void useAlt(r)}>Use {r.alt} for pings</button> : null}{r.usedAlt ? <span className="cr-res is-ok">Pinging {r.alt}</span> : null}{r.missingRoute && r.repo ? <button type="button" className="rd-btn rd-btn--primary" disabled={fixing.includes(r.serviceKey)} onClick={() => void fix([r])}>{fixing.includes(r.serviceKey) ? "Adding…" : "Add /health + merge"}</button> : r.ok ? <span className="cr-res is-ok">Has /health</span> : null}</td>
                   </tr>
                 ))}</tbody>
               </table>

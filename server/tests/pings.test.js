@@ -16,3 +16,10 @@ test("every running web service gets a 10-minute /health ping unless it has its 
     ["b:s5", "https://site.onrender.com", "/health", 10, true]
   ]);
 });
+
+test("health details keep safe primitives and drop secret-looking keys", () => {
+  const { safeDetails } = require("../utils/pings");
+  const out = safeDetails(JSON.stringify({ status: "ok", uptime: 12, dbPassword: "x", db: { connected: true, uri: "mongodb://u:p@h" }, list: [1] }));
+  expect(out).toEqual({ status: "ok", uptime: 12, "db.connected": true });
+  expect(safeDetails("<html>")).toBe(null);
+});
