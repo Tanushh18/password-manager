@@ -74,18 +74,21 @@ export default function RenderDashboard() {
   /* ---------- data ---------- */
   const loadAccounts = useCallback(async ({ quiet = false } = {}) => {
     if (!quiet) setLoading(true);
+    const t0 = Date.now();
     try {
       const result = await getRenderAccounts();
       const list = Array.isArray(result.accounts) ? result.accounts : [];
+      console.info("[render] accounts loaded", { count: list.length, ms: Date.now() - t0 });
       const withServices = await Promise.all(list.map(async (a) => {
-        try { const data = await getRenderServices(a.id); return { ...a, services: normalizeServices(data.services), truncated: Boolean(data.truncated) }; }
-        catch (e) { return { ...a, services: [], loadError: errorMessage(e, "Could not load services.") }; }
+        try { const data = await getRenderServices(a.id); console.info("[render] services loaded", { account: a.name, count: (data.services || []).length, ms: Date.now() - t0 }); return { ...a, services: normalizeServices(data.services), truncated: Boolean(data.truncated) }; }
+        catch (e) { console.error("[render] services failed", { account: a.name, status: e?.response?.status, error: e?.response?.data?.error, code: e?.code, ms: Date.now() - t0 }); return { ...a, services: [], loadError: errorMessage(e, "Could not load services.") }; }
       }));
       setAccounts(withServices);
       setServices(withServices.flatMap((a) => a.services.map((s) => ({ ...s, accountId: a.id, accountName: a.name }))));
       setLastSync(new Date());
       setError("");
     } catch (e) {
+      console.error("[render] accounts failed", { status: e?.response?.status, error: e?.response?.data?.error, code: e?.code, ms: Date.now() - t0 });
       setError(errorMessage(e, "Could not load Render connections. Sign in again if your Stashr session expired."));
     } finally { if (!quiet) setLoading(false); }
   }, []);

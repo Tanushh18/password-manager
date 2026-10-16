@@ -46,7 +46,7 @@ async function acquireLease() {
     const lease = await SchedulerLease.findOneAndUpdate(
       { _id: LEASE_ID, $or: [{ leaseUntil: { $lte: now } }, { owner: INSTANCE_ID }] },
       { $set: { owner: INSTANCE_ID, leaseUntil: new Date(now.getTime() + LEASE_MS), updatedAt: now } },
-      { new: true, upsert: true }
+      { returnDocument: "after", upsert: true }
     );
     return lease?.owner === INSTANCE_ID ? { acquired: true } : { acquired: false, reason: "lease_unavailable" };
   } catch (error) {

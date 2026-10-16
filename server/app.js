@@ -60,6 +60,18 @@ const STARTED_AT = new Date();
 
 app.use(express.json({ limit: "1mb" }));
 
+// Request log for diagnosis: only failures (4xx/5xx) and slow requests, never bodies, cookies or query strings.
+app.use((req, res, next) =>
+{
+  const started = Date.now();
+  res.on("finish", () =>
+  {
+    const ms = Date.now() - started;
+    if (res.statusCode >= 400 || ms > 3000) console.log(`[req] ${req.method} ${req.path} -> ${res.statusCode} in ${ms}ms`);
+  });
+  next();
+});
+
 /* ─────────────────────────────────────────────
    HEALTH CHECKS
    Public, unauthenticated and dependency free so
