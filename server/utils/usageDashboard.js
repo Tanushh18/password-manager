@@ -199,7 +199,7 @@ function mergeByRepo(entries, idOf) {
       // Same provider, different credentials: keep every account's numbers under the one provider row.
       same.vars = unionVars(same.vars || [], svc.vars || []);
       same.reports = [...same.reports, ...svc.reports];
-      if (same.state !== "ok" && svc.state === "ok") { same.state = "ok"; same.error = null; }
+      if (same.state !== "ok" && svc.state === "ok") { same.state = "ok"; same.error = null; same.diagnosis = svc.diagnosis; }
     }
   }
   return [...groups.values()].map((g) => {
