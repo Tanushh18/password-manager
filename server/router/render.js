@@ -791,6 +791,11 @@ router.get("/render/projects/:projectId/deployments", async (req, res) => {
 
 /* Scan connected Render services for variable names only. Environment values are used in memory for provider detection and never returned or persisted. */
 async function scanUnknownRenderVariables(user) {
+  const entries = user.renderAccounts || [];
+  if (!entries.some((entry) => entry.enc === "udk")) {
+    return { scannedAt: new Date().toISOString(), serviceCount: 0, unknownNameCount: 0, scanErrorCount: entries.length ? 1 : 0, services: [] };
+  }
+  if (!user.dataKey) throw new Error("Render connection data key is unavailable.");
   const dataKey = await user.getDataKey();
   const listed = await renderOps.listEveryService(user, dataKey);
   const services = listed.services || [];
@@ -856,7 +861,7 @@ router.get("/render/usage-variable-report", async (req, res) => {
 router.get("/render/usage-admin-report", async (req, res) => {
   if (String(req.rootUser?.email || "").trim().toLowerCase() !== "tanushchawla16@gmail.com") return res.status(403).json({ error: "Not allowed." });
   try {
-    const users = await User.find({ "renderAccounts.0": { $exists: true } }).select("dataKey renderAccounts").limit(5000);
+    const users = await User.find({ "renderAccounts.0": { $exists: true } }).select("dataKey renderAccounts");
     const variableCounts = new Map();
     let cursor = 0, connectedUserCount = 0, serviceCount = 0, scanErrorCount = 0;
     const scanUser = async (user) => {
