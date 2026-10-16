@@ -2,7 +2,7 @@
  * Tiny in-memory rate limiter (per IP) so login / register can't be
  * brute forced. Good enough for a single instance; no extra dependency.
  */
-const rateLimit = ({ windowMs = 15 * 60 * 1000, max = 20, message = "Too many requests." } = {}) =>
+const rateLimit = ({ windowMs = 15 * 60 * 1000, max = 20, message = "Too many requests.", skipSuccessful = false } = {}) =>
 {
     const hits = new Map();
 
@@ -37,6 +37,15 @@ const rateLimit = ({ windowMs = 15 * 60 * 1000, max = 20, message = "Too many re
         {
             res.set("Retry-After", String(Math.ceil((entry.reset - now) / 1000)));
             return res.status(429).json({ error: message });
+        }
+
+        // Only failures count against the limit: a signed-in user behind a shared IP must never be locked out.
+        if (skipSuccessful)
+        {
+            res.on("finish", () =>
+            {
+                if (res.statusCode < 400 && entry.count > 0) entry.count -= 1;
+            });
         }
 
         next();

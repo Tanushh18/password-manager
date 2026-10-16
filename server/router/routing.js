@@ -13,7 +13,7 @@ const {
 
 const registry = require("./registry");
 
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: "Too many attempts. Please wait a few minutes and try again." });
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, skipSuccessful: true, message: "Too many attempts. Please wait a few minutes and try again." });
 
 /* ════════════════ AUTH ════════════════ */
 

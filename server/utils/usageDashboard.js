@@ -143,7 +143,7 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
         } else { entry.state = "error"; entry.error = { code: res.code, message: res.error, detail: res.detail || "", hint: res.hint || "" }; }
       } else if (!providers[svc.key]) entry.state = "no-reader";
       if (entry.state === "ok") {
-        entry.diagnosis = "Live usage was read successfully using this service’s configured credentials.";
+        entry.diagnosis = "Live usage was read successfully using this service’s configured credentials." + (svc.incompleteAccounts?.length ? " Not tracked (incomplete variables): " + svc.incompleteAccounts.map((a) => (a.label || "default") + " is missing " + a.missing.join(", ")).join("; ") + "." : "");
       } else if (entry.state === "disabled") {
         entry.diagnosis = "Usage tracking is switched off for this provider in Services & Usage settings.";
       } else if (entry.state === "no-reader" && svc.key === "supabase") {
@@ -151,7 +151,7 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
       } else if (entry.state === "no-reader") {
         entry.diagnosis = "Stashr recognizes this provider, but its deployment credentials do not expose a supported usage endpoint. The provider console link shows the authoritative usage.";
       } else if (entry.state === "no-credentials" && svc.key === "cloudinary") {
-        entry.diagnosis = "Cloudinary was detected, but live usage needs CLOUDINARY_URL or a complete Cloud Name + API Key + API Secret set. Detected variable names: " + svc.vars.map((v) => v.name).join(", ") + ". Values remain hidden.";
+        entry.diagnosis = "Cloudinary was detected, but live usage needs CLOUDINARY_URL or a complete Cloud Name + API Key + API Secret set." + (svc.incompleteAccounts?.length ? " Incomplete account(s): " + svc.incompleteAccounts.map((a) => (a.label || "default") + " is missing " + a.missing.join(", ")).join("; ") + "." : "") + " Detected variable names: " + svc.vars.map((v) => v.name).join(", ") + ". Values remain hidden.";
       } else if (entry.state === "no-credentials") {
         entry.diagnosis = "The provider variables were detected, but Stashr could not build a complete read-only usage connection from them. Check the required connection string or credential pair for this provider; no values are shown here.";
       } else if (entry.state === "error") {

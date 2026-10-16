@@ -189,3 +189,17 @@ describe("usage projection: remaining and days left", () =>
         expect(seriesFor(undefined, "a")).toHaveLength(0);
     });
 });
+
+const { cloudinaryAnalysis } = require("../utils/usageCatalog");
+test("Cloudinary: prefix, infix and numbered account naming are all picked up; incomplete accounts are reported", () => {
+  const { sets, incomplete } = cloudinaryAnalysis(new Map(Object.entries({
+    CLOUDINARY_CLOUD_NAME: "main", CLOUDINARY_API_KEY: "k1", CLOUDINARY_API_SECRET: "s1",
+    SHINE_CLOUDINARY_CLOUD_NAME: "shine", SHINE_CLOUDINARY_API_KEY: "k2", SHINE_CLOUDINARY_API_SECRET: "s2",
+    CLOUDINARY_BLOG_CLOUD_NAME: "blog", CLOUDINARY_BLOG_API_KEY: "k3", CLOUDINARY_BLOG_API_SECRET: "s3",
+    CLOUDINARY_URL_2: "cloudinary://k4:s4@second",
+    CLOUDINARY_CLOUD_NAME_OLD: "old"
+  })));
+  expect(sets.map((s) => s.cloudName).sort()).toEqual(["blog", "main", "second", "shine"]);
+  expect(incomplete).toEqual([{ label: "old", missing: ["API Key", "API Secret"] }]);
+  expect(detectServices({ SHINE_CLOUDINARY_API_KEY: "k" }).services[0].key).toBe("cloudinary");
+});

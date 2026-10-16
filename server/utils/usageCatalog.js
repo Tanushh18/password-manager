@@ -55,7 +55,7 @@ const PROVIDERS = [
   { key: "uploadthing", label: "UploadThing", category: "Media", vars: /^UPLOADTHING[A-Z0-9_]*$/i },
   { key: "vercelblob", label: "Vercel Blob", category: "Media", vars: /^(BLOB_READ_WRITE_TOKEN|VERCEL_BLOB[A-Z0-9_]*)$/i },
   { key: "b2", label: "Backblaze B2 / Spaces / Wasabi", category: "Media", vars: /^(B2|BACKBLAZE|SPACES|DO_SPACES|WASABI)_[A-Z0-9_]+$/i },
-  { key: "cloudinary", label: "Cloudinary", category: "Media", vars: /^(CLOUDINARY[A-Z0-9_]*|CLOUD_NAME)$/i },
+  { key: "cloudinary", label: "Cloudinary", category: "Media", vars: /(^|_)CLOUDINARY(_|$)|^CLOUD_NAME(_[A-Z0-9_]+)?$/i },
   { key: "twilio", label: "Twilio", category: "SMS / Voice", vars: /^TWILIO[A-Z0-9_]*$/i },
   { key: "vonage", label: "Vonage (Nexmo)", category: "SMS / Voice", vars: /^(VONAGE|NEXMO)[A-Z0-9_]*$/i },
   { key: "sms", label: "SMS gateway", category: "SMS / Voice", vars: /^(SMS|MSG91|FAST2SMS|EXOTEL|PLIVO)[A-Z0-9_]*$/i },
@@ -147,29 +147,50 @@ function dbUri(values, scheme) {
 const HOST_LABELS = [[/neon\.tech$/, "Neon"], [/supabase\.(co|com)$/, "Supabase"], [/render\.com$/, "Render"], [/amazonaws\.com$/, "AWS RDS"], [/aivencloud\.com$/, "Aiven"], [/cockroachlabs\.cloud$/, "CockroachDB"], [/planetscale\.com$|psdb\.cloud$/, "PlanetScale"], [/railway\.app$|rlwy\.net$/, "Railway"], [/mongodb\.net$/, "Atlas"], [/upstash\.io$/, "Upstash"], [/redislabs\.com$|redis-cloud\.com$/, "Redis Cloud"], [/elephantsql\.com$/, "ElephantSQL"], [/digitalocean\.com$|ondigitalocean\.com$/, "DigitalOcean"], [/tidbcloud\.com$/, "TiDB Cloud"]];
 const hostLabel = (uri) => { try { const host = new URL(uri.replace(/^mongodb\+srv:/i, "mongodb:").replace(/^(mysql2|mariadb|rediss?|postgres(ql)?|mongodb):/i, "http:")).hostname.toLowerCase(); return (HOST_LABELS.find(([re]) => re.test(host)) || [])[1] || ""; } catch { return ""; } };
 
-/** Cloudinary can be configured as several accounts (e.g. CLOUDINARY_CLOUD_NAME and CLOUDINARY_CLOUD_NAME_shine). */
-function cloudinarySets(values) {
+/** Which Cloudinary part a variable name carries, and which account (group) it belongs to, whatever the naming style. */
+function cloudinaryPart(name) {
+  const up = name.toUpperCase().replace(/-/g, "_");
+  const hasBrand = /(^|_)CLOUDINARY(_|$)/.test(up);
+  const rest = up.replace(/(^|_)CLOUDINARY(?=_|$)/g, "_");
+  const kinds = [["cloudname", /(^|_)CLOUD_?NAME(?=_|$)/], ["apikey", /(^|_)API_?KEY(?=_|$)/], ["apisecret", /(^|_)API_?SECRET(?=_|$)/], ["url", /(^|_)URL(?=_|$)/]];
+  if (hasBrand) kinds.push(["cloudname", /(^|_)NAME(?=_|$)/], ["apikey", /(^|_)KEY(?=_|$)/], ["apisecret", /(^|_)SECRET(?=_|$)/]);
+  for (const [kind, re] of kinds) {
+    const m = re.exec(rest);
+    if (!m) continue;
+    const group = (rest.slice(0, m.index) + "_" + rest.slice(m.index + m[0].length)).replace(/_+/g, "_").replace(/^_|_$/g, "").toLowerCase();
+    if (kind === "url" && !hasBrand) return null;
+    if (!hasBrand && !/^(cloudname|apikey|apisecret)$/.test(kind)) return null;
+    return { kind, group };
+  }
+  return null;
+}
+
+/**
+ * Cloudinary can be configured as several accounts (CLOUDINARY_CLOUD_NAME_shine, SHINE_CLOUDINARY_API_KEY,
+ * CLOUDINARY_URL_2, ...). `incomplete` lists accounts whose variables are present but not enough to read usage.
+ */
+function cloudinaryAnalysis(values) {
   const sets = new Map();
-  const part = /^(?:cloudinary[_-]?)?(cloud[_-]?name|name|api[_-]?key|api[_-]?secret)(?:[_-]([a-z0-9]+))?$/i;
   for (const [name, value] of values) {
     if (typeof value !== "string" || !value.trim()) continue;
-    if (/^CLOUDINARY_URL(_[A-Z0-9]+)?$/i.test(name)) {
-      try { const u = new URL(value.trim()); if (u.protocol === "cloudinary:") sets.set(name, { label: name, cloudName: u.hostname, apiKey: decodeURIComponent(u.username), apiSecret: decodeURIComponent(u.password) }); } catch { /* ignore */ }
-      continue;
-    }
-    if (!/^(CLOUDINARY|CLOUD_NAME|API_KEY|API_SECRET)/i.test(name)) continue;
-    const m = part.exec(name);
-    if (!m) continue;
-    const kind = m[1].toLowerCase().replace(/[_-]/g, "");
-    const suffix = (m[2] || "").toLowerCase();
-    const set = sets.get(suffix) || { label: suffix || "default" };
-    if (kind === "cloudname" || kind === "name") set.cloudName = value.trim();
-    else if (kind === "apikey") set.apiKey = value.trim();
-    else if (kind === "apisecret") set.apiSecret = value.trim();
-    sets.set(suffix, set);
+    const part = cloudinaryPart(name);
+    if (!part) continue;
+    const text = value.trim();
+    const set = sets.get(part.group) || { label: part.group || "default" };
+    if (part.kind === "url") {
+      try { const u = new URL(text); if (u.protocol === "cloudinary:") Object.assign(set, { cloudName: u.hostname, apiKey: decodeURIComponent(u.username), apiSecret: decodeURIComponent(u.password), fromUrl: name }); } catch { /* ignore */ }
+    } else if (part.kind === "cloudname") set.cloudName = text;
+    else if (part.kind === "apikey") set.apiKey = text;
+    else set.apiSecret = text;
+    sets.set(part.group, set);
   }
-  return [...sets.values()].filter((s) => s.cloudName && s.apiKey && s.apiSecret);
+  const all = [...sets.values()];
+  const ready = all.filter((s) => s.cloudName && s.apiKey && s.apiSecret).map(({ fromUrl, ...s }) => s);
+  const incomplete = all.filter((s) => !(s.cloudName && s.apiKey && s.apiSecret)).map((s) => ({ label: s.label, missing: [["Cloud Name", s.cloudName], ["API Key", s.apiKey], ["API Secret", s.apiSecret]].filter(([, v]) => !v).map(([n]) => n) }));
+  return { sets: ready, incomplete };
 }
+
+const cloudinarySets = (values) => cloudinaryAnalysis(values).sets;
 
 const CREDENTIALS = {
   mongodb: (values) => {
@@ -251,7 +272,8 @@ function detectServices(values) {
     services.push({
       key: owner, label: def.label, host: host || "", category: def.category, console: consoleLink[owner] || null,
       vars: vars.map(({ _raw, ...safe }) => safe), configuredLimits: limits,
-      hasCredentials: Boolean(creds), credentials: creds
+      hasCredentials: Boolean(creds), credentials: creds,
+      incompleteAccounts: owner === "cloudinary" ? cloudinaryAnalysis(map).incomplete : undefined
     });
   }
   const order = ["Database", "Media", "SMS / Voice", "Voice / speech", "Email", "Messaging", "AI", "Realtime", "Auth", "APIs", "Monitoring", "DevOps", "Other"];
@@ -265,4 +287,4 @@ function publicService(service) {
   return rest;
 }
 
-module.exports = { detectServices, classifyVar, cloudinarySets, publicService, schemeOwner, hostLabel, PROVIDERS, SECRET_NAME, LIMIT_NAME };
+module.exports = { detectServices, classifyVar, cloudinarySets, cloudinaryAnalysis, publicService, schemeOwner, hostLabel, PROVIDERS, SECRET_NAME, LIMIT_NAME };
