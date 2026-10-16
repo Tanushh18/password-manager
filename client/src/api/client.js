@@ -227,6 +227,7 @@ export const getRenderAccounts = () => instance.get("/render/accounts").then((r)
 export const connectRenderAccount = (data) => instance.post("/render/accounts", data).then((r) => r.data);
 export const deleteRenderAccount = (id) => instance.delete("/render/accounts/" + encodeURIComponent(id)).then((r) => r.data);
 export const getRenderServices = (accountId) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/services").then((r) => r.data);
+export const renameRenderService = (accountId, serviceId, name) => instance.patch(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/name`, { name }).then((r) => r.data);
 export const getRenderLogs = (accountId, params) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/logs?" + new URLSearchParams(params).toString()).then((r) => r.data);
 export const getRenderEnvVars = (accountId, serviceId) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/services/" + encodeURIComponent(serviceId) + "/env-vars").then((r) => r.data);
 export const updateRenderEnvVar = (accountId, serviceId, key, value) => instance.put("/render/accounts/" + encodeURIComponent(accountId) + "/services/" + encodeURIComponent(serviceId) + "/env-vars/" + encodeURIComponent(key), { value }).then((r) => r.data);
