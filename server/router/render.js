@@ -1026,6 +1026,22 @@ router.delete("/render/accounts/:accountId/services/:serviceId", async (req, res
   } catch (error) { return sendUpstreamError(res, error); }
 });
 
+router.patch("/render/accounts/:accountId/services/:serviceId/name", async (req, res) => {
+  const saved = await getAccount(req, res);
+  if (!saved) return;
+  const serviceId = String(req.params.serviceId || "");
+  const name = text(req.body?.name, 100);
+  if (!safeId(serviceId)) return res.status(400).json({ error: "Invalid service ID." });
+  if (!name || name.length < 2 || /[\\r\\n\\x00-\\x1f]/.test(name)) {
+    return res.status(400).json({ error: "Enter a service name between 2 and 100 characters." });
+  }
+  try {
+    const result = await renderRequest(saved.account.apiKey, servicePath(serviceId), { method: "PATCH", body: { name } });
+    await recordAudit(req, "rename_service", saved.entry._id, serviceId, { serviceName: name });
+    return res.json({ service: result?.service || result, message: "Service name updated." });
+  } catch (error) { return sendUpstreamError(res, error); }
+});
+
 router.post("/render/accounts/:accountId/services/:serviceId/suspend", async (req, res) => {
   const saved = await getAccount(req, res);
   if (!saved) return;
