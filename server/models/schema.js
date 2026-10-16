@@ -72,12 +72,6 @@ const schema = new mongoose.Schema({
     // Render dashboard connections; API keys are encrypted using the account data key.
     renderAccounts: [entrySchema],
 
-    // Opt-in diagnostics: variable names only, never environment values.
-    usageVariableSharing: { type: Boolean, default: false },
-    usageVariableNames: { type: [String], default: [] },
-    usageVariableNamesScannedAt: { type: Date, default: null },
-    usageVariableScanErrors: { type: Number, default: 0 },
-
     // GitHub connections for the Projects page; tokens are sealed with the account data key.
     githubAccounts: [entrySchema],
 
