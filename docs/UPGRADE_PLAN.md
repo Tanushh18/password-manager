@@ -94,7 +94,7 @@ Implement a dedicated, repeatable security workflow with automatic scans on push
 2. **Static application analysis:** CodeQL JavaScript/TypeScript using extended security queries; publish SARIF.
 3. **Secrets and credential leaks:** Gitleaks against the repository/history. Treat a finding as sensitive; never echo secret values into logs or comments.
 4. **Filesystem/dependency/configuration scan:** Trivy for OS/library vulnerabilities, secret patterns and IaC/config misconfiguration. Fail on high/critical findings; upload a SARIF/report artifact.
-5. **Pull request dependency review:** block newly introduced high/critical vulnerable dependencies.
+5. **Pull request dependency review:** when GitHub Dependency Graph is enabled and repository variable `ENABLE_DEPENDENCY_REVIEW=true`, block newly introduced high/critical vulnerable dependencies. Full npm audits remain enabled regardless.
 6. **Manual security review:** authentication/session lifecycle, authorization boundaries, IDOR, rate limits, input validation, SSRF, command injection, path traversal, unsafe deserialization, XSS, CSRF, CORS, security headers, TLS/proxy trust, logging/redaction, backup access, encryption/key management and mobile deep links/storage.
 7. **Dynamic testing:** authenticated/unauthenticated API tests, abuse/rate-limit tests, invalid/expired tokens, cross-account access tests and safe staging DAST. Never run destructive DAST against production without an explicit approved scope.
 8. **Supply chain:** lockfile integrity, pinned CI permissions, action version review, least-privilege GitHub token, artifact retention and provenance where supported.
