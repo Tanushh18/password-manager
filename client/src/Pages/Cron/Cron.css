@@ -24,3 +24,19 @@
 .cr-chip{font-size:11px;padding:1px 7px;border-radius:999px;background:rgba(127,127,127,.14)}
 .cr-chip i{font-style:normal;opacity:.65;margin-right:3px}
 .cr-banner{margin:0 0 12px;padding:10px 14px;border-radius:10px;background:rgba(245,166,35,.14);border:1px solid rgba(245,166,35,.4);font-size:13px}
+
+
+/* Durable scheduler run history */
+.cr-run-history .cr-dim { padding: 1rem; }
+.cr-runs-table td { vertical-align: top; }
+.cr-runs-table td small { display: block; margin-top: .2rem; color: var(--text-muted); font-size: .72rem; }
+.cr-run-status { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: .25rem .55rem; font-size: .72rem; font-weight: 750; text-transform: capitalize; }
+.cr-run-status--success { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); }
+.cr-run-status--partial { color: var(--rd-warn); border-color: color-mix(in srgb, var(--rd-warn) 40%, var(--line)); }
+.cr-run-status--failed { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--line)); }
+.cr-run-steps { display: flex; flex-wrap: wrap; gap: .3rem; min-width: 180px; max-width: 420px; }
+.cr-run-step { display: inline-flex; border-radius: 6px; padding: .2rem .4rem; font-size: .68rem; background: var(--surface); border: 1px solid var(--line); text-transform: capitalize; }
+.cr-run-step--success { color: var(--ok); }
+.cr-run-step--partial { color: var(--rd-warn); }
+.cr-run-step--failed { color: var(--danger); }
+@media (max-width: 760px) { .cr-runs-table { min-width: 760px; } }
