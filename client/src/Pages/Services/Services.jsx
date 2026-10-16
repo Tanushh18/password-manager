@@ -215,8 +215,11 @@ function ProjectDetail({ project, onToggle, projectOf }) {
                   <td>{svc.configuredLimits.length ? svc.configuredLimits.map((l) => <code key={l.name} className="sv-tag">{l.name} = {l.value}{l.period ? " / " + l.period : ""}</code>) : <span className="sv-dim">—</span>}</td>
                   <td>
                     <span className={svc.state === "error" ? "sv-err" : "sv-dim"}>{STATE_TEXT[svc.state] || "—"}{svc.state === "error" && svc.error?.detail ? ": " + svc.error.detail : ""}</span>
-                    {svc.state === "error" && (svc.error?.hint || svc.error?.message) && <small className="sv-sub">{svc.error.hint || svc.error.message}</small>}
-                    {svc.state === "no-reader" && svc.usageHint && <small className="sv-sub">{svc.usageHint}</small>}
+                    {svc.diagnosis
+                      ? <small className="sv-sub">{svc.diagnosis}</small>
+                      : svc.state === "no-reader" && svc.usageHint
+                        ? <small className="sv-sub">{svc.usageHint}</small>
+                        : null}
                   </td>
                   <td className="sv-right">
                     {svc.console && <a href={svc.console} target="_blank" rel="noopener noreferrer">Console ↗</a>}

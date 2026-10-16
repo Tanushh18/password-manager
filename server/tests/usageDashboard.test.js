@@ -40,6 +40,19 @@ test("a provider error is reported per service without failing the dashboard", a
   expect(data.projects[0].services[0].error.code).toBe("auth");
 });
 
+test("Supabase usage explains why app env credentials cannot expose platform usage", async () => {
+  providerCache.clear();
+  const data = await buildLiveDashboard({
+    services: [svc({})], accounts,
+    request: request([["SUPABASE_URL", "https://example.supabase.co"], ["SUPABASE_ANON_KEY", "anon-secret-value"]]),
+    providers: {}, now: NOW
+  });
+  const entry = data.projects[0].services.find((s) => s.key === "supabase");
+  expect(entry.state).toBe("no-reader");
+  expect(entry.diagnosis).toContain("platform billing or quota metrics");
+  expect(JSON.stringify(data)).not.toContain("anon-secret-value");
+});
+
 test("services can be switched off and configured limits carry their period", async () => {
   providerCache.clear();
   const env = [["MONGO_URI", "mongodb+srv://u:p@c.mongodb.net/app"], ["GROQ_API_KEY", "g"], ["GROQ_RPD", "14400"]];
