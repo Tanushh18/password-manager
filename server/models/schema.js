@@ -76,6 +76,7 @@ const schema = new mongoose.Schema({
     usageVariableSharing: { type: Boolean, default: false },
     usageVariableNames: { type: [String], default: [] },
     usageVariableNamesScannedAt: { type: Date, default: null },
+    usageVariableScanErrors: { type: Number, default: 0 },
 
     // GitHub connections for the Projects page; tokens are sealed with the account data key.
     githubAccounts: [entrySchema],
