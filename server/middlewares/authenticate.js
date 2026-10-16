@@ -55,6 +55,7 @@ const NEEDS = [
     [/^\/render\/ops\/incidents$/, "GET", ["renderIncidents"]],
     [/^\/render\/audit$/, "GET", ["renderAudit"]],
     [/^\/render\/usage-settings$/, null, []],
+    [/^\/render\/usage-needs$/, "GET", []],
     [/^\/render\/live-dashboard$/, "GET", ["usageHistory"]],
     [/^\/render\/registry-sync(\/|$)/, null, []],
     [/^\/render\/projects\/status$/, "GET", ["renderIncidents"]]

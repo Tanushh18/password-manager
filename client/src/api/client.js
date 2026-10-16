@@ -321,7 +321,6 @@ export const diagnoseRenderLogs = (serviceName, logs, allowExternalProcessing = 
 
 /* Live-services usage dashboard (running Render services only; read-only provider checks). */
 export const getLiveDashboard = ({ refresh, rescan } = {}) => instance.get("/render/live-dashboard", { params: { ...(refresh || rescan ? { refresh: 1 } : {}), ...(rescan ? { rescan: 1 } : {}) }, timeout: rescan ? 90000 : 45000 }).then((r) => r.data);
-export const getUsageVariableReport = () => instance.get("/render/usage-variable-report", { timeout: 90000 }).then((r) => r.data);
-export const getUsageAdminReport = () => instance.get("/render/usage-admin-report", { timeout: 300000 }).then((r) => r.data);
+export const getUsageNeeds = () => instance.get("/render/usage-needs").then((r) => r.data);
 export const getUsageSettings = () => instance.get("/render/usage-settings").then((r) => r.data);
 export const saveUsageSettings = (body) => instance.put("/render/usage-settings", body).then((r) => r.data);

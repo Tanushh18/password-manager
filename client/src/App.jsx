@@ -17,6 +17,7 @@ import Servers from "./Pages/Servers/Servers";
 import Security from "./Pages/Security/Security";
 // Loaded on demand: operations screens are large and only needed on their routes.
 const Services = lazy(() => import("./Pages/Services/Services"));
+const ServiceMap = lazy(() => import("./Pages/Services/ServiceMap"));
 const Cron = lazy(() => import("./Pages/Cron/Cron"));
 const Forgot = lazy(() => import("./Pages/Forgot/Forgot"));
 const RenderDashboard = lazy(() => import("./Pages/Render/RenderDashboard"));
@@ -91,6 +92,7 @@ export default function App() {
           <Route path="/settings" element={<RequireVault><Settings /></RequireVault>} />
           <Route path="/servers" element={<RequireVault><RequireAdmin><Servers /></RequireAdmin></RequireVault>} />
           <Route path="/security" element={<RequireVault><RequireAdmin><Security /></RequireAdmin></RequireVault>} />
+          <Route path="/services/map" element={<RequireVault><Suspense fallback={<Splash />}><ServiceMap /></Suspense></RequireVault>} />
           <Route path="/services" element={<RequireVault><Suspense fallback={<Splash />}><Services /></Suspense></RequireVault>} />
           <Route path="/cron" element={<RequireVault><Suspense fallback={<Splash />}><Cron /></Suspense></RequireVault>} />
           <Route path="/render" element={<RequireVault><Suspense fallback={<Splash />}><RenderDashboard /></Suspense></RequireVault>} />

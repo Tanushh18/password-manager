@@ -143,7 +143,14 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
     // What the app's own code says (SDKs it depends on, variables it reads); null until the repo has been scanned.
     let hints = null;
     if (codeScan && service.repo) { try { hints = await codeScan(service); } catch { hints = null; } }
-    const detected = detectServices(env, { hints });
+    // The user's own mapping of variables to services (project scope, then this service) beats every automatic guess.
+    const groupId = groupIds.get(groupKey(service));
+    const overrides = new Map();
+    for (const scope of ["*", groupId, service.id]) {
+      const prefix = scope + "|";
+      for (const [k, v] of Object.entries(settings.mapping || {})) if (k.startsWith(prefix)) overrides.set(k.slice(prefix.length), v);
+    }
+    const detected = detectServices(env, { hints, overrides, customLabels: settings.customServices });
     const code = codeScan && service.repo ? {
       state: scanState(service.repo), files: hints?.files || 0, truncated: Boolean(hints?.truncated),
       // Variables the code reads that this deployment does not define: a missing or misspelled setting.
@@ -151,7 +158,6 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
     } : null;
     const items = [];
     for (const svc of detected.services) {
-      const groupId = groupIds.get(groupKey(service));
       const disabled = Boolean(settings.disabled?.[groupId + "|" + svc.key] || settings.disabled?.[service.id + "|" + svc.key]);
       const entry = { ...publicService(svc), fp: fingerprint(svc.key, svc.credentials), usage: null, reports: [], state: "no-credentials", error: null, usageHint: USAGE_HINT[svc.key] || (providers[svc.key] ? "" : "Stashr found this service from the app’s environment variables. It has no usage API that works with an app key, so check the provider’s own dashboard for usage and limits.") };
       entry.configuredLimits = svc.configuredLimits.map((l) => ({ ...l, period: limitPeriod(l.name) }));
@@ -200,7 +206,27 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
   out.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   const projects = mergeByRepo(out, (p) => groupIds.get(groupKey(p)));
 
-  return { generatedAt: new Date(now).toISOString(), liveCount: live.length, projectCount: projects.length, totalCount: services.length, projects, snapshotValues: values };
+  return { generatedAt: new Date(now).toISOString(), liveCount: live.length, projectCount: projects.length, totalCount: services.length, projects, snapshotValues: values, needsReader: needsReaderOf(projects, providers) };
+}
+
+/* Services with nothing to track (no usage or quota exists), so nobody needs to write a reader for them. */
+const NO_USAGE = new Set(["telegram", "github", "render", "payments", "expo", "platform", "bot", "authlib", "database"]);
+
+/**
+ * Services this user has (found automatically or mapped by hand) whose usage Stashr cannot read because no reader
+ * exists yet. Names and variable NAMES only: this is what an admin needs to write the missing reader.
+ */
+function needsReaderOf(projects, providers) {
+  const byKey = new Map();
+  for (const p of projects) for (const svc of p.services || []) {
+    if (providers[svc.key] || NO_USAGE.has(svc.key) || svc.inCodeOnly || !(svc.vars || []).length) continue;
+    const cur = byKey.get(svc.key) || { key: svc.key, label: svc.label, category: svc.category, vars: [], packages: [], projects: 0 };
+    cur.projects += 1;
+    for (const v of svc.vars) if (!cur.vars.includes(v.name) && cur.vars.length < 12) cur.vars.push(v.name);
+    for (const pkg of svc.packages || []) if (!cur.packages.includes(pkg) && cur.packages.length < 6) cur.packages.push(pkg);
+    byKey.set(svc.key, cur);
+  }
+  return [...byKey.values()];
 }
 
 const repoName = (url) => parseGithubRepo(url)?.repo || "";
@@ -252,4 +278,4 @@ function appendSnapshot(history, values, now = Date.now()) {
   return list.slice(-HISTORY_MAX);
 }
 
-module.exports = { buildLiveDashboard, mergeByRepo, appendSnapshot, limitPeriod, providerCache, clearServiceCaches };
+module.exports = { needsReaderOf, buildLiveDashboard, mergeByRepo, appendSnapshot, limitPeriod, providerCache, clearServiceCaches };

@@ -4,13 +4,14 @@ const renderOps = require("./renderOps");
 const { loadRenderServices } = require("./projectStatus");
 const { buildLiveDashboard, appendSnapshot, clearServiceCaches } = require("./usageDashboard");
 const { makeProviders } = require("./usageProviders");
-const { PROVIDERS } = require("./usageCatalog");
+const { PROVIDERS, PROVIDER_ROLES } = require("./usageCatalog");
 const { hintsFor, scanState } = require("./codeScan");
+const { recordNeedsReader } = require("./unsupportedServices");
 const { loadGithubAccounts } = require("./githubClient");
 
 /* Plan limits (MB) you tell Stashr about, because most providers do not report the limit of your plan. */
 const LIMIT_KEYS = ["mongodb", "postgres", "mysql", "redis", "turso", "elasticsearch", "aws"];
-const DEFAULTS = { enabled: false, mongoLimitMb: 512, limitsMb: {}, disabled: {} };
+const DEFAULTS = { enabled: false, mongoLimitMb: 512, limitsMb: {}, disabled: {}, mapping: {}, customServices: {} };
 let providers = null;
 const getProviders = () => {
   if (!providers) {
@@ -38,11 +39,55 @@ async function writeEntry(user, field, dataKey, value) {
   }
 }
 
+/* What the user told Stashr about their own variables (kept in the same sealed settings entry, so it follows them
+   to every device):
+     customServices: { slug: { label, category } }          services Stashr has no catalog entry for
+     mapping:        { "<scope>|<VARIABLE>": { key, role?, group? } }
+   scope is "*" (every project) or a project id; key is a catalog key, "custom:<slug>" or "ignore"; role says which
+   part of the credentials the variable is (see PROVIDER_ROLES); group tells several accounts of one provider apart. */
+const CATEGORIES = ["Database", "Media", "SMS / Voice", "Voice / speech", "Email", "Messaging", "AI", "Realtime", "Auth", "APIs", "Monitoring", "DevOps", "Other"];
+const PROVIDER_KEYS = new Set([...PROVIDERS.map((p) => p.key), "database"]);
+const MAX_MAPPINGS = 600;
+const MAX_CUSTOM = 40;
+
+function normalizeCustom(input, prev) {
+  const src = input && typeof input === "object" ? input : prev || {};
+  const out = {};
+  for (const [slug, def] of Object.entries(src)) {
+    if (Object.keys(out).length >= MAX_CUSTOM) break;
+    if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(slug) || !def || typeof def !== "object") continue;
+    const label = String(def.label || "").replace(/[\r\n]/g, " ").trim().slice(0, 60);
+    if (!label) continue;
+    out[slug] = { label, category: CATEGORIES.includes(def.category) ? def.category : "Other" };
+  }
+  return out;
+}
+
+function normalizeMapping(input, prev, custom) {
+  const src = input && typeof input === "object" ? input : prev || {};
+  const out = {};
+  for (const [k, v] of Object.entries(src)) {
+    if (Object.keys(out).length >= MAX_MAPPINGS) break;
+    const m = /^(\*|[A-Za-z0-9_-]{1,64})\|([A-Za-z_][A-Za-z0-9_.-]{0,100})$/.exec(k);
+    if (!m || !v || typeof v !== "object") continue;
+    const key = String(v.key || "");
+    const known = key === "ignore" || PROVIDER_KEYS.has(key) || /^auto-[a-z0-9]{1,24}$/.test(key) || (key.startsWith("custom:") && custom[key.slice(7)]);
+    if (!known) continue;
+    const entry = { key };
+    const roles = PROVIDER_ROLES[key];
+    if (roles && roles.some(([r]) => r === v.role)) entry.role = v.role;
+    if (entry.role && /^[a-z0-9_-]{1,30}$/.test(String(v.group || ""))) entry.group = String(v.group);
+    out[k] = entry;
+  }
+  return out;
+}
+
 const normalizeSettings = (input = {}, prev = DEFAULTS) => {
   const mb = Number(input.mongoLimitMb);
+  const custom = normalizeCustom(input.customServices, prev.customServices);
   const disabled = {};
   const src = input.disabled && typeof input.disabled === "object" ? input.disabled : prev.disabled || {};
-  for (const [k, v] of Object.entries(src)) if (v === true && /^[A-Za-z0-9_|-]{1,200}$/.test(k)) disabled[k] = true;
+  for (const [k, v] of Object.entries(src)) if (v === true && /^[A-Za-z0-9_|:-]{1,200}$/.test(k)) disabled[k] = true;
   const limitsMb = { ...(prev.limitsMb || {}) };
   if (input.limitsMb && typeof input.limitsMb === "object") {
     for (const key of LIMIT_KEYS) {
@@ -57,7 +102,9 @@ const normalizeSettings = (input = {}, prev = DEFAULTS) => {
   return {
     enabled: input.enabled === undefined ? Boolean(prev.enabled) : input.enabled === true,
     mongoLimitMb: limitsMb.mongodb, limitsMb,
-    disabled
+    disabled,
+    customServices: custom,
+    mapping: normalizeMapping(input.mapping, prev.mapping, custom)
   };
 };
 
@@ -106,7 +153,9 @@ async function computeUsage(user, dataKey, { refresh, rescan, record, cache }) {
     const next = appendSnapshot(history, data.snapshotValues);
     if (next.length !== history.length) await writeEntry(user, "usageHistory", dataKey, { snapshots: next });
   }
-  const { snapshotValues, ...publicData } = data;
+  // Remember (anonymously) which services still need a usage reader, for the admin's list.
+  if (data.needsReader?.length) void recordNeedsReader(user._id, data.needsReader);
+  const { snapshotValues, needsReader, ...publicData } = data;
   return { enabled: true, settings, historyPoints: history.length, ...publicData };
 }
 
@@ -132,9 +181,11 @@ function getUsageCapabilityCatalog() {
     const def = labels.get(key);
     return { key, label: def?.label || (key === "database" ? "Database (generic URL)" : key), category: def?.category || "Database" };
   }).sort((a, b) => a.category.localeCompare(b.category) || a.label.localeCompare(b.label));
-  const recognizedServices = PROVIDERS.map(({ key, label, category }) => ({ key, label, category, liveUsageSupported: readers.has(key) }))
+  const recognizedServices = PROVIDERS.map(({ key, label, category }) => ({ key, label, category, liveUsageSupported: readers.has(key), roles: PROVIDER_ROLES[key] || [] }))
     .sort((a, b) => a.category.localeCompare(b.category) || a.label.localeCompare(b.label));
   return { usageReaders, recognizedServices };
 }
 
-module.exports = { runUsage, runAllUsage, readSettings, saveSettings, normalizeSettings, getUsageCapabilityCatalog };
+function hasReader(key) { return Boolean(getProviders()[key]); }
+
+module.exports = { hasReader, runUsage, runAllUsage, readSettings, saveSettings, normalizeSettings, getUsageCapabilityCatalog };

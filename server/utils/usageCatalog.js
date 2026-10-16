@@ -125,6 +125,56 @@ function schemeOwner(text) {
   return null;
 }
 
+/*
+ * What each usage reader needs, so a user can say which of THEIR variables plays which part (cloud name, API key, ...)
+ * whatever the variables are called. role -> label.
+ */
+const URI = [["uri", "Connection string"]];
+const API_KEY = [["apiKey", "API key"]];
+const PROVIDER_ROLES = {
+  cloudinary: [["cloudName", "Cloud name"], ["apiKey", "API key"], ["apiSecret", "API secret"]],
+  mongodb: URI, postgres: URI, mysql: URI,
+  redis: [["uri", "Connection string (redis://)"], ["restUrl", "Upstash REST URL"], ["restToken", "Upstash REST token"]],
+  turso: [["url", "Database URL"], ["token", "Auth token"]],
+  elasticsearch: [["url", "URL (https)"], ["apiKey", "API key"], ["user", "Username"], ["password", "Password"]],
+  aws: [["accessKey", "Access key ID"], ["secretKey", "Secret access key"], ["bucket", "Bucket name"], ["region", "Region"], ["endpoint", "Endpoint URL (R2 / S3-compatible)"]],
+  twilio: [["accountSid", "Account SID"], ["authToken", "Auth token"]],
+  vonage: [["apiKey", "API key"], ["apiSecret", "API secret"]],
+  pinecone: API_KEY, sendgrid: API_KEY, elevenlabs: API_KEY, brevo: API_KEY, deepgram: API_KEY
+};
+
+/** Credentials in the shape the usage readers expect, built from variables the user assigned to roles. */
+function credsFromRoles(owner, byRole, groups) {
+  const v = (role) => (byRole[role] || "").trim();
+  switch (owner) {
+    case "cloudinary": {
+      const sets = (groups || []).filter((g) => g.cloudName && g.apiKey && g.apiSecret).map((g) => ({ label: g.label || "default", cloudName: g.cloudName.trim(), apiKey: g.apiKey.trim(), apiSecret: g.apiSecret.trim() }));
+      return sets.length ? { sets } : null;
+    }
+    case "mongodb": case "postgres": case "mysql": return v("uri") ? { uri: v("uri"), varName: "(mapped)" } : null;
+    case "redis":
+      if (/^https:\/\//i.test(v("restUrl")) && v("restToken")) return { restUrl: v("restUrl").replace(/\/+$/, ""), restToken: v("restToken") };
+      return v("uri") ? { uri: v("uri"), varName: "(mapped)" } : null;
+    case "turso": return v("url") && v("token") ? { url: v("url").replace(/^libsql:/i, "https:").replace(/\/+$/, ""), token: v("token") } : null;
+    case "elasticsearch": {
+      if (!/^https:\/\//i.test(v("url"))) return null;
+      const auth = v("apiKey") ? "ApiKey " + v("apiKey") : v("user") && v("password") ? "Basic " + Buffer.from(v("user") + ":" + v("password")).toString("base64") : "";
+      return auth ? { url: v("url").replace(/\/+$/, ""), auth } : null;
+    }
+    case "aws": {
+      if (!v("accessKey") || !v("secretKey") || !v("bucket")) return null;
+      const endpoint = /^https:\/\//i.test(v("endpoint")) ? v("endpoint").replace(/\/+$/, "") : "";
+      return { accessKey: v("accessKey"), secretKey: v("secretKey"), bucket: v("bucket"), region: v("region") || (endpoint ? "auto" : "us-east-1"), endpoint, sessionToken: "" };
+    }
+    case "twilio": return v("accountSid") && v("authToken") ? { accountSid: v("accountSid"), user: v("accountSid"), pass: v("authToken") } : null;
+    case "vonage": return v("apiKey") && v("apiSecret") ? { apiKey: v("apiKey"), apiSecret: v("apiSecret") } : null;
+    default: return PROVIDER_ROLES[owner] && v("apiKey") ? { apiKey: v("apiKey") } : null;
+  }
+}
+
+/* Roles whose value is not a secret (shown as is); every other role, and any mapped variable without a role, is hidden. */
+const PUBLIC_ROLES = new Set(["cloudName", "region", "bucket"]);
+
 /** Which service owns a variable, and how we know: its name, its value, or what the app's code does with it. */
 function ownerInfo(name, values, hints) {
   const text = typeof values.get(name) === "string" ? values.get(name).trim() : "";
@@ -314,7 +364,7 @@ function autoGroup(other) {
  * values: Map(name -> value). Returns { services, internal, other, unassigned } with masked variables only,
  * plus `credentials` (kept separate, for server-side use ONLY and never serialised to a client).
  */
-function detectServices(values, { hints } = {}) {
+function detectServices(values, { hints, overrides, customLabels } = {}) {
   const map = values instanceof Map ? values : new Map(Object.entries(values || {}));
   // Bare API_KEY / API_SECRET only mean Cloudinary when CLOUD_NAME is also present.
   const hasCloudName = [...map.keys()].some((n) => /^CLOUD_NAME$/i.test(n));
@@ -322,27 +372,48 @@ function detectServices(values, { hints } = {}) {
   const internal = [];
   const other = [];
   for (const [name, value] of map) {
-    let { owner, via } = ownerInfo(name, map, hints);
+    // What the user said about this variable wins over every automatic guess.
+    const mine = overrides instanceof Map ? overrides.get(name) : overrides?.[name];
+    if (mine?.key === "ignore") { internal.push({ ...classifyVar(name, value), via: "user" }); continue; }
+    let { owner, via } = mine?.key ? { owner: mine.key, via: "user" } : ownerInfo(name, map, hints);
+    // A variable the user assigned to a service is treated as a credential unless its role is plainly public: a name
+    // that does not look secret says nothing about its value, so it is never displayed.
+    let shown = classifyVar(name, value);
+    if (via === "user" && shown.kind === "config" && !PUBLIC_ROLES.has(mine?.role)) shown = { ...shown, kind: "secret", display: null };
     if (!owner && hasCloudName && /^API_(KEY|SECRET)$/i.test(name)) { owner = "cloudinary"; via = "name"; }
     if (!owner && INTERNAL.test(name)) { internal.push(classifyVar(name, value)); continue; }
     if (!owner) { other.push({ ...classifyVar(name, value), _raw: value }); continue; }
     if (!groups.has(owner)) groups.set(owner, []);
-    groups.get(owner).push({ ...classifyVar(name, value), _raw: value, _via: via });
+    groups.get(owner).push({ ...shown, _raw: value, _via: via, _role: mine?.role || "", _group: mine?.group || "" });
   }
   const auto = autoGroup(other);
   for (const [owner, vars] of auto.groups) groups.set(owner, vars);
   const services = [];
   for (const [owner, vars] of groups) {
-    const def = PROVIDERS.find((p) => p.key === owner) || (owner.startsWith("auto-") ? { label: titleCase(owner.slice(5).toUpperCase()), category: "Auto-detected" } : null) || ({ postgres: { label: "PostgreSQL", category: "Database" }, mysql: { label: "MySQL", category: "Database" }, database: { label: "Database", category: "Database" } })[owner] || { label: owner, category: "Other" };
+    const def = PROVIDERS.find((p) => p.key === owner) || (owner.startsWith("auto-") ? { label: titleCase(owner.slice(5).toUpperCase()), category: "Auto-detected" } : null) || (owner.startsWith("custom:") ? { label: customLabels?.[owner.slice(7)]?.label || owner.slice(7), category: customLabels?.[owner.slice(7)]?.category || "Other" } : null) || ({ postgres: { label: "PostgreSQL", category: "Database" }, mysql: { label: "MySQL", category: "Database" }, database: { label: "Database", category: "Database" } })[owner] || { label: owner, category: "Other" };
     const limits = vars.filter((v) => LIMIT_NAME.test(v.name) && NUMBERISH.test(String(v._raw))).map((v) => ({ name: v.name, value: Number(String(v._raw).trim()) }));
     let creds = CREDENTIALS[owner] ? CREDENTIALS[owner](map) : null;
+    // Variables the user assigned to roles (cloud name, API key, ...) build the credentials, whatever they are called.
+    const assigned = vars.filter((v) => v._via === "user" && v._role && PROVIDER_ROLES[owner]?.some(([r]) => r === v._role));
+    if (assigned.length) {
+      const byRole = {}, perGroup = new Map();
+      for (const v of assigned) {
+        byRole[v._role] = String(v._raw || "");
+        const g = v._group || "default";
+        if (!perGroup.has(g)) perGroup.set(g, { label: g });
+        perGroup.get(g)[v._role] = String(v._raw || "");
+      }
+      let mapped = credsFromRoles(owner, byRole, [...perGroup.values()]);
+      if (mapped && owner === "cloudinary" && creds?.sets) mapped = { sets: [...mapped.sets, ...creds.sets.filter((s) => !mapped.sets.some((m) => m.cloudName === s.cloudName))] };
+      if (mapped) creds = mapped;
+    }
     if (!creds && KEY_ONLY.has(owner)) { const hit = vars.find((v) => v._via === "value" && typeof v._raw === "string"); if (hit) creds = { apiKey: hit._raw.trim() }; }
     const detectedBy = [...new Set(vars.map((v) => v._via).filter(Boolean))];
     if (hints?.deps?.[owner]) detectedBy.push("code");
     const host = creds?.uri ? hostLabel(creds.uri) : "";
     services.push({
       key: owner, label: def.label, host: host || "", category: def.category, console: consoleLink[owner] || null,
-      vars: vars.map(({ _raw, _via, ...safe }) => safe), configuredLimits: limits,
+      vars: vars.map(({ _raw, _via, _role, _group, ...safe }) => ({ ...safe, via: _via || undefined, role: _role || undefined, group: _group || undefined })), configuredLimits: limits,
       detectedBy: [...new Set(detectedBy.length ? detectedBy : ["name"])], packages: hints?.deps?.[owner] || undefined,
       hasCredentials: Boolean(creds), credentials: creds,
       autoDetected: owner.startsWith("auto-") || undefined,
@@ -368,4 +439,4 @@ function publicService(service) {
   return rest;
 }
 
-module.exports = { ownerInfo, detectServices, classifyVar, cloudinarySets, cloudinaryAnalysis, publicService, schemeOwner, hostLabel, PROVIDERS, SECRET_NAME, LIMIT_NAME };
+module.exports = { PROVIDER_ROLES, credsFromRoles, ownerInfo, detectServices, classifyVar, cloudinarySets, cloudinaryAnalysis, publicService, schemeOwner, hostLabel, PROVIDERS, SECRET_NAME, LIMIT_NAME };

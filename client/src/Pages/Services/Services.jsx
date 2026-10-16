@@ -369,6 +369,7 @@ export default function Services() {
           <div className="rd-topbar__title"><div className="rd-eyebrow"><span />INFRASTRUCTURE</div><h1>🤖 Services &amp; Usage</h1></div>
           <div className="rd-topbar__tools">
             <span className="rd-sync" role="status" aria-live="polite">{loading ? "Loading…" : data?.generatedAt ? "Updated " + timeAgo(data.generatedAt) : ""}</span>
+            {data?.enabled && <Link className="rd-btn rd-btn--quiet" to="/services/map" title="Tell Stashr which variable belongs to which service">🧭 Map services</Link>}
             {data?.enabled && <button type="button" className="rd-btn rd-btn--quiet" aria-expanded={showSettings} onClick={() => setShowSettings((v) => !v)}>⚙ Settings</button>}
             {data?.enabled && <button type="button" className="rd-btn rd-btn--quiet" disabled={loading} title="Read each app's repository again for the services its code uses (normally cached for 6 hours)" onClick={() => void load(true, false, true)}>⟳ Rescan code</button>}
             <button type="button" className="rd-btn rd-btn--primary" disabled={loading} onClick={() => void load(true)}>{loading ? "Refreshing…" : "↻ Refresh"}</button>
