@@ -87,7 +87,7 @@
 .settings-admin__head, .settings-admin__service-title, .settings-admin__unknown-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .8rem; }
 .settings-admin__head p { max-width: 58ch; margin: .3rem 0 0; }
 .settings-admin h3 { margin: 1.25rem 0 .35rem; font-size: .9rem; color: var(--heading); }
-.settings-admin__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; margin: 1rem 0; }
+.settings-admin__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .6rem; margin: 1rem 0; }
 .settings-admin__stats > div { display: flex; flex-direction: column; gap: .15rem; padding: .8rem; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
 .settings-admin__stats strong { font-size: 1.35rem; color: var(--heading); font-variant-numeric: tabular-nums; }
 .settings-admin__stats span, .settings-admin__provider small, .settings-admin__service-title small, .settings-admin__vars small, .settings-admin__foot { color: var(--text-muted); font-size: .74rem; }
