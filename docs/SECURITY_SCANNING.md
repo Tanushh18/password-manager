@@ -51,8 +51,22 @@ Dynamic scans must run only against an explicitly approved staging target with a
 - Reports are retained for 30 days in workflow artifacts; use the GitHub Security tab and your retention policy for longer-term tracking.
 
 
-## Known dependency-audit blockers from the upgrade branch
+## Active time-limited dependency exceptions (approved 2026-10-16)
 
-The mobile audit has reported high-severity advisories in `braces` and `node-forge`, plus a moderate `uuid` advisory in the Xcode/Expo toolchain. The current public package versions do not provide a straightforward compatible upgrade path for all of these: the `braces` advisory currently has no patched npm release, and the `node-forge` advisory affects the published version currently resolved by Expo. Forcing npm's suggested Expo downgrade is not acceptable because it would introduce a major SDK regression. Do not mark these findings fixed, suppress them broadly, or merge as security-clean.
+The repository owner approved only the two exact high-severity package/advisory pairs recorded in [`security/exceptions.json`](../security/exceptions.json). Both expire on **2026-10-30**. The gate fails closed after expiry, on a missing report, or on any unapproved high/critical advisory.
 
-Compatible overrides were added for `shell-quote@1.11.0`, `source-map-js@1.2.2`, and `decode-uri-component@0.5.0`; these remove the corresponding known vulnerable versions from the mobile lockfile. The remaining findings must stay release-blocking until a compatible upstream fix is available, a tested vendor patch is reviewed, or the repository owner explicitly approves a narrow, time-bounded exception with compensating controls. Re-run `npm audit` and Trivy after every lockfile change and attach the exact report.
+- **`braces` — CVE-2026-93687 / GHSA-vfj7-8cjw-p6xm:** the currently resolved `3.0.3` release is affected and the advisory currently lists no patched release.
+- **`node-forge` — CVE-2026-85393 / GHSA-86w9-cpqp-85rv:** the currently resolved `1.4.0` release is affected and the advisory currently lists no patched release.
+- The npm audit gate walks dependency chains and accepts high/critical package summaries only when every high/critical root advisory is attributable to one of those active, exact exceptions. Unknown, unresolved or additional advisory roots fail the job.
+- Trivy still generates and uploads SARIF. The policy gate permits only a matching package name plus CVE/GHSA identifier; all other high/critical findings fail the job. The scanner itself is not disabled and the findings remain visible.
+- **`uuid` remains a moderate finding, not an exception and not marked fixed.** The current release gate blocks high/critical findings; the moderate finding remains in the audit report for follow-up.
+
+### Compensating controls and owner actions
+
+- Keep both findings visible in SARIF and workflow artifacts; do not add broad scanner ignores.
+- Do not feed attacker-controlled patterns into brace expansion.
+- Keep update-signing configuration enabled, use only trusted signing keys, and review whether the vulnerable `node-forge` verification path is reachable in the shipped runtime before production release.
+- Recheck upstream advisories and compatible package releases during the exception window. Remove each exception as soon as a tested remediation is available.
+- The exception is a temporary risk acceptance, **not proof that either dependency is safe or patched**. The expiry is enforced by the workflow; renewals require a new explicit owner decision and updated evidence.
+
+Re-run the full workflow after every dependency or policy change. A successful policy gate means only that findings are either absent or covered by this narrow, active approval; it does not certify the application as production-ready.

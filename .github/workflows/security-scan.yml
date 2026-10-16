@@ -39,10 +39,14 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
       - name: Audit all dependencies
-        run: npm audit --audit-level=high
-      - name: Save machine-readable audit report
-        if: always()
         run: npm audit --json > "${{ runner.temp }}/npm-audit-${{ matrix.directory }}.json" || true
+      - name: Enforce high/critical audit policy and active exceptions
+        run: node ../scripts/security-exception-gate.mjs npm "${{ runner.temp }}/npm-audit-${{ matrix.directory }}.json" ../security/exceptions.json
+      - name: Ensure machine-readable audit report exists
+        if: always()
+        run: |
+          report="${{ runner.temp }}/npm-audit-${{ matrix.directory }}.json"
+          if [ ! -s "$report" ]; then npm audit --json > "$report" || true; fi
       - name: Upload dependency audit report
         if: always()
         uses: actions/upload-artifact@v4
@@ -104,7 +108,7 @@ jobs:
           vuln-type: os,library
           severity: CRITICAL,HIGH
           ignore-unfixed: false
-          exit-code: "1"
+          exit-code: "0"
           format: sarif
           output: trivy-results.sarif
           skip-dirs: .git,node_modules,mobile/node_modules,client/node_modules,server/node_modules
@@ -122,6 +126,9 @@ jobs:
           path: trivy-results.sarif
           if-no-files-found: ignore
           retention-days: 30
+      - name: Enforce Trivy findings and active exceptions
+        if: always()
+        run: node scripts/security-exception-gate.mjs trivy trivy-results.sarif security/exceptions.json
 
   dast-staging:
     name: Passive DAST against explicitly configured staging
