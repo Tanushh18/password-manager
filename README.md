@@ -886,3 +886,9 @@ The Render page also includes:
 5. Use **Run sample now** to verify API credentials and metric availability, and export a CSV report to inspect stored samples and incidents.
 
 The scheduler secret only authorizes a monitoring tick; it does not expose user credentials. Protect the scheduler configuration and monitor its delivery history. A successful API response means the tick completed, not that every metric was available or every service was healthy. Render's API permissions, rate limits, service types and plan determine available data. The dashboard does not provide provider billing totals, automated production database restores, or a guarantee of continuous uptime from Render itself. AI diagnosis is optional and requires explicit consent plus server-side Groq configuration.
+
+## Platform operations and security
+
+Stashr's platform upgrade and verification plan is documented in [docs/UPGRADE_PLAN.md](docs/UPGRADE_PLAN.md). See the [target architecture](docs/ARCHITECTURE.md), [provider compatibility matrix](docs/INTEGRATION_MATRIX.md), [security scanning runbook](docs/SECURITY_SCANNING.md), [operations runbook](docs/OPERATIONS_RUNBOOK.md), and [quality/release gates](docs/QUALITY_GATES.md).
+
+Repository vulnerability scans run from [GitHub Actions → Security Scan](.github/workflows/security-scan.yml) on pushes, pull requests and weekly, with manual dispatch available. The admin-only Security Scans page links to the workflow and GitHub Security findings; it deliberately does not fabricate a clean result when a scan has not completed.
