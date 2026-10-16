@@ -69,31 +69,6 @@ export function robotMood(input = {}) {
   return { mood, ...MOODS[mood], hp, load, line };
 }
 
-/** Arena score: a healthy server doing the job on the least CPU/RAM and the fastest answer wins. */
-export function arenaScore(stats) {
-  if (stats.mood === "dead") return -1;
-  if (stats.mood === "sleeping") return -0.5;
-  return (stats.hp ?? 50);
-}
-
-/** The three fighters: running servers with data first (most loaded first, it makes a better fight), then the rest. */
-export function pickFighters(bots, count = 3) {
-  const rank = (b) => (b.stats.mood === "dead" ? 1 : b.stats.load != null ? 0 : b.stats.mood === "sleeping" ? 3 : 2);
-  return [...bots].sort((a, b) => rank(a) - rank(b) || (b.stats.load ?? 0) - (a.stats.load ?? 0)).slice(0, count);
-}
-
-/** Commentary for an arena round. */
-export function arenaCommentary(fighters) {
-  if (!fighters.length) return "Arena khaali hai — koi server connect karo 🥲";
-  const ranked = [...fighters].sort((a, b) => arenaScore(b.stats) - arenaScore(a.stats));
-  const [winner] = ranked;
-  const loser = ranked[ranked.length - 1];
-  if (fighters.length === 1) return winner.name + " akela hi ladd raha hai 🥊";
-  if (arenaScore(winner.stats) === arenaScore(loser.stats)) return "Barabar ki takkar! Koi kisi se kam nahi 🤝";
-  const tail = loser.stats.mood === "dead" ? loser.name + " to ring mein hi gir gaya 💀" : loser.stats.mood === "sleeping" ? loser.name + " ring mein so gaya 😴" : loser.name + " haanf raha hai 😮‍💨";
-  return "👑 " + winner.name + " jeet gaya — sabse efficient! " + tail;
-}
-
 /** Services page: a bot per app whose mood follows its most-used provider limit. */
 export function usageMood({ name, percent, status, errors = 0, tracked = 0 }) {
   let mood;

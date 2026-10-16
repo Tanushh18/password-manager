@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { robotMood, pickFighters, arenaCommentary, usageMood } from "../src/lib/robots.js";
+import { robotMood, usageMood } from "../src/lib/robots.js";
 
 test("robot mood follows what the server is doing", () => {
   assert.equal(robotMood({ name: "api", suspended: true }).mood, "sleeping");
@@ -16,18 +16,6 @@ test("robot mood follows what the server is doing", () => {
   assert.equal(chill.mood, "chill");
   assert.ok(chill.hp > 70 && chill.hp <= 100);
   assert.equal(robotMood({ name: "api" }).mood, "confused");
-});
-
-test("arena picks loaded servers and names the most efficient winner", () => {
-  const bots = [
-    { name: "a", key: "a", stats: robotMood({ name: "a", verdict: "up", cpu: 20 }) },
-    { name: "b", key: "b", stats: robotMood({ name: "b", verdict: "up", cpu: 90 }) },
-    { name: "c", key: "c", stats: robotMood({ name: "c" }) },
-    { name: "d", key: "d", stats: robotMood({ name: "d", verdict: "down" }) }
-  ];
-  assert.deepEqual(pickFighters(bots).map((b) => b.key), ["b", "a", "d"]);
-  assert.match(arenaCommentary([bots[0], bots[1], bots[3]]), /^👑 a jeet gaya/);
-  assert.match(arenaCommentary([bots[0], bots[1], bots[3]]), /d to ring mein hi gir gaya/);
 });
 
 test("service bots follow the closest limit", () => {

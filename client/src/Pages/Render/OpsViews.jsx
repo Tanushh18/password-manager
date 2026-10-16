@@ -7,6 +7,7 @@ import {
 } from "../../api/client";
 import { Kpi, Section, Skeleton, Empty, LineChart, Sparkline } from "./RenderUi";
 import { usePolling } from "./renderHooks";
+import { RobotSquad } from "./RobotArmy";
 import {
   serviceKind, serviceKey, normalizeList, sumMetricPoints, peakOf, rangeStart, timeAgo, formatNumber, formatDateTime,
   formatTime, isErrorLog, errorMessage, remediationFor, incidentTypeLabel, formatDuration, formatMetric, groupServices, METRIC_OPTIONS, RANGE_OPTIONS
@@ -43,7 +44,7 @@ async function waitForServiceReady(service, { deployId = "", timeoutMs = 300000,
 
 /* ====================================================================== Monitoring */
 
-export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, askConfirm, onOpenService, onRefreshServices, onAudit, onGoServices }) {
+export function MonitoringView({ services, series, ops, selectedGroupId, onSelectGroup, askConfirm, onOpenService, onRefreshServices, onAudit, onGoServices }) {
   const { groups, history, saving, running, persist, sampleNow } = ops;
   // Every app (servers from the same repo) is a ready-made group; your own groups come first.
   const appGroups = useMemo(() => groupServices(services.filter((s) => s.suspended !== "suspended"))
@@ -283,6 +284,7 @@ export function MonitoringView({ services, ops, selectedGroupId, onSelectGroup, 
             <button type="button" className="rd-btn rd-btn--quiet" disabled={running} onClick={() => void sampleNow()} title="Runs the monitor right now for every server: health check, last deploy and CPU / memory / latency. Problems open an incident. It also runs on its own every 5 minutes.">{running ? "Checking…" : "Check all servers now"}</button>
             {!group.app && <button type="button" className="rd-btn rd-btn--danger-quiet" onClick={() => void deleteGroup()}>Delete group</button>}
           </div>
+          {series && <RobotSquad services={members} series={series} onOpen={(key) => { const s = members.find((m) => serviceKey(m) === key); if (s) onOpenService(s); }} title={group.name + " squad"} />}
           <p className="rd-muted">{members.length} of {group.serviceKeys.length} services currently available{members.length < group.serviceKeys.length ? " — some members may belong to a disconnected account." : "."}</p>
 
           {metricBusy && !snapshot ? <Skeleton lines={6} height={18} /> : snapshot && (() => {

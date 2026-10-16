@@ -164,6 +164,10 @@ function ProjectDetail({ project, onToggle, projectOf }) {
   return (
     <div className="sv-stack">
       <header className="sv-detailhead">
+        {(() => {
+          const bot = usageMood({ name: project.name, percent: s.worst?.percent ?? null, status: s.status, errors: s.issues, tracked: withData.length });
+          return <div className={"sv-detailbot is-" + bot.tone} title={bot.line}><Robot mood={bot.mood} load={bot.load} size={64} /><span>{bot.line}</span></div>;
+        })()}
         <div>
           <div className="sv-titleline"><h2>{project.name}</h2><Status status={s.status} /></div>
           <p className="sv-dim">{[project.accountName, project.plan && project.plan + " plan", project.repo && project.repo.replace(/^https:\/\/github\.com\//, "")].filter(Boolean).join(" · ")}</p>
@@ -362,7 +366,7 @@ export default function Services() {
     <main className="rd-page">
       <header className="rd-topbar">
         <div className="rd-shell rd-topbar__inner">
-          <div className="rd-topbar__title"><div className="rd-eyebrow"><span />INFRASTRUCTURE</div><h1>Services &amp; Usage</h1></div>
+          <div className="rd-topbar__title"><div className="rd-eyebrow"><span />INFRASTRUCTURE</div><h1>🤖 Services &amp; Usage</h1></div>
           <div className="rd-topbar__tools">
             <span className="rd-sync" role="status" aria-live="polite">{loading ? "Loading…" : data?.generatedAt ? "Updated " + timeAgo(data.generatedAt) : ""}</span>
             {data?.enabled && <button type="button" className="rd-btn rd-btn--quiet" aria-expanded={showSettings} onClick={() => setShowSettings((v) => !v)}>⚙ Settings</button>}

@@ -1,11 +1,25 @@
 import React, { useMemo, useState } from "react";
 import Robot from "../../Components/Robot/Robot";
-import { robotMood, pickFighters, arenaScore, arenaCommentary, MOODS } from "../../lib/robots";
-import { serviceKey, safeUrl } from "./renderUtils";
+import { robotMood, MOODS } from "../../lib/robots";
+import { Sparkline } from "./RenderUi";
+import { serviceKey, safeUrl, timeAgo } from "./renderUtils";
 import "./RobotArmy.css";
 
 const fmt = (v, unit) => (v == null ? "—" : Math.round(v) + unit);
 const MOOD_ORDER = ["fire", "dead", "transforming", "sweaty", "chill", "confused", "sleeping"];
+const DEPLOY = { live: ["ok", "Live"], build_failed: ["bad", "Build fail"], update_failed: ["bad", "Deploy fail"], canceled: ["mid", "Cancelled"], build_in_progress: ["mid", "Building"], update_in_progress: ["mid", "Deploying"], pre_deploy_in_progress: ["mid", "Pre-deploy"], deactivated: ["mid", "Old"] };
+
+/** A server's robot stats from its latest monitoring sample. */
+export function botFor(s, series) {
+  const key = serviceKey(s);
+  const data = series.get(key);
+  const last = data?.last;
+  const stats = robotMood({
+    name: s.name, suspended: s.suspended === "suspended", verdict: last?.verdict, health: last?.health,
+    deployStatus: last?.deploy?.status, cpu: last?.cpu, memory: last?.memory, latency: last?.latency
+  });
+  return { key, s, last, points: data?.points || [], stats };
+}
 
 function Bar({ value, label, tone }) {
   const v = value == null ? 0 : Math.max(0, Math.min(100, value));
@@ -17,94 +31,87 @@ function Bar({ value, label, tone }) {
     </div>
   );
 }
+const hpTone = (hp) => (hp == null ? "idle" : hp < 30 ? "hot" : hp < 60 ? "warm" : "ok");
 
-function BotCard({ bot, onOpen, onAction, busy }) {
-  const { s, stats, key } = bot;
+function BotCard({ bot, onOpen, onAction, busy, incident, project }) {
+  const { s, stats, key, last, points } = bot;
   const suspended = s.suspended === "suspended";
   const isBusy = busy === key;
+  const d = s.serviceDetails || {};
+  const deploy = last?.deploy;
+  const [dTone, dLabel] = deploy?.status ? DEPLOY[deploy.status] || ["mid", deploy.status.replace(/_/g, " ")] : ["mid", "—"];
   return (
     <article className={"ra-card is-" + stats.tone}>
-      <div className="ra-card__bot"><Robot mood={stats.mood} load={stats.load} size={76} /></div>
+      <div className="ra-card__bot">
+        <Robot mood={stats.mood} load={stats.load} size={76} />
+        {incident && <span className="ra-badge ra-badge--bad" title="This server has an open incident">🚨 incident</span>}
+      </div>
       <div className="ra-card__body">
-        <button type="button" className="ra-card__name" onClick={() => onOpen(key)} title="Details, graphs, logs and environment">{s.name}</button>
+        <div className="ra-card__head">
+          <button type="button" className="ra-card__name" onClick={() => onOpen(key)} title="Details, graphs, logs and environment">{s.name}</button>
+          {project}
+        </div>
         <span className="ra-card__mood">{stats.face} {stats.title}</span>
         <p className="ra-card__line">{stats.line}</p>
-        <Bar label="HP" value={stats.hp} tone={stats.hp == null ? "idle" : stats.hp < 30 ? "hot" : stats.hp < 60 ? "warm" : "ok"} />
-        <Bar label="CPU" value={bot.last?.cpu ?? null} />
-        <Bar label="RAM" value={bot.last?.memory ?? null} />
-        <div className="ra-card__meta">
-          <span>⚡ {fmt(bot.last?.latency, " ms")}</span>
-          {s.serviceDetails?.url ? <a href={safeUrl(s.serviceDetails.url)} target="_blank" rel="noreferrer noopener">open ↗</a> : <span>no URL</span>}
-        </div>
+        <Bar label="HP" value={stats.hp} tone={hpTone(stats.hp)} />
+        <Bar label="CPU" value={last?.cpu ?? null} />
+        <Bar label="RAM" value={last?.memory ?? null} />
+        {points.length > 1 && <div className="ra-card__trend"><span>CPU trend</span><Sparkline values={points.map((p) => p.cpu)} max={100} width={150} height={22} label={"CPU trend of " + s.name} /></div>}
+        <dl className="ra-chips">
+          {last?.latency != null && <div><dt>⚡</dt><dd>{fmt(last.latency, " ms")}</dd></div>}
+          {deploy?.status && <div className={"is-" + dTone} title={deploy.commitMessage || ""}><dt>🚀</dt><dd>{dLabel}{deploy.createdAt ? " · " + timeAgo(deploy.createdAt) : ""}</dd></div>}
+          {(d.plan || d.region) && <div><dt>📦</dt><dd>{[d.plan, d.region].filter(Boolean).join(" · ")}</dd></div>}
+          {d.numInstances != null && <div><dt>🤖×</dt><dd>{d.numInstances}</dd></div>}
+          {s.branch && <div title={s.autoDeploy === "yes" ? "Auto-deploys on push" : "Manual deploys"}><dt>🌿</dt><dd>{s.branch}{s.autoDeploy === "yes" ? " · auto" : ""}</dd></div>}
+          {!suspended && <div><dt>🕒</dt><dd>{last?.t ? "checked " + timeAgo(last.t) : "not checked yet"}</dd></div>}
+        </dl>
+        {deploy?.commitMessage && <p className="ra-card__commit" title={deploy.commitMessage}>“{deploy.commitMessage.split("\n")[0]}”</p>}
         <div className="ra-card__actions">
           {!suspended && <button type="button" disabled={isBusy} onClick={() => onAction("restart", s)} title="Restart">↻ Restart</button>}
           <button type="button" disabled={isBusy} onClick={() => onAction("deploy", s)} title="Deploy the latest commit">⇪ Deploy</button>
           <button type="button" disabled={isBusy} className={suspended ? "is-wake" : "is-sleep"} onClick={() => onAction(suspended ? "resume" : "suspend", s)}>
             {isBusy ? "…" : suspended ? "⏰ Jagao" : "😴 Sulao"}
           </button>
+          {d.url && <a href={safeUrl(d.url)} target="_blank" rel="noreferrer noopener">open ↗</a>}
         </div>
       </div>
     </article>
   );
 }
 
-function Arena({ bots, onOpen }) {
-  const defaults = useMemo(() => pickFighters(bots).map((b) => b.key), [bots]);
-  const [chosen, setChosen] = useState(null);
-  const keys = (chosen || defaults).filter((k) => bots.some((b) => b.key === k));
-  const fighters = keys.map((k) => bots.find((b) => b.key === k)).filter(Boolean);
-  const best = fighters.length > 1 ? Math.max(...fighters.map((f) => arenaScore(f.stats))) : null;
-  const swap = (slot, key) => setChosen(() => { const next = [...keys]; next[slot] = key; return next; });
-  const rematch = () => {
-    const rest = bots.filter((b) => !keys.includes(b.key));
-    if (!rest.length) return;
-    setChosen([...new Set([...rest, ...bots].map((b) => b.key))].slice(0, 3));
-  };
-  if (bots.length < 2) return null;
+/** A compact row of robots, one per server, used where there is less room (Monitoring). */
+export function RobotSquad({ services, series, onOpen, title = "Squad status" }) {
+  const bots = useMemo(() => services.map((s) => botFor(s, series)), [services, series]);
+  if (!bots.length) return null;
+  const worst = [...bots].sort((a, b) => MOOD_ORDER.indexOf(a.stats.mood) - MOOD_ORDER.indexOf(b.stats.mood))[0];
   return (
-    <section className="ra-arena" aria-label="Robot fight arena">
-      <header className="ra-arena__head">
-        <h3>⚔️ Fight Arena</h3>
-        <p>{arenaCommentary(fighters.map((f) => ({ name: f.s.name, stats: f.stats })))}</p>
-        <button type="button" className="ra-btn" onClick={rematch}>🔁 Rematch</button>
-      </header>
-      <div className="ra-arena__ring">
-        {fighters.map((f, slot) => {
-          const score = arenaScore(f.stats);
-          const winner = best != null && score === best && fighters.filter((x) => arenaScore(x.stats) === best).length === 1;
-          return (
-            <div key={f.key + slot} className={"ra-fighter" + (winner ? " is-winner" : "")}>
-              {winner && <span className="ra-crown" aria-label="Winner">👑</span>}
-              <button type="button" className="ra-fighter__bot" onClick={() => onOpen(f.key)} aria-label={"Open " + f.s.name}><Robot mood={f.stats.mood} load={f.stats.load} size={104} /></button>
-              <select value={f.key} onChange={(e) => swap(slot, e.target.value)} aria-label={"Fighter " + (slot + 1)}>
-                {bots.map((b) => <option key={b.key} value={b.key}>{b.s.name}</option>)}
-              </select>
-              <Bar label="HP" value={f.stats.hp} tone={f.stats.hp == null ? "idle" : f.stats.hp < 30 ? "hot" : f.stats.hp < 60 ? "warm" : "ok"} />
-              <small>{f.stats.face} {f.stats.title} · CPU {fmt(f.last?.cpu, "%")} · RAM {fmt(f.last?.memory, "%")}</small>
-            </div>
-          );
-        })}
+    <div className="ra ra--compact">
+      <div className="ra-squadline">
+        <strong>🛰️ {title}</strong>
+        <span>{worst.stats.line}</span>
       </div>
-    </section>
+      <div className="ra-mini">
+        {bots.map((b) => (
+          <button key={b.key} type="button" className={"ra-mini__bot is-" + b.stats.tone} onClick={() => onOpen?.(b.key)} title={b.stats.line}>
+            <Robot mood={b.stats.mood} load={b.stats.load} size={48} />
+            <b>{b.s.name}</b>
+            <small>{b.stats.face} {b.stats.hp != null ? "HP " + b.stats.hp : b.stats.title}</small>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
-/** Render servers as a robot army: a robot per server whose mood follows its live health and load, plus an arena. */
-export default function RobotArmy({ groups, series, onOpen, onAction, busy }) {
+/** Render servers as a robot army: a robot per server whose mood follows its live health and load. */
+export default function RobotArmy({ groups, series, onOpen, onAction, busy, incidentKeys, projectCell }) {
   const [mood, setMood] = useState("all");
-  const bots = useMemo(() => groups.flatMap((group) => group.members.map((s) => {
-    const key = serviceKey(s);
-    const last = series.get(key)?.last;
-    const stats = robotMood({
-      name: s.name, suspended: s.suspended === "suspended", verdict: last?.verdict, health: last?.health,
-      deployStatus: last?.deploy?.status, cpu: last?.cpu, memory: last?.memory, latency: last?.latency
-    });
-    return { key, s, last, stats, app: group.name };
-  })), [groups, series]);
+  const bots = useMemo(() => groups.flatMap((group) => group.members.map((s) => ({ ...botFor(s, series), app: group.name }))), [groups, series]);
   const counts = useMemo(() => bots.reduce((m, b) => ({ ...m, [b.stats.mood]: (m[b.stats.mood] || 0) + 1 }), {}), [bots]);
   const visible = mood === "all" ? bots : bots.filter((b) => b.stats.mood === mood);
   const byApp = visible.reduce((m, b) => m.set(b.app, [...(m.get(b.app) || []), b]), new Map());
   if (!bots.length) return null;
+  const hasIncident = (key) => Boolean(incidentKeys && (incidentKeys.has ? incidentKeys.has(key) : incidentKeys.includes?.(key)));
 
   return (
     <div className="ra">
@@ -117,12 +124,12 @@ export default function RobotArmy({ groups, series, onOpen, onAction, busy }) {
         ))}
       </div>
 
-      <Arena bots={bots.filter((b) => b.s.suspended !== "suspended")} onOpen={onOpen} />
-
       {[...byApp].map(([app, list]) => (
         <section key={app} className="ra-squadron" aria-label={app}>
           <h3>{app} <span>{list.length} bot{list.length === 1 ? "" : "s"}</span></h3>
-          <div className="ra-grid">{list.map((bot) => <BotCard key={bot.key} bot={bot} onOpen={onOpen} onAction={onAction} busy={busy} />)}</div>
+          <div className="ra-grid">{list.map((bot) => (
+            <BotCard key={bot.key} bot={bot} onOpen={onOpen} onAction={onAction} busy={busy} incident={hasIncident(bot.key)} project={projectCell ? projectCell([bot.s]) : null} />
+          ))}</div>
         </section>
       ))}
     </div>

@@ -102,6 +102,26 @@ async function renderRequest(apiKey, path, options = {}) {
   }
 }
 
+/*
+ * Read-through cache for Render reads that the Monitoring view repeats (metrics, events, deploys). Keys hold a hash
+ * of the API key, never the key. Times are rounded to the minute so the same chart asked twice is one Render call.
+ * Any change made through Stashr (a non-GET request) clears it.
+ */
+const readCache = new Map();
+const READ_CACHE_MAX = 400;
+const keyHash = (apiKey) => require("crypto").createHash("sha256").update(String(apiKey)).digest("hex").slice(0, 16);
+function cachedRender(apiKey, path, ttlMs) {
+  const key = keyHash(apiKey) + path;
+  const hit = readCache.get(key);
+  if (hit && Date.now() - hit.at < ttlMs) return hit.promise;
+  const promise = renderRequest(apiKey, path);
+  if (readCache.size >= READ_CACHE_MAX) readCache.delete(readCache.keys().next().value);
+  readCache.set(key, { at: Date.now(), promise });
+  promise.catch(() => readCache.delete(key));
+  return promise;
+}
+const toMinute = (ms) => new Date(Math.floor(ms / 60000) * 60000).toISOString();
+
 function sendUpstreamError(res, error) {
   if (error && Number.isInteger(error.status) && error.status >= 400 && error.status < 600) {
     return res.status(error.status).json({ error: error.message || "Render API request failed." });
@@ -140,7 +160,7 @@ router.use("/render", authenticate, apiLimiter);
 /* Anything that changes services (delete, suspend, resume, create, deploy) invalidates the cached service list,
    so every page shows the new state on its next refresh. */
 router.use("/render", (req, res, next) => {
-  if (req.method !== "GET") res.on("finish", () => { try { clearServicesCache(req.rootUser._id); } catch { /* cache only */ } });
+  if (req.method !== "GET") res.on("finish", () => { try { clearServicesCache(req.rootUser._id); readCache.clear(); } catch { /* cache only */ } });
   next();
 });
 
@@ -572,8 +592,8 @@ router.get("/render/accounts/:accountId/services/:serviceId/events", async (req,
   if (!safeId(req.params.serviceId)) return res.status(400).json({ error: "Invalid service ID." });
   try {
     const params = new URLSearchParams({ limit: "100" });
-    if (typeof req.query.startTime === "string" && !Number.isNaN(Date.parse(req.query.startTime))) params.set("startTime", new Date(req.query.startTime).toISOString());
-    const rows = await renderRequest(saved.account.apiKey, servicePath(req.params.serviceId, "/events?" + params.toString()));
+    if (typeof req.query.startTime === "string" && !Number.isNaN(Date.parse(req.query.startTime))) params.set("startTime", toMinute(Date.parse(req.query.startTime)));
+    const rows = await cachedRender(saved.account.apiKey, servicePath(req.params.serviceId, "/events?" + params.toString()), 45 * 1000);
     const events = (Array.isArray(rows) ? rows : []).map((r) => r?.event || r).filter((e) => e && e.type).map((e) => ({
       id: String(e.id || ""), type: String(e.type), at: e.timestamp || e.createdAt || null,
       details: { status: e.details?.status ?? null, reason: typeof e.details?.reason === "object" ? JSON.stringify(e.details.reason).slice(0, 200) : String(e.details?.reason || "").slice(0, 200), deployId: e.details?.deployId || "", trigger: typeof e.details?.trigger === "object" ? Object.keys(e.details.trigger)[0] || "" : String(e.details?.trigger || "") }
@@ -588,7 +608,7 @@ router.get("/render/accounts/:accountId/services/:serviceId/deploys", async (req
   if (!saved) return;
   if (!safeId(req.params.serviceId)) return res.status(400).json({ error: "Invalid service ID." });
   try {
-    return res.json(await renderRequest(saved.account.apiKey, servicePath(req.params.serviceId, "/deploys?limit=20")));
+    return res.json(await cachedRender(saved.account.apiKey, servicePath(req.params.serviceId, "/deploys?limit=20"), 20 * 1000));
   } catch (error) { return sendUpstreamError(res, error); }
 });
 
@@ -692,8 +712,8 @@ router.get("/render/accounts/:accountId/services/:serviceId/metrics", async (req
   };
   const metric = String(req.query.metric || "cpu");
   if (!Object.prototype.hasOwnProperty.call(metrics, metric)) return res.status(400).json({ error: "Unsupported metric." });
-  const end = Date.now();
-  const requestedStart = Date.parse(String(req.query.startTime || ""));
+  const end = Math.floor(Date.now() / 60000) * 60000;
+  const requestedStart = Math.floor(Date.parse(String(req.query.startTime || "")) / 60000) * 60000;
   const start = Number.isFinite(requestedStart) ? Math.max(end - 24 * 60 * 60 * 1000, requestedStart) : end - 60 * 60 * 1000;
   const resolution = Math.max(30, Math.min(3600, Number.parseInt(req.query.resolutionSeconds, 10) || 60));
   const params = new URLSearchParams({
@@ -703,7 +723,7 @@ router.get("/render/accounts/:accountId/services/:serviceId/metrics", async (req
     resolutionSeconds: String(resolution)
   });
   try {
-    const data = await renderRequest(saved.account.apiKey, "/v1/metrics/" + metrics[metric] + "?" + params.toString());
+    const data = await cachedRender(saved.account.apiKey, "/v1/metrics/" + metrics[metric] + "?" + params.toString(), 60 * 1000);
     res.set("Cache-Control", "no-store");
     return res.json({ metric, startTime: new Date(start).toISOString(), endTime: new Date(end).toISOString(), data });
   } catch (error) { return sendUpstreamError(res, error); }

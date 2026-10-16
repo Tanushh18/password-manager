@@ -416,7 +416,7 @@ export default function RenderDashboard() {
               </div>
             )}
             {layout === "robots" && (loading ? <div className="rd-board"><Skeleton lines={4} height={120} /></div> : (
-              <RobotArmy groups={groups} series={series} onOpen={setSelectedKey} busy={busyKey} onAction={(kind, s) => void runAction(kind, [s])} />
+              <RobotArmy groups={groups} series={series} incidentKeys={fleet.incidentKeys} projectCell={projectCell} onOpen={setSelectedKey} busy={busyKey} onAction={(kind, s) => void runAction(kind, [s])} />
             ))}
             {layout === "robots" && !loading && !groups.length && <Empty icon="🤖" title={services.length ? "Koi robot match nahi hua" : "Robot army ready hai"}>{services.length ? "Search ya filters badal ke dekho." : "Render API key connect karo, robots aa jayenge."}</Empty>}
             {layout === "board" && (loading ? <div className="rd-board"><Skeleton lines={4} height={120} /></div> : (
@@ -511,7 +511,7 @@ export default function RenderDashboard() {
         )}
 
         {view === "monitoring" && (
-          <MonitoringView services={services} ops={ops} selectedGroupId={selectedGroupId} onSelectGroup={setSelectedGroupId} askConfirm={ask}
+          <MonitoringView services={services} series={series} ops={ops} selectedGroupId={selectedGroupId} onSelectGroup={setSelectedGroupId} askConfirm={ask}
             onOpenService={(s) => setSelectedKey(serviceKey(s))} onRefreshServices={() => loadAccounts({ quiet: true })} onAudit={loadAudit} onGoServices={() => go("services")} />
         )}
 
