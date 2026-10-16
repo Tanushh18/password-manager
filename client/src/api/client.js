@@ -314,5 +314,7 @@ export const diagnoseRenderLogs = (serviceName, logs, allowExternalProcessing = 
 /* Live-services usage dashboard (running Render services only; read-only provider checks). */
 export const getLiveDashboard = ({ refresh } = {}) => instance.get("/render/live-dashboard", { params: refresh ? { refresh: 1 } : {}, timeout: 90000 }).then((r) => r.data);
 export const getUsageAdminReport = () => instance.get("/render/usage-admin-report", { timeout: 90000 }).then((r) => r.data);
+export const getUsageVariableSharing = () => instance.get("/render/usage-variable-sharing").then((r) => r.data);
+export const setUsageVariableSharing = (enabled) => instance.put("/render/usage-variable-sharing", { enabled }, { timeout: 90000 }).then((r) => r.data);
 export const getUsageSettings = () => instance.get("/render/usage-settings").then((r) => r.data);
 export const saveUsageSettings = (body) => instance.put("/render/usage-settings", body).then((r) => r.data);
