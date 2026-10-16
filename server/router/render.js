@@ -789,36 +789,58 @@ router.get("/render/projects/:projectId/deployments", async (req, res) => {
   }
 });
 
-/* Admin-only diagnostics: names of environment variables not assigned to a known provider or internal setting.
-   Exact email allowlist is enforced on the server; environment-variable values never leave Render. */
-router.get("/render/usage-admin-report", async (req, res) => {
-  if (String(req.rootUser?.email || "").trim().toLowerCase() !== "tanushchawla16@gmail.com") {
-    return res.status(403).json({ error: "Not allowed." });
-  }
+/* A user explicitly opts in before Stashr stores unknown variable names for aggregate diagnostics. */
+router.get("/render/usage-variable-sharing", async (req, res) => {
+  return res.json({
+    enabled: req.rootUser.usageVariableSharing === true,
+    variableCount: Array.isArray(req.rootUser.usageVariableNames) ? req.rootUser.usageVariableNames.length : 0,
+    scannedAt: req.rootUser.usageVariableNamesScannedAt || null
+  });
+});
+
+router.put("/render/usage-variable-sharing", async (req, res) => {
+  if (typeof req.body?.enabled !== "boolean") return res.status(400).json({ error: "enabled must be true or false." });
   try {
+    if (req.body.enabled !== true) {
+      await User.updateOne({ _id: req.rootUser._id }, { $set: { usageVariableSharing: false, usageVariableNames: [], usageVariableNamesScannedAt: null } });
+      return res.json({ enabled: false, variableCount: 0, scannedAt: null });
+    }
     const dataKey = await req.rootUser.getDataKey();
     const { services, accounts } = await loadRenderServices(req.rootUser, dataKey, { refresh: true });
-    const rows = new Array(services.length);
-    let cursor = 0;
+    const names = new Set();
+    let scanErrorCount = 0, cursor = 0;
     const scanOne = async (service) => {
       const account = accounts.get(String(service.accountId));
-      if (!account?.apiKey) return { id: service.id, name: service.name, accountName: service.accountName || "", url: service.url || "", unknownVariables: [], scanError: "Render connection unavailable" };
+      if (!account?.apiKey) { scanErrorCount++; return; }
       try {
         const payload = await renderOps.renderRequest(account.apiKey, "/v1/services/" + encodeURIComponent(service.id) + "/env-vars?limit=100");
         const list = Array.isArray(payload) ? payload : Array.isArray(payload?.items) ? payload.items : Array.isArray(payload?.envVars) ? payload.envVars : [];
         const env = new Map();
         for (const row of list) { const v = row?.envVar || row; if (v && typeof v.key === "string") env.set(v.key, typeof v.value === "string" ? v.value : ""); }
-        const detected = detectServices(env);
-        return { id: service.id, name: service.name, accountName: service.accountName || account.name || "", url: service.url || "", unknownVariables: detected.other.map((v) => ({ name: v.name, kind: v.kind, set: Boolean(v.set) })).sort((a, b) => a.name.localeCompare(b.name)), scanError: null };
-      } catch { return { id: service.id, name: service.name, accountName: service.accountName || account.name || "", url: service.url || "", unknownVariables: [], scanError: "Could not read environment-variable names from Render" }; }
+        for (const v of detectServices(env).other) names.add(v.name);
+      } catch { scanErrorCount++; }
     };
     await Promise.all(Array.from({ length: Math.min(4, services.length) }, async () => {
-      while (cursor < services.length) { const index = cursor++; rows[index] = await scanOne(services[index]); }
+      while (cursor < services.length) await scanOne(services[cursor++]);
     }));
-    const catalog = getUsageCapabilityCatalog();
+    const variableNames = [...names].sort((a, b) => a.localeCompare(b));
+    const scannedAt = new Date();
+    await User.updateOne({ _id: req.rootUser._id }, { $set: { usageVariableSharing: true, usageVariableNames: variableNames, usageVariableNamesScannedAt: scannedAt } });
+    return res.json({ enabled: true, variableCount: variableNames.length, serviceCount: services.length, scanErrorCount, scannedAt });
+  } catch { return res.status(500).json({ error: "Could not scan your Render variable names." }); }
+});
+
+/* Admin-only aggregate view. It reads only reports explicitly shared by their owners. */
+router.get("/render/usage-admin-report", async (req, res) => {
+  if (String(req.rootUser?.email || "").trim().toLowerCase() !== "tanushchawla16@gmail.com") return res.status(403).json({ error: "Not allowed." });
+  try {
+    const sharedUsers = await User.find({ usageVariableSharing: true }).select("usageVariableNames").lean().exec();
+    const counts = new Map();
+    for (const user of sharedUsers) for (const name of new Set(user.usageVariableNames || [])) counts.set(name, (counts.get(name) || 0) + 1);
+    const variableNames = [...counts.entries()].map(([name, occurrences]) => ({ name, occurrences })).sort((a, b) => a.name.localeCompare(b.name));
     res.set("Cache-Control", "no-store");
-    return res.json({ scannedAt: new Date().toISOString(), serviceCount: rows.length, unknownNameCount: new Set(rows.flatMap((r) => r.unknownVariables.map((v) => v.name))).size, services: rows, ...catalog });
-  } catch { return res.status(500).json({ error: "Could not scan Render environment-variable names." }); }
+    return res.json({ scannedAt: new Date().toISOString(), reportingUsers: sharedUsers.length, unknownNameCount: variableNames.length, scanErrorCount: 0, variableNames, ...getUsageCapabilityCatalog() });
+  } catch { return res.status(500).json({ error: "Could not read aggregated variable names." }); }
 });
 
 /* Live-services usage dashboard: only running Render services, with provider usage, limits and projections. */
