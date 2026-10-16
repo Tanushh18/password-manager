@@ -46,7 +46,7 @@ export default function Security() {
       const runs = Array.isArray(data.workflow_runs) ? data.workflow_runs.slice(0, 6) : [];
       let jobs = [];
       if (runs[0]?.id) {
-        const jobResponse = await fetch(repoUrl + "/actions/runs/" + runs[0].id + "/jobs?per_page=20", {
+        const jobResponse = await fetch("https://api.github.com/repos/Tanushh18/password-manager/actions/runs/" + runs[0].id + "/jobs?per_page=20", {
           headers: { Accept: "application/vnd.github+json" }, cache: "no-store"
         });
         if (jobResponse.ok) {
