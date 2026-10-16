@@ -63,24 +63,24 @@ function AdminUsagePanel() {
   }, []);
   useEffect(() => { void load(); }, [load]);
   const needle = query.trim().toLowerCase();
-  const variableRows = (report?.variableNames || []).filter((v) => !needle || v.name.toLowerCase().includes(needle));
+  const serviceRows = (report?.services || []).map((service) => ({ ...service, unknownVariables: (service.unknownVariables || []).filter((v) => !needle || (v.name + " " + service.name + " " + service.accountName).toLowerCase().includes(needle)) })).filter((service) => service.unknownVariables.length || service.scanError);
   return (
     <Group title="Admin · Usage & variable diagnostics">
       <div className="settings-admin">
-        <div className="settings-admin__head"><div><strong>Render usage coverage</strong><p className="srow__hint">Shows only variable names explicitly shared by users; values, account identities and service names are never returned.</p></div><button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => void load()}>{busy ? "Loading…" : "↻ Refresh list"}</button></div>
+        <div className="settings-admin__head"><div><strong>Render usage coverage</strong><p className="srow__hint">Scans your connected Render services. Only variable names and safe service metadata are shown; values and secrets are never returned.</p></div><button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => void load()}>{busy ? "Loading…" : "↻ Refresh list"}</button></div>
         {error && <p className="settings-admin__error" role="alert">{error}</p>}
-        {report && <div className="settings-admin__stats"><div><strong>{report.reportingUsers ?? 0}</strong><span>Users sharing reports</span></div><div><strong>{report.unknownNameCount ?? 0}</strong><span>Unique unknown names</span></div><div><strong>{report.scanErrorCount ?? 0}</strong><span>Aggregate read errors</span></div></div>}
+        {report && <div className="settings-admin__stats"><div><strong>{report.serviceCount ?? 0}</strong><span>Services scanned</span></div><div><strong>{report.unknownNameCount ?? 0}</strong><span>Unique unknown names</span></div><div><strong>{report.scanErrorCount ?? 0}</strong><span>Scan errors</span></div></div>}
         <h3>Services with live usage readers</h3>
         <p className="srow__hint">These providers have a usage reader in Stashr. Actual metrics depend on credentials, permissions and provider API response.</p>
         <div className="settings-admin__providers">{(report?.usageReaders || []).map((provider) => <span className="settings-admin__provider" key={provider.key}><strong>{provider.label}</strong><small>{provider.category}</small></span>)}</div>
         <h3>Recognized services without a live usage reader</h3>
         <p className="srow__hint">Stashr can identify these variable families, but usage may need to be checked in the provider console.</p>
         <div className="settings-admin__providers">{(report?.recognizedServices || []).filter((provider) => !provider.liveUsageSupported).map((provider) => <span className="settings-admin__provider is-muted" key={provider.key}><strong>{provider.label}</strong><small>{provider.category} · console/manual</small></span>)}</div>
-        <div className="settings-admin__unknown-head"><h3>Unique unrecognized variable names</h3><input className="input" type="search" placeholder="Filter variable name…" aria-label="Filter unknown variable names" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
-        {!report && busy && <p className="srow__hint">Loading opt-in reports…</p>}
-        {report && !variableRows.length && <p className="settings-admin__empty">{needle ? "No names match this filter." : "No unknown variable names have been shared yet."}</p>}
-        {variableRows.map((v) => <span className="settings-admin__provider" key={v.name}><strong><code>{v.name}</code></strong><small>shared by {v.occurrences} user(s)</small></span>)}
-        {report?.scannedAt && <p className="settings-admin__foot">Refreshed: {new Date(report.scannedAt).toLocaleString()} · names are deduplicated per user.</p>}
+        <div className="settings-admin__unknown-head"><h3>Unique unrecognized variable names</h3><input className="input" type="search" placeholder="Filter variable or service…" aria-label="Filter unknown variables" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+        {!report && busy && <p className="srow__hint">Reading variable names from Render…</p>}
+        {report && !serviceRows.length && <p className="settings-admin__empty">{needle ? "No variables or services match this filter." : "No unrecognized variables found in readable services."}</p>}
+        {serviceRows.map((service) => <article className="settings-admin__service" key={service.id}><div className="settings-admin__service-title"><div><strong>{service.name}</strong><small>{service.accountName || "Render account"} · {service.id}</small></div>{service.url && <a href={service.url} target="_blank" rel="noopener noreferrer">Open service ↗</a>}</div>{service.scanError ? <p className="settings-admin__error">{service.scanError}</p> : <div className="settings-admin__vars">{service.unknownVariables.map((v) => <span key={v.name}><code>{v.name}</code><small>{v.kind === "empty" ? "empty" : v.set ? "set · value hidden" : "not set"}</small></span>)}</div>}</article>)}
+        {report?.scannedAt && <p className="settings-admin__foot">Last scan: {new Date(report.scannedAt).toLocaleString()} · values are never displayed.</p>}
       </div>
     </Group>
   );
