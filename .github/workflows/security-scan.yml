@@ -77,12 +77,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
           queries: security-extended
       - name: Analyze JavaScript and TypeScript
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:javascript-typescript"
 
@@ -97,6 +97,7 @@ jobs:
       - name: Scan dependencies, OS packages, secrets and misconfigurations
         uses: aquasecurity/trivy-action@v0.35.0
         with:
+          version: latest
           scan-type: fs
           scan-ref: .
           scanners: vuln,secret,misconfig
@@ -109,7 +110,7 @@ jobs:
           skip-dirs: .git,node_modules,mobile/node_modules,client/node_modules,server/node_modules
       - name: Upload Trivy SARIF
         if: always() && hashFiles('trivy-results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
           category: trivy-filesystem
