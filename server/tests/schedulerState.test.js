@@ -30,6 +30,7 @@ test("public run output is bounded to safe step names, statuses and counters", (
     steps: [{ name: "arbitrary", status: "weird", durationMs: -4, counts: { errors: 2, token: "secret" } }]
   });
   assert.equal(result.source, "internal");
+  assert.equal(result.persisted, false);
   assert.equal(result.steps[0].name, "unknown");
   assert.equal(result.steps[0].status, "partial");
   assert.deepEqual(result.steps[0].counts, { errors: 2 });
