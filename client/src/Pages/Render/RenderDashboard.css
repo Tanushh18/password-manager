@@ -490,3 +490,16 @@
 .rd-inc__dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--text-muted); opacity: .45; }
 .rd-inc__dots i.is-ok { background: var(--ok, #2a9d62); opacity: 1; }
 .rd-inc__dots i.is-bad { background: var(--danger); opacity: 1; }
+
+/* Accessible on/off switch for Render service lifecycle controls. */
+.rd-service-toggle { display: inline-flex; align-items: center; gap: .45rem; cursor: pointer; user-select: none; white-space: nowrap; color: var(--heading-2); font-size: .76rem; font-weight: 700; }
+.rd-service-toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.rd-service-toggle__track { position: relative; display: inline-flex; align-items: center; width: 38px; height: 22px; padding: 3px; border-radius: 999px; background: var(--ok, #2a9d62); border: 1px solid transparent; transition: background .18s, box-shadow .18s; flex-shrink: 0; }
+.rd-service-toggle__knob { width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.22); transform: translateX(16px); transition: transform .18s; }
+.rd-service-toggle.is-off .rd-service-toggle__track { background: var(--line-strong); }
+.rd-service-toggle.is-off .rd-service-toggle__knob { transform: translateX(0); }
+.rd-service-toggle input:focus-visible + .rd-service-toggle__track { outline: 2px solid var(--accent); outline-offset: 3px; }
+.rd-service-toggle input:disabled { cursor: wait; }
+.rd-service-toggle:has(input:disabled) { cursor: wait; opacity: .65; }
+.rd-service-toggle--detail { padding: .45rem .7rem; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); }
+
