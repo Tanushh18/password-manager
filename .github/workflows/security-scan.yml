@@ -49,7 +49,7 @@ jobs:
           if [ ! -s "$report" ]; then npm audit --json > "$report" || true; fi
       - name: Upload dependency audit report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: npm-audit-${{ matrix.directory }}
           path: ${{ runner.temp }}/npm-audit-${{ matrix.directory }}.json
@@ -120,7 +120,7 @@ jobs:
           category: trivy-filesystem
       - name: Upload Trivy report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: trivy-security-report
           path: trivy-results.sarif
