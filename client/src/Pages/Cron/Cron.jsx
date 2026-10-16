@@ -192,7 +192,7 @@ export default function Cron() {
                   <tr key={run.id || run.startedAt}>
                     <td><strong>{timeAgo(run.startedAt)}</strong><small>{new Date(run.startedAt).toLocaleString()}</small></td>
                     <td>{(run.durationMs / 1000).toFixed(1)}s</td>
-                    <td>{run.source === "external" ? "External cron" : "In-process"}</td>
+                    <td>{run.persisted === false ? "Memory fallback" : run.source === "external" ? "External cron" : "In-process"}</td>
                     <td><span className={"cr-run-status cr-run-status--" + run.status}>{run.status === "success" ? "Success" : run.status === "partial" ? "Partial" : "Failed"}</span></td>
                     <td><div className="cr-run-steps">{(run.steps || []).map((step) => (
                       <span key={step.name} className={"cr-run-step cr-run-step--" + step.status} title={step.name + " · " + step.durationMs + "ms"}>{step.name} · {step.status}</span>
