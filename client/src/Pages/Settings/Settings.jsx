@@ -67,7 +67,7 @@ function AdminUsagePanel() {
   return (
     <Group title="Admin · Usage & variable diagnostics">
       <div className="settings-admin">
-        <div className="settings-admin__head"><div><strong>Render usage coverage</strong><p className="srow__hint">Shows only variable names explicitly shared by users; values, account identities and service names are never returned.</p></div><button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => void load()}>{busy ? "Scanning…" : "↻ Scan again"}</button></div>
+        <div className="settings-admin__head"><div><strong>Render usage coverage</strong><p className="srow__hint">Shows only variable names explicitly shared by users; values, account identities and service names are never returned.</p></div><button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => void load()}>{busy ? "Loading…" : "↻ Refresh list"}</button></div>
         {error && <p className="settings-admin__error" role="alert">{error}</p>}
         {report && <div className="settings-admin__stats"><div><strong>{report.reportingUsers ?? 0}</strong><span>Users sharing reports</span></div><div><strong>{report.unknownNameCount ?? 0}</strong><span>Unique unknown names</span></div><div><strong>{report.scanErrorCount ?? 0}</strong><span>Aggregate read errors</span></div></div>}
         <h3>Services with live usage readers</h3>
