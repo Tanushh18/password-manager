@@ -172,34 +172,68 @@ function parseSource(fileName, text) {
 
 const tokensOf = (name) => String(name).toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 2);
 
-/**
- * files: [{ path, text }]. Returns
- *   deps:     { providerKey: [package, ...] }       every service the code depends on
- *   envLinks: { ENV_NAME: providerKey }              variables read in a file that imports exactly one service SDK
- *   envNames: [ENV_NAME, ...]                        every variable the code reads (names only)
- */
-function analyzeCode(files) {
-  const deps = {};
-  const votes = new Map(); // ENV_NAME -> Map(provider -> count)
-  const envNames = new Set();
-  const addDep = (key, pkgs) => { deps[key] = [...new Set([...(deps[key] || []), ...pkgs])].sort(); };
+/* Packages that say what a folder is: a server (framework) or a browser app. */
+const SERVER_FRAMEWORKS = /^(express|fastify|koa|hapi|@hapi\/hapi|@nestjs\/core|restify|polka|hono|socket\.io|apollo-server|@apollo\/server|flask|fastapi|django|aiohttp|tornado|sanic|starlette|uvicorn|gunicorn|bottle)$/i;
+const FRONTEND_FRAMEWORKS = /^(react|react-dom|vue|svelte|@angular\/core|vite|react-scripts|@vitejs\/plugin-react|webpack-dev-server|parcel|solid-js|preact|expo|react-native)$/i;
 
-  for (const file of files) {
-    const name = String(file.path || "");
-    const text = String(file.text || "");
-    if (/(^|\/)(package\.json|requirements[^/]*\.txt|pyproject\.toml|pipfile)$/i.test(name)) {
-      for (const [key, pkgs] of Object.entries(parseManifest(name, text))) addDep(key, pkgs);
-      continue;
+/** Frameworks a dependency manifest declares: { server: [..], frontend: [..], fullstack: [..] } (names only). */
+function manifestRoles(fileName, text) {
+  const out = { server: [], frontend: [], fullstack: [] };
+  const names = [];
+  const base = String(fileName || "").split("/").pop().toLowerCase();
+  try {
+    if (base === "package.json") {
+      const json = JSON.parse(text);
+      for (const g of ["dependencies", "devDependencies"]) names.push(...Object.keys(json[g] || {}));
+    } else if (/^requirements.*\.txt$/.test(base)) {
+      for (const line of text.split(/\r?\n/)) { const m = /^\s*([A-Za-z0-9][A-Za-z0-9._-]*)/.exec(line); if (m && !/^\s*#/.test(line)) names.push(m[1]); }
+    } else if (base === "pyproject.toml" || base === "pipfile") {
+      for (const m of text.matchAll(/["']?([A-Za-z0-9][A-Za-z0-9._-]{1,60})["']?\s*(?:=|[<>=!~;[]|["'])/g)) names.push(m[1]);
     }
-    const { packages, env } = parseSource(name, text);
-    for (const [key, pkgs] of packages) addDep(key, [...pkgs]);
-    env.forEach((n) => envNames.add(n));
-    if (!packages.size || !env.length) continue;
+  } catch { /* nothing to learn from a manifest that does not parse */ }
+  for (const n of names) {
+    if (/^(next|nuxt|@remix-run\/node|@sveltejs\/kit|astro)$/i.test(n)) out.fullstack.push(n);
+    else if (SERVER_FRAMEWORKS.test(n)) out.server.push(n);
+    else if (FRONTEND_FRAMEWORKS.test(n)) out.frontend.push(n);
+  }
+  return out;
+}
+
+/**
+ * What one file tells us (pure, no text kept): the services its dependencies / imports name, the variables it
+ * reads, which of those it ties to one service, and, for a manifest, what kind of app the folder is.
+ */
+function analyzeFile(path, text) {
+  const name = String(path || "");
+  const body = String(text || "");
+  if (/(^|\/)(package\.json|requirements[^/]*\.txt|pyproject\.toml|pipfile)$/i.test(name)) {
+    return { path: name, manifest: true, deps: parseManifest(name, body), roles: manifestRoles(name, body), env: [], links: {} };
+  }
+  const { packages, env } = parseSource(name, body);
+  const deps = {};
+  for (const [key, pkgs] of packages) deps[key] = [...pkgs].sort();
+  const links = {};
+  if (packages.size && env.length) {
     const providers = [...packages.keys()];
     for (const n of env) {
       // One SDK in the file: its variables belong to it. Several: only when the name itself points at one of them.
       const target = providers.length === 1 ? providers[0] : providers.find((p) => tokensOf(n).some((t) => p.includes(t) || t.includes(p.replace(/-/g, ""))));
-      if (!target) continue;
+      if (target) links[n] = target;
+    }
+  }
+  return { path: name, manifest: false, deps, roles: null, env, links };
+}
+
+/** Merges per-file results (any subset of a repository) into what the catalog needs. */
+function combineFiles(results) {
+  const deps = {};
+  const votes = new Map(); // ENV_NAME -> Map(provider -> count)
+  const envNames = new Set();
+  const addDep = (key, pkgs) => { deps[key] = [...new Set([...(deps[key] || []), ...pkgs])].sort(); };
+  for (const r of results) {
+    for (const [key, pkgs] of Object.entries(r.deps || {})) addDep(key, pkgs);
+    (r.env || []).forEach((n) => envNames.add(n));
+    for (const [n, target] of Object.entries(r.links || {})) {
       if (!votes.has(n)) votes.set(n, new Map());
       votes.get(n).set(target, (votes.get(n).get(target) || 0) + 1);
     }
@@ -213,4 +247,12 @@ function analyzeCode(files) {
   return { deps, envLinks, envNames: [...envNames].sort().slice(0, 400) };
 }
 
-module.exports = { valueOwner, parseManifest, parseSource, analyzeCode, jsProvider, pyProvider, KEY_RULES, HOST_RULES };
+/**
+ * files: [{ path, text }]. Returns
+ *   deps:     { providerKey: [package, ...] }       every service the code depends on
+ *   envLinks: { ENV_NAME: providerKey }              variables read in a file that imports exactly one service SDK
+ *   envNames: [ENV_NAME, ...]                        every variable the code reads (names only)
+ */
+const analyzeCode = (files) => combineFiles(files.map((f) => analyzeFile(f.path, f.text)));
+
+module.exports = { valueOwner, parseManifest, parseSource, analyzeFile, combineFiles, manifestRoles, analyzeCode, jsProvider, pyProvider, KEY_RULES, HOST_RULES };

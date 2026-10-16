@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useVault } from "../../state/vault";
 import { ShieldLine, Menu, Close, Arrow } from "../Icons/Icons";
@@ -12,6 +12,8 @@ function Navbar() {
   const name = profile?.name;
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef(null);
   const location = useLocation();
 
   useEffect(() => {
@@ -21,29 +23,45 @@ function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  useEffect(() => { setOpen(false); }, [location.pathname]);
+  useEffect(() => { setOpen(false); setMoreOpen(false); }, [location.pathname]);
+
+  // The "More" menu closes on an outside click or Escape.
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+    const onDown = (e) => { if (moreRef.current && !moreRef.current.contains(e.target)) setMoreOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") setMoreOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [moreOpen]);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
+  /* Main places stay in the bar; the rest live under "More" so the bar never overflows. */
   const links = isAuthenticated
     ? [
         { to: "/", label: "Home" },
         { to: "/passwords", label: "Passwords" },
         { to: "/projects", label: "Projects" },
-        { to: "/render", label: "Render" },
+        { to: "/render", label: "Servers" },
         { to: "/services", label: "Services" },
         { to: "/cron", label: "Cron" },
-        ...(profile?.isAdmin ? [{ to: "/servers", label: "Servers" }, { to: "/security", label: "Security scans" }] : []),
-        { to: "/settings", label: "Settings" },
-        { to: "/logout", label: "Sign out" },
       ]
     : [
         { to: "/", label: "Home" },
         { to: "/signin", label: "Sign in" },
       ];
+  const more = isAuthenticated
+    ? [
+        ...(profile?.isAdmin ? [{ to: "/servers", label: "Server URLs" }, { to: "/security", label: "Security scans" }] : []),
+        { to: "/settings", label: "Settings" },
+        { to: "/logout", label: "Sign out" },
+      ]
+    : [];
+  const allLinks = [...links, ...more];
 
   const cta = isAuthenticated
     ? { to: "/passwords", label: "My vault" }
@@ -66,6 +84,20 @@ function Navbar() {
                 {link.label}
               </NavLink>
             ))}
+            {more.length > 0 && (
+              <div className="nav__more" ref={moreRef}>
+                <button type="button" className={`nav__link nav__morebtn ${more.some((l) => location.pathname.startsWith(l.to)) ? "is-active" : ""}`} aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)}>
+                  More <span aria-hidden="true">▾</span>
+                </button>
+                {moreOpen && (
+                  <div className="nav__menu" role="menu">
+                    {more.map((link) => (
+                      <NavLink key={link.to} to={link.to} role="menuitem" className={({ isActive }) => `nav__menuitem ${isActive ? "is-active" : ""}`} end>{link.label}</NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </nav>
           <div className="nav__actions">
             <ThemeToggle />
@@ -85,12 +117,12 @@ function Navbar() {
           <button className="drawer__close" onClick={() => setOpen(false)} aria-label="Close menu"><Close size={18} /></button>
         </div>
         <nav className="drawer__links">
-          {links.map((link, i) => (
+          {allLinks.map((link, i) => (
             <NavLink key={link.to} to={link.to} className={({ isActive }) => `drawer__link ${isActive ? "is-active" : ""}`} end style={{ transitionDelay: `${0.06 + i * 0.06}s` }}>
               {link.label}
             </NavLink>
           ))}
-          <NavLink to={cta.to} className="drawer__link drawer__link--cta" style={{ transitionDelay: `${0.06 + links.length * 0.06}s` }}>
+          <NavLink to={cta.to} className="drawer__link drawer__link--cta" style={{ transitionDelay: `${0.06 + allLinks.length * 0.06}s` }}>
             {cta.label}<Arrow size={15} />
           </NavLink>
         </nav>

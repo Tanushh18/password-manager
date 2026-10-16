@@ -56,6 +56,10 @@ describe("user mapping of variables to services", () => {
     });
     expect(Object.keys(s.customServices)).toEqual(["acme-ai"]);
     expect(s.mapping).toEqual({ "*|MY_CLD": { key: "cloudinary", role: "cloudName", group: "shop" }, "p1|FOO": { key: "custom:acme-ai" }, "*|X": { key: "cloudinary" } });
+    // the server folder of each project: plain repo-relative paths only
+    const f = normalizeSettings({ serverFolders: { "srv-1": "server", "srv-2": ".", "srv-3": "../etc", "bad id": "x", "srv-4": "a//b", "srv-5": "apps/api" } });
+    expect(f.serverFolders).toEqual({ "srv-1": "server", "srv-2": ".", "srv-5": "apps/api" });
+    expect(normalizeSettings({ enabled: true }, f).serverFolders).toEqual(f.serverFolders);
     // saving other settings leaves the mapping alone
     expect(normalizeSettings({ enabled: true }, s).mapping).toEqual(s.mapping);
   });

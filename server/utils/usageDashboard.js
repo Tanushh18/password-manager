@@ -142,7 +142,8 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
     try { env = await readEnvCached(service); } catch { envError = true; }
     // What the app's own code says (SDKs it depends on, variables it reads); null until the repo has been scanned.
     let hints = null;
-    if (codeScan && service.repo) { try { hints = await codeScan(service); } catch { hints = null; } }
+    const serverFolder = settings.serverFolders?.[groupIds.get(groupKey(service))] || "";
+    if (codeScan && service.repo) { try { hints = await codeScan(service, serverFolder); } catch { hints = null; } }
     // The user's own mapping of variables to services (project scope, then this service) beats every automatic guess.
     const groupId = groupIds.get(groupKey(service));
     const overrides = new Map();
@@ -152,7 +153,9 @@ async function buildLiveDashboard({ services, accounts, request, providers, sett
     }
     const detected = detectServices(env, { hints, overrides, customLabels: settings.customServices });
     const code = codeScan && service.repo ? {
-      state: scanState(service.repo), files: hints?.files || 0, truncated: Boolean(hints?.truncated),
+      state: scanState(service.repo, serverFolder) === "pending" && hints ? "scanned" : scanState(service.repo, serverFolder), files: hints?.files || 0, truncated: Boolean(hints?.truncated),
+      // The repository's folders and the likely server folder, so the user can say which one is the server.
+      serverFolder, dirs: hints?.dirs || [], suggestion: hints?.suggestion || null, frontendVars: hints?.frontendEnv || [],
       // Variables the code reads that this deployment does not define: a missing or misspelled setting.
       missingEnv: hints ? (hints.envNames || []).filter((n) => !env.has(n) && !COMMON_ENV.test(n) && !/^(NEXT_PUBLIC|NUXT_PUBLIC|EXPO_PUBLIC|REACT_APP|VITE|PUBLIC|GATSBY)_/i.test(n)).slice(0, 40) : []
     } : null;

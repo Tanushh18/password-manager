@@ -270,8 +270,8 @@ export function MonitoringView({ services, series, ops, selectedGroupId, onSelec
           </select>
           <button type="button" className="rd-btn rd-btn--quiet" onClick={onGoServices}>＋ New group</button>
         </>}>
-        {!group && <Empty icon="◫" title={groups.length ? "Choose a group" : "Create your first group"} action={!groups.length && <button type="button" className="rd-btn rd-btn--primary" onClick={onGoServices}>Select services</button>}>
-          {groups.length ? "Pick a saved group to see metrics, errors and group-level actions." : "Tick two or more services in the Services view, then choose “Group selected”."}
+        {!group && <Empty icon="◫" title={groups.length ? "Choose a group" : "Create your first group"} action={!groups.length && <button type="button" className="rd-btn rd-btn--primary" onClick={onGoServices}>Select servers</button>}>
+          {groups.length ? "Pick a saved group to see metrics, errors and group-level actions." : "Tick two or more servers in the Servers view, then choose “Group selected”."}
         </Empty>}
 
         {group && <>

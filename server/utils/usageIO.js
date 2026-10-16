@@ -5,13 +5,13 @@ const { loadRenderServices } = require("./projectStatus");
 const { buildLiveDashboard, appendSnapshot, clearServiceCaches } = require("./usageDashboard");
 const { makeProviders } = require("./usageProviders");
 const { PROVIDERS, PROVIDER_ROLES } = require("./usageCatalog");
-const { hintsFor, scanState } = require("./codeScan");
+const { hintsFor, scanState, validFolder } = require("./codeScan");
 const { recordNeedsReader } = require("./unsupportedServices");
 const { loadGithubAccounts } = require("./githubClient");
 
 /* Plan limits (MB) you tell Stashr about, because most providers do not report the limit of your plan. */
 const LIMIT_KEYS = ["mongodb", "postgres", "mysql", "redis", "turso", "elasticsearch", "aws"];
-const DEFAULTS = { enabled: false, mongoLimitMb: 512, limitsMb: {}, disabled: {}, mapping: {}, customServices: {} };
+const DEFAULTS = { enabled: false, mongoLimitMb: 512, limitsMb: {}, disabled: {}, mapping: {}, customServices: {}, serverFolders: {} };
 let providers = null;
 const getProviders = () => {
   if (!providers) {
@@ -63,6 +63,18 @@ function normalizeCustom(input, prev) {
   return out;
 }
 
+/* The folder of each project's repository that is its server ("server", "apps/api", "." for the repo root). Variables
+   read only outside it are treated as frontend variables and left out of the mapping page. */
+function normalizeServerFolders(input, prev) {
+  const src = input && typeof input === "object" ? input : prev || {};
+  const out = {};
+  for (const [projectId, folder] of Object.entries(src)) {
+    if (Object.keys(out).length >= 200) break;
+    if (/^[A-Za-z0-9_-]{1,64}$/.test(projectId) && validFolder(folder)) out[projectId] = folder;
+  }
+  return out;
+}
+
 function normalizeMapping(input, prev, custom) {
   const src = input && typeof input === "object" ? input : prev || {};
   const out = {};
@@ -104,7 +116,8 @@ const normalizeSettings = (input = {}, prev = DEFAULTS) => {
     mongoLimitMb: limitsMb.mongodb, limitsMb,
     disabled,
     customServices: custom,
-    mapping: normalizeMapping(input.mapping, prev.mapping, custom)
+    mapping: normalizeMapping(input.mapping, prev.mapping, custom),
+    serverFolders: normalizeServerFolders(input.serverFolders, prev.serverFolders)
   };
 };
 
@@ -144,10 +157,11 @@ async function computeUsage(user, dataKey, { refresh, rescan, record, cache }) {
   const request = (accountId, path) => renderOps.renderRequest(accounts.get(accountId).apiKey, path);
   const history = readEntry(user, "usageHistory", dataKey, { snapshots: [] }).snapshots || [];
   const data = await buildLiveDashboard({ services, accounts, request, providers: getProviders(), settings, history, refresh, cache,
-    codeScan: githubAccounts.length ? (service) => {
-      const force = rescan && !rescanned.has(service.repo);
-      rescanned.add(service.repo);
-      return hintsFor(githubAccounts, service.repo, { wait: refresh, force });
+    codeScan: githubAccounts.length ? (service, serverFolder) => {
+      const k = service.repo + "@" + (serverFolder || "");
+      const force = rescan && !rescanned.has(k);
+      rescanned.add(k);
+      return hintsFor(githubAccounts, service.repo, { wait: refresh || force, force, serverFolder });
     } : null, scanState });
   if (record) {
     const next = appendSnapshot(history, data.snapshotValues);

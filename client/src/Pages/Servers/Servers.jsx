@@ -209,7 +209,7 @@ export default function Servers() {
           <Link to="/settings" className="proj-back">
             <Arrow size={14} style={{ transform: "rotate(180deg)" }} /> Settings
           </Link>
-          <h1 className="vault__title">Servers</h1>
+          <h1 className="vault__title">Server URLs</h1>
           <p className="vault__count">
             Change a backend URL here and every app picks it up the next time it starts — no code change, no redeploy.
           </p>

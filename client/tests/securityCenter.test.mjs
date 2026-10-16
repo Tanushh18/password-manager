@@ -19,7 +19,7 @@ test("security center route is protected by both vault authentication and admin 
   const app = await read("../src/App.jsx");
   const nav = await read("../src/Components/Navbar/Navbar.jsx");
   assert.ok(app.includes('<Route path="/security" element={<RequireVault><RequireAdmin><Security /></RequireAdmin></RequireVault>} />'));
-  assert.ok(nav.includes('profile?.isAdmin ? [{ to: "/servers", label: "Servers" }, { to: "/security", label: "Security scans" }]'));
+  assert.ok(nav.includes('profile?.isAdmin ? [{ to: "/servers", label: "Server URLs" }, { to: "/security", label: "Security scans" }]'));
 });
 
 test("security workflow covers dependency, static, secret, filesystem and PR dependency scans", async () => {

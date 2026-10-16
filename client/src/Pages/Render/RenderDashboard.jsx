@@ -17,7 +17,7 @@ import { Link } from "react-router-dom";
 import { useVault } from "../../state/vault";
 import { serviceProjectIndex } from "../../lib/serviceProjects";
 
-const VIEWS = [["overview", "Overview"], ["services", "Services"], ["monitoring", "Monitoring"], ["incidents", "Incidents"], ["settings", "Settings"]];
+const VIEWS = [["overview", "Overview"], ["services", "Servers"], ["monitoring", "Monitoring"], ["incidents", "Incidents"], ["settings", "Settings"]];
 const PAGE_SIZE = 15;
 const REFRESH_MS = 30000;
 const FAV_KEY = "stashr_render_favorites";
@@ -218,10 +218,10 @@ export default function RenderDashboard() {
 
   const createGroup = async () => {
     const keys = [...new Set(checked)].filter((k) => services.some((s) => serviceKey(s) === k));
-    if (keys.length < 2) { toast.info("Select at least two services to create a group."); return; }
+    if (keys.length < 2) { toast.info("Select at least two servers to create a group."); return; }
     if (keys.length > 10) { toast.info("A group can contain up to 10 services."); return; }
     if (ops.groups.length >= 10) { toast.info("You can save up to 10 server groups."); return; }
-    const name = await ask({ title: "Name this server group", message: keys.length + " services selected. Choose a name such as “Deal Radar”.", confirmLabel: "Create group", input: { placeholder: "Group name", label: "Group name", maxLength: 60 } });
+    const name = await ask({ title: "Name this server group", message: keys.length + " servers selected. Choose a name such as “Deal Radar”.", confirmLabel: "Create group", input: { placeholder: "Group name", label: "Group name", maxLength: 60 } });
     if (!name) return;
     const group = { id: "group-" + Date.now().toString(36), name: name.slice(0, 60), serviceKeys: keys, dependencies: [] };
     try {
@@ -238,9 +238,9 @@ export default function RenderDashboard() {
     if (!targets.length) return;
     const live = targets.filter((s) => s.suspended !== "suspended");
     const typed = await ask({
-      title: "Delete " + targets.length + " service" + (targets.length === 1 ? "" : "s") + " permanently?",
+      title: "Delete " + targets.length + " server" + (targets.length === 1 ? "" : "s") + " permanently?",
       message: targets.map((s) => s.name + (s.suspended === "suspended" ? " (suspended)" : " (LIVE)")).join(", ") + ". "
-        + (live.length ? "⚠ " + live.length + " live service" + (live.length === 1 ? " goes" : "s go") + " offline immediately. " : "")
+        + (live.length ? "⚠ " + live.length + " live server" + (live.length === 1 ? " goes" : "s go") + " offline immediately. " : "")
         + "This permanently deletes them from Render, including deploy history, logs and environment variables, and cannot be undone." + (live.length ? " Type DELETE to confirm." : ""),
       confirmLabel: "Yes, delete", cancelLabel: "No", danger: true,
       ...(live.length ? { input: { placeholder: "DELETE", label: "Type DELETE", maxLength: 10, match: "DELETE" } } : {})
@@ -252,7 +252,7 @@ export default function RenderDashboard() {
       const done = new Set(result.results.filter((r) => r.ok).map((r) => r.accountId + ":" + r.serviceId));
       const failures = result.results.filter((r) => !r.ok);
       setChecked((old) => old.filter((k) => !done.has(k)));
-      if (done.size) toast.success("Deleted " + done.size + " service" + (done.size === 1 ? "" : "s") + ".");
+      if (done.size) toast.success("Deleted " + done.size + " server" + (done.size === 1 ? "" : "s") + ".");
       if (failures.length) toast.error(failures.length + " not deleted: " + failures.slice(0, 3).map((f) => (f.name || f.serviceId) + " (" + f.error + ")").join("; ") + (failures.length > 3 ? "…" : ""), { autoClose: 10000 });
       await Promise.all([loadAccounts({ quiet: true }), loadAudit(), refreshOps()]);
     } catch (e) { toast.error(errorMessage(e, "Could not delete the selected services.")); }
@@ -288,8 +288,8 @@ export default function RenderDashboard() {
     const isLive = s.suspended !== "suspended";
     const typed = await ask({
       title: "Delete " + s.name + " permanently?",
-      message: (isLive ? "⚠ This service is LIVE and will go offline immediately. " : "") + "This permanently deletes it from Render, including deploy history, logs and environment variables, and cannot be undone. Type the service name to confirm.",
-      confirmLabel: "Delete service", danger: true, input: { placeholder: s.name, label: "Service name", maxLength: 200, match: s.name }
+      message: (isLive ? "⚠ This server is LIVE and will go offline immediately. " : "") + "This permanently deletes it from Render, including deploy history, logs and environment variables, and cannot be undone. Type the server name to confirm.",
+      confirmLabel: "Delete server", danger: true, input: { placeholder: s.name, label: "Server name", maxLength: 200, match: s.name }
     });
     if (typed !== s.name) return;
     try {
@@ -297,7 +297,7 @@ export default function RenderDashboard() {
       toast.success(s.name + " was deleted.");
       setChecked((old) => old.filter((k) => k !== serviceKey(s)));
       await Promise.all([loadAccounts({ quiet: true }), loadAudit(), refreshOps()]);
-    } catch (e) { toast.error(errorMessage(e, "Could not delete this service.")); }
+    } catch (e) { toast.error(errorMessage(e, "Could not delete this server.")); }
   };
 
   const copyToClipboard = async (text) => {
@@ -310,7 +310,7 @@ export default function RenderDashboard() {
     openNow.slice(0, 5).forEach((i) => items.push({ key: "i" + i.id, tone: "danger", title: i.message || i.type, meta: i.groupName + " · " + i.serviceName + " · " + timeAgo(i.openedAt), onClick: () => go("incidents") }));
     if (staleCount) items.push({ key: "stale-inc", tone: "warn", title: staleCount + " stale incident" + (staleCount === 1 ? "" : "s"), meta: "Their service or group no longer exists — close them", onClick: () => go("incidents") });
     services.filter((s) => s.suspended === "suspended").slice(0, 5).forEach((s) => items.push({ key: "s" + serviceKey(s), tone: "warn", title: s.name + " is suspended", meta: s.accountName + " · " + serviceKind(s), onClick: () => setSelectedKey(serviceKey(s)) }));
-    accounts.filter((a) => a.truncated).forEach((a) => items.push({ key: "t" + a.id, tone: "warn", title: a.name + ": inventory is incomplete", meta: "This account has more services than Stashr can list at once.", onClick: () => go("settings") }));
+    accounts.filter((a) => a.truncated).forEach((a) => items.push({ key: "t" + a.id, tone: "warn", title: a.name + ": inventory is incomplete", meta: "This account has more servers than Stashr can list at once.", onClick: () => go("settings") }));
     accounts.filter((a) => a.loadError).forEach((a) => items.push({ key: "a" + a.id, tone: "danger", title: a.name + ": " + a.loadError, meta: "Check the API key in Settings → Connections", onClick: () => go("settings") }));
     if (ops.loadError) items.push({ key: "ops", tone: "warn", title: "Persistent monitoring unavailable", meta: ops.loadError, onClick: () => void refreshOps() });
     return items;
@@ -355,7 +355,7 @@ export default function RenderDashboard() {
         {view === "overview" && (
           <div className="rd-stack">
             <div className="rd-kpis">
-              <Kpi label="Apps" value={loading ? "–" : appCount} hint={fleet.total + " services · " + accounts.length + " account" + (accounts.length === 1 ? "" : "s")} onClick={() => go("services")} />
+              <Kpi label="Apps" value={loading ? "–" : appCount} hint={fleet.total + " servers · " + accounts.length + " account" + (accounts.length === 1 ? "" : "s")} onClick={() => go("services")} />
               <Kpi label="Active" value={loading ? "–" : fleet.active} tone="ok" hint="Listed as not suspended" onClick={() => { clearFilters(); setStateFilter("active"); go("services"); }} />
               <Kpi label="Open incidents" value={openNow.length} tone={openNow.length ? "danger" : undefined} hint={openNow.length ? "Review and fix" : staleCount ? staleCount + " stale to close" : "None open"} onClick={() => go("incidents")} />
               <Kpi label="Suspended" value={loading ? "–" : fleet.suspended} tone={fleet.suspended ? "warn" : undefined} hint="May need attention" onClick={() => { clearFilters(); setStateFilter("suspended"); go("services"); }} />
@@ -363,7 +363,7 @@ export default function RenderDashboard() {
 
             <div className="rd-grid">
               <div className="rd-stack">
-                <Section title="Fleet status" subtitle="All services across connected accounts">
+                <Section title="Fleet status" subtitle="All servers across connected accounts">
                   {loading ? <Skeleton lines={3} /> : <>
                     <FleetBar counts={fleet} />
                     <ul className="rd-legend rd-legend--row">
@@ -376,7 +376,7 @@ export default function RenderDashboard() {
                 <Section title="Needs attention" subtitle={attention.length ? attention.length + " item" + (attention.length === 1 ? "" : "s") + " to review" : "Nothing needs your attention"}>
                   {attention.length ? (
                     <ul className="rd-attention">{attention.map((a) => <li key={a.key}><button type="button" className={"is-" + a.tone} onClick={a.onClick}><span className="rd-attention__mark" aria-hidden="true">{a.tone === "danger" ? "!" : "▲"}</span><div><strong>{a.title}</strong><small>{a.meta}</small></div><span aria-hidden="true">›</span></button></li>)}</ul>
-                  ) : <Empty icon="✓" title="All clear">No open incidents, suspended services or connection errors.</Empty>}
+                  ) : <Empty icon="✓" title="All clear">No open incidents, suspended servers or connection errors.</Empty>}
                 </Section>
               </div>
 
@@ -396,7 +396,7 @@ export default function RenderDashboard() {
           <Section title="Apps & servers" subtitle={groups.length + " app" + (groups.length === 1 ? "" : "s") + " · " + filtered.length + " of " + services.length + " services · servers from the same repo are grouped"} className="rd-card--flush"
             actions={<a className="rd-btn rd-btn--quiet" href="https://dashboard.render.com" target="_blank" rel="noreferrer noopener">Open Render ↗</a>}>
             <div className="rd-toolbar">
-              <label className="rd-search"><span aria-hidden="true">⌕</span><input ref={searchRef} type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, region, branch, repo…  ( / or Ctrl+K )" aria-label="Search services" /></label>
+              <label className="rd-search"><span aria-hidden="true">⌕</span><input ref={searchRef} type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, region, branch, repo…  ( / or Ctrl+K )" aria-label="Search servers" /></label>
               <select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)} aria-label="Filter by account"><option value="all">All accounts</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
               <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} aria-label="Filter by type"><option value="all">All types</option>{SERVICE_KINDS.map((t) => <option key={t}>{t}</option>)}</select>
               <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)} aria-label="Filter by status"><option value="all">Any status</option><option value="active">Active</option><option value="incident">Incident open</option><option value="suspended">Suspended</option></select>
@@ -410,7 +410,7 @@ export default function RenderDashboard() {
                 <strong>{checked.length} selected</strong>
                 {["restart", "deploy", "suspend", "resume"].map((k) => <button key={k} type="button" className="rd-btn rd-btn--quiet" disabled={Boolean(bulkBusy)} onClick={() => void runAction(k, checkedServices)}>{bulkBusy === k ? "Working…" : ACTIONS[k].label}</button>)}
                 <button type="button" className="rd-btn rd-btn--quiet" disabled={checked.length < 2} onClick={() => void createGroup()}>＋ Monitoring group</button>
-                <button type="button" className="rd-btn rd-btn--danger-quiet" disabled={bulkDeleting} title="Permanently delete the selected services (live or suspended)" onClick={() => void deleteSelected()}>{bulkDeleting ? "Deleting…" : "🗑 Delete selected (" + checkedServices.length + ")"}</button>
+                <button type="button" className="rd-btn rd-btn--danger-quiet" disabled={bulkDeleting} title="Permanently delete the selected servers (live or suspended)" onClick={() => void deleteSelected()}>{bulkDeleting ? "Deleting…" : "🗑 Delete selected (" + checkedServices.length + ")"}</button>
                 <button type="button" className="rd-btn rd-btn--link" onClick={() => setChecked([])}>Clear</button>
 
               </div>
@@ -430,8 +430,8 @@ export default function RenderDashboard() {
             <div className="rd-tablewrap">
               <table className="rd-table">
                 <thead><tr>
-                  <th scope="col" className="rd-col-check"><input type="checkbox" checked={allOnPage} onChange={togglePage} aria-label="Select all services on this page" /></th>
-                  {sortHeader("name", "Service")}<th scope="col">Project</th>{sortHeader("account", "Account")}{sortHeader("type", "Type")}{sortHeader("region", "Region")}{sortHeader("status", "Status")}{sortHeader("updated", "Updated")}
+                  <th scope="col" className="rd-col-check"><input type="checkbox" checked={allOnPage} onChange={togglePage} aria-label="Select all servers on this page" /></th>
+                  {sortHeader("name", "Server")}<th scope="col">Project</th>{sortHeader("account", "Account")}{sortHeader("type", "Type")}{sortHeader("region", "Region")}{sortHeader("status", "Status")}{sortHeader("updated", "Updated")}
                   <th scope="col"><span className="rd-sr">Actions</span></th>
                 </tr></thead>
                 <tbody>
@@ -453,7 +453,7 @@ export default function RenderDashboard() {
                           <td title={formatDateTime(s.updatedAt)}>{timeAgo(s.updatedAt)}</td>
                           <td className="rd-col-actions" onClick={(e) => e.stopPropagation()}>
                             <button type="button" className={"rd-icon-btn" + (fav ? " is-on" : "")} aria-pressed={fav} aria-label={(fav ? "Unfavorite " : "Favorite ") + s.name} onClick={() => toggleFavorite(s)}>{fav ? "★" : "☆"}</button>
-                            <button type="button" className="rd-icon-btn" aria-label={"Copy ID of " + s.name} title="Copy service ID" onClick={() => void copyToClipboard(s.id)}>⧉</button>
+                            <button type="button" className="rd-icon-btn" aria-label={"Copy ID of " + s.name} title="Copy server ID" onClick={() => void copyToClipboard(s.id)}>⧉</button>
                             <a className="rd-icon-btn" href={safeUrl(s.dashboardUrl)} target="_blank" rel="noreferrer noopener" aria-label={"Open " + s.name + " in Render"}>↗</a>
                             <button type="button" className="rd-icon-btn rd-icon-btn--danger" aria-label={"Delete " + s.name} title={"Delete " + s.name + (s.suspended === "suspended" ? "" : " (live)")} onClick={() => void deleteOne(s)}>🗑</button>
                           </td>
@@ -481,7 +481,7 @@ export default function RenderDashboard() {
                           <td><StatePill state={worst} /></td>
                           <td title={formatDateTime(group.main.updatedAt)}>{timeAgo(group.main.updatedAt)}</td>
                           <td className="rd-col-actions" onClick={(e) => e.stopPropagation()}>
-                            <span className="rd-count" title={group.members.length + " Render services built from this repo"}>{group.members.length}</span>
+                            <span className="rd-count" title={group.members.length + " Render servers built from this repo"}>{group.members.length}</span>
                             {group.repo && <a className="rd-icon-btn" href={safeUrl(group.repo)} target="_blank" rel="noreferrer noopener" aria-label={"Open " + group.name + " on GitHub"} title="Open the repository">⌥</a>}
                           </td>
                         </tr>
