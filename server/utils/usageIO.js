@@ -3,6 +3,7 @@ const renderOps = require("./renderOps");
 const { loadRenderServices } = require("./projectStatus");
 const { buildLiveDashboard, appendSnapshot } = require("./usageDashboard");
 const { makeProviders } = require("./usageProviders");
+const { PROVIDERS } = require("./usageCatalog");
 
 /* Plan limits (MB) you tell Stashr about, because most providers do not report the limit of your plan. */
 const LIMIT_KEYS = ["mongodb", "postgres", "mysql", "redis", "turso", "elasticsearch", "aws"];
@@ -96,4 +97,16 @@ async function runAllUsage() {
   return { users: users_ };
 }
 
-module.exports = { runUsage, runAllUsage, readSettings, saveSettings, normalizeSettings };
+function getUsageCapabilityCatalog() {
+  const readers = new Set(Object.keys(getProviders()));
+  const labels = new Map(PROVIDERS.map((p) => [p.key, p]));
+  const usageReaders = [...readers].map((key) => {
+    const def = labels.get(key);
+    return { key, label: def?.label || (key === "database" ? "Database (generic URL)" : key), category: def?.category || "Database" };
+  }).sort((a, b) => a.category.localeCompare(b.category) || a.label.localeCompare(b.label));
+  const recognizedServices = PROVIDERS.map(({ key, label, category }) => ({ key, label, category, liveUsageSupported: readers.has(key) }))
+    .sort((a, b) => a.category.localeCompare(b.category) || a.label.localeCompare(b.label));
+  return { usageReaders, recognizedServices };
+}
+
+module.exports = { runUsage, runAllUsage, readSettings, saveSettings, normalizeSettings, getUsageCapabilityCatalog };

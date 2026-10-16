@@ -4,7 +4,8 @@ const renderOps = require("../utils/renderOps");
 const { fetchAllPages } = require("../utils/renderPaging");
 const { syncProjectEnv, runAllEnvSync } = require("../utils/renderEnvSync");
 const { getProjectStatuses, runAllAutoLink, clearServicesCache } = require("../utils/projectStatus");
-const { runUsage, runAllUsage, readSettings, saveSettings } = require("../utils/usageIO");
+const { runUsage, runAllUsage, readSettings, saveSettings, getUsageCapabilityCatalog } = require("../utils/usageIO");
+const { detectServices } = require("../utils/usageCatalog");
 const { pushProjectEnv } = require("../utils/renderEnvPush");
 const { provision } = require("../utils/provision");
 const { createRepo, checkRepo, repoReadyError } = require("../utils/repoFlow");
@@ -786,6 +787,38 @@ router.get("/render/projects/:projectId/deployments", async (req, res) => {
   } catch (error) {
     return res.status(Number.isInteger(error.status) ? error.status : 500).json({ error: Number.isInteger(error.status) ? error.message : "Could not read this project's deployments." });
   }
+});
+
+/* Admin-only diagnostics: names of environment variables not assigned to a known provider or internal setting.
+   Exact email allowlist is enforced on the server; environment-variable values never leave Render. */
+router.get("/render/usage-admin-report", async (req, res) => {
+  if (String(req.rootUser?.email || "").trim().toLowerCase() !== "tanushchawla16@gmail.com") {
+    return res.status(403).json({ error: "Not allowed." });
+  }
+  try {
+    const dataKey = await req.rootUser.getDataKey();
+    const { services, accounts } = await loadRenderServices(req.rootUser, dataKey, { refresh: true });
+    const rows = new Array(services.length);
+    let cursor = 0;
+    const scanOne = async (service) => {
+      const account = accounts.get(String(service.accountId));
+      if (!account?.apiKey) return { id: service.id, name: service.name, accountName: service.accountName || "", url: service.url || "", unknownVariables: [], scanError: "Render connection unavailable" };
+      try {
+        const payload = await renderOps.renderRequest(account.apiKey, "/v1/services/" + encodeURIComponent(service.id) + "/env-vars?limit=100");
+        const list = Array.isArray(payload) ? payload : Array.isArray(payload?.items) ? payload.items : Array.isArray(payload?.envVars) ? payload.envVars : [];
+        const env = new Map();
+        for (const row of list) { const v = row?.envVar || row; if (v && typeof v.key === "string") env.set(v.key, typeof v.value === "string" ? v.value : ""); }
+        const detected = detectServices(env);
+        return { id: service.id, name: service.name, accountName: service.accountName || account.name || "", url: service.url || "", unknownVariables: detected.other.map((v) => ({ name: v.name, kind: v.kind, set: Boolean(v.set) })).sort((a, b) => a.name.localeCompare(b.name)), scanError: null };
+      } catch { return { id: service.id, name: service.name, accountName: service.accountName || account.name || "", url: service.url || "", unknownVariables: [], scanError: "Could not read environment-variable names from Render" }; }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, services.length) }, async () => {
+      while (cursor < services.length) { const index = cursor++; rows[index] = await scanOne(services[index]); }
+    }));
+    const catalog = getUsageCapabilityCatalog();
+    res.set("Cache-Control", "no-store");
+    return res.json({ scannedAt: new Date().toISOString(), serviceCount: rows.length, unknownNameCount: new Set(rows.flatMap((r) => r.unknownVariables.map((v) => v.name))).size, services: rows, ...catalog });
+  } catch { return res.status(500).json({ error: "Could not scan Render environment-variable names." }); }
 });
 
 /* Live-services usage dashboard: only running Render services, with provider usage, limits and projections. */
