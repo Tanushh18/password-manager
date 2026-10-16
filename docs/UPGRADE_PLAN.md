@@ -170,3 +170,16 @@ This is one continuous upgrade program; phases are ordering and acceptance gates
 ## 12. Current verification notes
 
 At the time this plan was drafted, the latest observed CI run had server tests and web tests/build passing, while the mobile `expo-doctor` check failed because nine Expo SDK packages were behind the expected patch versions. This must be rechecked on the upgrade branch; do not assume it is still the only failure. The existing CI dependency audits omitted development dependencies, so the new security workflow audits complete lockfiles.
+
+
+## 13. Implemented on `feat/stashr-full-platform-upgrade` (verify latest CI before release)
+
+- Repository security workflow: full dependency audit across server/web/mobile, CodeQL, Gitleaks, Trivy, optional dependency review and opt-in passive ZAP staging DAST.
+- Admin Security Center: reads real GitHub workflow runs and job statuses, links to exact run details, and handles API rate limits without claiming a clean scan.
+- Scheduler operations: bounded run-history collection in the existing MongoDB, per-step duration/status summaries, safe numeric counters only, retention cap, and an expiring Mongo-backed lease to avoid duplicate ticks across API instances.
+- Operations UI: displays recent scheduler runs and step outcomes.
+- API health: separate `/livez` (process liveness) and `/readyz` (database readiness) endpoints; the existing `/health` remains compatible.
+- Mobile dependency alignment: updates the eight Expo SDK patch versions reported by `expo-doctor` and refreshes the lockfile with package integrity hashes.
+- Tests: safe scheduler summary, authenticated persisted status endpoint, readiness/liveness, distributed lease, Security Center and scanner workflow coverage.
+
+These are code changes, not release certification. The latest branch CI/security runs must complete successfully. The optional ZAP job is skipped until `STAGING_BASE_URL` is configured to an authorized HTTPS staging target. Provider connectors beyond existing Render/GitHub integrations, production restore drills, and live-provider acceptance still need implementation/evidence before the overall roadmap can be marked complete.
