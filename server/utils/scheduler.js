@@ -162,4 +162,4 @@ async function getSchedulerStatus(limit = 10) {
 
 const lastTick = () => last;
 
-module.exports = { runTick, startScheduler, lastTick, getSchedulerStatus, executeStep, persistRun };
+module.exports = { runTick, startScheduler, lastTick, getSchedulerStatus, executeStep, persistRun, acquireLease, releaseLease };
