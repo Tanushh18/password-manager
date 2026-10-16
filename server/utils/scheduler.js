@@ -20,7 +20,7 @@ let running = null;
 let last = null;
 
 async function persistRun(run) {
-  if (mongoose.connection.readyState !== 1) return;
+  if (mongoose.connection.readyState !== 1) return false;
   try {
     await SystemJobRun.create({
       source: run.source,
@@ -32,8 +32,10 @@ async function persistRun(run) {
     });
     const excess = await SystemJobRun.find().sort({ startedAt: -1 }).skip(HISTORY_LIMIT).select("_id").lean();
     if (excess.length) await SystemJobRun.deleteMany({ _id: { $in: excess.map((row) => row._id) } });
+    return true;
   } catch {
     // The current process still exposes its in-memory status; a persistence failure must not crash the API.
+    return false;
   }
 }
 
@@ -125,8 +127,8 @@ async function runTick(source = "internal") {
         usage,
         telegram
       };
+      run.persisted = await persistRun(run);
       last = run;
-      await persistRun(run);
       return run;
     } finally {
       clearInterval(heartbeat);
@@ -153,7 +155,9 @@ async function getSchedulerStatus(limit = 10) {
     try {
       const rows = await SystemJobRun.find().sort({ startedAt: -1 }).limit(count).lean();
       const recentRuns = rows.map(publicRun);
-      if (recentRuns.length) return { lastTick: recentRuns[0], recentRuns };
+      const memoryRun = last ? publicRun(last) : null;
+      if (memoryRun && (!recentRuns[0] || Date.parse(memoryRun.completedAt) > Date.parse(recentRuns[0].completedAt))) recentRuns.unshift(memoryRun);
+      if (recentRuns.length) return { lastTick: recentRuns[0], recentRuns: recentRuns.slice(0, count) };
     } catch { /* use in-memory fallback when persistence is unavailable */ }
   }
   const recentRuns = last ? [publicRun(last)] : [];
