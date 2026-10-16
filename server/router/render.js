@@ -823,7 +823,8 @@ async function scanUnknownRenderVariables(user) {
         const variable = row?.envVar || row;
         if (variable && typeof variable.key === "string") env.set(variable.key, typeof variable.value === "string" ? variable.value : "");
       }
-      const unknownVariables = detectServices(env).other
+      const detectedEnv = detectServices(env);
+      const unknownVariables = [...detectedEnv.other, ...detectedEnv.autoDetectedVars]
         .map((variable) => ({ name: variable.name, kind: variable.kind, set: Boolean(variable.set) }))
         .sort((a, b) => a.name.localeCompare(b.name));
       rows.push({ id: service.id, name: service.name || service.id, url: service.url || null, accountName: accountFields?.name || "Render account", scanError: null, unknownVariables });

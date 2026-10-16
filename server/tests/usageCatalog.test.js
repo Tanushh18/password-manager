@@ -203,3 +203,12 @@ test("Cloudinary: prefix, infix and numbered account naming are all picked up; i
   expect(incomplete).toEqual([{ label: "old", missing: ["API Key", "API Secret"] }]);
   expect(detectServices({ SHINE_CLOUDINARY_API_KEY: "k" }).services[0].key).toBe("cloudinary");
 });
+
+test("unknown providers are auto-detected by name prefix, with no secrets exposed", () => {
+  const r = detectServices({ ACMEAI_API_KEY: "sk-secretvalue123456789", ACMEAI_MODEL: "big", DAILY_LIMIT: "5", RANDOM_THING: "v" });
+  expect(r.services.map((s) => s.key)).toEqual(["auto-acmeai"]);
+  expect(r.services[0].label).toBe("Acmeai");
+  expect(r.services[0].category).toBe("Auto-detected");
+  expect(JSON.stringify(r)).not.toContain("secretvalue");
+  expect(r.other.map((v) => v.name).sort()).toEqual(["DAILY_LIMIT", "RANDOM_THING"]);
+});

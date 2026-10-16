@@ -244,6 +244,44 @@ const CREDENTIALS = {
   }
 };
 
+
+/* Words that start many variable names without naming a service: never treated as a provider on their own. */
+const GENERIC_PREFIX = new Set(["APP", "API", "DB", "DATABASE", "SERVER", "CLIENT", "USER", "SITE", "WEB", "MAX", "MIN", "DEFAULT", "ENABLE", "ENABLED", "DISABLE", "FEATURE", "FEATURES", "USE", "IS", "ALLOW", "ALLOWED", "NEXT", "REACT", "VITE", "EXPO", "PUBLIC", "SECRET", "KEY", "TOKEN", "URL", "HOST", "NODE", "NPM", "TEST", "DEV", "PROD", "LOCAL", "BASE", "MAIN", "SELF", "FRONTEND", "BACKEND", "ENV", "CONFIG", "CACHE", "TIMEOUT", "RETRY", "DEBUG", "VERBOSE", "LOG", "DATA", "FILE", "FILES", "UPLOAD", "STORAGE", "EMAIL", "PHONE", "ADMIN", "OWNER", "COMPANY", "PROJECT", "SERVICE", "SERVICES", "TIME", "DATE", "ORIGIN", "ORIGINS", "WEBHOOK", "CALLBACK", "REDIRECT", "VERSION", "BUILD", "SKIP", "NO", "NEW", "OLD", "AUTH", "ACCESS", "REFRESH", "RENDER", "PYTHON", "RUBY", "GO", "JAVA", "BUN", "DENO", "YARN", "PNPM", "POETRY", "PIP", "UV"]);
+const CREDENTIAL_TAIL = /(KEY|TOKEN|SECRET|URI|URL|DSN|ENDPOINT|PASSWORD)$/i;
+const FRAMEWORK_PREFIX = /^(REACT_APP|VITE|NEXT_PUBLIC|EXPO_PUBLIC|NUXT_PUBLIC|PUBLIC)_/i;
+
+/** `FOO_API_KEY` -> "FOO"; null when the name does not look like it belongs to a named service. */
+function autoPrefix(name) {
+  const parts = name.replace(FRAMEWORK_PREFIX, "").toUpperCase().split("_").filter(Boolean);
+  if (parts.length < 2) return null;
+  const prefix = parts[0];
+  if (prefix.length < 3 || prefix.length > 24 || !/^[A-Z][A-Z0-9]*$/.test(prefix) || GENERIC_PREFIX.has(prefix)) return null;
+  return prefix;
+}
+
+const titleCase = (prefix) => prefix.charAt(0) + prefix.slice(1).toLowerCase();
+
+/**
+ * Variables no catalog entry claims are grouped by their name prefix into "auto-detected" services, so a brand-new
+ * provider shows up in Services without any code change. A prefix needs at least one credential-looking variable (KEY / TOKEN / SECRET / URL / ...).
+ */
+function autoGroup(other) {
+  const byPrefix = new Map();
+  for (const v of other) {
+    const prefix = autoPrefix(v.name);
+    if (!prefix) continue;
+    if (!byPrefix.has(prefix)) byPrefix.set(prefix, []);
+    byPrefix.get(prefix).push(v);
+  }
+  const groups = new Map(), taken = new Set();
+  for (const [prefix, vars] of byPrefix) {
+    if (!vars.some((v) => CREDENTIAL_TAIL.test(v.name))) continue;
+    groups.set("auto-" + prefix.toLowerCase(), vars);
+    vars.forEach((v) => taken.add(v.name));
+  }
+  return { groups, taken };
+}
+
 /**
  * values: Map(name -> value). Returns { services, internal, other, unassigned } with masked variables only,
  * plus `credentials` (kept separate, for server-side use ONLY and never serialised to a client).
@@ -259,13 +297,15 @@ function detectServices(values) {
     let owner = ownerOf(name, map);
     if (!owner && hasCloudName && /^API_(KEY|SECRET)$/i.test(name)) owner = "cloudinary";
     if (!owner && INTERNAL.test(name)) { internal.push(classifyVar(name, value)); continue; }
-    if (!owner) { other.push(classifyVar(name, value)); continue; }
+    if (!owner) { other.push({ ...classifyVar(name, value), _raw: value }); continue; }
     if (!groups.has(owner)) groups.set(owner, []);
     groups.get(owner).push({ ...classifyVar(name, value), _raw: value });
   }
+  const auto = autoGroup(other);
+  for (const [owner, vars] of auto.groups) groups.set(owner, vars);
   const services = [];
   for (const [owner, vars] of groups) {
-    const def = PROVIDERS.find((p) => p.key === owner) || ({ postgres: { label: "PostgreSQL", category: "Database" }, mysql: { label: "MySQL", category: "Database" }, database: { label: "Database", category: "Database" } })[owner] || { label: owner, category: "Other" };
+    const def = PROVIDERS.find((p) => p.key === owner) || (owner.startsWith("auto-") ? { label: titleCase(owner.slice(5).toUpperCase()), category: "Auto-detected" } : null) || ({ postgres: { label: "PostgreSQL", category: "Database" }, mysql: { label: "MySQL", category: "Database" }, database: { label: "Database", category: "Database" } })[owner] || { label: owner, category: "Other" };
     const limits = vars.filter((v) => LIMIT_NAME.test(v.name) && NUMBERISH.test(String(v._raw))).map((v) => ({ name: v.name, value: Number(String(v._raw).trim()) }));
     const creds = CREDENTIALS[owner] ? CREDENTIALS[owner](map) : null;
     const host = creds?.uri ? hostLabel(creds.uri) : "";
@@ -273,12 +313,14 @@ function detectServices(values) {
       key: owner, label: def.label, host: host || "", category: def.category, console: consoleLink[owner] || null,
       vars: vars.map(({ _raw, ...safe }) => safe), configuredLimits: limits,
       hasCredentials: Boolean(creds), credentials: creds,
+      autoDetected: owner.startsWith("auto-") || undefined,
       incompleteAccounts: owner === "cloudinary" ? cloudinaryAnalysis(map).incomplete : undefined
     });
   }
-  const order = ["Database", "Media", "SMS / Voice", "Voice / speech", "Email", "Messaging", "AI", "Realtime", "Auth", "APIs", "Monitoring", "DevOps", "Other"];
+  const order = ["Database", "Media", "SMS / Voice", "Voice / speech", "Email", "Messaging", "AI", "Realtime", "Auth", "APIs", "Monitoring", "DevOps", "Auto-detected", "Other"];
   services.sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category) || a.label.localeCompare(b.label));
-  return { services, internal, other };
+  const strip = ({ _raw, ...safe }) => safe;
+  return { services, internal, other: other.filter((v) => !auto.taken.has(v.name)).map(strip), autoDetectedVars: other.filter((v) => auto.taken.has(v.name)).map(strip) };
 }
 
 /** Removes server-only credentials before anything is sent to a client. */
