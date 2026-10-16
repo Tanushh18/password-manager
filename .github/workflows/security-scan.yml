@@ -8,12 +8,6 @@ on:
   schedule:
     - cron: "23 3 * * 1"
   workflow_dispatch:
-    inputs:
-      full_scan:
-        description: "Run the full repository security scan"
-        required: false
-        type: boolean
-        default: true
 
 permissions:
   contents: read
@@ -101,7 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Scan dependencies, OS packages, secrets and misconfigurations
-        uses: aquasecurity/trivy-action@0.31.0
+        uses: aquasecurity/trivy-action@v0.31.0
         with:
           scan-type: fs
           scan-ref: .
@@ -130,7 +124,7 @@ jobs:
 
   dependency-review:
     name: Pull request dependency review
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && vars.ENABLE_DEPENDENCY_REVIEW == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
