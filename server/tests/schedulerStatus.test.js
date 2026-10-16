@@ -11,6 +11,8 @@ process.env.RATE_LIMIT_MAX = "1000";
 const app = require("../app");
 const User = require("../models/schema");
 const SystemJobRun = require("../models/SystemJobRun");
+const SchedulerLease = require("../models/SchedulerLease");
+const { acquireLease, releaseLease } = require("../utils/scheduler");
 
 let mongo;
 before(async () => {
@@ -61,4 +63,25 @@ test("liveness is process-only while readiness requires MongoDB", async () => {
   assert.equal(ready.body.status, "ready");
   assert.equal(ready.body.dependencies.database, "connected");
   assert.equal(JSON.stringify(ready.body).includes("scheduler-status-test-secret"), false);
+});
+
+
+test("Mongo scheduler lease prevents a second instance from overlapping a live tick", async () => {
+  await SchedulerLease.deleteMany({});
+  await SchedulerLease.create({
+    _id: "background-scheduler",
+    owner: "other-instance",
+    leaseUntil: new Date(Date.now() + 60_000),
+    updatedAt: new Date()
+  });
+  const held = await acquireLease();
+  assert.equal(held.acquired, false);
+  assert.equal(held.reason, "lease_unavailable");
+
+  await SchedulerLease.updateOne({ _id: "background-scheduler" }, { $set: { leaseUntil: new Date(Date.now() - 1000) } });
+  const acquired = await acquireLease();
+  assert.equal(acquired.acquired, true);
+  await releaseLease();
+  const released = await SchedulerLease.findById("background-scheduler").lean();
+  assert.equal(released.leaseUntil.getTime() <= Date.now(), true);
 });
