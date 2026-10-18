@@ -19,7 +19,7 @@ const { runUserPings, pingResults, scanHealthRoutes } = require("../utils/pings"
 const { getProjectDeployments } = require("../utils/projectDeployments");
 const { findUrlReferences, replaceUrlReferences } = require("../utils/urlRefs");
 const { validateProvisionInput } = require("../utils/provisionInput");
-const { githubSend, probeScopes, loadGithubAccounts } = require("../utils/githubClient");
+const { githubSend, githubGet, resolveRepo, probeScopes, loadGithubAccounts } = require("../utils/githubClient");
 const { buildRegistrySync, setAutoSync, runAllRegistrySync } = require("../utils/registrySyncIO");
 const { isAdminUser } = require("./registry");
 const { checkServiceDeletion, parseBulkTargets, mapWithConcurrency } = require("../utils/renderGuards");
@@ -624,6 +624,68 @@ router.post("/render/accounts/:accountId/services/:serviceId/deploys", async (re
     });
     await recordAudit(req, "deploy_triggered", saved.entry._id, req.params.serviceId, { clearCache });
     return res.status(201).json(result);
+  } catch (error) { return sendUpstreamError(res, error); }
+});
+
+/*
+ * Choose which GitHub branch a Render service deploys. The branch list comes from the service's own repository,
+ * a chosen branch is checked on GitHub first, then set on the service (Render's source of truth) and, if asked, deployed.
+ */
+const BRANCH_RE = /^(?!-)(?!.*\.\.)[A-Za-z0-9._\/-]{1,200}$/;
+const branchPath = (name) => name.split("/").map(encodeURIComponent).join("/");
+
+async function serviceRepoContext(req, res) {
+  const saved = await getAccount(req, res);
+  if (!saved) return null;
+  if (!safeId(req.params.serviceId)) { res.status(400).json({ error: "Invalid service ID." }); return null; }
+  const payload = await renderRequest(saved.account.apiKey, servicePath(req.params.serviceId));
+  const service = payload?.service || payload;
+  const target = parseGithubRepo(service?.repo);
+  if (!target) { res.status(400).json({ error: "This service is not deployed from a GitHub repository." }); return null; }
+  const accounts = await loadGithubAccounts(req.rootUser, await req.rootUser.getDataKey());
+  if (!accounts.length) { res.json({ connected: false, current: service.branch || "", repo: target.owner + "/" + target.repo, branches: [] }); return null; }
+  const resolved = await resolveRepo(accounts, target);
+  if (resolved.error) { res.status(resolved.error.status).json({ error: resolved.error.message }); return null; }
+  return { saved, service, target, ...resolved };
+}
+
+router.get("/render/accounts/:accountId/services/:serviceId/branches", async (req, res) => {
+  try {
+    const ctx = await serviceRepoContext(req, res);
+    if (!ctx) return;
+    const branches = [];
+    for (let page = 1; page <= 3; page += 1) {
+      const r = await githubGet(ctx.used.token, ctx.base + "/branches?per_page=100&page=" + page);
+      if (!r.ok) { if (page === 1) return res.status(502).json({ error: "Could not read the branches from GitHub." }); break; }
+      branches.push(...r.body.map((b) => ({ name: String(b.name), protected: Boolean(b.protected) })));
+      if (r.body.length < 100) break;
+    }
+    res.set("Cache-Control", "no-store");
+    return res.json({ connected: true, repo: ctx.repo.full_name, current: ctx.service.branch || ctx.repo.default_branch || "", default: ctx.repo.default_branch || "", suspended: ctx.service.suspended === "suspended", branches });
+  } catch (error) { return sendUpstreamError(res, error); }
+});
+
+router.post("/render/accounts/:accountId/services/:serviceId/branch", async (req, res) => {
+  const branch = typeof req.body?.branch === "string" ? req.body.branch.trim() : "";
+  if (!BRANCH_RE.test(branch)) return res.status(400).json({ error: "Choose a valid branch." });
+  try {
+    const ctx = await serviceRepoContext(req, res);
+    if (!ctx) return;
+    const exists = await githubGet(ctx.used.token, ctx.base + "/branches/" + branchPath(branch));
+    if (!exists.ok) return res.status(exists.status === 404 ? 404 : 502).json({ error: exists.status === 404 ? `The branch "${branch}" does not exist on GitHub.` : "Could not check the branch on GitHub." });
+    const previous = ctx.service.branch || "";
+    if (previous !== branch) await renderRequest(ctx.saved.account.apiKey, servicePath(req.params.serviceId), { method: "PATCH", body: { branch } });
+    await recordAudit(req, "service_branch_changed", ctx.saved.entry._id, req.params.serviceId, { from: previous, to: branch });
+    let deployed = false, note = "";
+    if (req.body?.deploy === true) {
+      if (ctx.service.suspended === "suspended") note = "The service is suspended, so it was not deployed. Resume it to run the new branch.";
+      else {
+        await renderRequest(ctx.saved.account.apiKey, servicePath(req.params.serviceId, "/deploys"), { method: "POST", body: { clearCache: "do_not_clear", deployMode: "build_and_deploy" } });
+        deployed = true;
+        await recordAudit(req, "deploy_triggered", ctx.saved.entry._id, req.params.serviceId, { clearCache: false, branch });
+      }
+    }
+    return res.json({ branch, previous, deployed, note });
   } catch (error) { return sendUpstreamError(res, error); }
 });
 

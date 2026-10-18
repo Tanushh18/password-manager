@@ -54,3 +54,6 @@
 .pdep-v--E, .pdep-v--F, .pdep-v--G, .pdep-v--H { background: rgba(127, 127, 127, .22); color: var(--text); }
 .pdep__legend { margin: 0; font-size: .76rem; color: var(--text-muted); display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
 @media (max-width: 640px) { .pdep__head { flex-direction: column; } }
+
+.pdep__branch { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; min-width: 12rem; }
+.pdep__branch select { min-width: 9rem; padding: .3rem .5rem; font-size: .82rem; }

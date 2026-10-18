@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { getProjectDeployments } from "../../api/client";
+import { toast } from "react-toastify";
+import { getProjectDeployments, getServiceBranches, setServiceBranch } from "../../api/client";
 import { usePolling } from "../../Pages/Render/renderHooks";
 import { timeAgo, safeUrl, errorMessage } from "../../Pages/Render/renderUtils";
 import "./ProjectDeployments.css";
@@ -20,6 +21,54 @@ function Cell({ cell }) {
   if (cell.state === "missing") return <span className="pdep-cell pdep-cell--missing" title="Not set on this server">—</span>;
   if (cell.state === "empty") return <span className="pdep-cell pdep-cell--empty" title="Set, but empty">empty</span>;
   return <span className={"pdep-cell pdep-v pdep-v--" + cell.variant} title={"Value " + cell.variant + " (same letter = same value)"}>{cell.variant}</span>;
+}
+
+/** Pick which GitHub branch this server deploys. The branch list is read from the repo only when asked. */
+function BranchPicker({ server, onDone }) {
+  const [info, setInfo] = useState(null);
+  const [choice, setChoice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const open = async () => {
+    if (info || busy) return;
+    setBusy(true);
+    try { const r = await getServiceBranches(server.accountId, server.id); setInfo(r); setChoice(r.current || server.branch || ""); setErr(""); }
+    catch (e) { setErr(errorMessage(e, "Could not read the branches.")); }
+    finally { setBusy(false); }
+  };
+  const apply = async () => {
+    const same = choice === (info.current || "");
+    if (!window.confirm(same ? `Deploy "${choice}" on ${server.name} again?` : `Switch ${server.name} from "${info.current || "its current branch"}" to "${choice}" and deploy it?`)) return;
+    setBusy(true);
+    try {
+      const r = await setServiceBranch(server.accountId, server.id, choice, true);
+      toast.success(r.deployed ? `Deploying ${r.branch}.` : r.note || `Branch set to ${r.branch}.`);
+      setInfo(null);
+      onDone();
+    } catch (e) { toast.error(errorMessage(e, "Could not change the branch.")); }
+    finally { setBusy(false); }
+  };
+
+  if (server.gone || (server.error && !server.url)) return <span className="pdep__dim">—</span>;
+  if (!info) return (
+    <div className="pdep__branch">
+      <span>{server.branch || "default"}</span>
+      <button type="button" className="btn btn--ghost btn--sm" onClick={() => void open()} disabled={busy}>{busy ? "Reading…" : "Change"}</button>
+      {err ? <small className="pdep__err">{err}</small> : null}
+    </div>
+  );
+  if (!info.connected) return <small className="pdep__err">Connect GitHub (above) to choose a branch.</small>;
+  return (
+    <div className="pdep__branch">
+      <select className="input" value={choice} onChange={(e) => setChoice(e.target.value)} aria-label={`Branch for ${server.name}`} disabled={busy}>
+        {!info.branches.some((b) => b.name === info.current) && info.current ? <option value={info.current}>{info.current}</option> : null}
+        {info.branches.map((b) => <option key={b.name} value={b.name}>{b.name}{b.name === info.default ? " (default)" : ""}</option>)}
+      </select>
+      <button type="button" className="btn btn--primary btn--sm" onClick={() => void apply()} disabled={busy || !choice}>{busy ? "Working…" : choice === info.current ? "Redeploy" : "Switch and deploy"}</button>
+      <button type="button" className="btn btn--ghost btn--sm" onClick={() => setInfo(null)} disabled={busy}>Cancel</button>
+    </div>
+  );
 }
 
 /** Every Render server a project is deployed on: URL, status, last deploy, and which env vars are common or differ. */
@@ -59,7 +108,7 @@ export default function ProjectDeployments({ project }) {
       {servers.length > 0 && (
         <div className="pdep__scroll">
           <table className="pdep__table">
-            <thead><tr><th>Server</th><th>URL</th><th>Status</th><th>Last deploy</th><th>Plan · region</th><th>Env vars</th><th /></tr></thead>
+            <thead><tr><th>Server</th><th>URL</th><th>Status</th><th>Last deploy</th><th>Plan · region</th><th>Branch</th><th>Env vars</th><th /></tr></thead>
             <tbody>
               {servers.map((s) => {
                 const [state, label] = serverState(s);
@@ -70,6 +119,7 @@ export default function ProjectDeployments({ project }) {
                     <td><span className={"pdep__pill is-" + state}>{label}</span>{s.error && state !== "gone" ? <small className="pdep__err">{s.error}</small> : null}</td>
                     <td>{s.latestDeploy ? <><span className={"pdep__deploy is-" + (s.latestDeploy.status === "live" ? "ok" : /fail/.test(s.latestDeploy.status) ? "bad" : "mid")}>{DEPLOY_LABEL[s.latestDeploy.status] || s.latestDeploy.status}</span><small>{timeAgo(s.latestDeploy.at)}{s.latestDeploy.sha ? " · " + s.latestDeploy.sha : ""}</small></> : <span className="pdep__dim">—</span>}</td>
                     <td>{[s.plan, s.region].filter(Boolean).join(" · ") || <span className="pdep__dim">—</span>}</td>
+                    <td><BranchPicker server={s} onDone={() => void load({ quiet: true })} /></td>
                     <td>{s.envCount == null ? <span className="pdep__dim">?</span> : s.envCount}{s.envPartial ? <small className="pdep__err">too many to compare</small> : null}</td>
                     <td>{s.dashboardUrl ? <a href={safeUrl(s.dashboardUrl)} target="_blank" rel="noopener noreferrer" aria-label={"Open " + s.name + " in Render"}>Render ↗</a> : null}</td>
                   </tr>
