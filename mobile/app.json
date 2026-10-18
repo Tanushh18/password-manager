@@ -8,7 +8,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#0D0303",
-    "description": "Stashr \u2014 a private vault for every password and project. Same account and server as the Stashr website.",
+    "description": "Stashr — a private vault for every password and project. Same account and server as the Stashr website.",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tanush.stashr.com"
@@ -28,7 +28,6 @@
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.SYSTEM_ALERT_WINDOW",
-        "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
@@ -64,6 +63,14 @@
           "barcodeScannerEnabled": true
         }
       ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to find new photos and videos so it can back them up to your Google Drive."
+        }
+      ],
+      "expo-background-task",
+      "react-native-fast-tflite",
       [
         "expo-build-properties",
         {

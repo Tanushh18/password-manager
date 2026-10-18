@@ -93,7 +93,7 @@ export default function Settings() {
   const checkUpdates = async () => {
     try {
       const res = await Updates.checkForUpdateAsync();
-      if (!res.isAvailable) return toast("You're on the latest version ✨", "info");
+      if (!res.isAvailable) return toast("You're on the latest version", "info");
       await Updates.fetchUpdateAsync();
       Alert.alert("Update ready", "Restart Stashr to use the new version?", [
         { text: "Later", style: "cancel" },
@@ -125,7 +125,7 @@ export default function Settings() {
                   <Text style={{ color: theme.heading, fontFamily: theme.font.display, fontSize: 19 }}>{profile?.name || "Your vault"}</Text>
                   <Text style={{ color: theme.textMuted, fontFamily: theme.font.body, fontSize: 13 }}>{profile?.email}</Text>
                   <Text style={{ color: theme.accentSoft, fontFamily: theme.font.bodySemi, fontSize: 12, marginTop: 4 }}>
-                    {items.length} items · zero-knowledge AES-256-GCM
+                    {items.length} items · encrypted
                   </Text>
                 </View>
               </View>
@@ -141,6 +141,19 @@ export default function Settings() {
               </View>
             </Card>
           </FadeIn>
+
+          <Section title="WORKSPACE" delay={80}>
+            <Row icon="user" title="Shared with me" subtitle="Photo folders other people shared with you" onPress={() => router.push("/shared")} />
+            {profile?.features?.projects !== false ? <Row icon="folder" title="Projects" subtitle="Notes, variables and deploy status for each project" onPress={() => router.push("/projects")} /> : null}
+            {profile?.features?.servers !== false ? <Row icon="globe" title="Servers" subtitle="Render services: status, deploys, restart" onPress={() => router.push("/servers")} /> : null}
+            {profile?.features?.cron !== false ? <Row icon="pulse" title="Monitoring" subtitle="Health checks and incidents" onPress={() => router.push("/monitoring")} /> : null}
+            <Row icon="repeat" title="GitHub" subtitle="Accounts used to read your repositories" onPress={() => router.push("/github")} />
+            {profile?.features?.photos !== false ? <Row icon="cloud" title="Photo backup and storage" subtitle="Google accounts, camera-roll backup, share links" onPress={() => router.push("/photo-backup")} /> : null}
+            {profile?.features?.photos !== false ? <Row icon="user" title="People" subtitle="Photos grouped by face, on this phone only" onPress={() => router.push("/people")} /> : null}
+            {profile?.features?.photos !== false ? <Row icon="grid" title="Photo folders" subtitle="Folders mirrored in Google Drive" onPress={() => router.push("/photo-folders")} /> : null}
+            {profile?.features?.photos !== false ? <Row icon="image" title="Albums" subtitle="Collections across your accounts" onPress={() => router.push("/albums")} /> : null}
+            {profile?.isAdmin ? <Row icon="settings" title="Server URLs" subtitle="Backend addresses and environment sync" onPress={() => router.push("/server-urls")} /> : null}
+          </Section>
 
           <Section title="SECURITY" delay={100}>
             <Row
@@ -241,7 +254,7 @@ export default function Settings() {
 
           <Section title="APPEARANCE" delay={140}>
             <View>
-              <Row icon={theme.mode === "dark" ? "moon" : "sun"} title="Theme" subtitle="Aurora dark, soft light, or follow your phone" right={null} />
+              <Row icon={theme.mode === "dark" ? "moon" : "sun"} title="Theme" subtitle="Dark, light, or follow your phone" right={null} />
               <View style={styles.chips}>
                 {["system", "dark", "light"].map((p) => <Chip key={p} label={p[0].toUpperCase() + p.slice(1)} active={preference === p} onPress={() => setPreference(p)} />)}
               </View>

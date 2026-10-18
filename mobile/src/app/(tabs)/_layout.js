@@ -6,8 +6,8 @@ import Icon from "../../components/Icon";
 import { Bounce, tap } from "../../components/ui";
 import { useTheme } from "../../lib/theme";
 
-const ICONS = { index: "vault", health: "pulse", generator: "wand", settings: "settings" };
-const LABELS = { index: "Vault", health: "Health", generator: "Generate", settings: "Settings" };
+const ICONS = { index: "vault", photos: "image", health: "pulse", generator: "wand", settings: "settings" };
+const LABELS = { index: "Vault", photos: "Photos", health: "Health", generator: "Generate", settings: "Settings" };
 
 /** Docked bottom tab bar with a centre "add" button. */
 function VaultTabBar({ state, navigation }) {
@@ -56,6 +56,7 @@ export default function TabsLayout() {
       screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: theme.bg } }}
     >
       <Tabs.Screen name="index" />
+      <Tabs.Screen name="photos" />
       <Tabs.Screen name="health" />
       <Tabs.Screen name="generator" />
       <Tabs.Screen name="settings" />

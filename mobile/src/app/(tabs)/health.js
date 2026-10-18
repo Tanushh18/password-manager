@@ -85,7 +85,7 @@ export default function Health() {
             <FadeIn delay={160}>
               <Card style={{ marginTop: 16, alignItems: "center", gap: 8, paddingVertical: 26 }}>
                 <Icon name="shieldCheck" size={40} color={theme.ok} />
-                <Text style={{ color: theme.heading, fontFamily: theme.font.display, fontSize: 18 }}>All clear ✨</Text>
+                <Text style={{ color: theme.heading, fontFamily: theme.font.display, fontSize: 18 }}>All clear</Text>
                 <Text style={{ color: theme.textMuted, fontFamily: theme.font.body, textAlign: "center" }}>
                   Every password is strong, unique and fresh.
                 </Text>
@@ -145,7 +145,7 @@ export default function Health() {
                 "Turn on biometric unlock in Settings.",
               ].map((t) => (
                 <View key={t} style={{ flexDirection: "row", gap: 10, marginBottom: 8 }}>
-                  <Icon name="sparkle" size={16} color={theme.accentSoft} />
+                  <Icon name="shieldCheck" size={16} color={theme.accentSoft} />
                   <Text style={{ flex: 1, color: theme.textMuted, fontFamily: theme.font.body }}>{t}</Text>
                 </View>
               ))}

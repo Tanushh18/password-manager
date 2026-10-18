@@ -57,7 +57,7 @@ export default function Editor() {
         toast("Updated and re-encrypted 🔐");
       } else {
         await addItem(form);
-        toast("Encrypted and saved ✨");
+        toast("Encrypted and saved");
       }
       close();
     } catch (e) {

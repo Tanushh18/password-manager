@@ -43,7 +43,7 @@ export function ToastProvider({ children }) {
         >
           <View style={[styles.toast, { backgroundColor: theme.surfaceSolid, borderColor: alpha(color, 0.5), shadowColor: color }]}>
             <View style={[styles.icon, { backgroundColor: alpha(color, 0.18) }]}>
-              <Icon name={toast.type === "error" ? "alert" : toast.type === "info" ? "sparkle" : "check"} size={16} color={color} strokeWidth={2.2} />
+              <Icon name={toast.type === "error" ? "alert" : toast.type === "info" ? "clock" : "check"} size={16} color={color} strokeWidth={2.2} />
             </View>
             <Text style={{ flex: 1, color: theme.text, fontFamily: theme.font.bodyMedium, fontSize: 14 }}>{toast.message}</Text>
           </View>

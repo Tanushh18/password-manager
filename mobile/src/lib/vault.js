@@ -30,7 +30,7 @@ const K = {
   prefs: "aurelia_prefs",
 };
 const DEFAULT_PREFS = { autoLock: 0.5, icons: false, autofill: false, autofillBiometric: true }; // minutes; -1 = never
-const BIO_OPTIONS = { promptMessage: "Unlock Aurelia" };
+const BIO_OPTIONS = { promptMessage: "Unlock Stashr" };
 
 const VaultContext = createContext(null);
 
