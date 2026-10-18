@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "com.tanush.stashr.com",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#31AAA9"
