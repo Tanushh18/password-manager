@@ -12,6 +12,7 @@ const {
 } = require("./helpers");
 
 const registry = require("./registry");
+const { resolveFeatures } = require("../utils/features");
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, skipSuccessful: true, message: "Too many attempts. Please wait a few minutes and try again." });
 
@@ -123,7 +124,7 @@ router.get("/authenticate", authenticate, async (req, res) =>
 {
     res.set("Cache-Control", "no-store");
     const dataKey = await req.rootUser.getDataKey();
-    res.json({ ...req.rootUser.toPublic(dataKey), isAdmin: registry.isAdminUser(req.rootUser) });
+    res.json({ ...req.rootUser.toPublic(dataKey), isAdmin: registry.isAdminUser(req.rootUser), features: resolveFeatures(req.rootUser.email, req.rootUser.featureOverrides) });
 });
 
 router.get("/logout", async (req, res) =>
@@ -343,6 +344,12 @@ router.use(require("./github"));
 router.use(require("./account"));
 router.use(require("./extension"));
 router.use(require("./telegram"));
+router.use(require("./photoCloud"));
+router.use(require("./photoUpload"));
+router.use(require("./photoWorker"));
+router.use(require("./admin"));
+router.use(require("./photoImport"));
+router.use(require("./photoFolderShares"));
 router.use(require("./passwordReset"));
 router.use(registry);
 
