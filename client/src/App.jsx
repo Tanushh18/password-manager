@@ -16,6 +16,9 @@ import Settings from "./Pages/Settings/Settings";
 import Servers from "./Pages/Servers/Servers";
 import Security from "./Pages/Security/Security";
 // Loaded on demand: operations screens are large and only needed on their routes.
+const PhotoImport = lazy(() => import("./Pages/PhotoCloud/PhotoImport"));
+const SharedFolder = lazy(() => import("./Pages/PhotoCloud/SharedFolder"));
+const Admin = lazy(() => import("./Pages/Admin/Admin"));
 const Services = lazy(() => import("./Pages/Services/Services"));
 const ServiceMap = lazy(() => import("./Pages/Services/ServiceMap"));
 const Cron = lazy(() => import("./Pages/Cron/Cron"));
@@ -23,6 +26,8 @@ const Forgot = lazy(() => import("./Pages/Forgot/Forgot"));
 const RenderDashboard = lazy(() => import("./Pages/Render/RenderDashboard"));
 import Privacy from "./Pages/Privacy/Privacy";
 import Logout from "./Pages/Logout/Logout";
+import PhotoCloud from "./Pages/PhotoCloud/PhotoCloud";
+import PhotoShare from "./Pages/PhotoCloud/PhotoShare";
 import Navbar from "./Components/Navbar/Navbar";
 import InstallPrompt from "./Components/InstallPrompt/InstallPrompt";
 import Splash from "./Components/Splash/Splash";
@@ -36,6 +41,11 @@ function RequireVault({ children }) {
   if (status === "checking") return <Splash {...(waking ? WAKING : {})} />;
   if (status === "signedOut") return <Navigate to="/signin" replace state={{ from: location.pathname }} />;
   return children;
+}
+
+function RequireFeature({ feature, children }) {
+  const { profile } = useVault();
+  return profile?.features?.[feature] ? children : <Navigate to="/passwords" replace />;
 }
 
 function RequireAdmin({ children }) {
@@ -84,6 +94,11 @@ export default function App() {
           <Route path="/forgot-password" element={<GuestOnly><Suspense fallback={<Splash />}><Forgot /></Suspense></GuestOnly>} />
           <Route path="/signup" element={<GuestOnly><Signup /></GuestOnly>} />
           <Route path="/passwords" element={<RequireVault><Vault /></RequireVault>} />
+          <Route path="/photos" element={<RequireVault><RequireFeature feature="photos"><PhotoCloud /></RequireFeature></RequireVault>} />
+          <Route path="/photos/import" element={<RequireVault><RequireFeature feature="photoImport"><Suspense fallback={<Splash />}><PhotoImport /></Suspense></RequireFeature></RequireVault>} />
+          <Route path="/photos/shared/:id" element={<RequireVault><RequireFeature feature="photos"><Suspense fallback={<Splash />}><SharedFolder /></Suspense></RequireFeature></RequireVault>} />
+          <Route path="/admin" element={<RequireVault><RequireFeature feature="adminPanel"><Suspense fallback={<Splash />}><Admin /></Suspense></RequireFeature></RequireVault>} />
+          <Route path="/share/photos/:token" element={<PhotoShare />} />
           <Route path="/projects" element={<RequireVault><Projects /></RequireVault>} />
           <Route path="/projects/new" element={<RequireVault><ProjectForm /></RequireVault>} />
           <Route path="/projects/deploy" element={<RequireVault><ProjectDeploy /></RequireVault>} />

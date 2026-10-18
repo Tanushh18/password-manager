@@ -197,6 +197,37 @@ export const getRegistry = () => instance.get("/registry");
 export const saveRegistry = (app, urls) => instance.put(`/registry/${app}`, { urls });
 export const checkServer = (url) => instance.post("/registry/check", { url }, { timeout: 30000 });
 
+/* ── Personal AI Photo Cloud ── */
+export const getPhotoCloudDashboard = () => instance.get("/photo-cloud/dashboard", { timeout: 30000 }).then((r) => r.data);
+export const connectPhotoGoogleAccount = (data) => instance.post("/photo-cloud/connections", data).then((r) => r.data);
+export const startPhotoGoogleOAuth = (label) => instance.get("/photo-cloud/google/start", { params: { label } }).then((r) => r.data);
+export const getBlob = (path) => instance.get(path, { responseType: "blob", timeout: 60000 }).then((r) => r.data);
+export const getAdminUsers = (q = "") => instance.get("/admin/users", { params: { q, limit: 300 } }).then((r) => r.data);
+export const setUserFeature = (id, key, enabled) => instance.put(`/admin/users/${encodeURIComponent(id)}/features`, { key, enabled }).then((r) => r.data);
+export const listPhotoImports = () => instance.get("/photo-import/batches").then((r) => r.data);
+export const createPhotoImport = (data) => instance.post("/photo-import/batches", data, { timeout: 60000 }).then((r) => r.data);
+export const getPhotoImport = (id) => instance.get(`/photo-import/batches/${encodeURIComponent(id)}`, { timeout: 30000 }).then((r) => r.data);
+export const photoImportAction = (id, action) => instance.post(`/photo-import/batches/${encodeURIComponent(id)}/${action}`, {}, { timeout: 60000 }).then((r) => r.data);
+export const deletePhotoImport = (id) => instance.delete(`/photo-import/batches/${encodeURIComponent(id)}`).then((r) => r.data);
+export const createFolderShare = (data) => instance.post("/photo-cloud/folder-shares", data).then((r) => r.data);
+export const listFolderShares = () => instance.get("/photo-cloud/folder-shares").then((r) => r.data);
+export const revokeFolderShare = (id) => instance.delete(`/photo-cloud/folder-shares/${encodeURIComponent(id)}`).then((r) => r.data);
+export const getSharedWithMe = () => instance.get("/photo-cloud/shared-with-me").then((r) => r.data);
+export const getSharedMedia = (id) => instance.get(`/photo-cloud/shared/${encodeURIComponent(id)}/media`, { timeout: 30000 }).then((r) => r.data);
+export const importExistingPhotos = () => instance.post("/photo-cloud/import-existing", {}, { timeout: 180000 }).then((r) => r.data);
+export const createPhotoFolder = (name, parentId) => instance.post("/photo-cloud/folders", { name, parentId }).then((r) => r.data);
+export const deletePhotoFolder = (id) => instance.delete(`/photo-cloud/folders/${encodeURIComponent(id)}`).then((r) => r.data);
+export const syncPhotoGoogleAccount = (id) => instance.post(`/photo-cloud/connections/${encodeURIComponent(id)}/sync`).then((r) => r.data);
+export const updatePhotoConnection = (id, data) => instance.put(`/photo-cloud/connections/${encodeURIComponent(id)}`, data).then((r) => r.data);
+export const disconnectPhotoConnection = (id) => instance.delete(`/photo-cloud/connections/${encodeURIComponent(id)}`).then((r) => r.data);
+export const exportPhotoManifest = () => instance.get("/photo-cloud/export").then((r) => r.data);
+export const savePhotoRoutingPolicy = (data) => instance.put("/photo-cloud/routing-policy", data).then((r) => r.data);
+export const createPhotoBackupJob = (data) => instance.post("/photo-cloud/backup/jobs", data).then((r) => r.data);
+export const createPhotoShare = (data) => instance.post("/photo-cloud/shares", data).then((r) => r.data);
+export const getPhotoShares = () => instance.get("/photo-cloud/shares").then((r) => r.data);
+export const revokePhotoShare = (id) => instance.delete(`/photo-cloud/shares/${encodeURIComponent(id)}`).then((r) => r.data);
+export const getPublicPhotoShare = (token) => instance.get(`/public/photo-cloud/shares/${encodeURIComponent(token)}`, { withCredentials: false }).then((r) => r.data);
+
 /* ── Auth ── */
 export const checkAuthenticated = () => instance.get("/authenticate");
 export const loginUser = (data) => instance.post("/login", data);
@@ -279,6 +310,7 @@ export const pushProjectRenderEnv = (projectId, options = {}) => instance.post("
 /* Automatic upkeep: live project health/drift (auto-links to Render first) and Servers-tab sync. */
 export const getProjectStatuses = ({ id, refresh } = {}) => instance.get("/render/projects/status", { params: { ...(id ? { id } : {}), ...(refresh ? { refresh: 1 } : {}) }, timeout: 30000 }).then((r) => r.data);
 export const getRegistrySync = ({ refresh } = {}) => instance.get("/render/registry-sync", { params: refresh ? { refresh: 1 } : {}, timeout: 30000 }).then((r) => r.data);
+export const syncRegistryEnv = (app, options = {}) => instance.post("/render/registry-env-sync/" + encodeURIComponent(app), options, { timeout: 90000 }).then((r) => r.data);
 export const setRegistryAutoSync = (app, autoSync) => instance.put("/render/registry-sync/" + encodeURIComponent(app), { autoSync }).then((r) => r.data);
 
 /* GitHub connections for the Projects page (tokens stay encrypted server-side). */

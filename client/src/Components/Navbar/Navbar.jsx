@@ -45,10 +45,11 @@ function Navbar() {
     ? [
         { to: "/", label: "Home" },
         { to: "/passwords", label: "Passwords" },
-        { to: "/projects", label: "Projects" },
-        { to: "/render", label: "Servers" },
-        { to: "/services", label: "Services" },
-        { to: "/cron", label: "Cron" },
+        ...(profile?.features?.photos !== false ? [{ to: "/photos", label: "Photos" }] : []),
+        ...(profile?.features?.projects !== false ? [{ to: "/projects", label: "Projects" }] : []),
+        ...(profile?.features?.servers !== false ? [{ to: "/render", label: "Servers" }] : []),
+        ...(profile?.features?.services !== false ? [{ to: "/services", label: "Services" }] : []),
+        ...(profile?.features?.cron !== false ? [{ to: "/cron", label: "Cron" }] : []),
       ]
     : [
         { to: "/", label: "Home" },
@@ -56,7 +57,7 @@ function Navbar() {
       ];
   const more = isAuthenticated
     ? [
-        ...(profile?.isAdmin ? [{ to: "/servers", label: "Server URLs" }, { to: "/security", label: "Security scans" }] : []),
+        ...(profile?.isAdmin ? [{ to: "/admin", label: "Admin panel" }, { to: "/servers", label: "Server URLs" }, { to: "/security", label: "Security scans" }] : []),
         { to: "/settings", label: "Settings" },
         { to: "/logout", label: "Sign out" },
       ]
