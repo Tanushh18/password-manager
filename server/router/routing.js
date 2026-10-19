@@ -340,6 +340,7 @@ router.use(require("./vault"));
 router.use(require("./projects"));
 router.use(require("./render"));
 router.use(require("./github"));
+router.use(require("./hosts"));
 router.use(require("./account"));
 router.use(require("./extension"));
 router.use(require("./telegram"));

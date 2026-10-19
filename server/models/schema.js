@@ -75,6 +75,9 @@ const schema = new mongoose.Schema({
     // GitHub connections for the Projects page; tokens are sealed with the account data key.
     githubAccounts: [entrySchema],
 
+    // Vercel / Netlify / Railway / Cloudflare tokens for deploying from Projects; sealed with the account data key.
+    hostAccounts: [entrySchema],
+
     // Encrypted audit trail for Render operations; never stores environment-variable values.
     renderAudit: [entrySchema],
 

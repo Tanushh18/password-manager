@@ -326,3 +326,9 @@ export const getLiveDashboard = ({ refresh, rescan } = {}) => instance.get("/ren
 export const getUsageNeeds = () => instance.get("/render/usage-needs").then((r) => r.data);
 export const getUsageSettings = () => instance.get("/render/usage-settings").then((r) => r.data);
 export const saveUsageSettings = (body) => instance.put("/render/usage-settings", body).then((r) => r.data);
+
+/* Other hosting providers (Vercel, Netlify, Railway, Cloudflare Pages): connections and "deploy this repo + branch". */
+export const getHostAccounts = () => instance.get("/hosts/accounts").then((r) => r.data);
+export const connectHostAccount = (body) => instance.post("/hosts/accounts", body, { timeout: 45000 }).then((r) => r.data);
+export const deleteHostAccount = (id) => instance.delete("/hosts/accounts/" + encodeURIComponent(id)).then((r) => r.data);
+export const deployToHost = (body) => instance.post("/hosts/deploy", body, { timeout: 180000 }).then((r) => r.data);

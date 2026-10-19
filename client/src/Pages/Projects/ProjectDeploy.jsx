@@ -3,10 +3,12 @@ import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import Field from "../../Components/Field/Field";
 import GithubConnectModal from "../../Components/Project/GithubConnectModal";
+import HostConnectModal from "../../Components/Project/HostConnectModal";
+import { HOSTS, hostById } from "../../lib/hostGuides";
 import { Arrow, Check, Copy, Plus, Trash, Alert } from "../../Components/Icons/Icons";
 import { useVault } from "../../state/vault";
 import { parseEnvBlock } from "../../lib/projectItems";
-import { checkRepoCode, createRepo, deployProject, getGithubAccounts, getRenderAccounts, getRenderOwners } from "../../api/client";
+import { checkRepoCode, createRepo, deployProject, deployToHost, getGithubAccounts, getHostAccounts, getRenderAccounts, getRenderOwners } from "../../api/client";
 import "../Passwords/Passwords.css";
 import "./Projects.css";
 
@@ -64,6 +66,9 @@ export default function ProjectDeploy() {
   const [render, setRender] = useState(null);
   const [owners, setOwners] = useState([]);
   const [connectOpen, setConnectOpen] = useState(false);
+  const [host, setHost] = useState("render"); // render | vercel | netlify | railway | cloudflare
+  const [hostAccounts, setHostAccounts] = useState(null);
+  const [hostModal, setHostModal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
@@ -72,12 +77,16 @@ export default function ProjectDeploy() {
   const [codeState, setCodeState] = useState({ status: "idle" }); // idle | checking | empty | ready | error
   const [wait, setWait] = useState(false);
   const [form, setForm] = useState({
-    name: "", description: "", template: "node", existingRepoUrl: "", branch: "", visibility: "public", githubAccountId: "", renderAccountId: "", ownerId: "",
+    name: "", description: "", template: "node", existingRepoUrl: "", branch: "", hostAccountId: "", hostBuild: "", hostOutput: "", visibility: "public", githubAccountId: "", renderAccountId: "", ownerId: "",
     region: "singapore", runtime: "node", buildCommand: RUNTIMES.node.build, startCommand: RUNTIMES.node.start, envVars: [], useExistingRepo: false
   });
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
 
   const loadGithub = () => getGithubAccounts().then((r) => setGithub(r.accounts || [])).catch(() => setGithub([]));
+  const loadHosts = () => getHostAccounts().then((r) => setHostAccounts(r.accounts || [])).catch(() => setHostAccounts([]));
+  useEffect(() => { void loadHosts(); }, []);
+  const hostChoices = (hostAccounts || []).filter((a) => a.provider === host);
+  useEffect(() => { if (host !== "render" && !hostChoices.some((a) => a.id === form.hostAccountId)) set({ hostAccountId: hostChoices[0]?.id || "" }); }, [host, hostAccounts]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { void loadGithub(); getRenderAccounts().then((r) => setRender(r.accounts || [])).catch(() => setRender([])); }, []);
 
   const writable = useMemo(() => (github || []).filter((a) => a.valid !== false && a.write), [github]);
@@ -93,7 +102,7 @@ export default function ProjectDeploy() {
   const ownCode = form.template === "empty" || form.template === "existing";
   const isStatic = Boolean(RUNTIMES[form.runtime]?.isStatic);
   const repoName = slug(form.name);
-  const ready = form.name.trim() && repoName && form.githubAccountId && form.renderAccountId && (form.template !== "existing" || form.existingRepoUrl.trim()) && (owners.length < 2 || form.ownerId);
+  const ready = form.name.trim() && repoName && form.githubAccountId && (host === "render" ? form.renderAccountId && (owners.length < 2 || form.ownerId) : form.hostAccountId) && (form.template !== "existing" || form.existingRepoUrl.trim());
 
   const pickTemplate = (template) => {
     const preset = TEMPLATE_PRESET[template];
@@ -155,13 +164,20 @@ export default function ProjectDeploy() {
     if (!repo || busy || codeState.status !== "ready") return;
     setBusy(true); setError(""); setResult(null);
     try {
+      if (host !== "render") {
+        const data = await deployToHost({ name: form.name, description: form.description, repoUrl: repo.url, branch: form.branch || codeState.branch || "", githubAccountId: form.githubAccountId, hostAccountId: form.hostAccountId, envVars: form.envVars, buildCommand: form.hostBuild, outputDir: form.hostOutput });
+        setResult({ ok: true, host: data.host, steps: [{ step: "host", status: "done", detail: "Deployed " + data.repo.owner + "/" + data.repo.repo + " (" + data.repo.branch + ") to " + data.host }], repo: data.repo, service: data.service, projectId: data.projectId, firstDeploy: "started", hostNote: data.note });
+        void refreshProfile();
+        toast.success("Project created and deploying on " + data.host + ".");
+        return;
+      }
       const data = await deployProject({ ...form, repoName, template: "existing", useExistingRepo: true, existingRepoUrl: repo.url, branch: form.branch, visibility: "public" });
       setResult(data);
       void refreshProfile();
       toast.success("Project created and deploying on the free plan.");
     } catch (e) {
       const data = e?.response?.data;
-      if (data?.steps) setResult(data); else setError(errorOf(e, "Could not deploy the project."));
+      if (data?.steps) setResult(data); else if (host !== "render" && data?.error) setError(data.error); else setError(errorOf(e, "Could not deploy the project."));
     } finally { setBusy(false); }
   };
 
@@ -202,6 +218,7 @@ export default function ProjectDeploy() {
                 <p className="field__note">
                   {result.firstDeploy === "waiting-for-code"
                     ? "Render is waiting for your code. The first git push below triggers the first deploy automatically."
+                    : result.host ? "The first deploy is running on " + result.host + ". " + (result.hostNote || "")
                     : "The first deploy is running on Render (free instances take a few minutes to build). Stashr will show its health on the project page."}
                 </p>
               </section>
@@ -280,7 +297,34 @@ export default function ProjectDeploy() {
           </fieldset>
 
           <section className="card dp-section">
-            <h2>3 · Render</h2>
+            <h2>3 · Hosting</h2>
+            <div className="dp-templates" role="group" aria-label="Hosting provider">
+              <button type="button" className="dp-template" aria-pressed={host === "render"} onClick={() => setHost("render")}><strong>Render</strong><small>Servers and static sites, free plan.</small></button>
+              {HOSTS.map((h) => <button key={h.id} type="button" className="dp-template" aria-pressed={host === h.id} onClick={() => setHost(h.id)}><strong>{h.label}</strong><small>{h.best}</small></button>)}
+            </div>
+          </section>
+
+          {host !== "render" ? (
+            <section className="card dp-section">
+              <h2>{hostById(host).label}</h2>
+              <p className="field__note">Deploys the repository above (and the branch you pick after “Check repository”) to {hostById(host).label}. Your env vars below are sent to it as well.</p>
+              <div className="dp-grid">
+                <div className="field">
+                  <label className="field__label" htmlFor="dp-host">{hostById(host).label} account</label>
+                  <select id="dp-host" className="input" value={form.hostAccountId} onChange={(e) => set({ hostAccountId: e.target.value })} disabled={!hostChoices.length}>
+                    {!hostChoices.length ? <option value="">{hostAccounts ? "No " + hostById(host).label + " account connected" : "Loading…"}</option> : null}
+                    {hostChoices.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+                <Field id="dp-hbuild" label="Build command (optional)" placeholder="auto-detected" value={form.hostBuild} onChange={(e) => set({ hostBuild: e.target.value })} autoComplete="off" spellCheck="false" />
+                <Field id="dp-hout" label="Output directory (optional)" placeholder="auto-detected" value={form.hostOutput} onChange={(e) => set({ hostOutput: e.target.value })} autoComplete="off" spellCheck="false" />
+              </div>
+              <div className="gh-panel__row"><button type="button" className="btn btn--ghost btn--sm" onClick={() => setHostModal(true)}>{hostChoices.length ? "Manage " : "Connect "}{hostById(host).label}</button></div>
+              {!hostChoices.length ? <p className="field__note">No {hostById(host).label} token yet. Press Connect for the step-by-step way to get one.</p> : null}
+            </section>
+          ) : (
+          <section className="card dp-section">
+            <h2>Render</h2>
             <div className="dp-free"><Check size={16} /><span><strong>Free plan only.</strong> Stashr always creates the service on Render’s free plan; there is no option to choose a paid one. Free services sleep after about 15 minutes without traffic and wake on the next request.</span></div>
             <div className="dp-grid">
               <div className="field"><label className="field__label" htmlFor="dp-runtime">Framework / runtime</label><select id="dp-runtime" className="input" value={form.runtime} onChange={(e) => pickRuntime(e.target.value)}>{Object.entries(RUNTIMES).map(([k, r]) => <option key={k} value={k}>{r.label}</option>)}</select></div>
@@ -307,9 +351,11 @@ export default function ProjectDeploy() {
             </div>
           </section>
 
+          )}
+
           <section className="card dp-section">
             <h2>4 · Environment variables</h2>
-            <p className="field__note">Sent straight to Render and saved, encrypted, in the Stashr project.</p>
+            <p className="field__note">Sent straight to the host and saved, encrypted, in the Stashr project.</p>
             <div className="dp-env">
               {form.envVars.map((row, i) => (
                 <div key={i} className="dp-env-row">
@@ -358,7 +404,7 @@ export default function ProjectDeploy() {
               ) : null}
               <div className="gh-panel__row">
                 <button type="button" className="btn btn--ghost btn--sm" disabled={codeState.status === "checking"} onClick={() => { setWait(true); void checkCode(repo.url); }}>Check again</button>
-                <button type="button" className="btn btn--primary btn--lg" disabled={busy || codeState.status !== "ready" || !ready} onClick={() => void deploy()}>{busy ? <><span className="spinner" /> Deploying… this can take up to a minute</> : "Deploy to Render"}</button>
+                <button type="button" className="btn btn--primary btn--lg" disabled={busy || codeState.status !== "ready" || !ready} onClick={() => void deploy()}>{busy ? <><span className="spinner" /> Deploying… this can take up to a minute</> : "Deploy to " + (host === "render" ? "Render" : hostById(host).label)}</button>
               </div>
             </section>
           ) : (
@@ -369,6 +415,7 @@ export default function ProjectDeploy() {
           )}
         </form>
       </div>
+      <HostConnectModal open={hostModal} initial={host === "render" ? "vercel" : host} onClose={() => setHostModal(false)} onChange={(a) => setHostAccounts(a)} />
       <GithubConnectModal open={connectOpen} onClose={() => setConnectOpen(false)} onChange={() => void loadGithub()} />
     </div>
   );
