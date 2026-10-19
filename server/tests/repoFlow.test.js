@@ -76,6 +76,24 @@ describe("guided flow: has the code arrived?", () =>
         expect(github.calls[1].path).toContain("sha=trunk");
     });
 
+    test("a chosen branch is checked and the branch list comes back", async () =>
+    {
+        const github = fakeGithub((m, p) => (p.includes("/branches") ? ok([{ name: "main" }, { name: "feature-x" }]) : p.includes("/commits") ? ok([{ sha: "abc" }]) : ok({ private: false, default_branch: "main" })));
+        const r = await checkRepo({ github, owner: "o", repo: "r", branch: "feature-x", withBranches: true });
+        expect(r.branch).toBe("feature-x");
+        expect(r.default).toBe("main");
+        expect(r.branches).toEqual(["main", "feature-x"]);
+        expect(github.calls[1].path).toContain("sha=feature-x");
+    });
+
+    test("a branch that does not exist is an error", async () =>
+    {
+        const github = fakeGithub((m, p) => (p.includes("/commits") ? fail(404) : ok({ private: false, default_branch: "main" })));
+        const r = await checkRepo({ github, owner: "o", repo: "r", branch: "nope" });
+        expect(r.ok).toBe(false);
+        expect(r.error).toContain("nope");
+    });
+
     test("private and missing repositories are rejected", async () =>
     {
         expect((await checkRepo({ github: fakeGithub(() => ok({ private: true })), owner: "o", repo: "r" })).error).toBe(PRIVATE_ERROR);

@@ -24,6 +24,9 @@ function validateProvisionInput(body) {
   const existingRepoUrl = template === "existing" ? clean(b.existingRepoUrl, 300) : "";
   if (template === "existing" && !existingRepoUrl) return { error: "Enter the URL of the existing repository." };
 
+  const branch = template === "existing" ? clean(b.branch, 200) : "";
+  if (branch && !/^(?!-)(?!.*\.\.)[A-Za-z0-9._\/-]{1,200}$/.test(branch)) return { error: "Choose a valid branch." };
+
   const visibility = b.visibility === "public" ? "public" : "private";
   const region = clean(b.region, 20) || "oregon";
   if (!REGIONS.includes(region)) return { error: "Choose a supported Render region." };
@@ -54,7 +57,7 @@ function validateProvisionInput(body) {
   return {
     value: {
       name, repoName, description: clean(b.description, 300), template, visibility, region, runtime, buildCommand, startCommand,
-      envVars, existingRepoUrl, useExistingRepo: b.useExistingRepo === true || template === "existing",
+      envVars, existingRepoUrl, branch, useExistingRepo: b.useExistingRepo === true || template === "existing",
       githubAccountId: clean(b.githubAccountId, 40), renderAccountId: clean(b.renderAccountId, 40), ownerId: clean(b.ownerId, 160)
     }
   };

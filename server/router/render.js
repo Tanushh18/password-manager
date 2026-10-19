@@ -1033,7 +1033,9 @@ router.post("/render/repo/check", async (req, res) => {
   try {
     const github = await githubFor(req, res, req.body?.githubAccountId);
     if (!github) return undefined;
-    const result = await checkRepo({ github, owner: target.owner, repo: target.repo });
+    const branch = typeof req.body?.branch === "string" ? req.body.branch.trim() : "";
+    if (branch && !BRANCH_RE.test(branch)) return res.status(400).json({ ok: false, error: "Choose a valid branch." });
+    const result = await checkRepo({ github, owner: target.owner, repo: target.repo, branch, withBranches: true });
     res.set("Cache-Control", "no-store");
     return res.status(result.ok ? 200 : (result.status === 404 ? 404 : 422)).json(result);
   } catch (error) {

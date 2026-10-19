@@ -37,8 +37,9 @@ async function provision({ input, github, render, ownerId: chosenOwner, saveProj
     const found = await github.send("GET", "/repos/" + encodeURIComponent(target.owner) + "/" + encodeURIComponent(target.repo));
     if (!found.ok) return failure(steps, "github-repo", found.status === 404 ? "Repository not found, or this GitHub token has no access to it." : "Could not read that repository from GitHub.");
     owner = found.body.owner?.login || target.owner; repo = found.body.name || target.repo; branch = found.body.default_branch || "main";
+    if (input.branch) branch = input.branch; // a branch chosen on the form, e.g. to test a feature before it goes live
     if (precheck) {
-      const refused = await precheck({ github, owner, repo });
+      const refused = await precheck({ github, owner, repo, branch: input.branch || "" });
       if (refused) return failure(steps, "github-repo", refused);
     }
     skip(steps, "github-repo", "Using existing repository " + owner + "/" + repo);

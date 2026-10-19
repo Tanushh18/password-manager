@@ -55,21 +55,28 @@ async function createRepo({ input, github }) {
 }
 
 /** { ok, hasCode, branch, private } for a repository, or { ok: false, error }. An empty repository is not an error. */
-async function checkRepo({ github, owner, repo }) {
+async function checkRepo({ github, owner, repo, branch: wanted = "", withBranches = false }) {
   const info = await github.send("GET", "/repos/" + enc(owner) + "/" + enc(repo));
   if (!info.ok) return failure(info.status === 404 ? "Repository not found, or this GitHub token has no access to it." : "Could not read that repository from GitHub.", { status: info.status });
   if (info.body.private) return failure(PRIVATE_ERROR, { status: 422, private: true });
-  const branch = info.body.default_branch || "main";
+  const defaultBranch = info.body.default_branch || "main";
+  const branch = wanted || defaultBranch;
   const commits = await github.send("GET", "/repos/" + enc(owner) + "/" + enc(repo) + "/commits?per_page=1&sha=" + enc(branch));
+  if (wanted && !commits.ok && (commits.status === 404 || commits.status === 422)) return failure("The branch \"" + wanted + "\" does not exist in " + owner + "/" + repo + ".", { status: 404 });
   const hasCode = commits.ok && Array.isArray(commits.body) && commits.body.length > 0;
-  return { ok: true, hasCode, branch, private: false, pushedAt: info.body.pushed_at || "" };
+  const result = { ok: true, hasCode, branch, default: defaultBranch, private: false, pushedAt: info.body.pushed_at || "" };
+  if (withBranches) {
+    const list = await github.send("GET", "/repos/" + enc(owner) + "/" + enc(repo) + "/branches?per_page=100");
+    result.branches = list.ok && Array.isArray(list.body) ? list.body.map((b) => String(b.name)) : [];
+  }
+  return result;
 }
 
 /** `precheck` for provision(): refuse private repositories and repositories that have no code yet. Returns an error string or null. */
-async function repoReadyError({ github, owner, repo }) {
-  const status = await checkRepo({ github, owner, repo });
+async function repoReadyError({ github, owner, repo, branch }) {
+  const status = await checkRepo({ github, owner, repo, branch });
   if (!status.ok) return status.error;
-  if (!status.hasCode) return "No code has been pushed to " + owner + "/" + repo + " yet. Push your code first, then deploy.";
+  if (!status.hasCode) return "No code has been pushed to " + owner + "/" + repo + (branch ? " on " + branch : "") + " yet. Push your code first, then deploy.";
   return null;
 }
 

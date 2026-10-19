@@ -72,7 +72,7 @@ export default function ProjectDeploy() {
   const [codeState, setCodeState] = useState({ status: "idle" }); // idle | checking | empty | ready | error
   const [wait, setWait] = useState(false);
   const [form, setForm] = useState({
-    name: "", description: "", template: "node", existingRepoUrl: "", visibility: "public", githubAccountId: "", renderAccountId: "", ownerId: "",
+    name: "", description: "", template: "node", existingRepoUrl: "", branch: "", visibility: "public", githubAccountId: "", renderAccountId: "", ownerId: "",
     region: "singapore", runtime: "node", buildCommand: RUNTIMES.node.build, startCommand: RUNTIMES.node.start, envVars: [], useExistingRepo: false
   });
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
@@ -134,14 +134,14 @@ export default function ProjectDeploy() {
   };
 
   /* Step 2: has any code arrived in the repository? */
-  const checkCode = useCallback(async (url) => {
-    setCodeState((old) => (old.status === "ready" ? old : { status: "checking" }));
+  const checkCode = useCallback(async (url, branch = form.branch) => {
+    setCodeState((old) => (old.status === "ready" && !branch ? old : { status: "checking", branches: old.branches, default: old.default }));
     try {
-      const data = await checkRepoCode({ githubAccountId: form.githubAccountId, repoUrl: url });
-      setCodeState({ status: data.hasCode ? "ready" : "empty", branch: data.branch });
+      const data = await checkRepoCode({ githubAccountId: form.githubAccountId, repoUrl: url, branch: branch || undefined });
+      setCodeState({ status: data.hasCode ? "ready" : "empty", branch: data.branch, branches: data.branches || [], default: data.default });
       if (data.hasCode) setWait(false);
-    } catch (e) { setCodeState({ status: "error", message: errorOf(e, "Could not check the repository.") }); setWait(false); }
-  }, [form.githubAccountId]);
+    } catch (e) { setCodeState((old) => ({ status: "error", message: errorOf(e, "Could not check the repository."), branches: old.branches, default: old.default })); setWait(false); }
+  }, [form.githubAccountId, form.branch]);
 
   // While the repository is empty, look again every few seconds so the Deploy button unlocks by itself.
   useEffect(() => {
@@ -155,7 +155,7 @@ export default function ProjectDeploy() {
     if (!repo || busy || codeState.status !== "ready") return;
     setBusy(true); setError(""); setResult(null);
     try {
-      const data = await deployProject({ ...form, repoName, template: "existing", useExistingRepo: true, existingRepoUrl: repo.url, visibility: "public" });
+      const data = await deployProject({ ...form, repoName, template: "existing", useExistingRepo: true, existingRepoUrl: repo.url, branch: form.branch, visibility: "public" });
       setResult(data);
       void refreshProfile();
       toast.success("Project created and deploying on the free plan.");
@@ -218,7 +218,7 @@ export default function ProjectDeploy() {
                   </div>
                 </section>
               ) : null}
-              <div className="gh-panel__row"><Link className="btn btn--ghost" to="/projects/deploy" onClick={() => { setResult(null); setRepo(null); setCodeState({ status: "idle" }); set({ name: "", description: "", envVars: [], existingRepoUrl: "" }); }}>Create another</Link></div>
+              <div className="gh-panel__row"><Link className="btn btn--ghost" to="/projects/deploy" onClick={() => { setResult(null); setRepo(null); setCodeState({ status: "idle" }); set({ name: "", description: "", envVars: [], existingRepoUrl: "", branch: "" }); }}>Create another</Link></div>
             </>
           ) : null}
         </div>
@@ -248,7 +248,7 @@ export default function ProjectDeploy() {
                 <button key={id} type="button" className="dp-template" aria-pressed={form.template === id} onClick={() => pickTemplate(id)}><strong>{label}</strong><small>{hint}</small></button>
               ))}
             </div>
-            {form.template === "existing" ? <Field id="dp-existing" label="Existing repository URL" placeholder="https://github.com/you/your-repo" value={form.existingRepoUrl} onChange={(e) => set({ existingRepoUrl: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
+            {form.template === "existing" ? <Field id="dp-existing" label="Existing repository URL" placeholder="https://github.com/you/your-repo" value={form.existingRepoUrl} onChange={(e) => set({ existingRepoUrl: e.target.value, branch: "" })} autoComplete="off" spellCheck="false" hint="Deploying a repo that already has a project? Use a different project name so the new server gets its own name." /> : null}
           </section>
 
           <section className="card dp-section">
@@ -288,7 +288,7 @@ export default function ProjectDeploy() {
               {!RUNTIMES[form.runtime].isStatic && form.runtime !== "docker" ? <Field id="dp-start" label="Start command" value={form.startCommand} onChange={(e) => set({ startCommand: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
             </div>
             {RUNTIMES[form.runtime]?.needsDockerfile ? <p className="field__note">Render builds this from a <code>Dockerfile</code> at the root of the repository. Use it for PHP/Laravel, Java/Spring Boot, .NET and anything else without a native runtime.</p> : null}
-            <p className="field__note">Every push to the repository’s default branch redeploys automatically.</p>
+            <p className="field__note">Every push to the deployed branch redeploys automatically.</p>
             <div className="dp-grid">
               <div className="field">
                 <label className="field__label" htmlFor="dp-render">Render account</label>
@@ -347,6 +347,15 @@ export default function ProjectDeploy() {
                   : codeState.status === "error" ? <><Alert size={15} /> {codeState.message}</>
                   : "No code in the repository yet. This page checks again every few seconds, or press “Check again” after you push."}
               </div>
+              {repo.existing && codeState.branches?.length ? (
+                <div className="field">
+                  <label className="field__label" htmlFor="dp-branch">Branch to deploy</label>
+                  <select id="dp-branch" className="input" value={form.branch || codeState.default || ""} disabled={busy || codeState.status === "checking"} onChange={(e) => { set({ branch: e.target.value }); void checkCode(repo.url, e.target.value); }}>
+                    {codeState.branches.map((b) => <option key={b} value={b}>{b}{b === codeState.default ? " (default)" : ""}</option>)}
+                  </select>
+                  <p className="field__note">Pick a feature branch to test it on its own server before it goes live. Pushes to this branch redeploy it.</p>
+                </div>
+              ) : null}
               <div className="gh-panel__row">
                 <button type="button" className="btn btn--ghost btn--sm" disabled={codeState.status === "checking"} onClick={() => { setWait(true); void checkCode(repo.url); }}>Check again</button>
                 <button type="button" className="btn btn--primary btn--lg" disabled={busy || codeState.status !== "ready" || !ready} onClick={() => void deploy()}>{busy ? <><span className="spinner" /> Deploying… this can take up to a minute</> : "Deploy to Render"}</button>
