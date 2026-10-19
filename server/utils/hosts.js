@@ -197,6 +197,122 @@ const cloudflare = {
   }
 };
 
+
+/* ───────────── Existing sites: list, inspect, redeploy ─────────────
+ * A "site" is { id, name, url, dashboardUrl, repo ("owner/repo" or ""), branch, meta }. `meta` holds ids a provider
+ * needs later (Railway's service and environment). Nothing here returns a token or an environment variable value.
+ */
+const state = (raw) => {
+  const v = String(raw || "").toLowerCase();
+  if (/err|fail|crash|cancel|removed/.test(v)) return "failed";
+  if (/ready|success|live|published/.test(v)) return "live";
+  if (/build|deploy|queue|enqueue|init|active|process|upload|new|pending/.test(v)) return "building";
+  return "unknown";
+};
+const deployOf = (status, at, commit, sha, branch) => ({ status: state(status), raw: String(status || "").slice(0, 40), at: at || null, commit: String(commit || "").split("\n")[0].slice(0, 100), sha: String(sha || "").slice(0, 7), branch: String(branch || "").slice(0, 100) });
+const asAt = (v) => (typeof v === "number" ? new Date(v).toISOString() : v || null);
+const q = (account) => (account.teamId ? "?teamId=" + encodeURIComponent(account.teamId) : "");
+
+vercel.branchDeploy = true;
+vercel.siteOf = (p) => ({ id: String(p.id), name: String(p.name), url: p.targets?.production?.alias?.[0] ? httpsUrl(p.targets.production.alias[0]) : "https://" + p.name + ".vercel.app", dashboardUrl: "https://vercel.com/dashboard", repo: p.link?.org && p.link?.repo ? p.link.org + "/" + p.link.repo : "", branch: String(p.link?.productionBranch || ""), meta: {} });
+vercel.list = async (token, account, http = defaultHttp) => {
+  const res = await http("https://api.vercel.com/v9/projects" + (q(account) ? q(account) + "&" : "?") + "limit=100", { headers: bearer(token) });
+  if (!res.ok) return fail(reason(res, "Could not list your Vercel projects."));
+  return { ok: true, sites: (res.body?.projects || []).map(vercel.siteOf) };
+};
+vercel.inspect = async (token, account, link, http = defaultHttp) => {
+  const id = encodeURIComponent(link.remoteId);
+  const proj = await http("https://api.vercel.com/v9/projects/" + id + q(account), { headers: bearer(token) });
+  if (!proj.ok) return fail(proj.status === 404 ? "That Vercel project no longer exists." : reason(proj, "Could not read the Vercel project."));
+  const dep = await http("https://api.vercel.com/v6/deployments" + (q(account) ? q(account) + "&" : "?") + "projectId=" + id + "&limit=1", { headers: bearer(token) });
+  const d = dep.body?.deployments?.[0];
+  return { ok: true, site: vercel.siteOf(proj.body), latestDeploy: d ? deployOf(d.readyState || d.state, asAt(d.created), d.meta?.githubCommitMessage, d.meta?.githubCommitSha, d.meta?.githubCommitRef) : null };
+};
+vercel.redeploy = async (token, account, link, { branch } = {}, http = defaultHttp) => {
+  const [org, repo] = String(link.repo || "").split("/");
+  if (!org || !repo) return fail("This Vercel project is not linked to a GitHub repository, so it can't be redeployed from here.");
+  const ref = branch || link.branch || "main";
+  const body = { name: link.name, project: link.remoteId, gitSource: { type: "github", org, repo, ref } };
+  if (!branch || branch === link.branch) body.target = "production";
+  const res = await http("https://api.vercel.com/v13/deployments" + (q(account) ? q(account) + "&" : "?") + "forceNew=1", { method: "POST", headers: bearer(token), json: body });
+  return res.ok ? { ok: true, branch: ref } : fail(reason(res, "Vercel could not start the deployment."));
+};
+
+netlify.branchDeploy = false;
+netlify.siteOf = (s) => ({ id: String(s.id), name: String(s.name || s.id), url: httpsUrl(s.ssl_url || s.url), dashboardUrl: s.admin_url || "https://app.netlify.com", repo: /github\.com[:/]/.test(s.build_settings?.repo_url || "") ? String(s.build_settings.repo_url).replace(/^.*github\.com[:/]/, "").replace(/\.git$/, "") : String(s.build_settings?.repo_path || ""), branch: String(s.build_settings?.repo_branch || ""), meta: {} });
+netlify.list = async (token, account, http = defaultHttp) => {
+  const res = await http("https://api.netlify.com/api/v1/sites?per_page=100", { headers: bearer(token) });
+  if (!res.ok || !Array.isArray(res.body)) return fail(reason(res, "Could not list your Netlify sites."));
+  return { ok: true, sites: res.body.map(netlify.siteOf) };
+};
+netlify.inspect = async (token, account, link, http = defaultHttp) => {
+  const id = encodeURIComponent(link.remoteId);
+  const site = await http("https://api.netlify.com/api/v1/sites/" + id, { headers: bearer(token) });
+  if (!site.ok) return fail(site.status === 404 ? "That Netlify site no longer exists." : reason(site, "Could not read the Netlify site."));
+  const dep = await http("https://api.netlify.com/api/v1/sites/" + id + "/deploys?per_page=1", { headers: bearer(token) });
+  const d = Array.isArray(dep.body) ? dep.body[0] : null;
+  return { ok: true, site: netlify.siteOf(site.body), latestDeploy: d ? deployOf(d.state, d.created_at, d.title, d.commit_ref, d.branch) : null };
+};
+netlify.redeploy = async (token, account, link, _opts, http = defaultHttp) => {
+  const res = await http("https://api.netlify.com/api/v1/sites/" + encodeURIComponent(link.remoteId) + "/builds", { method: "POST", headers: bearer(token), json: {} });
+  return res.ok ? { ok: true, branch: link.branch } : fail(reason(res, "Netlify could not start a build."));
+};
+
+railway.branchDeploy = false;
+railway.list = async (token, account, http = defaultHttp) => {
+  const res = await gql(http, token, "query { projects { edges { node { id name services { edges { node { id name } } } environments { edges { node { id name } } } } } } }");
+  if (!res.ok) return fail(reason(res, res.message ? "Railway: " + res.message.slice(0, 160) : "Could not list your Railway projects."));
+  const sites = [];
+  for (const { node: p } of res.data?.projects?.edges || []) {
+    const env = (p.environments?.edges || []).map((e) => e.node).find((e) => /prod/i.test(e.name)) || p.environments?.edges?.[0]?.node;
+    for (const { node: svc } of p.services?.edges || []) {
+      sites.push({ id: p.id + ":" + svc.id, name: p.name + " · " + svc.name, url: "", dashboardUrl: "https://railway.com/project/" + p.id, repo: "", branch: "", meta: { projectId: p.id, serviceId: svc.id, environmentId: env?.id || "" } });
+    }
+  }
+  return { ok: true, sites };
+};
+railway.inspect = async (token, account, link, http = defaultHttp) => {
+  const m = link.meta || {};
+  if (!m.projectId || !m.serviceId || !m.environmentId) return fail("This Railway link is missing its service details. Unlink it and link it again.");
+  const dep = await gql(http, token, "query($i: DeploymentListInput!) { deployments(first: 1, input: $i) { edges { node { id status createdAt staticUrl meta } } } }", { i: { projectId: m.projectId, serviceId: m.serviceId, environmentId: m.environmentId } });
+  if (!dep.ok) return fail(reason(dep, dep.message ? "Railway: " + dep.message.slice(0, 160) : "Could not read the Railway service."));
+  const d = dep.data?.deployments?.edges?.[0]?.node;
+  let url = link.url || "";
+  const dom = await gql(http, token, "query($p: String!, $e: String!, $s: String!) { domains(projectId: $p, environmentId: $e, serviceId: $s) { serviceDomains { domain } } }", { p: m.projectId, e: m.environmentId, s: m.serviceId });
+  const domain = dom.data?.domains?.serviceDomains?.[0]?.domain;
+  if (domain) url = httpsUrl(domain);
+  return { ok: true, site: { id: link.remoteId, name: link.name, url, dashboardUrl: link.dashboardUrl, repo: link.repo, branch: link.branch, meta: m }, latestDeploy: d ? deployOf(d.status, d.createdAt, d.meta?.commitMessage, d.meta?.commitHash, d.meta?.branch) : null, deployId: d?.id || "" };
+};
+railway.redeploy = async (token, account, link, _opts, http = defaultHttp) => {
+  const seen = await railway.inspect(token, account, link, http);
+  if (!seen.ok) return seen;
+  if (!seen.deployId) return fail("Railway has no earlier deployment to redeploy. Push a commit to start one.");
+  const res = await gql(http, token, "mutation($id: String!) { deploymentRedeploy(id: $id) { id } }", { id: seen.deployId });
+  return res.ok ? { ok: true, branch: link.branch } : fail(reason(res, res.message ? "Railway: " + res.message.slice(0, 160) : "Railway could not redeploy."));
+};
+
+cloudflare.branchDeploy = true;
+cloudflare.siteOf = (p) => ({ id: String(p.name), name: String(p.name), url: httpsUrl(p.subdomain || p.name + ".pages.dev"), dashboardUrl: "https://dash.cloudflare.com/?to=/:account/pages/view/" + encodeURIComponent(p.name), repo: p.source?.config?.owner && p.source?.config?.repo_name ? p.source.config.owner + "/" + p.source.config.repo_name : "", branch: String(p.production_branch || ""), meta: {} });
+cloudflare.deployOf = (d) => (d ? deployOf(d.latest_stage?.status === "success" ? "success" : d.latest_stage?.status === "failure" ? "failed" : d.latest_stage?.status || "active", d.created_on, d.deployment_trigger?.metadata?.commit_message, d.deployment_trigger?.metadata?.commit_hash, d.deployment_trigger?.metadata?.branch) : null);
+cloudflare.list = async (token, account, http = defaultHttp) => {
+  if (!account.accountId) return fail("Reconnect this Cloudflare token: its account could not be found.");
+  const res = await http(CF + "/accounts/" + encodeURIComponent(account.accountId) + "/pages/projects", { headers: bearer(token) });
+  if (!res.ok) return fail(cfError(res, "Could not list your Cloudflare Pages projects."));
+  return { ok: true, sites: (res.body?.result || []).map(cloudflare.siteOf) };
+};
+cloudflare.inspect = async (token, account, link, http = defaultHttp) => {
+  const res = await http(CF + "/accounts/" + encodeURIComponent(account.accountId) + "/pages/projects/" + encodeURIComponent(link.remoteId), { headers: bearer(token) });
+  if (!res.ok) return fail(res.status === 404 ? "That Cloudflare Pages project no longer exists." : cfError(res, "Could not read the Cloudflare Pages project."));
+  return { ok: true, site: cloudflare.siteOf(res.body.result), latestDeploy: cloudflare.deployOf(res.body.result.latest_deployment) };
+};
+cloudflare.redeploy = async (token, account, link, { branch } = {}, http = defaultHttp) => {
+  const form = new FormData();
+  const ref = branch || link.branch || "main";
+  form.append("branch", ref);
+  const res = await http(CF + "/accounts/" + encodeURIComponent(account.accountId) + "/pages/projects/" + encodeURIComponent(link.remoteId) + "/deployments", { method: "POST", headers: bearer(token), form });
+  return res.ok ? { ok: true, branch: ref } : fail(cfError(res, "Cloudflare could not start the deployment."));
+};
+
 const PROVIDERS = { vercel, netlify, railway, cloudflare };
 const ids = () => Object.keys(PROVIDERS);
 

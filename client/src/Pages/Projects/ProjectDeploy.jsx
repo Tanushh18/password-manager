@@ -69,6 +69,7 @@ export default function ProjectDeploy() {
   const [host, setHost] = useState("render"); // render | vercel | netlify | railway | cloudflare
   const [hostAccounts, setHostAccounts] = useState(null);
   const [hostModal, setHostModal] = useState(false);
+  const [pre, setPre] = useState({ status: "idle", branches: [], default: "", message: "" }); // branches of the repo URL typed above, loaded before "Check repository"
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
@@ -98,6 +99,19 @@ export default function ProjectDeploy() {
     getRenderOwners(form.renderAccountId).then((r) => { if (live) { setOwners(r.owners || []); set({ ownerId: r.owners?.length === 1 ? r.owners[0].id : "" }); } }).catch(() => { if (live) setOwners([]); });
     return () => { live = false; };
   }, [form.renderAccountId]);
+
+  useEffect(() => {
+    const url = form.existingRepoUrl.trim();
+    if (form.template !== "existing" || !form.githubAccountId || !/github\.com[/:][\w.-]+\/[\w.-]+/i.test(url)) { setPre({ status: "idle", branches: [], default: "", message: "" }); return undefined; }
+    let live = true;
+    setPre((p) => ({ ...p, status: "loading", message: "" }));
+    const timer = setTimeout(() => {
+      checkRepoCode({ githubAccountId: form.githubAccountId, repoUrl: url })
+        .then((d) => { if (live) setPre({ status: "ready", branches: d.branches || [], default: d.default || d.branch || "", message: "" }); })
+        .catch((e) => { if (live) setPre({ status: "error", branches: [], default: "", message: errorOf(e, "Could not read the branches.") }); });
+    }, 600);
+    return () => { live = false; clearTimeout(timer); };
+  }, [form.existingRepoUrl, form.githubAccountId, form.template]);
 
   const ownCode = form.template === "empty" || form.template === "existing";
   const isStatic = Boolean(RUNTIMES[form.runtime]?.isStatic);
@@ -266,6 +280,17 @@ export default function ProjectDeploy() {
               ))}
             </div>
             {form.template === "existing" ? <Field id="dp-existing" label="Existing repository URL" placeholder="https://github.com/you/your-repo" value={form.existingRepoUrl} onChange={(e) => set({ existingRepoUrl: e.target.value, branch: "" })} autoComplete="off" spellCheck="false" hint="Deploying a repo that already has a project? Use a different project name so the new server gets its own name." /> : null}
+            {form.template === "existing" && pre.status !== "idle" ? (
+              <div className="field">
+                <label className="field__label" htmlFor="dp-prebranch">Branch to deploy</label>
+                <select id="dp-prebranch" className="input" value={form.branch || pre.default} disabled={pre.status !== "ready" || locked} onChange={(e) => set({ branch: e.target.value })}>
+                  {pre.status === "loading" ? <option value="">Loading branches…</option> : null}
+                  {pre.status === "error" ? <option value="">Branches unavailable</option> : null}
+                  {pre.branches.map((b) => <option key={b} value={b}>{b}{b === pre.default ? " (default)" : ""}</option>)}
+                </select>
+                <p className="field__note">{pre.status === "error" ? pre.message : "Pick a feature branch to test it on its own server before it goes live."}</p>
+              </div>
+            ) : null}
           </section>
 
           <section className="card dp-section">

@@ -65,3 +65,51 @@ describe("hosting providers", () => {
     expect(http.calls.find((c) => c.url.endsWith("/pages/projects")).json.source.config.production_branch).toBe("feature-x");
   });
 });
+
+describe("hosting providers: existing servers", () => {
+  test("vercel: lists projects, reads status, redeploys a chosen branch", async () => {
+    const proj = { id: "prj_1", name: "web", link: { type: "github", org: "me", repo: "app", productionBranch: "main" } };
+    const http = recorder((url) => (url.includes("/v9/projects?") || url.includes("/v9/projects&") ? ok({ projects: [proj] }) : url.includes("/v9/projects/prj_1") ? ok(proj) : url.includes("/v6/deployments") ? ok({ deployments: [{ readyState: "READY", created: 1700000000000, meta: { githubCommitSha: "abcdef123", githubCommitMessage: "fix", githubCommitRef: "main" } }] }) : ok({ id: "d" })));
+    const list = await PROVIDERS.vercel.list("tok", {}, http);
+    expect(list.sites[0].repo).toBe("me/app");
+    const seen = await PROVIDERS.vercel.inspect("tok", {}, { remoteId: "prj_1" }, http);
+    expect(seen.latestDeploy.status).toBe("live");
+    expect(seen.latestDeploy.sha).toBe("abcdef1");
+    const re = await PROVIDERS.vercel.redeploy("tok", {}, { remoteId: "prj_1", name: "web", repo: "me/app", branch: "main" }, { branch: "feature-x" }, http);
+    expect(re.ok).toBe(true);
+    const post = http.calls.find((c) => c.method === "POST");
+    expect(post.json.gitSource.ref).toBe("feature-x");
+    expect(post.json.target).toBe(undefined);
+  });
+
+  test("netlify: lists sites and triggers a build", async () => {
+    const http = recorder((url) => (url.includes("/sites?per_page") ? ok([{ id: "s1", name: "blog", ssl_url: "https://blog.netlify.app", build_settings: { repo_url: "https://github.com/me/blog", repo_branch: "main" } }]) : ok({})));
+    const list = await PROVIDERS.netlify.list("tok", {}, http);
+    expect(list.sites[0].repo).toBe("me/blog");
+    expect((await PROVIDERS.netlify.redeploy("tok", {}, { remoteId: "s1" }, {}, http)).ok).toBe(true);
+  });
+
+  test("cloudflare: lists Pages projects and deploys another branch", async () => {
+    const http = recorder((url) => (url.endsWith("/pages/projects") ? ok({ result: [{ name: "site", subdomain: "site.pages.dev", production_branch: "main", source: { config: { owner: "me", repo_name: "site" } } }] }) : ok({ result: {} })));
+    const list = await PROVIDERS.cloudflare.list("tok", { accountId: "a1" }, http);
+    expect(list.sites[0].url).toBe("https://site.pages.dev");
+    const re = await PROVIDERS.cloudflare.redeploy("tok", { accountId: "a1" }, { remoteId: "site", branch: "main" }, { branch: "dev" }, http);
+    expect(re.branch).toBe("dev");
+  });
+
+  test("railway: lists services and redeploys the latest deployment", async () => {
+    const http = recorder((url, o) => {
+      const qy = o.json.query;
+      if (qy.includes("projects {")) return ok({ data: { projects: { edges: [{ node: { id: "p1", name: "api", services: { edges: [{ node: { id: "sv1", name: "web" } }] }, environments: { edges: [{ node: { id: "e1", name: "production" } }] } } }] } } });
+      if (qy.includes("deployments(")) return ok({ data: { deployments: { edges: [{ node: { id: "dep1", status: "SUCCESS", createdAt: "2026-01-01T00:00:00Z" } }] } } });
+      if (qy.includes("domains(")) return ok({ data: { domains: { serviceDomains: [{ domain: "api.up.railway.app" }] } } });
+      return ok({ data: { deploymentRedeploy: { id: "dep2" } } });
+    });
+    const list = await PROVIDERS.railway.list("tok", {}, http);
+    expect(list.sites[0].meta).toEqual({ projectId: "p1", serviceId: "sv1", environmentId: "e1" });
+    const link = { remoteId: list.sites[0].id, name: "api", meta: list.sites[0].meta };
+    const seen = await PROVIDERS.railway.inspect("tok", {}, link, http);
+    expect(seen.site.url).toBe("https://api.up.railway.app");
+    expect((await PROVIDERS.railway.redeploy("tok", {}, link, {}, http)).ok).toBe(true);
+  });
+});

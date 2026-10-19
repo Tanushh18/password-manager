@@ -5,6 +5,7 @@ import GithubPanel from "../../Components/Project/GithubPanel";
 import ProjectStatus from "../../Components/Project/ProjectStatus";
 import RenderEnvSync from "../../Components/Project/RenderEnvSync";
 import ProjectDeployments from "../../Components/Project/ProjectDeployments";
+import HostLinks from "../../Components/Project/HostLinks";
 import GithubConnectModal from "../../Components/Project/GithubConnectModal";
 import { STATUS_BADGE } from "../../Components/Project/ProjectCard";
 import { Arrow, Globe, Pencil } from "../../Components/Icons/Icons";
@@ -52,6 +53,8 @@ export default function ProjectDetail() {
         {project.repoUrl ? <GithubPanel repoUrl={project.repoUrl} refreshKey={githubKey} onConnect={() => setGithubOpen(true)} /> : null}
 
         {project.renderServiceId || (project.renderServices || []).length ? <ProjectDeployments project={project} /> : null}
+
+        <HostLinks project={project} />
 
         <RenderEnvSync project={project} />
 

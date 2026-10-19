@@ -5,7 +5,9 @@ const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
 const { PROVIDERS, ids, hostName } = require("../utils/hosts");
 const { parseGithubRepo } = require("../utils/github");
-const { githubSend, loadGithubAccounts } = require("../utils/githubClient");
+const { githubGet, githubSend, loadGithubAccounts } = require("../utils/githubClient");
+const crypto = require("crypto");
+const { mapWithConcurrency } = require("../utils/renderGuards");
 const { groupKey } = require("../utils/projectMerge");
 
 /*
@@ -134,6 +136,125 @@ router.post("/hosts/deploy", deployLimiter, async (req, res) => {
   } catch {
     return res.status(500).json({ ok: false, error: "Could not deploy. Check the host and GitHub for anything already created." });
   }
+});
+
+/* ───────────── Link servers you already have ───────────── */
+const accountOf = (req, dataKey, id) => {
+  const entry = mongoose.isValidObjectId(id) ? (req.rootUser.hostAccounts || []).find((e) => String(e._id) === String(id) && e.enc === "udk") : null;
+  const account = entry ? User.publicEntry(entry, dataKey) : null;
+  return account && PROVIDERS[account.provider] ? account : null;
+};
+const projectOf = async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.projectId)) { res.status(404).json({ error: "Could not find that project." }); return null; }
+  const dataKey = await req.rootUser.getDataKey();
+  const entry = (req.rootUser.projects || []).find((e) => String(e._id) === req.params.projectId && e.enc === "udk");
+  if (!entry) { res.status(404).json({ error: "Could not find that project." }); return null; }
+  const fields = User.publicEntry(entry, dataKey);
+  if (fields.broken) { res.status(422).json({ error: "This project could not be decrypted." }); return null; }
+  return { entry, fields, dataKey };
+};
+const saveLinks = (req, ctx, hostLinks) => User.updateOne({ _id: req.rootUser._id, "projects._id": ctx.entry._id }, { $set: { "projects.$.data": User.sealEntry(ctx.dataKey, { ...ctx.fields, hostLinks }), "projects.$.updatedAt": new Date() } });
+const linksOf = (fields) => (Array.isArray(fields.hostLinks) ? fields.hostLinks : []).filter((l) => l && l.id && l.provider && l.remoteId);
+const publicLink = (l) => ({ id: l.id, provider: l.provider, label: PROVIDERS[l.provider]?.label || l.provider, hostAccountId: l.hostAccountId, name: l.name, url: l.url || "", dashboardUrl: l.dashboardUrl || "", repo: l.repo || "", branch: l.branch || "", branchDeploy: Boolean(PROVIDERS[l.provider]?.branchDeploy) });
+
+/* Sites/projects that already exist on a connected host, for the "link existing" picker. */
+router.get("/hosts/accounts/:id/sites", async (req, res) => {
+  try {
+    const dataKey = await req.rootUser.getDataKey();
+    const account = accountOf(req, dataKey, req.params.id);
+    if (!account) return res.status(404).json({ error: "Connection not found." });
+    const out = await PROVIDERS[account.provider].list(account.token, account);
+    if (!out.ok) return res.status(422).json({ error: out.error });
+    res.set("Cache-Control", "no-store");
+    return res.json({ provider: account.provider, sites: out.sites.slice(0, 300).map((x) => ({ id: x.id, name: x.name, url: x.url, repo: x.repo, branch: x.branch })) });
+  } catch { return res.status(500).json({ error: "Could not list the sites." }); }
+});
+
+router.post("/hosts/projects/:projectId/links", async (req, res) => {
+  try {
+    const ctx = await projectOf(req, res);
+    if (!ctx) return undefined;
+    const account = accountOf(req, ctx.dataKey, text(req.body?.hostAccountId, 40));
+    if (!account) return res.status(400).json({ error: "Choose a connected hosting account." });
+    const remoteId = text(req.body?.remoteId, 300);
+    const found = await PROVIDERS[account.provider].list(account.token, account);
+    if (!found.ok) return res.status(422).json({ error: found.error });
+    const site = found.sites.find((x) => x.id === remoteId);
+    if (!site) return res.status(404).json({ error: "That site was not found on this account." });
+    const links = linksOf(ctx.fields);
+    if (links.some((l) => l.provider === account.provider && l.remoteId === site.id && l.hostAccountId === text(req.body?.hostAccountId, 40))) return res.status(409).json({ error: "That site is already linked to this project." });
+    if (links.length >= 20) return res.status(400).json({ error: "A project can link up to 20 servers." });
+    const link = { id: crypto.randomBytes(8).toString("hex"), provider: account.provider, hostAccountId: text(req.body?.hostAccountId, 40), remoteId: site.id, name: site.name, url: site.url, dashboardUrl: site.dashboardUrl, repo: site.repo, branch: site.branch, meta: site.meta || {} };
+    await saveLinks(req, ctx, [...links, link]);
+    return res.status(201).json({ link: publicLink(link) });
+  } catch { return res.status(500).json({ error: "Could not link this site." }); }
+});
+
+router.delete("/hosts/projects/:projectId/links/:linkId", async (req, res) => {
+  try {
+    const ctx = await projectOf(req, res);
+    if (!ctx) return undefined;
+    const links = linksOf(ctx.fields);
+    if (!links.some((l) => l.id === req.params.linkId)) return res.status(404).json({ error: "That link was not found." });
+    await saveLinks(req, ctx, links.filter((l) => l.id !== req.params.linkId));
+    return res.json({ message: "Unlinked. The site itself was not touched." });
+  } catch { return res.status(500).json({ error: "Could not unlink this site." }); }
+});
+
+/* Live status of every linked server of one project. One failing host never hides the others. */
+router.get("/hosts/projects/:projectId/links", async (req, res) => {
+  try {
+    const ctx = await projectOf(req, res);
+    if (!ctx) return undefined;
+    const rows = await mapWithConcurrency(linksOf(ctx.fields), 3, async (link) => {
+      const base = publicLink(link);
+      const account = accountOf(req, ctx.dataKey, link.hostAccountId);
+      if (!account) return { ...base, error: "Its " + base.label + " connection was removed. Connect it again to see the status." };
+      try {
+        const seen = await PROVIDERS[link.provider].inspect(account.token, account, link);
+        if (!seen.ok) return { ...base, accountName: account.name, error: seen.error };
+        return { ...base, accountName: account.name, name: seen.site.name || base.name, url: seen.site.url || base.url, dashboardUrl: seen.site.dashboardUrl || base.dashboardUrl, repo: seen.site.repo || base.repo, branch: seen.site.branch || base.branch, latestDeploy: seen.latestDeploy };
+      } catch { return { ...base, accountName: account.name, error: "Could not read this server." }; }
+    });
+    res.set("Cache-Control", "no-store");
+    return res.json({ links: rows });
+  } catch { return res.status(500).json({ error: "Could not read the linked servers." }); }
+});
+
+/* Branches of the repository a linked server deploys, for hosts that can deploy any branch. */
+router.get("/hosts/projects/:projectId/links/:linkId/branches", async (req, res) => {
+  try {
+    const ctx = await projectOf(req, res);
+    if (!ctx) return undefined;
+    const link = linksOf(ctx.fields).find((l) => l.id === req.params.linkId);
+    if (!link) return res.status(404).json({ error: "That link was not found." });
+    const target = parseGithubRepo(link.repo || ctx.fields.repoUrl);
+    if (!target) return res.json({ connected: false, branches: [], current: link.branch || "" });
+    for (const gh of loadGithubAccounts(req.rootUser, ctx.dataKey)) {
+      const base = "/repos/" + encodeURIComponent(target.owner) + "/" + encodeURIComponent(target.repo);
+      const repo = await githubGet(gh.token, base);
+      if (!repo.ok) continue;
+      const list = await githubGet(gh.token, base + "/branches?per_page=100");
+      return res.json({ connected: true, current: link.branch || repo.body.default_branch || "", default: repo.body.default_branch || "", branches: list.ok && Array.isArray(list.body) ? list.body.map((b) => String(b.name)) : [] });
+    }
+    return res.json({ connected: false, branches: [], current: link.branch || "" });
+  } catch { return res.status(500).json({ error: "Could not read the branches." }); }
+});
+
+router.post("/hosts/projects/:projectId/links/:linkId/redeploy", deployLimiter, async (req, res) => {
+  try {
+    const ctx = await projectOf(req, res);
+    if (!ctx) return undefined;
+    const link = linksOf(ctx.fields).find((l) => l.id === req.params.linkId);
+    if (!link) return res.status(404).json({ error: "That link was not found." });
+    const account = accountOf(req, ctx.dataKey, link.hostAccountId);
+    if (!account) return res.status(400).json({ error: "Its connection was removed. Connect it again first." });
+    const branch = text(req.body?.branch, 200);
+    if (branch && (!BRANCH_RE.test(branch) || !PROVIDERS[link.provider].branchDeploy)) return res.status(400).json({ error: branch && !PROVIDERS[link.provider].branchDeploy ? PROVIDERS[link.provider].label + " can only redeploy its current branch from here." : "Choose a valid branch." });
+    const out = await PROVIDERS[link.provider].redeploy(account.token, account, link, { branch });
+    if (!out.ok) return res.status(422).json({ error: out.error });
+    return res.json({ ok: true, branch: out.branch || "" });
+  } catch { return res.status(500).json({ error: "Could not start the deployment." }); }
 });
 
 module.exports = router;

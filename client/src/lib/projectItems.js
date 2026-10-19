@@ -89,6 +89,8 @@ export function normalizeProject(raw = {}) {
   if (Array.isArray(raw.renderServices) && raw.renderServices.length) {
     next.renderServices = raw.renderServices.filter((s) => s && s.serviceId).map((s) => ({ accountId: String(s.accountId || ""), serviceId: String(s.serviceId), name: String(s.name || ""), url: /^https:\/\//i.test(String(s.url || "")) ? String(s.url) : "", suspended: Boolean(s.suspended) }));
   }
+  // Existing Vercel / Netlify / Railway / Cloudflare servers linked to this project (kept in step by the server).
+  if (Array.isArray(raw.hostLinks) && raw.hostLinks.length) next.hostLinks = raw.hostLinks.filter((l) => l && l.id && l.remoteId);
   return next;
 }
 
