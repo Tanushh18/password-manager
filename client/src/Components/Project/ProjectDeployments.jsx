@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import { getProjectDeployments, getServiceBranches, setServiceBranch } from "../../api/client";
 import { usePolling } from "../../Pages/Render/renderHooks";
 import { timeAgo, safeUrl, errorMessage } from "../../Pages/Render/renderUtils";
+import ServerEnvCopy from "./ServerEnvCopy";
 import "./ProjectDeployments.css";
 
 const FILTERS = [["all", "All"], ["common", "Common"], ["different", "Different values"], ["partial", "Only on some"], ["stashr_only", "Only in Stashr"]];
@@ -71,6 +72,18 @@ function BranchPicker({ server, onDone }) {
   );
 }
 
+/** "Copy env" button for one server row, opening the copy dialog. */
+function EnvCopyButton({ server, onDone }) {
+  const [open, setOpen] = useState(false);
+  if (server.gone || (server.error && !server.url)) return null;
+  return (
+    <>
+      <button type="button" className="btn btn--ghost btn--sm" onClick={() => setOpen(true)}>Copy env</button>
+      {open ? <ServerEnvCopy server={server} open={open} onClose={() => setOpen(false)} onDone={onDone} /> : null}
+    </>
+  );
+}
+
 /** Every Render server a project is deployed on: URL, status, last deploy, and which env vars are common or differ. */
 export default function ProjectDeployments({ project }) {
   const [data, setData] = useState(null);
@@ -121,7 +134,7 @@ export default function ProjectDeployments({ project }) {
                     <td>{[s.plan, s.region].filter(Boolean).join(" · ") || <span className="pdep__dim">—</span>}</td>
                     <td><BranchPicker server={s} onDone={() => void load({ quiet: true })} /></td>
                     <td>{s.envCount == null ? <span className="pdep__dim">?</span> : s.envCount}{s.envPartial ? <small className="pdep__err">too many to compare</small> : null}</td>
-                    <td>{s.dashboardUrl ? <a href={safeUrl(s.dashboardUrl)} target="_blank" rel="noopener noreferrer" aria-label={"Open " + s.name + " in Render"}>Render ↗</a> : null}</td>
+                    <td><div className="pdep__branch"><EnvCopyButton server={s} onDone={() => void load({ quiet: true })} />{s.dashboardUrl ? <a href={safeUrl(s.dashboardUrl)} target="_blank" rel="noopener noreferrer" aria-label={"Open " + s.name + " in Render"}>Render ↗</a> : null}</div></td>
                   </tr>
                 );
               })}
