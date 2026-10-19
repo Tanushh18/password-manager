@@ -113,3 +113,22 @@ describe("hosting providers: existing servers", () => {
     expect((await PROVIDERS.railway.redeploy("tok", {}, link, {}, http)).ok).toBe(true);
   });
 });
+
+describe("vercel token validation", () => {
+  test("a team-scoped token that cannot read /v2/user is accepted via the projects list", async () => {
+    const http = recorder((url) => (url.includes("/v2/user") ? bad(403, { error: { code: "forbidden", message: "Not authorized" } }) : ok({ projects: [] })));
+    const r = await PROVIDERS.vercel.validate("tok", { teamId: "team_abc" }, http);
+    expect(r.ok).toBe(true);
+    expect(r.teamId).toBe("team_abc");
+    expect(http.calls[1].url).toContain("teamId=team_abc");
+  });
+  test("an invalid token says so and tells how to fix it", async () => {
+    const r = await PROVIDERS.vercel.validate("tok", {}, recorder(() => bad(403, { error: { code: "invalid_token", message: "The token is not valid" } })));
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("not valid");
+  });
+  test("a forbidden token without a team ID asks for the Team ID", async () => {
+    const r = await PROVIDERS.vercel.validate("tok", {}, recorder(() => bad(403, { error: { code: "forbidden", message: "Not authorized" } })));
+    expect(r.error).toContain("Team ID");
+  });
+});

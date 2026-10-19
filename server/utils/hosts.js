@@ -42,10 +42,26 @@ function reason(res, fallback) {
 const vercel = {
   id: "vercel", label: "Vercel", kind: "frontend",
   async validate(token, { teamId = "" } = {}, http = defaultHttp) {
+    const tq = teamId ? "?teamId=" + encodeURIComponent(teamId) : "";
     const res = await http("https://api.vercel.com/v2/user", { headers: bearer(token) });
-    if (!res.ok) return fail(res.status === 401 || res.status === 403 ? "Vercel rejected this token." : reason(res, "Could not read your Vercel account."));
-    const user = res.body?.user || {};
-    return { ok: true, label: first(user.username, user.name, user.email, "Vercel"), teamId: String(teamId || "") };
+    if (res.ok) {
+      const user = res.body?.user || {};
+      return { ok: true, label: first(user.username, user.name, user.email, "Vercel"), teamId: String(teamId || "") };
+    }
+    // A token scoped to a team can't read /v2/user (Vercel answers 403), but it can list that team's projects.
+    const projects = await http("https://api.vercel.com/v9/projects" + tq + (tq ? "&" : "?") + "limit=1", { headers: bearer(token) });
+    if (projects.ok) return { ok: true, label: teamId ? "Vercel team " + teamId : "Vercel", teamId: String(teamId || "") };
+    const code = first(res.body?.error?.code, projects.body?.error?.code);
+    const said = first(res.body?.error?.message, projects.body?.error?.message);
+    if (res.network || projects.network) return fail("Could not reach Vercel. Try again.");
+    if (res.status === 429) return fail("Vercel is rate limiting this token. Try again in a minute.");
+    if (code === "invalid_token" || /invalid.*token|not.*valid/i.test(said)) return fail("Vercel says this token is not valid" + (said ? " (" + said.slice(0, 120) + ")" : "") + ". Create a new one at vercel.com/account/tokens and paste it in full, with no spaces or quotes.");
+    if (res.status === 403 || projects.status === 403) {
+      return fail(teamId
+        ? "Vercel accepted the token but not for team " + teamId + (said ? " (" + said.slice(0, 120) + ")" : "") + ". Check the Team ID (Team Settings → General) and that the token's scope is that team."
+        : "Vercel accepted the token but it has no access here" + (said ? " (" + said.slice(0, 120) + ")" : "") + ". If you created it with a team scope, enter that Team ID below. Otherwise create the token with the scope set to your personal account.");
+    }
+    return fail("Vercel refused this token" + (said ? ": " + said.slice(0, 160) : " (status " + res.status + ")") + ".");
   },
   async deploy(token, account, input, http = defaultHttp) {
     const q = account.teamId ? "?teamId=" + encodeURIComponent(account.teamId) : "";

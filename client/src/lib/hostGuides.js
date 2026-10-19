@@ -5,7 +5,7 @@ export const HOSTS = [
     tokenUrl: "https://vercel.com/account/tokens", tokenHint: "Paste the token Vercel shows once.",
     steps: [
       "Open vercel.com/account/tokens and click Create Token.",
-      "Name it (e.g. Stashr), choose the scope (your account or team) and an expiry, then Create.",
+      "Name it (e.g. Stashr), choose the scope and an expiry, then Create. Easiest: scope = your personal account. If you pick a team, also enter that Team ID below (Team Settings → General).",
       "Copy the token right away, Vercel shows it once, and paste it here.",
       "Connect GitHub to Vercel once (Account Settings → Authentication → GitHub) and give it access to the repo you deploy."
     ],
