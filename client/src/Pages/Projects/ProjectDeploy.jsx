@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import Field from "../../Components/Field/Field";
 import GithubConnectModal from "../../Components/Project/GithubConnectModal";
+import EnvImport from "../../Components/Project/EnvImport";
 import HostConnectModal from "../../Components/Project/HostConnectModal";
 import { HOSTS, hostById } from "../../lib/hostGuides";
 import { Arrow, Check, Copy, Plus, Trash, Alert } from "../../Components/Icons/Icons";
@@ -61,7 +62,7 @@ function Copyable({ text, label }) {
 
 /** Create a GitHub repo, deploy it on Render's FREE plan with env vars, and link a Stashr project — in one go. */
 export default function ProjectDeploy() {
-  const { refreshProfile } = useVault();
+  const { refreshProfile, projects } = useVault();
   const [github, setGithub] = useState(null);
   const [render, setRender] = useState(null);
   const [owners, setOwners] = useState([]);
@@ -390,6 +391,7 @@ export default function ProjectDeploy() {
                 </div>
               ))}
               <div className="gh-panel__row"><button type="button" className="btn btn--ghost btn--sm" onClick={() => set({ envVars: [...form.envVars, { name: "", value: "" }] })}><Plus size={13} /> Add variable</button></div>
+              <EnvImport renderAccounts={render || []} projects={projects} repoUrl={form.existingRepoUrl || repo?.url || ""} taken={form.envVars.map((v) => v.name)} onImport={(rows) => set({ envVars: [...form.envVars.filter((v) => v.name || v.value), ...rows] })} />
               <textarea className="input" rows={3} placeholder={"Or paste a .env file:\nAPI_KEY=abc123\nDATABASE_URL=postgres://…"} aria-label="Paste a .env file" value={pasteText} onChange={(e) => setPasteText(e.target.value)} spellCheck="false" />
               {pasteText.trim() ? <div className="gh-panel__row"><button type="button" className="btn btn--ghost btn--sm" onClick={applyPaste}>Add pasted variables</button></div> : null}
             </div>
