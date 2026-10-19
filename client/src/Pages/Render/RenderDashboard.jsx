@@ -14,6 +14,8 @@ import {
 } from "./renderUtils";
 import "./RenderDashboard.css";
 import { Link } from "react-router-dom";
+import HostConnectModal from "../../Components/Project/HostConnectModal";
+import { HOSTS } from "../../lib/hostGuides";
 import { useVault } from "../../state/vault";
 import { serviceProjectIndex } from "../../lib/serviceProjects";
 
@@ -54,6 +56,7 @@ export default function RenderDashboard() {
   // modals
   const [selectedKey, setSelectedKey] = useState(null);
   const [connectOpen, setConnectOpen] = useState(false);
+  const [otherHost, setOtherHost] = useState(""); // vercel | netlify | railway | cloudflare: opens the token dialog for that host
   const [accountName, setAccountName] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
@@ -532,10 +535,16 @@ export default function RenderDashboard() {
         )}
       </div>
 
+      <HostConnectModal open={Boolean(otherHost)} initial={otherHost || "vercel"} onClose={() => setOtherHost("")} />
+
       {connectOpen && (
         <Modal labelledBy="rd-connect-title" onClose={() => setConnectOpen(false)} className="rd-dialog--sm">
-          <h2 id="rd-connect-title" className="rd-dialog__title">Connect Render</h2>
-          <p className="rd-dialog__body">Enter a Render API key. Stashr validates it, then stores it encrypted with your account’s vault data key.</p>
+          <h2 id="rd-connect-title" className="rd-dialog__title">Connect a host</h2>
+          <div className="rd-tabs" role="group" aria-label="Hosting provider" style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "4px 0 10px" }}>
+            <button type="button" className="rd-btn rd-btn--primary" aria-pressed="true">Render</button>
+            {HOSTS.map((h) => <button key={h.id} type="button" className="rd-btn rd-btn--quiet" onClick={() => { setConnectOpen(false); setOtherHost(h.id); }}>{h.label}</button>)}
+          </div>
+          <p className="rd-dialog__body">Enter a Render API key. Stashr validates it, then stores it encrypted with your account’s vault data key. Using Vercel, Netlify, Railway or Cloudflare Pages? Pick it above for its token steps.</p>
           <form onSubmit={connect} className="rd-form">
             <label>Account name <small>optional</small><input className="rd-field" value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="e.g. Production" maxLength={80} /></label>
             <label>Render API key
