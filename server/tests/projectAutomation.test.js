@@ -151,3 +151,14 @@ describe("Servers tab sync planning", () =>
         expect(planRegistrySync(["https://dealradar.ggnhome.com"], services).add).toHaveLength(0);
     });
 });
+
+describe("registry sync across hosts", () =>
+{
+    test("matches vercel.app / netlify.app URLs against connected hosting sites", () =>
+    {
+        const services = [{ id: "p1", name: "web", url: "https://web.vercel.app", repo: "https://github.com/me/app", suspended: false, provider: "vercel", providerLabel: "Vercel" }];
+        const plan = planRegistrySync(["https://web.vercel.app", "https://ghost.netlify.app", "https://custom.example.com"], services);
+        expect(plan.items.map((i) => i.kind).join(",")).toBe("host,unmatched,external");
+        expect(plan.remove).toHaveLength(0);
+    });
+});

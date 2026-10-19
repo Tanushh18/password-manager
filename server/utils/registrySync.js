@@ -1,8 +1,10 @@
-/* Pure planning for the Servers tab: match registry URLs to Render services and decide safe changes. */
+/* Pure planning for the Servers tab: match registry URLs to Render services and Vercel / Netlify / Railway / Cloudflare sites and decide safe changes. */
 const { repoKey } = require("./projectLink");
 
 const hostOf = (url) => { try { return new URL(url).hostname.toLowerCase(); } catch { return ""; } };
 const isRenderHost = (host) => /\.onrender\.com$/.test(host);
+const KNOWN_HOST = /\.(vercel\.app|netlify\.app|railway\.app|pages\.dev)$/;
+const isManagedHost = (host) => isRenderHost(host) || KNOWN_HOST.test(host);
 const pathOf = (url) => { try { return new URL(url).pathname.replace(/\/+$/, ""); } catch { return ""; } };
 
 /**
@@ -15,9 +17,9 @@ function planRegistrySync(urls, services) {
 
   const items = (urls || []).map((url) => {
     const host = hostOf(url);
-    if (!isRenderHost(host)) return { url, kind: "external", service: null };
+    if (!isManagedHost(host)) return { url, kind: "external", service: null };
     const service = byHost.get(host) || null;
-    return { url, kind: service ? "render" : "unmatched", service };
+    return { url, kind: service ? (isRenderHost(host) ? "render" : "host") : "unmatched", service };
   });
 
   // Safe removal: a suspended Render service is dead weight, but never remove the last working URL.
@@ -33,7 +35,7 @@ function planRegistrySync(urls, services) {
   const add = [];
   for (const s of services || []) {
     const host = hostOf(s.url);
-    if (!host || !isRenderHost(host) || listed.has(host) || s.suspended === true) continue;
+    if (!host || !isManagedHost(host) || listed.has(host) || s.suspended === true) continue;
     if (!repos.has(repoKey(s.repo))) continue;
     add.push({ url: (new URL(s.url).origin + suffix), name: s.name, accountName: s.accountName || "", reason: "Running service from the same repository" });
     if (add.length >= 5) break;

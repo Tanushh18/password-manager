@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { Arrow, Trash } from "../../Components/Icons/Icons";
 import * as api from "../../api/client";
+import HostConnectModal from "../../Components/Project/HostConnectModal";
 import "./Servers.css";
 
 import MascotBanner from "../../Components/Robot/MascotBanner";
@@ -19,18 +20,18 @@ const ago = (value) => {
 function RenderTag({ item, willRemove }) {
   if (!item) return null;
   if (item.kind === "external") return <span className="servers__render servers__render--muted">Custom domain</span>;
-  if (item.kind === "unmatched") return <span className="servers__render servers__render--muted" title="Not found in the Render accounts connected to Stashr">Not in connected Render</span>;
+  if (item.kind === "unmatched") return <span className="servers__render servers__render--muted" title="Not found in the hosting accounts connected to Stashr">Not in a connected host</span>;
   const s = item.service;
   const deploy = s.lastDeploy ? " · deploy " + s.lastDeploy.status.replace(/_/g, " ") + (s.lastDeploy.at ? " " + ago(s.lastDeploy.at) : "") : "";
   return (
     <span className={"servers__render servers__render--" + s.state} title={s.name + " · " + s.accountName}>
-      Render · {s.state === "active" ? "Active" : "Suspended"}{s.plan ? " · " + s.plan : ""}{s.region ? " · " + s.region : ""}{deploy}
+      {s.provider || "Render"} · {s.state === "active" ? "Active" : "Suspended"}{s.plan ? " · " + s.plan : ""}{s.region ? " · " + s.region : ""}{deploy}
       {willRemove ? " · will be removed automatically" : ""}
     </span>
   );
 }
 
-function AppCard({ entry, sync, onSaved, onSyncChanged }) {
+function AppCard({ entry, sync, onSaved, onSyncChanged, onConnect }) {
   const [urls, setUrls] = useState(entry.urls);
   const [draft, setDraft] = useState("");
   const [health, setHealth] = useState({}); // url -> { state, ms }
@@ -132,16 +133,16 @@ function AppCard({ entry, sync, onSaved, onSyncChanged }) {
         })}
       </ul>
 
-      {sync?.renderConnected ? (
+      {sync?.connected ?? sync?.renderConnected ? (
         <div className="servers__sync">
           <label className="servers__auto">
             <input type="checkbox" checked={autoOn} onChange={(e) => void toggleAuto(e.target.checked)} />
-            Keep in sync with Render automatically
+            Keep in sync with your hosting automatically
           </label>
-          <span className="servers__hint">Suspended Render servers are dropped from this list in the background — never the last working one. Custom domains are never touched.</span>
+          <span className="servers__hint">Suspended Render servers are dropped (other hosts are only matched and shown, never removed) from this list in the background — never the last working one. Custom domains are never touched.</span>
           {sync.add?.length ? (
             <div className="servers__suggest">
-              <strong>Found on Render</strong>
+              <strong>Found on your connected hosting</strong>
               {sync.add.map((a) => (
                 <div key={a.url} className="servers__suggest-row">
                   <code>{a.url}</code><span className="servers__hint">{a.name}{a.accountName ? " · " + a.accountName : ""}</span>
@@ -156,7 +157,7 @@ function AppCard({ entry, sync, onSaved, onSyncChanged }) {
             </ul>
           ) : null}
         </div>
-      ) : sync ? <p className="servers__hint">Connect a Render account on the Render page and this list syncs with it automatically.</p> : null}
+      ) : sync ? <p className="servers__hint">Connect a hosting account and this list is matched with it automatically. <Link to="/render">Render</Link> connects on the Render page; <button type="button" className="btn btn--ghost btn--sm" onClick={onConnect}>Connect Vercel, Netlify, Railway or Cloudflare</button></p> : null}
 
       <div className="servers__add">
         <input
@@ -187,6 +188,7 @@ export default function Servers() {
   const [apps, setApps] = useState(null);
   const [sync, setSync] = useState({}); // app -> Render sync info (automatic; optional)
   const [error, setError] = useState("");
+  const [connectOpen, setConnectOpen] = useState(false);
 
   const loadSync = useCallback((refresh = false) => {
     api.getRegistrySync({ refresh })
@@ -215,7 +217,8 @@ export default function Servers() {
           <p className="vault__count">
             Change a backend URL here and every app picks it up the next time it starts — no code change, no redeploy.
           </p>
-          <button type="button" className="btn btn--ghost btn--sm" onClick={() => loadSync(true)}>↻ Refresh Render sync</button>
+          <button type="button" className="btn btn--ghost btn--sm" onClick={() => loadSync(true)}>↻ Refresh hosting sync</button>
+          <button type="button" className="btn btn--ghost btn--sm" onClick={() => setConnectOpen(true)}>Connect Vercel, Netlify, Railway or Cloudflare</button>
         </header>
 
         {apps && <MascotBanner kind="satellite" {...registryMood(apps)} />}
@@ -224,11 +227,12 @@ export default function Servers() {
         {apps && (
           <div className="servers__grid">
             {apps.map((entry) => (
-              <AppCard key={entry.app + entry.urls.join("|")} entry={entry} sync={sync[entry.app]} onSaved={onSaved} onSyncChanged={loadSync} />
+              <AppCard key={entry.app + entry.urls.join("|")} entry={entry} sync={sync[entry.app]} onSaved={onSaved} onSyncChanged={loadSync} onConnect={() => setConnectOpen(true)} />
             ))}
           </div>
         )}
       </div>
+      <HostConnectModal open={connectOpen} onClose={() => setConnectOpen(false)} onChange={() => loadSync(true)} />
     </div>
   );
 }

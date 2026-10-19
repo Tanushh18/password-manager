@@ -5,6 +5,7 @@ const renderOps = require("./renderOps");
 const { mapWithConcurrency } = require("./renderGuards");
 const { planRegistrySync, applyRemovals } = require("./registrySync");
 const { loadRenderServices } = require("./projectStatus");
+const { loadHostSites } = require("./hostSites");
 const { ADMINS, DEFAULTS, APP_LABELS } = require("./registryDefaults");
 
 /*
@@ -31,7 +32,9 @@ const savedUrls = (doc, app) => (doc && doc.urls && doc.urls.length ? doc.urls :
 /** Per-app sync view for the admin Servers page. */
 async function buildRegistrySync(user, { refresh = false } = {}) {
   const dataKey = await user.getDataKey();
-  const { services, accounts } = await loadRenderServices(user, dataKey, { refresh });
+  const { services: renderServices, accounts } = await loadRenderServices(user, dataKey, { refresh });
+  const hosts = await loadHostSites(user, dataKey, { refresh }).catch(() => ({ services: [], count: 0 }));
+  const services = [...renderServices, ...hosts.services];
   const docs = await Registry.find({}).lean();
   const byApp = new Map(docs.map((d) => [d.app, d]));
   const apps = [];
@@ -42,10 +45,10 @@ async function buildRegistrySync(user, { refresh = false } = {}) {
     const items = await mapWithConcurrency(plan.items, 4, async (item) => {
       if (!item.service) return { url: item.url, kind: item.kind, service: null };
       const s = item.service;
-      return { url: item.url, kind: item.kind, service: { name: s.name, accountName: s.accountName, state: stateOf(s), plan: s.plan, region: s.region, dashboardUrl: s.dashboardUrl, lastDeploy: await deployBrief(accounts, s) } };
+      return { url: item.url, kind: item.kind, service: { name: s.name, provider: s.providerLabel || "Render", accountName: s.accountName, state: stateOf(s), plan: s.plan, region: s.region, dashboardUrl: s.dashboardUrl, lastDeploy: await deployBrief(accounts, s) } };
     });
     apps.push({
-      app, label: APP_LABELS[app], autoSync: doc ? doc.autoSync !== false : true, renderConnected: accounts.size > 0,
+      app, label: APP_LABELS[app], autoSync: doc ? doc.autoSync !== false : true, renderConnected: accounts.size > 0, hostsConnected: hosts.count > 0, connected: accounts.size > 0 || hosts.count > 0,
       items, add: plan.add, willRemove: plan.remove, log: (doc?.syncLog || []).slice(-5).reverse()
     });
   }
