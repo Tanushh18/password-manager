@@ -79,7 +79,7 @@ export default function ProjectDeploy() {
   const [codeState, setCodeState] = useState({ status: "idle" }); // idle | checking | empty | ready | error
   const [wait, setWait] = useState(false);
   const [form, setForm] = useState({
-    name: "", description: "", template: "node", existingRepoUrl: "", branch: "", hostAccountId: "", hostBuild: "", hostOutput: "", visibility: "public", githubAccountId: "", renderAccountId: "", ownerId: "",
+    name: "", description: "", template: "node", existingRepoUrl: "", branch: "", rootDir: "", hostAccountId: "", hostBuild: "", hostOutput: "", visibility: "public", githubAccountId: "", renderAccountId: "", ownerId: "",
     region: "singapore", runtime: "node", buildCommand: RUNTIMES.node.build, startCommand: RUNTIMES.node.start, envVars: [], useExistingRepo: false
   });
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
@@ -108,7 +108,7 @@ export default function ProjectDeploy() {
     setPre((p) => ({ ...p, status: "loading", message: "" }));
     const timer = setTimeout(() => {
       checkRepoCode({ githubAccountId: form.githubAccountId, repoUrl: url })
-        .then((d) => { if (live) setPre({ status: "ready", branches: d.branches || [], default: d.default || d.branch || "", message: "" }); })
+        .then((d) => { if (live) setPre({ status: "ready", branches: d.branches || [], default: d.default || d.branch || "", rootHint: d.rootHint || "", message: "" }); })
         .catch((e) => { if (live) setPre({ status: "error", branches: [], default: "", message: errorOf(e, "Could not read the branches.") }); });
     }, 600);
     return () => { live = false; clearTimeout(timer); };
@@ -162,7 +162,7 @@ export default function ProjectDeploy() {
     setCodeState((old) => (old.status === "ready" && !branch ? old : { status: "checking", branches: old.branches, default: old.default }));
     try {
       const data = await checkRepoCode({ githubAccountId: form.githubAccountId, repoUrl: url, branch: branch || undefined });
-      setCodeState({ status: data.hasCode ? "ready" : "empty", branch: data.branch, branches: data.branches || [], default: data.default });
+      setCodeState({ status: data.hasCode ? "ready" : "empty", branch: data.branch, branches: data.branches || [], default: data.default, rootHint: data.rootHint || "" });
       if (data.hasCode) setWait(false);
     } catch (e) { setCodeState((old) => ({ status: "error", message: errorOf(e, "Could not check the repository."), branches: old.branches, default: old.default })); setWait(false); }
   }, [form.githubAccountId, form.branch]);
@@ -280,7 +280,7 @@ export default function ProjectDeploy() {
                 <button key={id} type="button" className="dp-template" aria-pressed={form.template === id} onClick={() => pickTemplate(id)}><strong>{label}</strong><small>{hint}</small></button>
               ))}
             </div>
-            {form.template === "existing" ? <Field id="dp-existing" label="Existing repository URL" placeholder="https://github.com/you/your-repo" value={form.existingRepoUrl} onChange={(e) => set({ existingRepoUrl: e.target.value, branch: "" })} autoComplete="off" spellCheck="false" hint="Deploying a repo that already has a project? Use a different project name so the new server gets its own name." /> : null}
+            {form.template === "existing" ? <Field id="dp-existing" label="Existing repository URL" placeholder="https://github.com/you/your-repo" value={form.existingRepoUrl} onChange={(e) => set({ existingRepoUrl: e.target.value, branch: "", rootDir: "" })} autoComplete="off" spellCheck="false" hint="Deploying a repo that already has a project? Use a different project name so the new server gets its own name." /> : null}
             {form.template === "existing" && pre.status !== "idle" ? (
               <div className="field">
                 <label className="field__label" htmlFor="dp-prebranch">Branch to deploy</label>
@@ -358,6 +358,15 @@ export default function ProjectDeploy() {
               {!RUNTIMES[form.runtime].isStatic && form.runtime !== "docker" ? <Field id="dp-start" label="Start command" value={form.startCommand} onChange={(e) => set({ startCommand: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
             </div>
             {RUNTIMES[form.runtime]?.needsDockerfile ? <p className="field__note">Render builds this from a <code>Dockerfile</code> at the root of the repository. Use it for PHP/Laravel, Java/Spring Boot, .NET and anything else without a native runtime.</p> : null}
+            {ownCode ? (
+              <>
+                <Field id="dp-root" label="Root directory (monorepo)" placeholder="e.g. server (leave empty if package.json is at the repo root)" value={form.rootDir} onChange={(e) => set({ rootDir: e.target.value })} autoComplete="off" spellCheck="false" />
+                {!form.rootDir && (codeState.rootHint || pre.rootHint) ? (
+                  <div className="notice notice--err" role="alert"><Alert size={15} /> No <code>package.json</code> (or other app file) at the top of this repo, so the build will fail. The app looks like it lives in <code>{codeState.rootHint || pre.rootHint}/</code>.{" "}
+                    <button type="button" className="btn btn--ghost btn--sm" onClick={() => set({ rootDir: codeState.rootHint || pre.rootHint })}>Use “{codeState.rootHint || pre.rootHint}”</button></div>
+                ) : null}
+              </>
+            ) : null}
             <p className="field__note">Every push to the deployed branch redeploys automatically.</p>
             <div className="dp-grid">
               <div className="field">

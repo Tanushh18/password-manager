@@ -394,3 +394,15 @@ describe("provision orchestration", () =>
         expect(p.https).not.toContain("@");
     });
 });
+
+describe("root directory for monorepos", () =>
+{
+    test("is validated, kept for existing repos and sent to Render", () =>
+    {
+        const ok = validateProvisionInput({ name: "App", template: "existing", existingRepoUrl: "https://github.com/o/r", rootDir: "/server/" });
+        expect(ok.value.rootDir).toBe("server");
+        expect(buildRenderPayload(ok.value, { ownerId: "o", repoUrl: "https://github.com/o/r", branch: "v2" }).rootDir).toBe("server");
+        expect(validateProvisionInput({ name: "App", template: "existing", existingRepoUrl: "https://github.com/o/r", rootDir: "../etc" }).error).toContain("Root directory");
+        expect(validateProvisionInput({ name: "App", template: "node", rootDir: "server" }).value.rootDir).toBe("");
+    });
+});

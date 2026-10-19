@@ -27,6 +27,9 @@ function validateProvisionInput(body) {
   const branch = template === "existing" ? clean(b.branch, 200) : "";
   if (branch && !/^(?!-)(?!.*\.\.)[A-Za-z0-9._\/-]{1,200}$/.test(branch)) return { error: "Choose a valid branch." };
 
+  const rootDir = OWN_CODE.has(template) ? clean(b.rootDir, 100).replace(/^\/+|\/+$/g, "") : "";
+  if (rootDir && (!/^[A-Za-z0-9._\/-]+$/.test(rootDir) || rootDir.split("/").some((part) => part === ".." || part === "."))) return { error: "Root directory must be a folder path like “server”." };
+
   const visibility = b.visibility === "public" ? "public" : "private";
   const region = clean(b.region, 20) || "oregon";
   if (!REGIONS.includes(region)) return { error: "Choose a supported Render region." };
@@ -57,7 +60,7 @@ function validateProvisionInput(body) {
   return {
     value: {
       name, repoName, description: clean(b.description, 300), template, visibility, region, runtime, buildCommand, startCommand,
-      envVars, existingRepoUrl, branch, useExistingRepo: b.useExistingRepo === true || template === "existing",
+      envVars, existingRepoUrl, branch, rootDir, useExistingRepo: b.useExistingRepo === true || template === "existing",
       githubAccountId: clean(b.githubAccountId, 40), renderAccountId: clean(b.renderAccountId, 40), ownerId: clean(b.ownerId, 160)
     }
   };
@@ -69,7 +72,7 @@ function validateProvisionInput(body) {
  */
 function buildRenderPayload(input, { ownerId, repoUrl, branch = "main" }) {
   const base = {
-    ownerId, name: input.repoName, repo: repoUrl, branch, autoDeploy: "yes",
+    ownerId, name: input.repoName, repo: repoUrl, branch, autoDeploy: "yes", ...(input.rootDir ? { rootDir: input.rootDir } : {}),
     envVars: input.envVars.map((v) => ({ key: v.name, value: v.value }))
   };
   const config = TEMPLATES[input.template]?.render || RUNTIMES[input.runtime];

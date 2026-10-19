@@ -68,6 +68,16 @@ async function checkRepo({ github, owner, repo, branch: wanted = "", withBranche
   if (withBranches) {
     const list = await github.send("GET", "/repos/" + enc(owner) + "/" + enc(repo) + "/branches?per_page=100");
     result.branches = list.ok && Array.isArray(list.body) ? list.body.map((b) => String(b.name)) : [];
+    // A monorepo has its app in a subfolder; without a Root Directory the build finds no package.json and fails.
+    const top = await github.send("GET", "/repos/" + enc(owner) + "/" + enc(repo) + "/contents?ref=" + enc(branch));
+    if (top.ok && Array.isArray(top.body)) {
+      const names = top.body.map((f) => String(f.name));
+      const MANIFEST = ["package.json", "requirements.txt", "pyproject.toml", "go.mod", "Dockerfile", "index.html", "Gemfile", "pom.xml", "composer.json"];
+      if (!names.some((n) => MANIFEST.includes(n))) {
+        const folder = ["server", "backend", "api", "app", "web", "client", "frontend"].find((d) => top.body.some((f) => f.type === "dir" && f.name === d));
+        if (folder) result.rootHint = folder;
+      }
+    }
   }
   return result;
 }

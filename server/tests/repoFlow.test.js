@@ -133,3 +133,17 @@ describe("guided flow: deploy is gated on pushed code", () =>
         expect(r.service.plan).toBe("free");
     });
 });
+
+describe("monorepo hint", () =>
+{
+    test("suggests a subfolder when the repo root has no app file", async () =>
+    {
+        const github = fakeGithub((m, p) => (p.includes("/contents") ? ok([{ name: "client", type: "dir" }, { name: "server", type: "dir" }, { name: "README.md", type: "file" }]) : p.includes("/branches") ? ok([{ name: "v2" }]) : p.includes("/commits") ? ok([{ sha: "a" }]) : ok({ private: false, default_branch: "v2" })));
+        expect((await checkRepo({ github, owner: "o", repo: "r", withBranches: true })).rootHint).toBe("server");
+    });
+    test("no hint when package.json is at the root", async () =>
+    {
+        const github = fakeGithub((m, p) => (p.includes("/contents") ? ok([{ name: "package.json", type: "file" }, { name: "server", type: "dir" }]) : p.includes("/branches") ? ok([]) : p.includes("/commits") ? ok([{ sha: "a" }]) : ok({ private: false, default_branch: "main" })));
+        expect((await checkRepo({ github, owner: "o", repo: "r", withBranches: true })).rootHint).toBe(undefined);
+    });
+});
