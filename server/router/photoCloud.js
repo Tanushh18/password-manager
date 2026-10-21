@@ -53,7 +53,7 @@ router.get("/photo-cloud/dashboard", photosAuth, async (req, res) => {
     try {
         const key = await req.rootUser.getDataKey();
         const connections = decode(req.rootUser.photoConnections, key);
-        const media = decode(req.rootUser.photoMedia, key).map(({ _eid, thumbnailUrl, webViewUrl, ...item }) => item);
+        const media = decode(req.rootUser.photoMedia, key).map(({ _eid, ...item }) => item);
         const jobs = decode(req.rootUser.photoBackupJobs, key).map(({ _eid, sessionUri, ...job }) => job).slice(-200).reverse();
         const byChecksum = new Map();
         for (const item of media) if (item.checksum) byChecksum.set(item.checksum, [...(byChecksum.get(item.checksum) || []), item.id]);
