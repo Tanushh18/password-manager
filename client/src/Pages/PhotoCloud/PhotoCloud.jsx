@@ -56,7 +56,9 @@ export default function PhotoCloud() {
     event.preventDefault(); setSaving(true); try { const result = await startPhotoGoogleOAuth(label || "Google account"); window.location.assign(result.url); } catch (e) { toast.error(e?.response?.data?.error || "Google OAuth is not configured yet."); setSaving(false); }
   };
   const refreshIndex = async () => {
-    setSyncStartedAt(Date.now()); setSyncElapsed(0);
+    const startedAt = Date.now();
+    setSyncStartedAt(startedAt);
+    setSyncElapsed(0);
     try {
       const current = await getPhotoCloudDashboard();
       const connected = (current.connections || []).filter((account) => account.oauthMode === "connected");
@@ -64,14 +66,14 @@ export default function PhotoCloud() {
       await load();
       toast.success(connected.length ? "Google Drive indexes refreshed." : "Photo Cloud index refreshed.");
     } catch { toast.error("Could not refresh the Google Drive index."); }
-    finally { setSyncElapsed(syncStartedAt ? Math.floor((Date.now() - syncStartedAt) / 1000) : 0); setSyncStartedAt(null); }
+    finally { setSyncElapsed(Math.floor((Date.now() - startedAt) / 1000)); setSyncStartedAt(null); }
   };
   useEffect(() => {
     if (!syncStartedAt) return undefined;
     const timer = window.setInterval(() => setSyncElapsed(Math.floor((Date.now() - syncStartedAt) / 1000)), 1000);
     return () => window.clearInterval(timer);
   }, [syncStartedAt]);
-  const syncAccount = async (id) => { setSyncingId(id); setSyncStartedAt(Date.now()); setSyncElapsed(0); try { await syncPhotoGoogleAccount(id); await load(); toast.success("Account index refreshed."); } catch { toast.error("Could not refresh this account."); } finally { setSyncingId(""); setSyncElapsed(syncStartedAt ? Math.floor((Date.now() - syncStartedAt) / 1000) : 0); setSyncStartedAt(null); } };
+  const syncAccount = async (id) => { const startedAt = Date.now(); setSyncingId(id); setSyncStartedAt(startedAt); setSyncElapsed(0); try { await syncPhotoGoogleAccount(id); await load(); toast.success("Account index refreshed."); } catch { toast.error("Could not refresh this account."); } finally { setSyncingId(""); setSyncElapsed(Math.floor((Date.now() - startedAt) / 1000)); setSyncStartedAt(null); } };
   const toggleEligible = async (account) => { try { await updatePhotoConnection(account.id, { eligible: !account.eligible }); await load(); toast.success(account.eligible ? "Account removed from new-upload routing." : "Account enabled for new uploads."); } catch { toast.error("Could not update account routing."); } };
   const disconnectAccount = async (account) => { if (!window.confirm(`Disconnect ${account.label}? Cloud files will not be deleted, but indexed items will become unavailable.`)) return; try { await disconnectPhotoConnection(account.id); await load(); toast.success("Account disconnected. Cloud files were not deleted."); } catch { toast.error("Could not disconnect this account."); } };
   const downloadManifest = async () => { try { const manifest = await exportPhotoManifest(); const url = URL.createObjectURL(new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" })); const link = document.createElement("a"); link.href = url; link.download = `stashr-photo-manifest-${new Date().toISOString().slice(0, 10)}.json`; link.click(); URL.revokeObjectURL(url); toast.success("Manifest exported."); } catch { toast.error("Could not export the photo manifest."); } };
