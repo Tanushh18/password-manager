@@ -5,7 +5,7 @@ import axios from "axios";
 // xxdr is the fixed address apps use to find the current server list (see "Server registry" below).
 // (…-8gvj was deleted on Render; it is no longer listed, and dead servers are skipped automatically anyway.)
 const DEFAULT_SERVERS = [
-    "https://password-manager-server-xxdr.onrender.com"
+    "https://stashr-v2.onrender.com"
 ];
 
 const SERVERS = (import.meta.env.VITE_API_URLS || import.meta.env.REACT_APP_API_URLS || import.meta.env.REACT_APP_API_URL || "")
@@ -14,16 +14,15 @@ const SERVERS = (import.meta.env.VITE_API_URLS || import.meta.env.REACT_APP_API_
     .filter(Boolean);
 if (SERVERS.length === 0) SERVERS.push(...DEFAULT_SERVERS);
 
-// Servers come from the Stashr registry (edited on the Servers page), so changing a URL never needs a
-// redeploy. The build-time list above is only the bootstrap: it is asked for the registry on start,
-// the last answer is cached on this device, and the bootstrap stays at the end as a last resort.
+// The build-time server list is the primary configured endpoint. The Stashr registry adds
+// fallback servers on startup; keeping the configured endpoint first ensures this deployment uses v2.
 const BOOTSTRAP = [...SERVERS];
 const REGISTRY_CACHE_KEY = "pm_registry_stashr";
 const REGISTRY_APP = "stashr";
 
 const mergeServers = (fresh) =>
 {
-    const list = [...fresh, ...BOOTSTRAP].filter((u, i, a) => u && a.indexOf(u) === i);
+    const list = [...BOOTSTRAP, ...fresh].filter((u, i, a) => u && a.indexOf(u) === i);
     const current = SERVERS[active];
     SERVERS.splice(0, SERVERS.length, ...list);
     const i = SERVERS.indexOf(current);
