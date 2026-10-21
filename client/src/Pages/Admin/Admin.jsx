@@ -25,7 +25,7 @@ export default function Admin() {
     setBusy(id);
     try {
       const res = await setUserFeature(user.id, feature.key, enabled);
-      setData((d) => ({ ...d, users: d.users.map((u) => (u.id === user.id ? res.user : u)) }));
+      setData((d) => ({ ...d, users: (d?.users || []).map((u) => (u.id === user.id ? res.user : u)) }));
     } catch (e) { toast.error(errorMessage(e, "Could not change that.")); }
     finally { setBusy(""); }
   };
@@ -43,7 +43,7 @@ export default function Admin() {
       <section className="card admin__card">
         <div className="admin__bar">
           <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by email" />
-          <span className="admin__count">{data ? `${data.users.length} of ${data.total} users` : "Loading…"}</span>
+          <span className="admin__count">{data ? `${(data.users || []).length} of ${data.total ?? 0} users` : "Loading…"}</span>
         </div>
         <div className="admin__scroll">
           <table className="admin__table">
@@ -67,7 +67,7 @@ export default function Admin() {
               ))}
             </tbody>
           </table>
-          {data && data.users.length === 0 ? <p className="admin__empty">No users match.</p> : null}
+          {data && (data.users || []).length === 0 ? <p className="admin__empty">No users match.</p> : null}
         </div>
       </section>
 

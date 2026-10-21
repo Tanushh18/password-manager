@@ -5,7 +5,9 @@ import axios from "axios";
 // xxdr is the fixed address apps use to find the current server list (see "Server registry" below).
 // (…-8gvj was deleted on Render; it is no longer listed, and dead servers are skipped automatically anyway.)
 const DEFAULT_SERVERS = [
-    "https://stashr-v2.onrender.com"
+    "https://stashr-v2.onrender.com",
+    // Second address with the same code, so the site still works while the first one is suspended or asleep.
+    "https://password-manager-server-xxdr.onrender.com"
 ];
 
 const SERVERS = (import.meta.env.VITE_API_URLS || import.meta.env.REACT_APP_API_URLS || import.meta.env.REACT_APP_API_URL || "")
