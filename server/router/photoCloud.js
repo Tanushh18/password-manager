@@ -25,7 +25,9 @@ router.get("/photo-cloud/google/start", photosAuth, async (req, res) => {
     const requestedReturn = String(req.query.returnTo || "");
     const returnTo = requestedReturn.startsWith("/") && !requestedReturn.startsWith("//") && !requestedReturn.includes("\\") ? requestedReturn.slice(0, 200) : "/photos";
     const state = jwt.sign({ uid: String(req.rootUser._id), mobile: req.query.client === "mobile", label: clean(req.query.label || req.body?.label || "Google account", 80), returnTo }, process.env.SECRET_KEY, { expiresIn: "10m" });
-    const scope = process.env.GOOGLE_PHOTO_SCOPES || "openid email https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/photospicker.mediaitems.readonly";
+    const requiredScopes = ["openid", "email", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/photospicker.mediaitems.readonly"];
+    const configuredScopes = String(process.env.GOOGLE_PHOTO_SCOPES || "https://www.googleapis.com/auth/drive.readonly").split(/\s+/).filter(Boolean);
+    const scope = [...new Set([...configuredScopes, ...requiredScopes])].join(" ");
     const params = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: "code", access_type: "offline", prompt: "consent", scope, state });
     return res.json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}` });
 });
@@ -42,11 +44,17 @@ router.get("/photo-cloud/google/callback", async (req, res) => {
         if (!tokenResponse.ok || !tokens.access_token) throw new Error("Google token exchange failed");
         const profileResponse = await fetch("https://openidconnect.googleapis.com/v1/userinfo", { headers: { Authorization: `Bearer ${tokens.access_token}` } });
         const profile = await profileResponse.json();
+        if (!profileResponse.ok || !profile.email) throw new Error("Google account details could not be verified");
+        const grantedScopes = String(tokens.scope || "").split(/\s+/).filter(Boolean);
+        const requiredScopes = ["https://www.googleapis.com/auth/photospicker.mediaitems.readonly", "https://www.googleapis.com/auth/drive.file"];
+        if (grantedScopes.length && requiredScopes.some((scope) => !grantedScopes.includes(scope))) return back("missing_scope", claims.returnTo);
         const user = await User.findById(claims.uid);
         if (!user) throw new Error("Account not found");
         const key = await user.getDataKey();
-        const connection = { id: crypto.randomUUID(), label: clean(claims.label || profile.name || "Google account", 80), email: clean(profile.email, 160), provider: "Google Drive", status: "connected", eligible: true, priority: (user.photoConnections || []).length + 1, lastScan: null, oauthMode: "connected", accessToken: tokens.access_token, refreshToken: tokens.refresh_token || "", tokenType: tokens.token_type, expiresAt: Date.now() + Number(tokens.expires_in || 3600) * 1000 };
-        await User.updateOne({ _id: user._id }, { $push: { photoConnections: encoded(key, connection) } });
+        const existing = decode(user.photoConnections, key).find((item) => String(item.email || "").toLowerCase() === String(profile.email).toLowerCase());
+        const connection = { ...(existing || {}), id: existing?.id || crypto.randomUUID(), label: clean(claims.label || existing?.label || profile.name || "Google account", 80), email: clean(profile.email, 160), provider: "Google Drive", status: "connected", eligible: existing?.eligible !== false, priority: existing?.priority || (user.photoConnections || []).length + 1, lastScan: existing?.lastScan || null, oauthMode: "connected", accessToken: tokens.access_token, refreshToken: tokens.refresh_token || existing?.refreshToken || "", tokenType: tokens.token_type, expiresAt: Date.now() + Number(tokens.expires_in || 3600) * 1000, scopes: grantedScopes };
+        if (existing?._eid) await updateEntry(user, "photoConnections", connection, key);
+        else await pushEntry(user, "photoConnections", connection, key);
         return back("connected", claims.returnTo);
     } catch (error) { return back("error", "/photos"); }
 });

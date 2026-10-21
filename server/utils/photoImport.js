@@ -70,8 +70,8 @@ async function createBatch(userId, { label, sourceConnectionId, concurrency = 1 
   if (!source || source.status !== "connected" || !source.accessToken) throw fail(400, "Pick a connected Google account as the source.");
   await freshToken(user, key, source);
   const response = await authed(user, key, source, `${PICKER}/sessions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pickingConfig: { maxItemCount: "2000" } }) });
-  if (response.status === 403 || response.status === 401) throw fail(400, "Reconnect this Google account to allow picking from Google Photos (it needs a new permission).");
-  if (!response.ok) throw fail(502, "Google Photos did not open a picking session. Try again in a moment.");
+  if (response.status === 403 || response.status === 401) throw fail(400, "Google denied the Photos Picker permission. Reconnect the same Google account and approve both Photos Picker and Drive access.");
+  if (!response.ok) { const detail = await response.text().catch(() => ""); throw fail(502, "Google Photos could not open a picking session (" + response.status + ")" + (detail ? ": " + detail.slice(0, 180) : ".")); }
   const session = await response.json();
   const root = await stashrFolder(user, key, "Google Photos", null);
   const folder = await stashrFolder(user, key, label, root.id);
@@ -88,7 +88,7 @@ async function listPicked(user, key, connection, sessionId) {
   let pageToken = "";
   for (let page = 0; page < 40; page += 1) { // 40 x 100 covers the 2,000 limit with room to spare
     const response = await authed(user, key, connection, `${PICKER}/mediaItems?` + new URLSearchParams({ sessionId, pageSize: "100", ...(pageToken ? { pageToken } : {}) }));
-    if (!response.ok) throw fail(response.status, "Google Photos would not list the picked items.");
+    if (!response.ok) { const detail = await response.text().catch(() => ""); throw fail(response.status, "Google Photos could not list selected media (" + response.status + ")" + (detail ? ": " + detail.slice(0, 180) : ".")); }
     const body = await response.json();
     out.push(...(body.mediaItems || []));
     pageToken = body.nextPageToken || "";
@@ -107,9 +107,14 @@ async function pollBatch(batchId) {
     if (!source) throw fail(409, "The source Google account is no longer connected.");
     await freshToken(user, key, source);
     const response = await authed(user, key, source, `${PICKER}/sessions/${encodeURIComponent(claimed.sessionId)}`);
-    if (response.status === 404 || response.status === 403) {
+    if (response.status === 404) {
       await Batch.updateOne({ _id: batchId }, { $set: { status: "expired", finishedAt: new Date() } });
       await event(batchId, "error", "The Google Photos session expired before anything was chosen. Start a new import.");
+      return null;
+    }
+    if (response.status === 401 || response.status === 403) {
+      await Batch.updateOne({ _id: batchId }, { $set: { status: "paused", pauseReason: "Google Photos permission was denied. Reconnect the Google account, then resume this import." } });
+      await event(batchId, "error", "Google rejected the Photos Picker permission. Reconnect this account and resume.");
       return null;
     }
     if (!response.ok) throw fail(response.status, "Could not check the picking session.");

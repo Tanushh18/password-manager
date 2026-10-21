@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { createPhotoImport, deletePhotoImport, errorMessage, getPhotoCloudDashboard, getPhotoImport, listPhotoImports, photoImportAction, startPhotoGoogleOAuth } from "../../api/client";
@@ -147,6 +148,7 @@ function Detail({ id, onChanged }) {
 }
 
 export default function PhotoImport() {
+  const location = useLocation();
   const [batches, setBatches] = useState(null);
   const [selected, setSelected] = useState("");
   const [accounts, setAccounts] = useState([]);
@@ -162,9 +164,15 @@ export default function PhotoImport() {
     catch (e) { toast.error(errorMessage(e, "Could not load imports.")); setBatches([]); }
   }, []);
   useEffect(() => {
+    const result = new URLSearchParams(location.search).get("google");
+    if (result === "connected") toast.success("Google account connected. Choose photos below to import them into Stashr.");
+    else if (result === "missing_scope") { setAccountWarning("Google did not grant the Photos Picker and Drive permissions. Reconnect and approve every requested permission."); toast.error("Google Photos permission is still missing."); }
+    else if (result === "error") toast.error("Google reconnect failed. Check the Google OAuth configuration and try again.");
+    else if (result === "cancelled") toast.info("Google connection was cancelled.");
+    if (result) window.history.replaceState({}, "", location.pathname);
     void refresh();
     getPhotoCloudDashboard().then((d) => { const all = d.connections || []; const ok = all.filter((c) => c.status === "connected" && c.oauthMode === "connected"); setAccounts(ok); setSource((s) => ok.some((a) => a.id === s) ? s : (ok[0]?.id || "")); setAccountWarning(ok.length ? "" : (all.length ? "Your saved Google account needs to be reconnected before importing." : "Connect a Google account to start importing.")); }).catch(() => { setAccountWarning("Could not check Google account status. Reconnect or refresh the page."); });
-  }, [refresh]);
+  }, [refresh, location.pathname, location.search]);
   useEffect(() => { const t = setInterval(() => void refresh(), 10000); return () => clearInterval(t); }, [refresh]);
 
   const reconnect = async () => {
@@ -180,7 +188,7 @@ export default function PhotoImport() {
       const { batch } = await createPhotoImport({ label: label.trim(), sourceConnectionId: source, concurrency: parallel });
       setLabel(""); await refresh(); setSelected(batch.id);
       window.open(batch.pickerUri, "_blank", "noopener");
-      toast.info("Google Photos opened in a new tab. Choose your photos there.");
+      toast.info("Select photos/videos in Google Photos and press Done. Return here to watch the import.");
     } catch (e) {
       const message = errorMessage(e, "Could not start the import.");
       if (/reconnect|permission|pick a connected google account|401|403/i.test(message)) { setAccountWarning("Google needs permission again. Reconnect below, then return here to import."); toast.info("Reconnect your Google account to continue."); }
@@ -199,7 +207,7 @@ export default function PhotoImport() {
         <Link to="/photos" className="proj-back">← Photos</Link>
         <p className="eyebrow">Admin pipeline</p>
         <h1>Import from Google Photos</h1>
-        <p className="pi-muted pi-lede">Google does not let apps read a whole Google Photos library, so you choose photos with Google's own picker (up to 2,000 at a time). Stashr then copies them into your Drive one after another, in the background, and files them in a folder you name. You can close this page; the work continues on the server.</p>
+        <p className="pi-muted pi-lede">Google does not allow apps to silently display your entire existing library. Open Google Photos, select photos/videos, and press Done. Stashr then copies only those selected items into your connected Drive and adds them to this library. Reconnect alone does not import media.</p>
       </header>
 
       <div className="pi-layout">
