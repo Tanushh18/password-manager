@@ -335,6 +335,14 @@ export const getDeployLogs = (projectId, ref, deployId = "") => instance.get(dep
 export const setDeployBranch = (projectId, ref, branch, deploy = true) => instance.put(deployOpsPath(projectId) + "/branch", { ref, branch, deploy }, { timeout: 120000 }).then((r) => r.data);
 export const moveDeployAccount = (projectId, ref, accountId) => instance.put(deployOpsPath(projectId) + "/account", { ref, accountId }).then((r) => r.data);
 export const syncDeployEnv = (projectId, body) => instance.post(deployOpsPath(projectId) + "/sync", body, { timeout: 180000 }).then((r) => r.data);
+const movePath = (projectId) => "/move-server/" + encodeURIComponent(projectId);
+/* Move one Render server to another account, one step per call (plan, create, status, frontends, relink, delete-old). */
+export const movePlan = (projectId, body) => instance.post(movePath(projectId) + "/plan", body, { timeout: 90000 }).then((r) => r.data);
+export const moveCreate = (projectId, body) => instance.post(movePath(projectId) + "/create", body, { timeout: 90000 }).then((r) => r.data);
+export const moveStatus = (projectId, params) => instance.get(movePath(projectId) + "/status", { params, timeout: 60000 }).then((r) => r.data);
+export const moveFrontends = (projectId, body) => instance.post(movePath(projectId) + "/frontends", body, { timeout: 180000 }).then((r) => r.data);
+export const moveRelink = (projectId, body) => instance.post(movePath(projectId) + "/relink", body).then((r) => r.data);
+export const moveDeleteOld = (projectId, body) => instance.post(movePath(projectId) + "/delete-old", body, { timeout: 60000 }).then((r) => r.data);
 
 /* Persistent Render operations: all credentials remain encrypted server-side. */
 export const getRenderOpsConfig = () => instance.get("/render/ops/config").then((r) => r.data);
