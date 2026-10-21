@@ -8,7 +8,7 @@ const authenticate = require("../middlewares/authenticate");
 const { serverError } = require("./helpers");
 
 const { clean, decode, encoded, publicConnection, updateEntry, pushEntry, driveFetch, refreshGoogleToken } = require("../utils/photoStore");
-const { listDriveMedia } = require("../utils/driveIndex");
+const { listDriveMedia, listDriveFolders } = require("../utils/driveIndex");
 const { storageTotals, suggestAccount } = require("../utils/photoRouting");
 const workers = require("../utils/photoWorkers");
 const { requireFeature } = require("../utils/features");
@@ -55,13 +55,14 @@ router.get("/photo-cloud/dashboard", photosAuth, async (req, res) => {
         const connections = decode(req.rootUser.photoConnections, key);
         const media = decode(req.rootUser.photoMedia, key).map(({ _eid, ...item }) => item);
         const jobs = decode(req.rootUser.photoBackupJobs, key).map(({ _eid, sessionUri, ...job }) => job).slice(-200).reverse();
+        const driveFolders = connections.flatMap((connection) => (connection.driveFolders || []).map((folder) => ({ ...folder, connectionId: connection.id, account: connection.email || connection.label })));
         const byChecksum = new Map();
         for (const item of media) if (item.checksum) byChecksum.set(item.checksum, [...(byChecksum.get(item.checksum) || []), item.id]);
         const duplicateGroups = [...byChecksum.values()].filter((ids) => ids.length > 1);
         const settings = photoSettings(req.rootUser, key);
         const folders = decode(req.rootUser.photoFolders, key).map(({ _eid, driveIds, ...folder }) => ({ ...folder, count: media.filter((m) => m.folderId === folder.id).length }));
         const suggestion = suggestAccount(connections, { bufferGb: Number(settings.safetyBufferGb ?? 2), defaultId: settings.defaultConnectionId });
-        return res.json({ connections: connections.map(publicConnection), totals: storageTotals(connections), suggestion, folders, workers: { enabled: workers.enabled(), count: workers.urls().length }, media, jobs, duplicateGroups, albums: decode(req.rootUser.photoAlbums, key).map(({ _eid, ...album }) => album), settings: { ...settings, defaultConnectionId: settings.defaultConnectionId || connections[0]?.id || "" }, providerNotice: "Google Drive is the initial supported provider. Originals stay in the connected account; this app stores the index and organization metadata." });
+        return res.json({ connections: connections.map(publicConnection), driveFolders, totals: storageTotals(connections), suggestion, folders, workers: { enabled: workers.enabled(), count: workers.urls().length }, media, jobs, duplicateGroups, albums: decode(req.rootUser.photoAlbums, key).map(({ _eid, ...album }) => album), settings: { ...settings, defaultConnectionId: settings.defaultConnectionId || connections[0]?.id || "" }, providerNotice: "Google Drive is the initial supported provider. Originals stay in the connected account; this app stores the index and organization metadata." });
     } catch (error) { return serverError(res, "photo-cloud/dashboard", error); }
 });
 
@@ -96,6 +97,8 @@ async function syncConnection(user, key, current) {
     if (!result.ok) { current.status = result.status === 401 ? "reauthorize" : "provider_error"; current.lastError = "Google Drive did not allow the index scan."; }
     else {
         if (result.quota) { current.usedGb = result.quota.usedGb; current.limitGb = result.quota.limitGb; }
+        const folderResult = await listDriveFolders(current.accessToken, { maxPages: 10 }).catch(() => ({ ok: false, folders: [] }));
+        current.driveFolders = folderResult.ok ? folderResult.folders.map((folder) => ({ id: folder.id, name: folder.name, webViewUrl: folder.webViewLink || "", parents: folder.parents || [], modifiedAt: folder.modifiedTime || null })) : (current.driveFolders || []);
         const fresh = await User.findById(user._id, "photoMedia"); // re-read: an earlier account's scan may have just changed it
         const all = decode(fresh?.photoMedia, key);
         const previous = new Map(all.filter((item) => item.sourceConnectionId === current.id).map((item) => [item.id, item]));
