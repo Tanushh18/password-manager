@@ -5,7 +5,7 @@ import { router } from "expo-router";
 import Aurora from "../components/Aurora";
 import Icon from "../components/Icon";
 import { useToast } from "../components/Toast";
-import { Badge, Bounce, Card, Chip, FadeIn, GradientButton, IconButton } from "../components/ui";
+import { Badge, Bounce, Card, Chip, FadeIn, GhostButton, GradientButton, IconButton } from "../components/ui";
 import { useTheme, alpha } from "../lib/theme";
 import { useVault } from "../lib/vault";
 import { STATUS_LABEL, STATUSES } from "../lib/projectItems";
@@ -82,6 +82,7 @@ export default function Projects() {
             {projects.length} project{projects.length === 1 ? "" : "s"} · end-to-end encrypted
           </Text>
         </View>
+        <GhostButton small title="Create & deploy" onPress={() => router.push("/deploy-new")} />
       </FadeIn>
 
       {projectsBroken ? (

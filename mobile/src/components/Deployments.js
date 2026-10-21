@@ -76,6 +76,26 @@ function Branch({ projectId, project, target, onDone }) {
   );
 }
 
+/** Read this server through another connected account of the same host. Hidden when there is only one account. */
+function Account({ projectId, target, onDone }) {
+  const toast = useToast();
+  const [accounts, setAccounts] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const load = target.provider === "render" ? api.renderAccounts().then((r) => r.accounts || []) : api.hostAccounts().then((r) => (r.accounts || []).filter((a) => a.provider === target.provider));
+    load.then(setAccounts).catch(() => setAccounts([]));
+  }, [target.provider]);
+  if (!accounts || accounts.length < 2) return null;
+  const change = (a) => {
+    if (a.id === target.accountId) return;
+    Alert.alert(`Use ${a.name}?`, `${target.name} will be read through ${a.name}. The server itself is not touched.`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Change", onPress: async () => { setBusy(true); try { await api.deployAccount(projectId, target.ref, a.id); toast(`Now read through ${a.name}`); onDone(); } catch (e) { toast(e.message, "error"); } finally { setBusy(false); } } }
+    ]);
+  };
+  return <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, opacity: busy ? 0.5 : 1 }}>{accounts.map((a) => <Chip key={a.id} label={a.name} active={a.id === target.accountId} onPress={() => change(a)} />)}</View>;
+}
+
 /** Every server of a project on every hosting provider: status, URL, branch, logs, redeploy, env sync and move. */
 export default function Deployments({ project }) {
   const { theme } = useTheme();
@@ -124,6 +144,7 @@ export default function Deployments({ project }) {
               {t.dashboardUrl ? <GhostButton small title={`Open ${t.label}`} onPress={() => Linking.openURL(t.dashboardUrl)} /> : null}
               {t.provider === "render" ? <GhostButton small title="Move account" onPress={() => router.push({ pathname: "/move-server", params: { projectId: project.id, ref: t.ref } })} /> : null}
             </View>
+            <Account projectId={project.id} target={t} onDone={load} />
             {project.repoUrl ? <Branch projectId={project.id} project={project} target={t} onDone={load} /> : null}
             {open[t.ref] ? <Logs projectId={project.id} target={t} /> : null}
           </Card>

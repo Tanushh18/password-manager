@@ -213,6 +213,12 @@ export const api = {
   deployAccount: (projectId, ref, accountId) => request(`/deploy-ops/projects/${encodeURIComponent(projectId)}/account`, { method: "PUT", body: { ref, accountId } }),
   deploySync: (projectId, body) => request(`/deploy-ops/projects/${encodeURIComponent(projectId)}/sync`, { method: "POST", body, timeout: 180000 }),
 
+  // Create & deploy: connected hosts, Render workspaces, and the two deploy calls
+  hostAccounts: () => request("/hosts/accounts", { timeout: 40000 }),
+  renderOwners: (accountId) => request(`/render/accounts/${encodeURIComponent(accountId)}/owners`, { timeout: 40000 }),
+  renderCreateDeploy: (body) => request("/render/deploy", { method: "POST", body, timeout: 180000 }),
+  hostCreateDeploy: (body) => request("/hosts/deploy", { method: "POST", body, timeout: 180000 }),
+
   // Move one Render server to another account, one step per call
   movePlan: (projectId, body) => request(`/move-server/${encodeURIComponent(projectId)}/plan`, { method: "POST", body, timeout: 90000 }),
   moveCreate: (projectId, body) => request(`/move-server/${encodeURIComponent(projectId)}/create`, { method: "POST", body, timeout: 90000 }),
