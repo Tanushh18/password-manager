@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Move server to new account</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,600&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single column of phases, each a ruled ledger with step rows; a sticky progress rail on top. */
+:root {
+  --paper: #f3f1ea;
+  --ink: #1b2320;
+  --muted: #5d6b64;
+  --rule: #cfd5cc;
+  --moss: #2e5e4a;
+  --ember: #b0512a;
+  --card: #fbfaf6;
+  --display: "Newsreader", Georgia, serif;
+  --body: "Instrument Sans", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #161c19; --ink: #e7ebe4; --muted: #95a39b; --rule: #34403a;
+    --card: #1d2521; --moss: #8fc7ad; --ember: #e59a72; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #161c19; --ink: #e7ebe4; --muted: #95a39b; --rule: #34403a;
+  --card: #1d2521; --moss: #8fc7ad; --ember: #e59a72; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font: 15px/1.55 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 64px;
+}
+main { max-width: 760px; margin: 0 auto; min-width: 0; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+.kicker { font: 500 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 600 clamp(32px, 6vw, 46px)/1.05 var(--display); margin-top: 12px; }
+.lede { color: var(--muted); max-width: 60ch; margin: 14px 0 0; }
+
+/* Progress rail */
+.rail { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2; background: var(--paper); padding: 14px 0 12px; border-bottom: 1px solid var(--rule); margin-top: 26px; }
+.rail__row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.rail__bar { height: 6px; background: var(--rule); border-radius: 99px; overflow: hidden; margin-top: 10px; }
+.rail__fill { height: 100%; width: 0; background: var(--moss); transition: width .35s ease; }
+.rail__count { font: 500 13px var(--mono); }
+.rail__reset { background: none; border: 0; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Phases */
+.phase { margin-top: 34px; min-width: 0; }
+.phase__head { display: flex; align-items: baseline; gap: 14px; padding-bottom: 10px; border-bottom: 2px solid var(--ink); }
+.phase__no { font: 500 13px var(--mono); color: var(--ember); }
+.phase__head h2 { font: 600 24px/1.2 var(--display); }
+.phase__done { margin-left: auto; font: 500 12px var(--mono); color: var(--moss); }
+
+/* Steps */
+.step { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 4px 12px; padding: 16px 0; border-bottom: 1px solid var(--rule); }
+.step input { appearance: none; width: 22px; height: 22px; margin: 2px 0 0 6px; border: 2px solid var(--muted); border-radius: 6px; display: grid; place-content: center; cursor: pointer; background: var(--card); }
+.step input::after { content: ""; width: 10px; height: 10px; transform: scale(0); transition: transform .15s ease; background: var(--moss); clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0, 43% 62%); }
+.step input:checked { border-color: var(--moss); }
+.step input:checked::after { transform: scale(1); }
+.step input:focus-visible { outline: 3px solid var(--moss); outline-offset: 2px; }
+.step__title { font-weight: 600; cursor: pointer; }
+.step.is-done .step__title { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+.step__body { grid-column: 2; margin: 0; color: var(--muted); }
+.step__body b { color: var(--ink); font-weight: 600; }
+.step details { grid-column: 2; }
+.step summary { cursor: pointer; font: 500 12px var(--mono); color: var(--moss); letter-spacing: .04em; margin-top: 4px; }
+.step details p, .step details li { color: var(--ink); font-size: 14px; }
+.step details ul { margin: 6px 0 0; padding-left: 18px; }
+.gate { grid-column: 2; display: inline-flex; gap: 8px; align-items: center; font: 500 12px var(--mono); padding: 4px 9px; border-radius: 6px; border: 1px solid var(--ember); color: var(--ember); justify-self: start; }
+code { font: 13px var(--mono); background: var(--card); border: 1px solid var(--rule); border-radius: 5px; padding: 1px 5px; overflow-wrap: anywhere; }
+
+/* Stop box */
+.stop { margin-top: 30px; padding: 18px 20px; border: 1px solid var(--ember); border-radius: 12px; background: var(--card); }
+.stop h3 { font: 600 19px var(--display); color: var(--ember); }
+.stop ul { margin: 10px 0 0; padding-left: 18px; }
+footer { margin-top: 34px; color: var(--muted); font-size: 13px; }
+
+@media (prefers-reduced-motion: reduce) { .rail__fill, .step input::after { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <p class="kicker">Runbook · Render · account move</p>
+  <h1>Move a server to a new account</h1>
+  <p class="lede">Create the server in the new account, point the frontend at it, and only then delete the old one. Tick each step as you go; progress is saved in this browser.</p>
+
+  <section class="rail" aria-label="Progress">
+    <div class="rail__row">
+      <span class="rail__count" id="count">0 of 0 done</span>
+      <button class="rail__reset" id="reset" type="button">Reset progress</button>
+    </div>
+    <div class="rail__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="bar"><div class="rail__fill" id="fill"></div></div>
+  </section>
+
+  <section class="phase" data-phase>
+    <header class="phase__head"><span class="phase__no">01</span><h2>Prepare</h2><span class="phase__done"></span></header>
+
+    <div class="step"><input type="checkbox" id="s1"><label class="step__title" for="s1">Write down the current server</label>
+      <p class="step__body">Name, account, live URL, branch, plan and region. You will need the URL and branch in the next phases.</p>
+      <details><summary>What to note</summary><ul><li>Service name and its <code>.onrender.com</code> URL</li><li>Account it is in now, and the account you are moving it to</li><li>Branch it deploys and whether auto-deploy is on</li></ul></details>
+    </div>
+
+    <div class="step"><input type="checkbox" id="s2"><label class="step__title" for="s2">Take an environment snapshot of the old server</label>
+      <p class="step__body">Open the server, go to <b>Environment variables</b> and press <b>▣ Snapshot</b>. This is your backup of every variable.</p>
+      <span class="gate">Gate: snapshot listed under “Encrypted snapshots”</span>
+    </div>
+
+    <div class="step"><input type="checkbox" id="s3"><label class="step__title" for="s3">Check the new account can reach the repository</label>
+      <p class="step__body">The new account needs access to the GitHub repo and a free-plan slot. Stashr reads this from the GitHub connection on the Create &amp; deploy page.</p>
+    </div>
+
+    <div class="step"><input type="checkbox" id="s4"><label class="step__title" for="s4">List every frontend that uses the old URL</label>
+      <p class="step__body">Search the variables of your frontend services for the old URL. Note each service name.</p>
+      <details><summary>How to find them</summary><ul><li>Use <b>Deployments → Copy env</b> or the URL-replace tool, which lists references across services</li><li>Check the repo too: a URL hard-coded in code needs a commit (phase 04)</li></ul></details>
+    </div>
+  </section>
+
+  <section class="phase" data-phase>
+    <header class="phase__head"><span class="phase__no">02</span><h2>Build the new server</h2><span class="phase__done"></span></header>
+
+    <div class="step"><input type="checkbox" id="s5"><label class="step__title" for="s5">Create the server in the new account</label>
+      <p class="step__body">Open <b>Create &amp; deploy</b>, choose <b>Use an existing repository</b>, pick the same repo and branch, and set <b>Render account</b> to the new one. Keep the same runtime and build commands.</p>
+      <span class="gate">Gate: deploy reaches Live (Logs panel shows the deploy)</span>
+    </div>
+
+    <div class="step"><input type="checkbox" id="s6"><label class="step__title" for="s6">Copy the variables into the new server</label>
+      <p class="step__body">On the new server, press <b>Copy env</b> and choose the old server. Read the preview: names only, nothing is written until you confirm.</p>
+      <details><summary>What to check in the preview</summary><ul><li>“new” count equals the old variable count, minus any that differ on purpose</li><li>Keep <b>Then deploy the latest commit</b> ticked</li></ul></details>
+    </div>
+
+    <div class="step"><input type="checkbox" id="s7"><label class="step__title" for="s7">Confirm the new server answers</label>
+      <p class="step__body">Open the new URL in a browser and check its health route. The Overview tab runs an endpoint health check.</p>
+      <span class="gate">Gate: health check is green and logs show no startup errors</span>
+    </div>
+  </section>
+
+  <section class="phase" data-phase>
+    <header class="phase__head"><span class="phase__no">03</span><h2>Point the frontend at it</h2><span class="phase__done"></span></header>
+
+    <div class="step"><input type="checkbox" id="s8"><label class="step__title" for="s8">Replace the old URL in the frontend variables</label>
+      <p class="step__body">Use the URL-replace tool: old URL in, new URL out, for each frontend service from step 04. Review the list before applying.</p>
+    </div>
+
+    <div class="step"><input type="checkbox" id="s9"><label class="step__title" for="s9">Redeploy the frontend</label>
+      <p class="step__body">Saving variables on the Render server page deploys the latest commit automatically. Check the deploy reaches Live.</p>
+    </div>
+
+    <div class="step"><input type="checkbox" id="s10"><label class="step__title" for="s10">Test the live frontend end to end</label>
+      <p class="step__body">Open the frontend, sign in and use one feature that calls the server. Check the new server’s logs show the request.</p>
+      <span class="gate">Gate: a real request reaches the NEW server, not the old one</span>
+    </div>
+  </section>
+
+  <section class="phase" data-phase>
+    <header class="phase__head"><span class="phase__no">04</span><h2>Ship the code</h2><span class="phase__done"></span></header>
+
+    <div class="step"><input type="checkbox" id="s11"><label class="step__title" for="s11">Commit any hard-coded old URL to main</label>
+      <p class="step__body">Skip this if step 08 changed everything. If a URL is written in code, change it, commit to <code>main</code> and push. This goes live on the next auto-deploy.</p>
+    </div>
+
+    <div class="step"><input type="checkbox" id="s12"><label class="step__title" for="s12">Move the Stashr project link to the new server</label>
+      <p class="step__body">In the project page, open <b>Stashr ⇄ Render variables</b> and link the new server with <b>Link service</b>. The new server becomes the project’s main server, so Deployments and sync use it from then on.</p>
+    </div>
+  </section>
+
+  <section class="phase" data-phase>
+    <header class="phase__head"><span class="phase__no">05</span><h2>Retire the old server</h2><span class="phase__done"></span></header>
+
+    <div class="step"><input type="checkbox" id="s13"><label class="step__title" for="s13">Let it run for a day as a fallback</label>
+      <p class="step__body">Leave the old server up while you watch the new one. Nothing is deleted yet.</p>
+    </div>
+
+    <div class="step"><input type="checkbox" id="s14"><label class="step__title" for="s14">Delete the old server</label>
+      <p class="step__body">Only now. Render asks you to type the service name. This cannot be undone, except from the snapshot in step 02.</p>
+      <span class="gate">Gate: steps 07, 10 and 13 are all ticked</span>
+    </div>
+
+    <div class="step"><input type="checkbox" id="s15"><label class="step__title" for="s15">Check the new server’s final state</label>
+      <p class="step__body">Status Running, branch correct, auto-deploy on if it was on before, and the Servers URL list shows the new URL.</p>
+    </div>
+  </section>
+
+  <section class="stop">
+    <h3>Stop and roll back if</h3>
+    <ul>
+      <li>The new server does not reach Live, or its health check fails. Do not continue. The old server is still running.</li>
+      <li>The frontend shows errors after the URL change. Put the old URL back with the same replace tool, then redeploy.</li>
+      <li>A variable is missing on the new server. Copy it again from the snapshot before going on.</li>
+    </ul>
+  </section>
+
+  <footer>Steps 01 to 15. Tick a step only after its gate, if it has one.</footer>
+</main>
+
+<script>
+(function () {
+  var KEY = "move-server-checklist-v1";
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type="checkbox"]'));
+  var count = document.getElementById("count");
+  var fill = document.getElementById("fill");
+  var bar = document.getElementById("bar");
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { return {}; }
+  }
+  function save(state) {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* storage blocked: progress lasts this visit only */ }
+  }
+  function render() {
+    var done = boxes.filter(function (b) { return b.checked; }).length;
+    var pct = boxes.length ? Math.round((done / boxes.length) * 100) : 0;
+    count.textContent = done + " of " + boxes.length + " done";
+    fill.style.width = pct + "%";
+    bar.setAttribute("aria-valuenow", String(pct));
+    boxes.forEach(function (b) { b.parentElement.classList.toggle("is-done", b.checked); });
+    document.querySelectorAll("[data-phase]").forEach(function (phase) {
+      var list = phase.querySelectorAll('input[type="checkbox"]');
+      var n = Array.prototype.filter.call(list, function (b) { return b.checked; }).length;
+      phase.querySelector(".phase__done").textContent = n === list.length ? "complete" : n + "/" + list.length;
+    });
+  }
+
+  var state = load();
+  boxes.forEach(function (b) {
+    b.checked = Boolean(state[b.id]);
+    b.addEventListener("change", function () {
+      state[b.id] = b.checked;
+      save(state);
+      render();
+    });
+  });
+  // Confirmation dialogs are not shown in this viewer, so reset takes two taps instead.
+  var reset = document.getElementById("reset");
+  var armed = false;
+  reset.addEventListener("click", function () {
+    if (!armed) {
+      armed = true;
+      reset.textContent = "Tap again to clear all ticks";
+      setTimeout(function () { armed = false; reset.textContent = "Reset progress"; }, 4000);
+      return;
+    }
+    armed = false;
+    reset.textContent = "Reset progress";
+    state = {};
+    save(state);
+    boxes.forEach(function (b) { b.checked = false; });
+    render();
+  });
+  render();
+})();
+</script>
+</body>
+</html>
