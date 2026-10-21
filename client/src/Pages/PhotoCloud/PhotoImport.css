@@ -71,10 +71,23 @@
 .pi-new select:disabled { opacity: .7; cursor: not-allowed; }
 @media (max-width: 520px) { .pi { padding-top: 1.2rem; } .pi-new, .pi-batches, .pi-detail { padding: .9rem; } .pi-row { align-items: flex-start; flex-direction: column; gap: .25rem; } .pi-detail__head { flex-direction: column; } }
 
-.pi-dest { border: 1px solid var(--line, #e5e5e5); border-radius: 10px; padding: 10px 12px; margin: 0; display: grid; gap: 8px; }
-.pi-dest legend { font-weight: 600; padding: 0 4px; }
-.pi-dest__row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.pi-dest__row small { margin-left: 6px; }
+/* Account picker inside the form: checkbox rows, not stacked labels (.pi-new label would otherwise restyle them). */
+.pi-new .pi-dest { border: 1px solid var(--line); border-radius: var(--r-md); padding: .7rem .8rem; margin: 0; display: grid; gap: .55rem; }
+.pi-new .pi-dest legend { font-size: .8rem; color: var(--heading); font-weight: 600; padding: 0 .3rem; }
+.pi-new .pi-dest__row { display: flex; align-items: center; gap: .55rem; cursor: pointer; font-size: .86rem; color: var(--text); }
+.pi-new .pi-dest__row input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); flex: 0 0 auto; }
+.pi-new .pi-dest__row small { margin-left: .35rem; font-size: .76rem; }
+.pi-new .pi-dest > .pi-muted { margin: 0; font-size: .76rem; }
 
-.pi-rename { display: flex; align-items: flex-end; gap: 8px; margin: 8px 0 16px; }
-.pi-rename label { flex: 1; }
+/* Folder name after an import: same field style as the form. */
+.pi-rename { display: flex; align-items: flex-end; gap: .6rem; margin: .8rem 0 1rem; flex-wrap: wrap; }
+.pi-rename label { flex: 1 1 220px; display: grid; gap: .3rem; font-size: .8rem; color: var(--text-muted); }
+.pi-rename input { padding: .6rem .7rem; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-md); color: var(--text); font: inherit; }
+.pi-rename input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (max-width: 520px) {
+  .pi-tiles { grid-template-columns: repeat(2, 1fr); }
+  .pi-speed { grid-template-columns: 1fr 1fr; }
+  .pi-speed > div:last-child { grid-column: 1 / -1; }
+  .pi-rename button { width: 100%; }
+}
