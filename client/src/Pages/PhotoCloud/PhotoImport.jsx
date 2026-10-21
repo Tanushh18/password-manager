@@ -183,13 +183,24 @@ export default function PhotoImport() {
 
   const start = async (event) => {
     event.preventDefault();
+    // Reserve the new tab during the user's click. A window.open() after the
+    // awaited API request is often blocked by browser popup protection.
+    const pickerWindow = window.open("about:blank", "_blank");
+    if (pickerWindow) {
+      try {
+        pickerWindow.document.title = "Opening Google Photos…";
+        pickerWindow.document.body.innerHTML = "<p style='font-family:system-ui;padding:24px'>Opening Google Photos picker…</p>";
+      } catch {}
+    }
     setCreating(true);
     try {
       const { batch } = await createPhotoImport({ label: label.trim(), sourceConnectionId: source, concurrency: parallel });
       setLabel(""); await refresh(); setSelected(batch.id);
-      window.open(batch.pickerUri, "_blank", "noopener");
+      if (pickerWindow && !pickerWindow.closed) pickerWindow.location.href = batch.pickerUri;
+      else toast.warn("Your browser blocked the picker popup. Use the Open Google Photos button in the import panel.");
       toast.info("Select photos/videos in Google Photos and press Done. Return here to watch the import.");
     } catch (e) {
+      if (pickerWindow && !pickerWindow.closed) pickerWindow.close();
       const message = errorMessage(e, "Could not start the import.");
       if (/reconnect|permission|pick a connected google account|401|403/i.test(message)) { setAccountWarning("Google needs permission again. Reconnect below, then return here to import."); toast.info("Reconnect your Google account to continue."); }
       else toast.error(message);
