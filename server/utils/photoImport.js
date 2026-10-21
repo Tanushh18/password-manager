@@ -246,7 +246,7 @@ async function processItem(item) {
     const mimeType = download.headers.get("content-type")?.split(";")[0] || meta.mimeType || "application/octet-stream";
     const filename = meta.type === "VIDEO" && !/\.mp4$/i.test(meta.filename) ? meta.filename.replace(/\.[^.]+$/, "") + ".mp4" : meta.filename;
     const excluded = [];
-    let target = null, sessionUri = "";
+    let target = null, sessionUri = "", refused = null;
     for (let tries = 0; tries < connections.length && !sessionUri; tries += 1) {
       target = pickDestination(connections, size || 0, { bufferGb: Number(settings.safetyBufferGb ?? 2), defaultId: settings.defaultConnectionId, excludeIds: excluded });
       if (!target) break;
@@ -258,9 +258,18 @@ async function processItem(item) {
         body: JSON.stringify({ name: filename, mimeType, ...(parent ? { parents: [parent] } : {}), appProperties: { stashrImport: item.pickedId }, ...(meta.createTime ? { createdTime: meta.createTime } : {}) })
       });
       sessionUri = r.headers.get("location") || "";
-      if (!sessionUri) excluded.push(target.id);
+      if (!sessionUri) {
+        excluded.push(target.id);
+        // Drive answers 403 for a full account too; only a permission refusal means the account must be reconnected.
+        if (!refused && (r.status === 401 || r.status === 403) && !/quota/i.test(await r.text().catch(() => ""))) refused = target;
+      }
     }
-    if (!sessionUri) { await download.body.cancel().catch(() => {}); await release(item, 1); return pauseBatch(batch._id, "No connected Drive account has room for the next file. Free space or connect another account, then resume."); }
+    if (!sessionUri) {
+      await download.body.cancel().catch(() => {});
+      await release(item, 1);
+      if (refused) return pauseBatch(batch._id, `Google Drive refused uploads to ${refused.email || refused.label}. Reconnect that Google account, then resume.`);
+      return pauseBatch(batch._id, "No connected Drive account has room for the next file. Free space or connect another account, then resume.");
+    }
 
     // 3. stream it across
     let lastWrite = 0;
@@ -380,7 +389,11 @@ async function control(userId, batchId, action) {
   if (!batch) throw fail(404, "Import not found.");
   const set = (status, extra = {}) => Batch.updateOne({ _id: batch._id }, { $set: { status, pauseReason: "", ...extra } });
   if (action === "pause" && batch.status === "running") { await set("paused", { pauseReason: "Paused by you." }); await event(batch._id, "info", "Paused by you."); }
-  else if (action === "resume" && batch.status === "paused") { await set("running"); await event(batch._id, "info", "Resumed."); }
+  else if (action === "resume" && batch.status === "paused") {
+    // Paused while still choosing (no items yet): go back to the picker. Marking it "running" would finish it with nothing.
+    if (await Item.exists({ batchId: batch._id })) { await set("running"); await event(batch._id, "info", "Resumed."); }
+    else { await set("picking"); await event(batch._id, "info", "Resumed. Checking your Google Photos selection…"); await pollBatch(batch._id); }
+  }
   else if (action === "cancel" && ["picking", "running", "paused"].includes(batch.status)) { await set("cancelled", { finishedAt: new Date() }); await event(batch._id, "info", "Cancelled. Files already imported stay in Drive."); }
   else if (action === "retry-failed") {
     const r = await Item.updateMany({ batchId: batch._id, status: "failed" }, { $set: { status: "pending", attempts: 0, error: "", notBefore: null, leaseUntil: null } });

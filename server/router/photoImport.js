@@ -17,7 +17,7 @@ const fail = (res, error) => (Number.isInteger(error.status) && error.status < 5
 
 const publicBatch = (b) => ({
     id: String(b._id), label: b.label, status: b.status, pauseReason: b.pauseReason || "", concurrency: b.concurrency,
-    pickerUri: b.status === "picking" ? `${b.pickerUri}/autoclose` : "", sessionExpires: b.sessionExpires || null,
+    pickerUri: b.status === "picking" && b.pickerUri ? `${b.pickerUri}/autoclose` : "", sessionExpires: b.sessionExpires || null,
     counts: b.counts, createdAt: b.createdAt, startedAt: b.startedAt || null, finishedAt: b.finishedAt || null
 });
 
