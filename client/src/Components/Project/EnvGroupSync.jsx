@@ -18,6 +18,7 @@ export default function EnvGroupSync({ projectId, servers, initialSource, open, 
   const [picked, setPicked] = useState(new Set());
   const [overwrite, setOverwrite] = useState(false);
   const [deploy, setDeploy] = useState(true);
+  const [across, setAcross] = useState(false); // also servers of other projects that deploy the same repo
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
@@ -25,7 +26,7 @@ export default function EnvGroupSync({ projectId, servers, initialSource, open, 
   const loadPreview = async (sourceId) => {
     setBusy(true); setError(""); setResult(null);
     try {
-      const r = await syncProjectServers(projectId, { apply: false, sourceServiceId: sourceId, allServers: true });
+      const r = await syncProjectServers(projectId, { apply: false, sourceServiceId: sourceId, allServers: true, acrossProjects: across });
       setPreview(r);
       // Same branch as the source is picked by default; servers on other branches can be ticked too.
       setPicked(new Set(r.targets.filter((t) => !t.error && t.branch === r.source.branch).map((t) => t.serviceId)));
@@ -33,6 +34,7 @@ export default function EnvGroupSync({ projectId, servers, initialSource, open, 
     finally { setBusy(false); }
   };
   useEffect(() => { if (open) { setSource(initialSource); void loadPreview(initialSource); } }, [open, initialSource]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (open && preview) void loadPreview(source); }, [across]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (id) => setPicked((old) => { const next = new Set(old); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const targets = (preview?.targets || []).filter((t) => picked.has(t.serviceId));
@@ -42,7 +44,7 @@ export default function EnvGroupSync({ projectId, servers, initialSource, open, 
     if (!targets.length) return;
     setBusy(true); setError("");
     try {
-      const r = await syncProjectServers(projectId, { apply: true, overwrite, deploy, sourceServiceId: source, targetServiceIds: [...picked] });
+      const r = await syncProjectServers(projectId, { apply: true, overwrite, deploy, sourceServiceId: source, targetServiceIds: [...picked], acrossProjects: across });
       setResult(r);
       const written = r.results.reduce((n, x) => n + x.written, 0);
       toast.success(written ? "Wrote " + written + " variable" + (written === 1 ? "" : "s") + "." : "Nothing needed changing.");
@@ -85,6 +87,7 @@ export default function EnvGroupSync({ projectId, servers, initialSource, open, 
           </div>
 
           <div className="sync-modal__opts">
+            <label><input type="checkbox" checked={across} onChange={(e) => setAcross(e.target.checked)} disabled={busy} /> Also servers of other projects that deploy this same repository</label>
             <label><input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} disabled={busy} /> Also replace values that differ from the source</label>
             <label><input type="checkbox" checked={deploy} onChange={(e) => setDeploy(e.target.checked)} disabled={busy} /> Redeploy the latest commit on each changed server</label>
             <p className="field__note">Variables that exist only on a target are never deleted.</p>

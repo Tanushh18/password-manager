@@ -6,6 +6,7 @@ const { mapWithConcurrency } = require("./renderGuards");
 const { linkedServices } = require("./projectMerge");
 const { planEnvSync, pendingNames } = require("./serviceEnvSync");
 const { retargetService } = require("./projectServiceAccount");
+const { repoKey } = require("./projectLink");
 
 /*
  * Server-side work for a project's Render servers: copying variables from one server to the others that run
@@ -45,8 +46,15 @@ async function saveProject(user, entry, dataKey, fields, patch) {
 }
 
 /** Reads every linked server: its branch, status and variables (values kept in memory only). */
-async function readServers(user, dataKey, fields) {
-  const services = linkedServices([fields]).filter((s) => safeId(s.serviceId));
+/** Decrypted projects (other than `fields`) whose GitHub repo is the same repository. */
+function projectsSharingRepo(projects, fields) {
+  const key = repoKey(fields?.repoUrl);
+  if (!key) return [];
+  return (projects || []).filter((p) => p && !p.broken && p.id !== fields.id && repoKey(p.repoUrl) === key);
+}
+
+async function readServers(user, dataKey, serviceList) {
+  const services = serviceList.filter((s) => safeId(s.serviceId));
   return mapWithConcurrency(services, 3, async (s) => {
     const apiKey = accountKey(user, dataKey, s.accountId);
     const base = { serviceId: s.serviceId, accountId: s.accountId, name: s.name || s.serviceId, apiKey };
@@ -71,9 +79,11 @@ async function readServers(user, dataKey, fields) {
  * `overwrite` also replaces values that differ; without it only missing variables are written.
  * `deploy` triggers a new build of the latest commit on every server that was changed.
  */
-async function syncServicesEnv(user, projectId, { apply = false, overwrite = false, deploy = false, sourceServiceId = "", targetServiceIds = null, allServers = false } = {}) {
+async function syncServicesEnv(user, projectId, { apply = false, overwrite = false, deploy = false, sourceServiceId = "", targetServiceIds = null, allServers = false, acrossProjects = false } = {}) {
   const { entry, dataKey, fields } = await loadProject(user, projectId);
-  const servers = await readServers(user, dataKey, fields);
+  // acrossProjects: also the servers of every other project that deploys the same GitHub repository.
+  const others = acrossProjects ? projectsSharingRepo((user.projects || []).filter((e) => e.enc === "udk").map((e) => ({ ...User.publicEntry(e, dataKey), id: String(e._id) })), { ...fields, id: String(entry._id) }) : [];
+  const servers = await readServers(user, dataKey, linkedServices([fields, ...others]));
   const source = servers.find((s) => s.serviceId === (sourceServiceId || fields.renderServiceId));
   if (!source) throw fail(400, "Choose a source server from this project.");
   if (source.error) throw fail(502, source.error);
@@ -128,4 +138,4 @@ async function moveServiceAccount(user, projectId, serviceId, accountId) {
   return { serviceId, accountId: String(accountId), name: String(service?.name || serviceId) };
 }
 
-module.exports = { syncServicesEnv, moveServiceAccount };
+module.exports = { syncServicesEnv, moveServiceAccount, projectsSharingRepo };

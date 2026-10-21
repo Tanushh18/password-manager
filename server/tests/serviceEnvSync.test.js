@@ -59,3 +59,25 @@ describe("Moving a service to another account", () =>
         expect(retargetService(fields, "nope", "acc2")).toBe(null);
     });
 });
+
+describe("Projects that deploy the same repository", () =>
+{
+    const { projectsSharingRepo } = require("../utils/projectServiceSync");
+    const mine = { id: "a", name: "api", repoUrl: "https://github.com/Acme/app" };
+    const projects = [
+        mine,
+        { id: "b", name: "api copy", repoUrl: "https://github.com/acme/APP.git" },
+        { id: "c", name: "other", repoUrl: "https://github.com/acme/else" },
+        { id: "d", name: "broken", repoUrl: "https://github.com/acme/app", broken: true }
+    ];
+
+    test("finds the other projects on the same repository, ignoring case and .git", () =>
+    {
+        expect(projectsSharingRepo(projects, mine).map((p) => p.id).join(",")).toBe("b");
+    });
+
+    test("a project without a GitHub repo shares nothing", () =>
+    {
+        expect(projectsSharingRepo(projects, { id: "z", repoUrl: "" }).length).toBe(0);
+    });
+});

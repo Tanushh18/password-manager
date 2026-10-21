@@ -945,7 +945,7 @@ router.post("/render/projects/:projectId/env-sync", async (req, res) => {
   try {
     const result = await syncServicesEnv(req.rootUser, req.params.projectId, {
       apply: req.body?.apply === true, overwrite: req.body?.overwrite === true, deploy: req.body?.deploy === true,
-      sourceServiceId: typeof req.body?.sourceServiceId === "string" ? req.body.sourceServiceId : "", targetServiceIds: list(req.body?.targetServiceIds), allServers: req.body?.allServers === true
+      sourceServiceId: typeof req.body?.sourceServiceId === "string" ? req.body.sourceServiceId : "", targetServiceIds: list(req.body?.targetServiceIds), allServers: req.body?.allServers === true, acrossProjects: req.body?.acrossProjects === true
     });
     if (result.applied) await recordAudit(req, "project_env_sync", "", "", { projectId: String(req.params.projectId), servers: result.results.length, written: result.results.reduce((n, r) => n + r.written, 0) });
     res.set("Cache-Control", "no-store");
