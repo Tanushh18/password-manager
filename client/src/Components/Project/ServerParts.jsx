@@ -63,7 +63,8 @@ export function AccountPicker({ projectId, server, onDone }) {
 
 /** Deployment progress and the latest app logs of one server. Closed by default; refreshes while open. */
 export function ServerLogs({ server }) {
-  const [open, setOpen] = useState(false);
+  // Mounted only when the row's Logs button is pressed, so it starts open.
+  const [open, setOpen] = useState(true);
   const [deploys, setDeploys] = useState(null);
   const [logs, setLogs] = useState(null);
   const [error, setError] = useState("");
@@ -73,10 +74,10 @@ export function ServerLogs({ server }) {
       const end = new Date();
       const [d, l] = await Promise.all([
         getRenderDeploys(server.accountId, server.id),
-        server.ownerId ? getRenderLogs(server.accountId, { ownerId: server.ownerId, resource: server.id, startTime: new Date(end.getTime() - 30 * 60000).toISOString(), endTime: end.toISOString(), direction: "backward", limit: "60", type: "app" }) : Promise.resolve({ logs: [] })
+        server.ownerId ? getRenderLogs(server.accountId, { ownerId: server.ownerId, resource: server.id, startTime: new Date(end.getTime() - 30 * 60000).toISOString(), endTime: end.toISOString(), direction: "backward", limit: "60", type: "app" }) : Promise.resolve(null)
       ]);
       setDeploys(normalizeList(d, "deploy").slice(0, 6));
-      setLogs(Array.isArray(l.logs) ? l.logs.slice().reverse() : []);
+      setLogs(l ? (Array.isArray(l.logs) ? l.logs.slice().reverse() : []) : null);
       setError("");
     } catch (e) { setError(errorMessage(e, "Could not read the logs from Render.")); }
   }, [server.accountId, server.id, server.ownerId]);
@@ -91,7 +92,7 @@ export function ServerLogs({ server }) {
   const latest = deploys?.[0];
   const status = String(latest?.status || "").toLowerCase();
   return (
-    <details className="srvlogs" onToggle={(e) => setOpen(e.currentTarget.open)}>
+    <details className="srvlogs" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary>Deployment progress &amp; logs{latest ? <span className={"srvlogs__state is-" + (status === "live" ? "ok" : IN_PROGRESS.includes(status) ? "mid" : "bad")}>{DEPLOY_LABEL[status] || status || "—"}</span> : null}</summary>
       {error ? <div className="notice notice--err" role="alert">{error}</div> : null}
       {!deploys && !error ? <p className="field__note">Reading from Render…</p> : null}
@@ -115,7 +116,7 @@ export function ServerLogs({ server }) {
             </ul>
           ) : null}
           <p className="field__label srvlogs__label">Latest app logs (last 30 min)</p>
-          <pre className="srvlogs__log" aria-label="App logs">{logs?.length ? logs.map((l) => String(l.message || "").slice(0, 300)).join("\n") : "No log lines in the last 30 minutes."}</pre>
+          <pre className="srvlogs__log" aria-label="App logs">{logs === null ? "App logs are unavailable for this service." : logs.length ? logs.map((l) => String(l.message || "").slice(0, 300)).join("\n") : "No log lines in the last 30 minutes."}</pre>
         </>
       ) : null}
     </details>
