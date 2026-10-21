@@ -13,7 +13,7 @@ export default function PhotoCloud() {
   const { items, profile } = useVault();
   const [data, setData] = useState(null);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("photos");
+  const [filter, setFilter] = useState("all");
   const [viewTab, setViewTab] = useState("photos");
   const [syncStartedAt, setSyncStartedAt] = useState(null);
   const [syncElapsed, setSyncElapsed] = useState(0);
