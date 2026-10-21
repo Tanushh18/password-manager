@@ -38,3 +38,24 @@ describe("duplicate Google account entries", () => {
     expect(pickPrimary([broken, working], new Map()).id).toBe("working");
   });
 });
+
+describe("folding duplicate entries into the kept one", () => {
+  const { mergeAccounts } = require("../utils/photoAccounts");
+  test("moves indexed files and import links onto the kept entry, once per file", () => {
+    const old = acct("old");
+    const current = acct("current");
+    const media = [
+      { id: "old:f1", providerFileId: "f1", sourceConnectionId: "old" },
+      { id: "current:f1", providerFileId: "f1", sourceConnectionId: "current" },
+      { id: "old:f2", providerFileId: "f2", sourceConnectionId: "old" },
+    ];
+    const batches = [{ sourceConnectionId: "old", destinationIds: ["old", "current"] }];
+    const plan = mergeAccounts([old, current], media, batches);
+    // "old" has the most files linked, so it is kept; "current" is folded into it.
+    expect(plan.connections.map((c) => c.id)).toEqual(["old"]);
+    expect(plan.removable.map((c) => c.id)).toEqual(["current"]);
+    expect(plan.media.map((m) => m.id).sort()).toEqual(["old:f1", "old:f2"]);
+    expect(plan.target("current")).toBe("old");
+    expect(plan.target("old")).toBe("old");
+  });
+});

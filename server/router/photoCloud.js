@@ -10,7 +10,7 @@ const { serverError } = require("./helpers");
 const { clean, decode, encoded, publicConnection, updateEntry, pushEntry, driveFetch, refreshGoogleToken } = require("../utils/photoStore");
 const { listDriveMedia, listDriveFolders } = require("../utils/driveIndex");
 const { storageTotals, suggestAccount } = require("../utils/photoRouting");
-const { normEmail, linkCounts, pickPrimary, duplicatesToRemove } = require("../utils/photoAccounts");
+const { normEmail, pickPrimary, mergeAccounts, linkCounts } = require("../utils/photoAccounts");
 const { PhotoImportBatch } = require("../models/photoImport");
 const workers = require("../utils/photoWorkers");
 const { requireFeature } = require("../utils/features");
@@ -63,18 +63,33 @@ router.get("/photo-cloud/google/callback", async (req, res) => {
     } catch (error) { return back("error", "/photos"); }
 });
 
-/* Extra entries for an account that already has one, with no files or imports linked. */
-async function duplicatePlan(user, key) {
+/* Entries for the same Google account are folded into one (files and imports move to the kept entry). */
+async function accountPlan(user, key) {
     const connections = decode(user.photoConnections, key);
-    const linked = linkCounts(decode(user.photoMedia, key), await PhotoImportBatch.find({ userId: user._id }, "sourceConnectionId destinationIds").lean());
-    return { connections, removable: duplicatesToRemove(connections, linked) };
+    const media = decode(user.photoMedia, key);
+    const batches = await PhotoImportBatch.find({ userId: user._id }, "sourceConnectionId destinationIds").lean();
+    // Only rewrite the stored lists when every saved record could be read; otherwise an unreadable one would be dropped.
+    const complete = connections.length === (user.photoConnections || []).length && media.length === (user.photoMedia || []).length;
+    return { ...mergeAccounts(connections, media, batches), batches, complete };
+}
+
+async function applyAccountMerge(user, key, plan) {
+    if (!plan.complete || !plan.into.size) return false;
+    const removeIds = plan.removable.map((c) => new mongoose.Types.ObjectId(c._eid));
+    await User.updateOne({ _id: user._id }, { $set: { photoMedia: plan.media.map((item) => encoded(key, item)) }, $pull: { photoConnections: { _id: { $in: removeIds } } } });
+    for (const batch of plan.batches) {
+        const sourceConnectionId = plan.target(batch.sourceConnectionId);
+        const destinationIds = [...new Set((batch.destinationIds || []).map(plan.target))];
+        if (sourceConnectionId !== batch.sourceConnectionId || destinationIds.join() !== (batch.destinationIds || []).join()) await PhotoImportBatch.updateOne({ _id: batch._id }, { $set: { sourceConnectionId, destinationIds } });
+    }
+    return true;
 }
 
 router.get("/photo-cloud/connections/duplicates", photosAuth, async (req, res) => {
     try {
         const key = await req.rootUser.getDataKey();
-        const plan = await duplicatePlan(req.rootUser, key);
-        return res.json({ removable: plan.removable.map((c) => ({ id: c.id, label: c.label, email: c.email, status: c.status })) });
+        const plan = await accountPlan(req.rootUser, key);
+        return res.json({ removable: plan.removable.map((c) => ({ id: c.id, label: c.label, email: c.email, status: c.status })), files: plan.media.length - (req.rootUser.photoMedia || []).length });
     } catch (error) { return serverError(res, "photo-cloud/connections/duplicates", error); }
 });
 
@@ -82,22 +97,21 @@ router.get("/photo-cloud/connections/duplicates", photosAuth, async (req, res) =
 router.post("/photo-cloud/connections/duplicates/cleanup", photosAuth, async (req, res) => {
     try {
         const key = await req.rootUser.getDataKey();
-        const plan = await duplicatePlan(req.rootUser, key);
+        const plan = await accountPlan(req.rootUser, key);
         const list = plan.removable.map((c) => ({ id: c.id, label: c.label, email: c.email, status: c.status }));
-        if (req.body?.confirm !== true) return res.json({ dryRun: true, removable: list, message: "Nothing removed. Send confirm: true to remove these entries." });
-        const eids = plan.removable.map((c) => c._eid).filter(Boolean);
-        if (eids.length) await User.updateOne({ _id: req.rootUser._id }, { $pull: { photoConnections: { _id: { $in: eids.map((id) => new mongoose.Types.ObjectId(id)) } } } });
-        return res.json({ dryRun: false, removed: eids.length, removable: list, message: "Duplicate account entries removed. Files in Drive were not touched." });
+        if (req.body?.confirm !== true) return res.json({ dryRun: true, removable: list, message: "Nothing changed. Send confirm: true to fold these entries." });
+        const applied = await applyAccountMerge(req.rootUser, key, plan);
+        return res.json({ dryRun: false, applied, removed: applied ? plan.removable.length : 0, removable: list, message: "Duplicate account entries folded into their kept entry. Files in Drive were not touched." });
     } catch (error) { return serverError(res, "photo-cloud/connections/duplicates/cleanup", error); }
 });
 
 router.get("/photo-cloud/dashboard", photosAuth, async (req, res) => {
     try {
         const key = await req.rootUser.getDataKey();
-        const plan = await duplicatePlan(req.rootUser, key);
-        const hidden = new Set(plan.removable.map((c) => c.id));
-        const connections = plan.connections.filter((c) => !hidden.has(c.id));
-        const media = decode(req.rootUser.photoMedia, key).map(({ _eid, ...item }) => item);
+        const plan = await accountPlan(req.rootUser, key);
+        await applyAccountMerge(req.rootUser, key, plan);
+        const connections = plan.connections;
+        const media = plan.media.map(({ _eid, ...item }) => item);
         const jobs = decode(req.rootUser.photoBackupJobs, key).map(({ _eid, sessionUri, ...job }) => job).slice(-200).reverse();
         const driveFolders = connections.flatMap((connection) => (connection.driveFolders || []).map((folder) => ({ ...folder, connectionId: connection.id, account: connection.email || connection.label })));
         const byChecksum = new Map();

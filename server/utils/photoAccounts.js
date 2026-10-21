@@ -1,7 +1,8 @@
 /*
  * One Google account can end up with several connection entries: reconnecting used to add a new entry each time.
- * Entries are matched by email. The one with the most files and imports linked to it is the one that is kept;
- * an extra entry with nothing linked to it can be removed.
+ * Entries are matched by email. The entry with the most files and imports linked to it is kept; the others are folded
+ * into it: their indexed files and import links are moved onto the kept entry, then the extra entries are removed.
+ * Nothing in Google Drive is touched.
  */
 const normEmail = (value) => String(value || "").trim().toLowerCase();
 
@@ -21,20 +22,55 @@ function pickPrimary(connections, linked) {
   return [...connections].sort((a, b) => rank(b, linked) - rank(a, linked))[0] || null;
 }
 
-/** Entries that repeat an account already kept and have nothing linked to them. */
-function duplicatesToRemove(connections, linked) {
+/** Per account with more than one entry: the kept entry and the extra ones. */
+function accountGroups(connections, linked) {
   const byEmail = new Map();
   for (const connection of connections) {
     const email = normEmail(connection.email);
     if (email) byEmail.set(email, [...(byEmail.get(email) || []), connection]);
   }
-  const removable = [];
+  const groups = [];
   for (const group of byEmail.values()) {
     if (group.length < 2) continue;
     const keep = pickPrimary(group, linked);
-    for (const connection of group) if (connection !== keep && !linked.get(connection.id)) removable.push(connection);
+    groups.push({ keep, others: group.filter((connection) => connection !== keep) });
   }
-  return removable;
+  return groups;
 }
 
-module.exports = { normEmail, linkCounts, pickPrimary, duplicatesToRemove };
+/** Extra entries with nothing linked to them (safe to drop without moving anything). */
+function duplicatesToRemove(connections, linked) {
+  return accountGroups(connections, linked).flatMap((g) => g.others.filter((connection) => !linked.get(connection.id)));
+}
+
+/**
+ * Folds extra entries into the kept one, in memory. Files indexed under an extra entry are re-pointed at the kept entry
+ * (their ids follow the same `connectionId:fileId` pattern the Drive index uses); a file already present is kept once.
+ */
+function mergeAccounts(connections, media = [], batches = []) {
+  const linked = linkCounts(media, batches);
+  const into = new Map();
+  for (const { keep, others } of accountGroups(connections, linked)) for (const other of others) into.set(other.id, keep.id);
+  const target = (id) => into.get(id) || id;
+
+  const seen = new Set();
+  const merged = [];
+  const moved = (item) => target(item.sourceConnectionId) !== item.sourceConnectionId;
+  // Entries that already belong to the kept account come first, so they win over moved duplicates.
+  for (const item of [...media].sort((a, b) => Number(moved(a)) - Number(moved(b)))) {
+    const next = moved(item) ? { ...item, sourceConnectionId: target(item.sourceConnectionId), id: item.providerFileId ? `${target(item.sourceConnectionId)}:${item.providerFileId}` : item.id } : item;
+    if (seen.has(next.id)) continue;
+    seen.add(next.id);
+    merged.push(next);
+  }
+
+  return {
+    connections: connections.filter((connection) => !into.has(connection.id)),
+    removable: [...into.keys()].map((id) => connections.find((connection) => connection.id === id)),
+    media: merged,
+    into,
+    target,
+  };
+}
+
+module.exports = { normEmail, linkCounts, pickPrimary, duplicatesToRemove, mergeAccounts };
