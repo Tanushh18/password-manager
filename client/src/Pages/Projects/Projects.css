@@ -198,3 +198,25 @@
 .pv2-links { display: inline-flex; align-items: center; gap: .9rem; }
 .pv2-serverlist__name { display: grid; }
 .pv2-serverlist__url { font-size: .72rem; color: var(--accent) !important; overflow: hidden; text-overflow: ellipsis; }
+
+.pv2-platforms { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin: .2rem 0 .8rem; }
+.pv2-platforms__label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); margin-right: .2rem; }
+
+.repopick { display: grid; gap: .5rem; }
+.repopick__tools { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+.repopick__tools > .input[type="search"] { flex: 1; min-width: 180px; }
+.repopick__sort { display: flex; gap: .4rem; align-items: center; font-size: .8rem; color: var(--text-muted); }
+.repopick__sort select { padding: .3rem .5rem; font-size: .8rem; }
+.repopick__check { font-size: .8rem; color: var(--text-muted); display: flex; gap: .3rem; align-items: center; }
+.repopick__list { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; max-height: 340px; overflow: auto; }
+.repopick__item { width: 100%; text-align: left; display: grid; gap: .15rem; padding: .55rem .7rem; border-radius: var(--r-md); border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.repopick__item:hover { border-color: rgba(var(--accent-rgb), .5); }
+.repopick__item.is-selected { border-color: var(--accent); background: rgba(var(--accent-rgb), .1); }
+.repopick__item strong { font-size: .88rem; color: var(--heading); word-break: break-all; }
+.repopick__item small { color: var(--text-muted); font-size: .76rem; }
+.repopick__meta { display: flex; gap: .5rem; flex-wrap: wrap; font-size: .72rem; color: var(--text-faint); }
+.repopick__meta em { font-style: normal; font-weight: 700; color: #b7791f; text-transform: uppercase; letter-spacing: .04em; }
+.dp-scope { display: grid; gap: .5rem; }
+.dp-scope__note { margin: 0; font-size: .8rem; color: var(--text-muted); }
+.pv2-platforms__sort { margin-left: auto; display: flex; gap: .4rem; align-items: center; font-size: .8rem; color: var(--text-muted); }
+.pv2-platforms__sort select { padding: .3rem .5rem; font-size: .8rem; }

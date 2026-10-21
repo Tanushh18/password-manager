@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Modal } from "react-responsive-modal";
 import "react-responsive-modal/styles.css";
 import { toast } from "react-toastify";
-import { getRenderAccounts, getRenderEnvVars, getRenderServices, updateRenderEnvVar } from "../../api/client";
+import { getRenderAccounts, getRenderEnvVars, getRenderServices, triggerRenderDeploy, updateRenderEnvVar } from "../../api/client";
 import { useVault } from "../../state/vault";
 import { errorMessage } from "../../Pages/Render/renderUtils";
 
@@ -15,6 +15,7 @@ export default function ServerEnvCopy({ server, open, onClose, onDone }) {
   const [pick, setPick] = useState("");
   const [plan, setPlan] = useState(null); // { add, differ, same, rows }
   const [overwrite, setOverwrite] = useState(false);
+  const [deployAfter, setDeployAfter] = useState(true); // a saved env only takes effect on a new build
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -55,7 +56,10 @@ export default function ServerEnvCopy({ server, open, onClose, onDone }) {
     let ok = 0;
     try {
       for (const r of rows) { await updateRenderEnvVar(server.accountId, server.id, r.name, r.value); ok += 1; }
-      toast.success("Copied " + ok + " variable" + (ok === 1 ? "" : "s") + " to " + server.name + ".");
+      if (deployAfter) {
+        try { await triggerRenderDeploy(server.accountId, server.id, false); toast.success("Copied " + ok + " variable" + (ok === 1 ? "" : "s") + " to " + server.name + " and started a deploy of the latest commit."); }
+        catch (e) { toast.error(errorMessage(e, "Variables saved, but the deploy did not start.")); }
+      } else toast.success("Copied " + ok + " variable" + (ok === 1 ? "" : "s") + " to " + server.name + ".");
       onDone?.(); onClose();
     } catch (e) { setErr("Stopped after " + ok + " of " + rows.length + ". " + errorMessage(e, "Render refused a variable.")); if (ok) onDone?.(); }
     finally { setBusy(false); }
@@ -91,6 +95,7 @@ export default function ServerEnvCopy({ server, open, onClose, onDone }) {
           </div>
         ) : null}
         {err ? <div className="notice notice--err" role="alert">{err}</div> : null}
+        {plan ? <label className="field__note" style={{ display: "block" }}><input type="checkbox" checked={deployAfter} onChange={(e) => setDeployAfter(e.target.checked)} disabled={busy} /> Then deploy the latest commit so the new variables are used</label> : null}
         <div className="gh-panel__row">
           <button type="button" className="btn btn--primary" disabled={busy || !count} onClick={() => void apply()}>{busy && plan ? "Copying…" : count ? "Copy " + count + " variable" + (count === 1 ? "" : "s") : "Nothing to copy"}</button>
           <button type="button" className="btn btn--ghost" disabled={busy} onClick={onClose}>Cancel</button>

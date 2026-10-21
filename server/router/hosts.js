@@ -9,6 +9,7 @@ const { githubGet, githubSend, loadGithubAccounts } = require("../utils/githubCl
 const crypto = require("crypto");
 const { mapWithConcurrency } = require("../utils/renderGuards");
 const { groupKey } = require("../utils/projectMerge");
+const { applyClientFolder } = require("../utils/clientFolder");
 
 /*
  * Hosting connections (Vercel, Netlify, Railway, Cloudflare Pages) and "deploy this repo + branch" from Projects.
@@ -101,6 +102,10 @@ router.post("/hosts/deploy", deployLimiter, async (req, res) => {
       name: hostName(b.hostName || name), owner, repo, branch: branch || defaultBranch, defaultBranch, envVars,
       framework: text(b.framework, 40), buildCommand: text(b.buildCommand, 300), outputDir: text(b.outputDir, 200)
     };
+    const folded = applyClientFolder({ folder: text(b.clientFolder, 200), buildCommand: input.buildCommand, outputDir: input.outputDir });
+    if (folded.error) return res.status(400).json({ ok: false, error: folded.error });
+    input.buildCommand = folded.buildCommand;
+    input.outputDir = folded.outputDir;
     if (!input.name) return res.status(400).json({ ok: false, error: "That name can't be used. Use letters, numbers and dashes." });
     if (/[\r\n\0]/.test(input.buildCommand + input.outputDir)) return res.status(400).json({ ok: false, error: "Build settings must be a single line." });
 

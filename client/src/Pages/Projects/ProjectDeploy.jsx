@@ -4,6 +4,8 @@ import { toast } from "react-toastify";
 import Field from "../../Components/Field/Field";
 import GithubConnectModal from "../../Components/Project/GithubConnectModal";
 import EnvImport from "../../Components/Project/EnvImport";
+import EnvText from "../../Components/Project/EnvText";
+import RepoPicker from "../../Components/Project/RepoPicker";
 import HostConnectModal from "../../Components/Project/HostConnectModal";
 import { HOSTS, hostById } from "../../lib/hostGuides";
 import { Arrow, Check, Copy, Plus, Trash, Alert } from "../../Components/Icons/Icons";
@@ -52,6 +54,13 @@ const RUNTIMES = {
 // Which preset a starter template deploys with.
 const TEMPLATE_PRESET = { nextjs: "nextjs", react: "vite", vue: "vite", svelte: "vite", astro: "astro", node: "node", python: "python", flask: "flask", go: "go", docker: "docker", static: "static" };
 const REGIONS = ["singapore", "oregon", "ohio", "virginia", "frankfurt"];
+// What an existing repository deploys: its server folder, its client folder, or both at once.
+const SCOPES = [["server", "Server only", "The API or back end, with its own folder."], ["client", "Client only", "The front end, as a static site."], ["both", "Server + client", "Both from one repository, at the same time."]];
+const SCOPE_NOTE = {
+  server: "Deploys the server folder of this repository. Pick where it runs under Hosting.",
+  client: "Deploys the client folder as a static site. Pick the host under Hosting.",
+  both: "The server goes to Render. The client goes to the host you pick under Hosting (Render serves it as a static site by default)."
+};
 const slug = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[-._]+|[-._]+$/g, "").replace(/-{2,}/g, "-").slice(0, 60);
 const errorOf = (e, fallback) => e?.response?.data?.error || fallback;
 
@@ -80,7 +89,8 @@ export default function ProjectDeploy() {
   const [wait, setWait] = useState(false);
   const [form, setForm] = useState({
     name: "", description: "", template: "node", existingRepoUrl: "", branch: "", rootDir: "", hostAccountId: "", hostBuild: "", hostOutput: "", visibility: "public", githubAccountId: "", renderAccountId: "", ownerId: "",
-    region: "singapore", runtime: "node", buildCommand: RUNTIMES.node.build, startCommand: RUNTIMES.node.start, envVars: [], useExistingRepo: false
+    region: "singapore", runtime: "node", buildCommand: RUNTIMES.node.build, startCommand: RUNTIMES.node.start, envVars: [], useExistingRepo: false,
+    deployScope: "server", clientRootDir: "", clientRuntime: "vite"
   });
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
 
@@ -116,8 +126,11 @@ export default function ProjectDeploy() {
 
   const ownCode = form.template === "empty" || form.template === "existing";
   const isStatic = Boolean(RUNTIMES[form.runtime]?.isStatic);
+  const scope = form.template === "existing" ? form.deployScope : "server"; // only an existing repo can split into server and client
+  const renderPart = host === "render" || scope === "both"; // a Render service is part of this deploy
+  const deployLabel = scope === "both" ? "Deploy server + client" : "Deploy to " + (host === "render" ? "Render" : hostById(host).label);
   const repoName = slug(form.name);
-  const ready = form.name.trim() && repoName && form.githubAccountId && (host === "render" ? form.renderAccountId && (owners.length < 2 || form.ownerId) : form.hostAccountId) && (form.template !== "existing" || form.existingRepoUrl.trim());
+  const ready = form.name.trim() && repoName && form.githubAccountId && (renderPart ? form.renderAccountId && (owners.length < 2 || form.ownerId) : true) && (host !== "render" ? form.hostAccountId : true) && (form.template !== "existing" || form.existingRepoUrl.trim());
 
   const pickTemplate = (template) => {
     const preset = TEMPLATE_PRESET[template];
@@ -174,31 +187,44 @@ export default function ProjectDeploy() {
     return () => clearInterval(timer);
   }, [repo, wait, checkCode]);
 
-  /* Step 3: deploy on Render once the code is there. */
+  /* Step 3: deploy once the code is there: the server, the client, or both. Each part is its own service. */
+  const renderJob = (overrides) => deployProject({ ...form, repoName, template: "existing", useExistingRepo: true, existingRepoUrl: repo.url, branch: form.branch, visibility: "public", ...overrides });
+  const hostJob = async (overrides) => {
+    const data = await deployToHost({ name: form.name, description: form.description, repoUrl: repo.url, branch: form.branch || codeState.branch || "", githubAccountId: form.githubAccountId, hostAccountId: form.hostAccountId, envVars: form.envVars, buildCommand: form.hostBuild, outputDir: form.hostOutput, ...overrides });
+    return { ok: true, host: data.host, steps: [{ step: "host", status: "done", detail: "Deployed " + data.repo.owner + "/" + data.repo.repo + " (" + data.repo.branch + ") to " + data.host }], repo: data.repo, service: data.service, projectId: data.projectId, firstDeploy: "started", hostNote: data.note };
+  };
+  const jobs = [];
+  if (scope === "server") jobs.push({ label: "Server", run: () => (host === "render" ? renderJob({}) : hostJob({})) });
+  if (scope === "client") jobs.push({ label: "Client", run: () => (host === "render" ? renderJob({ rootDir: form.clientRootDir }) : hostJob({ clientFolder: form.clientRootDir })) });
+  if (scope === "both") {
+    jobs.push({ label: "Server", run: () => renderJob({ rootDir: form.rootDir }) });
+    jobs.push({ label: "Client", run: () => (host === "render"
+      ? renderJob({ name: form.name + " client", repoName: slug(form.name + "-client"), rootDir: form.clientRootDir, runtime: form.clientRuntime, buildCommand: RUNTIMES[form.clientRuntime]?.build || "", startCommand: "" })
+      : hostJob({ name: form.name + " client", clientFolder: form.clientRootDir })) });
+  }
+
   const deploy = async () => {
     if (!repo || busy || codeState.status !== "ready") return;
     setBusy(true); setError(""); setResult(null);
+    const parts = [];
     try {
-      if (host !== "render") {
-        const data = await deployToHost({ name: form.name, description: form.description, repoUrl: repo.url, branch: form.branch || codeState.branch || "", githubAccountId: form.githubAccountId, hostAccountId: form.hostAccountId, envVars: form.envVars, buildCommand: form.hostBuild, outputDir: form.hostOutput });
-        setResult({ ok: true, host: data.host, steps: [{ step: "host", status: "done", detail: "Deployed " + data.repo.owner + "/" + data.repo.repo + " (" + data.repo.branch + ") to " + data.host }], repo: data.repo, service: data.service, projectId: data.projectId, firstDeploy: "started", hostNote: data.note });
-        void refreshProfile();
-        toast.success("Project created and deploying on " + data.host + ".");
-        return;
-      }
-      const data = await deployProject({ ...form, repoName, template: "existing", useExistingRepo: true, existingRepoUrl: repo.url, branch: form.branch, visibility: "public" });
-      setResult(data);
+      for (const job of jobs) parts.push({ ...(await job.run()), label: job.label });
+      setResult({ ok: true, steps: parts.flatMap((p) => p.steps), parts });
       void refreshProfile();
-      toast.success("Project created and deploying on the free plan.");
+      toast.success(parts.length > 1 ? "Server and client are deploying." : parts[0].host ? "Project created and deploying on " + parts[0].host + "." : "Project created and deploying on the free plan.");
     } catch (e) {
       const data = e?.response?.data;
-      if (data?.steps) setResult(data); else if (host !== "render" && data?.error) setError(data.error); else setError(errorOf(e, "Could not deploy the project."));
+      const message = data?.error || errorOf(e, "Could not deploy the project.");
+      if (!parts.length && !data?.steps) { setError(message); return; }
+      setResult({ ok: false, error: message, steps: [...parts.flatMap((p) => p.steps), ...(data?.steps || [])], parts, repo: data?.repo || repo, canReuseRepo: !parts.length && Boolean(data?.canReuseRepo) });
     } finally { setBusy(false); }
   };
 
   /* ---------------- result screen ---------------- */
   if (result) {
     const ok = result.ok;
+    const parts = result.parts || [];
+    const waiting = parts.find((p) => p.firstDeploy === "waiting-for-code");
     return (
       <div className="vault page">
         <div className="shell proj-shell">
@@ -206,8 +232,8 @@ export default function ProjectDeploy() {
           <h1 className="vault__title">{ok ? "All set" : "Stopped part-way"}</h1>
           <section className="card dp-section" aria-live="polite">
             <ul className="dp-steps">
-              {result.steps.map((s) => (
-                <li key={s.step} className={"is-" + s.status}><span className="mark">{s.status === "done" ? "✓" : s.status === "failed" ? "✕" : "–"}</span><span>{s.detail}</span></li>
+              {result.steps.map((s, i) => (
+                <li key={i} className={"is-" + s.status}><span className="mark">{s.status === "done" ? "✓" : s.status === "failed" ? "✕" : "–"}</span><span>{s.detail}</span></li>
               ))}
               {!ok ? <li className="is-failed"><span className="mark">✕</span><span><strong>{result.error}</strong></span></li> : null}
             </ul>
@@ -220,39 +246,37 @@ export default function ProjectDeploy() {
             ) : !ok ? <div className="gh-panel__row"><button type="button" className="btn btn--ghost btn--sm" onClick={() => setResult(null)}>Back</button></div> : null}
           </section>
 
-          {ok ? (
-            <>
-              <section className="card dp-section">
-                <h2>Your project</h2>
-                <div className="dp-links">
-                  <a className="btn btn--primary btn--sm" href={result.repo.url} target="_blank" rel="noreferrer noopener">Open repository ↗</a>
-                  {result.service.url ? <a className="btn btn--ghost btn--sm" href={result.service.url} target="_blank" rel="noreferrer noopener">Open live site ↗</a> : null}
-                  {result.service.dashboardUrl ? <a className="btn btn--ghost btn--sm" href={result.service.dashboardUrl} target="_blank" rel="noreferrer noopener">Open in Render ↗</a> : null}
-                  {result.projectId ? <Link className="btn btn--ghost btn--sm" to={"/projects/" + result.projectId}>Open project in Stashr</Link> : null}
-                </div>
-                <p className="field__note">
-                  {result.firstDeploy === "waiting-for-code"
-                    ? "Render is waiting for your code. The first git push below triggers the first deploy automatically."
-                    : result.host ? "The first deploy is running on " + result.host + ". " + (result.hostNote || "")
-                    : "The first deploy is running on Render (free instances take a few minutes to build). Stashr will show its health on the project page."}
-                </p>
-              </section>
+          {parts.map((part) => (
+            <section className="card dp-section" key={part.label + part.repo?.url}>
+              <h2>{parts.length > 1 ? part.label + " · " : ""}Your project</h2>
+              <div className="dp-links">
+                {part.repo ? <a className="btn btn--primary btn--sm" href={part.repo.url} target="_blank" rel="noreferrer noopener">Open repository ↗</a> : null}
+                {part.service?.url ? <a className="btn btn--ghost btn--sm" href={part.service.url} target="_blank" rel="noreferrer noopener">Open live site ↗</a> : null}
+                {part.service?.dashboardUrl ? <a className="btn btn--ghost btn--sm" href={part.service.dashboardUrl} target="_blank" rel="noreferrer noopener">Open in {part.host || "Render"} ↗</a> : null}
+                {part.projectId ? <Link className="btn btn--ghost btn--sm" to={"/projects/" + part.projectId}>Open project in Stashr</Link> : null}
+              </div>
+              <p className="field__note">
+                {part.firstDeploy === "waiting-for-code"
+                  ? "Render is waiting for your code. The first git push below triggers the first deploy automatically."
+                  : part.host ? "The first deploy is running on " + part.host + ". " + (part.hostNote || "")
+                  : "The first deploy is running on Render (free instances take a few minutes to build). Stashr will show its health on the project page."}
+              </p>
+            </section>
+          ))}
 
-              {result.firstDeploy === "waiting-for-code" ? (
-                <section className="card dp-section">
-                  <h2>Push your code from the terminal</h2>
-                  <p className="field__note">Run these inside your project folder. Sign in to GitHub the way you normally do (<code>gh auth login</code>, a credential manager, or an SSH key) — Stashr never puts its token in the URL.</p>
-                  <pre className="dp-code">{result.repo.commands.join("\n")}</pre>
-                  <div className="gh-panel__row">
-                    <Copyable text={result.repo.commands.join("\n")} label="Copy commands" />
-                    <Copyable text={result.repo.https} label="Copy HTTPS URL" />
-                    <Copyable text={result.repo.ssh} label="Copy SSH URL" />
-                  </div>
-                </section>
-              ) : null}
-              <div className="gh-panel__row"><Link className="btn btn--ghost" to="/projects/deploy" onClick={() => { setResult(null); setRepo(null); setCodeState({ status: "idle" }); set({ name: "", description: "", envVars: [], existingRepoUrl: "", branch: "" }); }}>Create another</Link></div>
-            </>
+          {waiting ? (
+            <section className="card dp-section">
+              <h2>Push your code from the terminal</h2>
+              <p className="field__note">Run these inside your project folder. Sign in to GitHub the way you normally do (<code>gh auth login</code>, a credential manager, or an SSH key) — Stashr never puts its token in the URL.</p>
+              <pre className="dp-code">{waiting.repo.commands.join("\n")}</pre>
+              <div className="gh-panel__row">
+                <Copyable text={waiting.repo.commands.join("\n")} label="Copy commands" />
+                <Copyable text={waiting.repo.https} label="Copy HTTPS URL" />
+                <Copyable text={waiting.repo.ssh} label="Copy SSH URL" />
+              </div>
+            </section>
           ) : null}
+          {ok ? <div className="gh-panel__row"><Link className="btn btn--ghost" to="/projects/deploy" onClick={() => { setResult(null); setRepo(null); setCodeState({ status: "idle" }); set({ name: "", description: "", envVars: [], existingRepoUrl: "", branch: "", deployScope: "server", clientRootDir: "" }); }}>Create another</Link></div> : null}
         </div>
       </div>
     );
@@ -280,6 +304,7 @@ export default function ProjectDeploy() {
                 <button key={id} type="button" className="dp-template" aria-pressed={form.template === id} onClick={() => pickTemplate(id)}><strong>{label}</strong><small>{hint}</small></button>
               ))}
             </div>
+            {form.template === "existing" && form.githubAccountId ? <RepoPicker accountId={form.githubAccountId} selected={form.existingRepoUrl.trim()} disabled={locked} onPick={(r) => set({ existingRepoUrl: r.url, branch: "", rootDir: "", clientRootDir: "" })} /> : null}
             {form.template === "existing" ? <Field id="dp-existing" label="Existing repository URL" placeholder="https://github.com/you/your-repo" value={form.existingRepoUrl} onChange={(e) => set({ existingRepoUrl: e.target.value, branch: "", rootDir: "" })} autoComplete="off" spellCheck="false" hint="Deploying a repo that already has a project? Use a different project name so the new server gets its own name." /> : null}
             {form.template === "existing" && pre.status !== "idle" ? (
               <div className="field">
@@ -322,6 +347,16 @@ export default function ProjectDeploy() {
 
           </fieldset>
 
+          {form.template === "existing" ? (
+            <section className="card dp-section dp-scope">
+              <h2>Deploy what?</h2>
+              <div className="dp-templates" role="group" aria-label="What to deploy">
+                {SCOPES.map(([id, label, hint]) => <button key={id} type="button" className="dp-template" aria-pressed={form.deployScope === id} onClick={() => set({ deployScope: id })}><strong>{label}</strong><small>{hint}</small></button>)}
+              </div>
+              <p className="dp-scope__note">{SCOPE_NOTE[scope]}</p>
+            </section>
+          ) : null}
+
           <section className="card dp-section">
             <h2>3 · Hosting</h2>
             <div className="dp-templates" role="group" aria-label="Hosting provider">
@@ -348,7 +383,8 @@ export default function ProjectDeploy() {
               <div className="gh-panel__row"><button type="button" className="btn btn--ghost btn--sm" onClick={() => setHostModal(true)}>{hostChoices.length ? "Manage " : "Connect "}{hostById(host).label}</button></div>
               {!hostChoices.length ? <p className="field__note">No {hostById(host).label} token yet. Press Connect for the step-by-step way to get one.</p> : null}
             </section>
-          ) : (
+          ) : null}
+          {renderPart ? (
           <section className="card dp-section">
             <h2>Render</h2>
             <div className="dp-free"><Check size={16} /><span><strong>Free plan only.</strong> Stashr always creates the service on Render’s free plan; there is no option to choose a paid one. Free services sleep after about 15 minutes without traffic and wake on the next request.</span></div>
@@ -357,10 +393,18 @@ export default function ProjectDeploy() {
               {form.runtime !== "static" ? <Field id="dp-build" label="Build command" value={form.buildCommand} onChange={(e) => set({ buildCommand: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
               {!RUNTIMES[form.runtime].isStatic && form.runtime !== "docker" ? <Field id="dp-start" label="Start command" value={form.startCommand} onChange={(e) => set({ startCommand: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
             </div>
+            {scope === "both" && host === "render" ? (
+              <div className="field"><label className="field__label" htmlFor="dp-croute">Client framework (static site)</label><select id="dp-croute" className="input" value={form.clientRuntime} onChange={(e) => set({ clientRuntime: e.target.value })}>{Object.entries(RUNTIMES).filter(([, r]) => r.isStatic).map(([k, r]) => <option key={k} value={k}>{r.label}</option>)}</select></div>
+            ) : null}
             {RUNTIMES[form.runtime]?.needsDockerfile ? <p className="field__note">Render builds this from a <code>Dockerfile</code> at the root of the repository. Use it for PHP/Laravel, Java/Spring Boot, .NET and anything else without a native runtime.</p> : null}
             {ownCode ? (
               <>
-                <Field id="dp-root" label="Root directory (monorepo)" placeholder="e.g. server (leave empty if package.json is at the repo root)" value={form.rootDir} onChange={(e) => set({ rootDir: e.target.value })} autoComplete="off" spellCheck="false" />
+                {scope === "client" ? (
+                  <Field id="dp-root" label="Client folder" placeholder="e.g. client" value={form.clientRootDir} onChange={(e) => set({ clientRootDir: e.target.value })} autoComplete="off" spellCheck="false" hint="The folder with the client's package.json." />
+                ) : (
+                  <Field id="dp-root" label={scope === "both" ? "Server folder" : "Root directory (monorepo)"} placeholder="e.g. server (leave empty if package.json is at the repo root)" value={form.rootDir} onChange={(e) => set({ rootDir: e.target.value })} autoComplete="off" spellCheck="false" />
+                )}
+                {scope === "both" ? <Field id="dp-croot" label="Client folder" placeholder="e.g. client" value={form.clientRootDir} onChange={(e) => set({ clientRootDir: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
                 {!form.rootDir && (codeState.rootHint || pre.rootHint) ? (
                   <div className="notice notice--err" role="alert"><Alert size={15} /> No <code>package.json</code> (or other app file) at the top of this repo, so the build will fail. The app looks like it lives in <code>{codeState.rootHint || pre.rootHint}/</code>.{" "}
                     <button type="button" className="btn btn--ghost btn--sm" onClick={() => set({ rootDir: codeState.rootHint || pre.rootHint })}>Use “{codeState.rootHint || pre.rootHint}”</button></div>
@@ -386,7 +430,7 @@ export default function ProjectDeploy() {
             </div>
           </section>
 
-          )}
+          ) : null}
 
           <section className="card dp-section">
             <h2>4 · Environment variables</h2>
@@ -403,6 +447,7 @@ export default function ProjectDeploy() {
               <EnvImport renderAccounts={render || []} projects={projects} repoUrl={form.existingRepoUrl || repo?.url || ""} taken={form.envVars.map((v) => v.name)} onImport={(rows) => set({ envVars: [...form.envVars.filter((v) => v.name || v.value), ...rows] })} />
               <textarea className="input" rows={3} placeholder={"Or paste a .env file:\nAPI_KEY=abc123\nDATABASE_URL=postgres://…"} aria-label="Paste a .env file" value={pasteText} onChange={(e) => setPasteText(e.target.value)} spellCheck="false" />
               {pasteText.trim() ? <div className="gh-panel__row"><button type="button" className="btn btn--ghost btn--sm" onClick={applyPaste}>Add pasted variables</button></div> : null}
+              <EnvText rows={form.envVars} onChange={(rows) => set({ envVars: rows })} idPrefix="dp-env" />
             </div>
           </section>
 
@@ -440,7 +485,7 @@ export default function ProjectDeploy() {
               ) : null}
               <div className="gh-panel__row">
                 <button type="button" className="btn btn--ghost btn--sm" disabled={codeState.status === "checking"} onClick={() => { setWait(true); void checkCode(repo.url); }}>Check again</button>
-                <button type="button" className="btn btn--primary btn--lg" disabled={busy || codeState.status !== "ready" || !ready} onClick={() => void deploy()}>{busy ? <><span className="spinner" /> Deploying… this can take up to a minute</> : "Deploy to " + (host === "render" ? "Render" : hostById(host).label)}</button>
+                <button type="button" className="btn btn--primary btn--lg" disabled={busy || codeState.status !== "ready" || !ready} onClick={() => void deploy()}>{busy ? <><span className="spinner" /> Deploying… this can take up to a minute</> : deployLabel}</button>
               </div>
             </section>
           ) : (

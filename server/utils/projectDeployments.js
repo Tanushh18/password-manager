@@ -42,7 +42,7 @@ async function getProjectDeployments(user, projectId) {
       const raw = await renderRequest(account.apiKey, path);
       const service = raw?.service || raw;
       const out = {
-        ...base, accountName: account.name, name: String(service?.name || base.name), type: service?.type || "",
+        ...base, accountName: account.name, name: String(service?.name || base.name), type: service?.type || "", ownerId: String(service?.ownerId || ""),
         url: /^https:\/\//i.test(String(service?.serviceDetails?.url || "")) ? service.serviceDetails.url : "",
         dashboardUrl: service?.dashboardUrl || "", suspended: service?.suspended === "suspended",
         region: service?.serviceDetails?.region || "", plan: service?.serviceDetails?.plan || service?.serviceDetails?.buildPlan || "",

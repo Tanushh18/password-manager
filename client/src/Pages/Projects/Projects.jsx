@@ -30,6 +30,8 @@ export default function Projects() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("__active"); // __active = everything except archived
   const [source, setSource] = useState("any"); // any | github | render | manual
+  const [platform, setPlatform] = useState("all"); // all | Render | Vercel | ... (where the project is hosted)
+  const [sortBy, setSortBy] = useState("recent"); // recent | name | status | platform
   const [view, setView] = useState("all"); // all | values | projects (while searching)
   const [importing, setImporting] = useState(false);
   const [githubOpen, setGithubOpen] = useState(false);
@@ -89,8 +91,14 @@ export default function Projects() {
   const searchRef = useShortcuts(() => navigate("/projects/new"));
 
   const sourceOf = (p) => p.autoSource || "manual";
+  const platformOf = (p) => p.hostingProvider || (p.renderServiceId || (p.renderServices || []).length ? "Render" : "");
+  const platforms = useMemo(() => {
+    const counts = new Map();
+    for (const p of projects) { const k = platformOf(p); if (k) counts.set(k, (counts.get(k) || 0) + 1); }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [projects]);
   const byStatus = useMemo(() => projects.filter((p) =>
-    (status === "__all" || (status === "__active" ? p.status !== "archived" : p.status === status)) && (source === "any" || sourceOf(p) === source)), [projects, status, source]);
+    (status === "__all" || (status === "__active" ? p.status !== "archived" : p.status === status)) && (source === "any" || sourceOf(p) === source) && (platform === "all" || platformOf(p) === platform)), [projects, status, source, platform]);
   const tiles = useMemo(() => ({
     active: projects.filter((p) => p.status !== "archived").length,
     deployed: projects.filter((p) => p.status === "deployed").length,
@@ -101,8 +109,14 @@ export default function Projects() {
   const results = useMemo(() => {
     const r = searchProjects(byStatus, search);
     const recent = (a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
-    return { projects: [...r.projects].sort(recent), values: r.values };
-  }, [byStatus, search]);
+    const sorters = {
+      recent,
+      name: (a, b) => String(a.name).localeCompare(String(b.name)),
+      status: (a, b) => String(a.status || "").localeCompare(String(b.status || "")) || String(a.name).localeCompare(String(b.name)),
+      platform: (a, b) => platformOf(a).localeCompare(platformOf(b)) || String(a.name).localeCompare(String(b.name))
+    };
+    return { projects: [...r.projects].sort(sorters[sortBy] || recent), values: r.values };
+  }, [byStatus, search, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const searching = search.trim().length > 0;
   const showValues = searching && view !== "projects" && results.values.length > 0;
@@ -156,6 +170,24 @@ export default function Projects() {
           <div className="notice notice--err vault__notice">
             <Alert size={15} /> {projectsBroken} project{projectsBroken === 1 ? "" : "s"} couldn't be decrypted with this key and {projectsBroken === 1 ? "is" : "are"} hidden.
           </div>
+        ) : null}
+
+        {platforms.length ? (
+          <nav className="pv2-platforms" aria-label="Filter by platform">
+            <span className="pv2-platforms__label">Platform</span>
+            <button type="button" className={"folder-chip " + (platform === "all" ? "is-active" : "")} onClick={() => setPlatform("all")}>All <span>{projects.length}</span></button>
+            {platforms.map(([name, count]) => (
+              <button key={name} type="button" className={"folder-chip " + (platform === name ? "is-active" : "")} aria-pressed={platform === name} onClick={() => setPlatform(name)}>{name} <span>{count}</span></button>
+            ))}
+            <label className="pv2-platforms__sort">Sort
+              <select className="input" value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort projects">
+                <option value="recent">Recently updated</option>
+                <option value="name">Name</option>
+                <option value="status">Status</option>
+                <option value="platform">Platform</option>
+              </select>
+            </label>
+          </nav>
         ) : null}
 
         <div className="vault__tools">

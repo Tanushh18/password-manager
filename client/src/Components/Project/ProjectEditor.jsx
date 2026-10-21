@@ -4,6 +4,7 @@ import "react-responsive-modal/styles.css";
 import { toast } from "react-toastify";
 import Field from "../Field/Field";
 import { emptyProject, emptyDatabase, emptyEnvVar, emptyExtraField, parseEnvBlock } from "../../lib/projectItems";
+import EnvText from "./EnvText";
 import { Globe, Trash, Check, Plus } from "../Icons/Icons";
 
 const text = (id, label, key, form, setForm, extra = {}) => (
@@ -254,6 +255,12 @@ export default function ProjectEditor({ open, project, onClose, onSave, onDelete
           <button type="button" className="btn btn--ghost btn--sm" onClick={() => setForm((f) => ({ ...f, envVars: [...f.envVars, emptyEnvVar()] }))}>
             <Plus size={14} /> Add variable
           </button>
+          {/* All variables as one text block. Purpose notes are kept for names that stay. */}
+          <EnvText
+            idPrefix="proj-env"
+            rows={form.envVars}
+            onChange={(rows) => setForm((f) => ({ ...f, envVars: rows.map((r) => ({ ...emptyEnvVar(), ...(f.envVars.find((x) => x.name === r.name) || {}), name: r.name, value: r.value })) }))}
+          />
         </div>
 
         <details className="proj-section proj-optional" open={startOpen.custom}>

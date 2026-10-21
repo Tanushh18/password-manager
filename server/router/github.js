@@ -5,6 +5,8 @@ const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
 const { parseGithubRepo, shapeRepoDetails } = require("../utils/github");
 const { githubGet, githubSend, loadGithubAccounts, resolveRepo, probeScopes } = require("../utils/githubClient");
+const { listRepos } = require("../utils/githubRepos");
+const { planBranchDeletes, branchPath } = require("../utils/githubBranches");
 const { applyHealthRoute } = require("../utils/healthRouteApply");
 
 /*
@@ -75,6 +77,63 @@ router.delete("/github/accounts/:id", async (req, res) => {
     cache.clear();
     return res.json({ message: "Disconnected." });
   } catch { return res.status(500).json({ error: "Could not remove this GitHub connection." }); }
+});
+
+/* Repositories one connected GitHub account can see, for the "pick an existing repo" step. Cached briefly. */
+router.get("/github/accounts/:id/repos", async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: "GitHub connection not found." });
+  try {
+    const account = (await savedAccounts(req)).find((a) => a.id === req.params.id);
+    if (!account) return res.status(404).json({ error: "GitHub connection not found." });
+    const result = await listRepos(account.token, { refresh: req.query.refresh === "1" });
+    if (!result.ok) return res.status(result.status === 401 ? 401 : 502).json({ error: result.status === 401 ? "GitHub rejected this token. Reconnect it." : "Could not list repositories from GitHub." });
+    res.set("Cache-Control", "no-store");
+    return res.json({ repos: result.repos, truncated: result.truncated, account: { id: account.id, login: account.login } });
+  } catch { return res.status(500).json({ error: "Could not list repositories." }); }
+});
+
+/* Every branch of one repository (read with the chosen account). The default branch is marked, never deletable. */
+router.get("/github/repo/branches", async (req, res) => {
+  const target = parseGithubRepo(req.query.url);
+  if (!target) return res.status(400).json({ error: "This is not a GitHub repository URL." });
+  try {
+    const account = (await savedAccounts(req)).find((a) => a.id === String(req.query.githubAccountId || ""));
+    if (!account) return res.status(400).json({ error: "Choose a connected GitHub account." });
+    const resolved = await resolveRepo([account], target);
+    if (resolved.error) return res.status(resolved.error.status).json({ error: resolved.error.message });
+    const branches = [];
+    for (let page = 1; page <= 5; page += 1) {
+      const r = await githubGet(account.token, resolved.base + "/branches?per_page=100&page=" + page);
+      if (!r.ok) { if (page === 1) return res.status(502).json({ error: "Could not read the branches from GitHub." }); break; }
+      branches.push(...r.body.map((b) => ({ name: String(b.name), protected: Boolean(b.protected) })));
+      if (r.body.length < 100) break;
+    }
+    const scopes = await probeScopes(account.token);
+    res.set("Cache-Control", "no-store");
+    return res.json({ repo: resolved.repo.full_name, default: resolved.repo.default_branch || "", canDelete: scopes.write, branches: branches.map((b) => ({ ...b, isDefault: b.name === resolved.repo.default_branch })) });
+  } catch { return res.status(500).json({ error: "Could not read the branches." }); }
+});
+
+/* Deletes the chosen branches (never the default branch). Each result is reported on its own, so one failure does not hide the rest. */
+router.post("/github/repo/branches/delete", async (req, res) => {
+  const target = parseGithubRepo(req.body?.url);
+  if (!target) return res.status(400).json({ error: "This is not a GitHub repository URL." });
+  const names = Array.isArray(req.body?.branches) ? req.body.branches.filter((n) => typeof n === "string") : [];
+  if (!names.length) return res.status(400).json({ error: "Choose at least one branch." });
+  try {
+    const account = (await savedAccounts(req)).find((a) => a.id === String(req.body?.githubAccountId || ""));
+    if (!account) return res.status(400).json({ error: "Choose a connected GitHub account." });
+    const resolved = await resolveRepo([account], target);
+    if (resolved.error) return res.status(resolved.error.status).json({ error: resolved.error.message });
+    const plan = planBranchDeletes(names, { defaultBranch: resolved.repo.default_branch || "", live: Array.isArray(req.body?.live) ? req.body.live.filter((n) => typeof n === "string") : [] });
+    const results = [];
+    for (const branch of plan.allowed) {
+      const r = await githubSend(account.token, "DELETE", resolved.base + "/git/refs/heads/" + branchPath(branch.name));
+      results.push(r.ok || r.status === 404 ? { name: branch.name, ok: true, alreadyGone: r.status === 404 } : { name: branch.name, ok: false, error: r.status === 403 ? "GitHub refused: this token cannot delete branches (it needs the repo scope)." : "GitHub could not delete this branch." });
+    }
+    res.set("Cache-Control", "no-store");
+    return res.json({ repo: resolved.repo.full_name, results, refused: plan.refused });
+  } catch { return res.status(500).json({ error: "Could not delete the branches." }); }
 });
 
 /* Details for ONE project's repository: repo info, recent commits, open PRs and the latest CI run. */

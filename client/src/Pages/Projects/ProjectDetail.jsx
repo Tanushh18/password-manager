@@ -5,6 +5,7 @@ import GithubPanel from "../../Components/Project/GithubPanel";
 import ProjectStatus from "../../Components/Project/ProjectStatus";
 import RenderEnvSync from "../../Components/Project/RenderEnvSync";
 import ProjectDeployments from "../../Components/Project/ProjectDeployments";
+import BranchTree from "../../Components/Project/BranchTree";
 import HostLinks from "../../Components/Project/HostLinks";
 import GithubConnectModal from "../../Components/Project/GithubConnectModal";
 import { STATUS_BADGE } from "../../Components/Project/ProjectCard";
@@ -51,6 +52,8 @@ export default function ProjectDetail() {
         <ProjectStatus project={project} />
 
         {project.repoUrl ? <GithubPanel repoUrl={project.repoUrl} refreshKey={githubKey} onConnect={() => setGithubOpen(true)} /> : null}
+
+        {project.repoUrl ? <BranchTree key={"b" + project.id} project={project} /> : null}
 
         {project.renderServiceId || (project.renderServices || []).length ? <ProjectDeployments project={project} /> : null}
 
