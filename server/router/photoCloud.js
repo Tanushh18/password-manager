@@ -188,6 +188,18 @@ router.get("/photo-cloud/export", photosAuth, async (req, res) => {
     } catch (error) { return serverError(res, "photo-cloud/export", error); }
 });
 
+router.delete("/photo-cloud/media/:id", photosAuth, async (req, res) => {
+    try {
+        const key = await req.rootUser.getDataKey();
+        const media = decode(req.rootUser.photoMedia, key);
+        const target = media.find((item) => item.id === req.params.id);
+        if (!target) return res.status(404).json({ error: "Media item not found." });
+        const remaining = media.filter((item) => item.id !== target.id);
+        await User.updateOne({ _id: req.rootUser._id }, { $set: { photoMedia: remaining.map((item) => encoded(key, item)) } });
+        return res.json({ removed: true, message: "Removed from Photo Cloud index. The original file was not deleted." });
+    } catch (error) { return serverError(res, "photo-cloud/media/remove", error); }
+});
+
 router.post("/photo-cloud/backup/jobs", photosAuth, async (req, res) => {
     const filename = clean(req.body.filename, 180);
     if (!filename) return res.status(400).json({ error: "A filename is required." });
