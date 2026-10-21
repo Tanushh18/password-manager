@@ -36,16 +36,19 @@ export default function PhotoCloud() {
   useEffect(() => { void load(); }, []);
   const accounts = data?.connections || [];
   const media = useMemo(() => (data?.media || []).filter((item) => {
-    const mime = String(item.mimeType || "").toLowerCase();
-    const name = String(item.filename || "").toLowerCase();
-    const isVideo = mime.startsWith("video/") || /\.(mp4|mov|m4v|webm|avi|mkv)$/i.test(name);
-    const isImage = mime.startsWith("image/") || /\.(jpe?g|png|gif|webp|heic|heif|bmp|svg|tiff?)$/i.test(name);
+    const mime = String(item.mimeType || "").trim().toLowerCase();
+    const name = String(item.filename || item.name || "").trim().toLowerCase();
+    const kind = String(item.type || "").trim().toLowerCase();
+    const isVideo = mime.startsWith("video/") || /\\.(mp4|m4v|mov|webm|avi|mkv|mpeg|mpg|3gp|3g2|mts|m2ts|wmv|flv|ogv)$/i.test(name) || kind === "video";
+    const isImage = mime.startsWith("image/") || /\\.(jpe?g|png|gif|webp|heic|heif|avif|bmp|svg|tiff?|raw|dng|cr2|nef|arw|orf|rw2)$/i.test(name) || ["photo", "image", "screenshot"].includes(kind);
+    const isScreenshot = kind === "screenshot" || /screenshot|screen[ _-]?shot/i.test(name);
     const isRealMedia = isImage || isVideo;
     const isDriveFile = !isRealMedia;
-    const haystack = [item.filename, item.tag, item.account, item.type].join(" ").toLowerCase();
-    const tabMatch = viewTab === "all" || (viewTab === "photos" && isImage) || (viewTab === "videos" && isVideo) || (viewTab === "drive" && isDriveFile) || (viewTab === "sync");
-    return tabMatch && (!query || haystack.includes(query.toLowerCase())) && (filter === "all" || item.type === filter || (filter === "favorites" && item.favorite));
-  }).sort((a, b) => new Date(b.takenAt || b.modifiedAt || 0) - new Date(a.takenAt || a.modifiedAt || 0)), [data, query, filter, viewTab]);
+    const haystack = [item.filename, item.name, item.tag, item.account, item.type, item.mimeType].join(" ").toLowerCase();
+    const tabMatch = viewTab === "all" || (viewTab === "photos" && isImage) || (viewTab === "videos" && isVideo) || (viewTab === "drive" && isDriveFile) || viewTab === "sync";
+    const filterMatch = filter === "all" || (filter === "screenshot" && isScreenshot) || (filter === "favorites" && Boolean(item.favorite));
+    return tabMatch && filterMatch && (!query || haystack.includes(query.toLowerCase()));
+  }).sort((a, b) => new Date(b.takenAt || b.modifiedAt || b.createdAt || 0) - new Date(a.takenAt || a.modifiedAt || a.createdAt || 0)), [data, query, filter, viewTab]);
   const storage = data?.totals ? data.totals.usedGb : accounts.reduce((sum, account) => sum + Number(account.usedGb || 0), 0);
   const capacity = data?.totals ? data.totals.limitGb : accounts.reduce((sum, account) => sum + Number(account.limitGb || 0), 0);
   const doneJobs = (data?.jobs || []).filter((j) => j.status === "completed").length;
