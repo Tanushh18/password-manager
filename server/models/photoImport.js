@@ -11,6 +11,7 @@ const batchSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
   label: { type: String, required: true },
   sourceConnectionId: { type: String, required: true },   // Google account that owns the photos
+  destinationIds: { type: [String], default: [] },        // Drive accounts this import may use (empty = all connected)
   folderId: { type: String, default: "" },                // Stashr folder the photos are filed into
   concurrency: { type: Number, default: 1 },              // items in flight for this batch (1 = strictly one after another)
   status: { type: String, default: "picking", index: true }, // picking | ready | running | paused | completed | cancelled | expired | failed

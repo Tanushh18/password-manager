@@ -70,3 +70,8 @@
 .pi-new input:focus, .pi-new select:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pi-new select:disabled { opacity: .7; cursor: not-allowed; }
 @media (max-width: 520px) { .pi { padding-top: 1.2rem; } .pi-new, .pi-batches, .pi-detail { padding: .9rem; } .pi-row { align-items: flex-start; flex-direction: column; gap: .25rem; } .pi-detail__head { flex-direction: column; } }
+
+.pi-dest { border: 1px solid var(--line, #e5e5e5); border-radius: 10px; padding: 10px 12px; margin: 0; display: grid; gap: 8px; }
+.pi-dest legend { font-weight: 600; padding: 0 4px; }
+.pi-dest__row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.pi-dest__row small { margin-left: 6px; }

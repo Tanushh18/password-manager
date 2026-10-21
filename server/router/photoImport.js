@@ -33,7 +33,8 @@ router.post("/photo-import/batches", ...gate, async (req, res) => {
     const label = String(req.body?.label || "").trim().slice(0, 60).replace(/[\\/]/g, "-");
     if (!label) return res.status(400).json({ error: "Give this import a name; it becomes the folder name in Drive." });
     try {
-        const batch = await createBatch(req.rootUser._id, { label, sourceConnectionId: String(req.body?.sourceConnectionId || ""), concurrency: req.body?.concurrency });
+        const destinationIds = Array.isArray(req.body?.destinationIds) ? req.body.destinationIds.map(String).slice(0, 20) : [];
+        const batch = await createBatch(req.rootUser._id, { label, sourceConnectionId: String(req.body?.sourceConnectionId || ""), destinationIds, concurrency: req.body?.concurrency });
         return res.status(201).json({ batch: publicBatch(batch) });
     } catch (error) { return fail(res, error); }
 });
@@ -57,6 +58,10 @@ router.get("/photo-import/batches/:id", ...gate, async (req, res) => {
         ]);
         const remainingItems = (stages.pending || 0) + ACTIVE.reduce((n, s) => n + (stages[s] || 0), 0);
         const speed = estimate(finishedRows.map((r) => ({ bytes: r.bytes, startedAt: r.startedAt, finishedAt: r.finishedAt })), { items: remainingItems });
+        const [sizes] = await Item.aggregate([{ $match: { batchId: batch._id } }, { $group: { _id: null, bytes: { $sum: "$bytes" }, measured: { $sum: { $cond: [{ $gt: ["$bytes", 0] }, 1, 0] } } } }]);
+        const destinations = decode(req.rootUser.photoConnections, key)
+            .filter((c) => (batch.destinationIds?.length ? batch.destinationIds.includes(c.id) : c.status === "connected"))
+            .map((c) => ({ id: c.id, label: c.label || c.email, status: c.status, freeGb: c.limitGb == null ? null : Math.max(0, Number(c.limitGb) - Number(c.usedGb || 0)) }));
         res.set("Cache-Control", "no-store");
         return res.json({
             batch: publicBatch(batch),
@@ -66,6 +71,8 @@ router.get("/photo-import/batches/:id", ...gate, async (req, res) => {
             recent: recent.map((i) => ({ id: String(i._id), filename: name(i), status: i.status, bytes: i.bytes, note: i.error, finishedAt: i.finishedAt, destination: accounts.get(i.destinationConnectionId) || "", seconds: i.startedAt && i.finishedAt ? Math.round((i.finishedAt - i.startedAt) / 1000) : null })),
             failed: failed.map((i) => ({ id: String(i._id), filename: name(i), error: i.error, attempts: i.attempts, finishedAt: i.finishedAt })),
             retrying: retrying.map((i) => ({ id: String(i._id), filename: name(i), attempts: i.attempts, error: i.error, retryAt: i.notBefore })),
+            storage: { bytes: sizes?.bytes || 0, measured: sizes?.measured || 0 },
+            destinations,
             events: [...(batch.events || [])].reverse().slice(0, 60)
         });
     } catch (error) { return serverError(res, "photo-import/detail", error); }

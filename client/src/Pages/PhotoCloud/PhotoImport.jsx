@@ -11,6 +11,7 @@ const ago = (v) => { const m = Math.max(0, Math.round((Date.now() - new Date(v).
 const LABEL = { picking: "Waiting for your selection", listing: "Reading your selection", running: "Importing", paused: "Paused", completed: "Finished", cancelled: "Cancelled", expired: "Expired", failed: "Failed" };
 const STAGE_LABEL = { downloading: "Downloading from Google Photos", uploading: "Uploading to Drive", verifying: "Checking the copy" };
 const TERMINAL = new Set(["completed", "cancelled", "expired", "failed"]);
+const freeOf = (a) => (a.limitGb == null ? null : Math.max(0, a.limitGb - (a.usedGb || 0)));
 
 function Pipeline({ stages, total }) {
   const boxes = [["Chosen", total, "chosen"], ["Waiting", stages.pending, "pending"], ["Downloading", stages.downloading, "downloading"], ["Uploading", stages.uploading, "uploading"], ["Checking", stages.verifying, "verifying"], ["In Drive", stages.done, "done"]];
@@ -46,8 +47,9 @@ function Detail({ id, onChanged }) {
   };
   if (!view) return <section className="card pi-detail"><p className="pi-muted">Loading…</p></section>;
 
-  const { batch, stages, speed, active, recent, failed, retrying, events } = view;
+  const { batch, stages, speed, active, recent, failed, retrying, events, storage, destinations = [] } = view;
   const c = batch.counts;
+  const freeTotal = destinations.reduce((n, d) => n + (d.freeGb || 0), 0);
   const finished = c.done + c.skipped + c.failed;
   const pct = c.total ? Math.round((finished / c.total) * 100) : 0;
 
@@ -83,6 +85,14 @@ function Detail({ id, onChanged }) {
           </div>
           <div className="pi-bar" role="progressbar" aria-valuenow={pct} aria-valuemin="0" aria-valuemax="100"><i style={{ width: `${pct}%` }} /></div>
           <p className="pi-muted">{finished} of {c.total} handled ({pct}%) · {size(c.bytesDone)} copied</p>
+
+          <h3>Storage</h3>
+          <div className="pi-speed">
+            <div><span>Needed</span><strong>{storage?.measured ? `${size(storage.bytes)}${storage.measured < c.total ? "+" : ""}` : "not reported"}</strong></div>
+            <div><span>Free in these accounts</span><strong>{freeTotal.toFixed(1)} GB</strong></div>
+            <div><span>Accounts</span><strong>{destinations.length}</strong></div>
+          </div>
+          <p className="pi-muted">{destinations.map((d) => `${d.label}${d.freeGb == null ? " (space unknown)" : ` (${d.freeGb.toFixed(1)} GB free)`}`).join(" · ") || "No account selected."}</p>
 
           <h3>Speed</h3>
           <div className="pi-speed">
@@ -141,6 +151,18 @@ function Detail({ id, onChanged }) {
         </>
       )}
 
+      {batch.status === "completed" && c.done > 0 ? (
+        <div className="pi-note">
+          <strong>Before you delete anything in Google Photos</strong>
+          <ol>
+            <li>Check that Drive has the {c.done} copied file(s) in the folder "{batch.label}".</li>
+            <li>Open a few of them in Stashr to make sure they look right.</li>
+            <li>Only then delete the originals in Google Photos yourself. Stashr cannot delete them, because Google does not let apps delete Photos items.</li>
+          </ol>
+          <a className="btn btn--ghost btn--sm" href="https://photos.google.com/" target="_blank" rel="noreferrer">Open Google Photos</a>
+        </div>
+      ) : null}
+
       <h3>Log</h3>
       <ul className="pi-log">{events.map((e, i) => <li key={i} className={`pi-log--${e.level}`}><time>{new Date(e.at).toLocaleTimeString()}</time> {e.message}</li>)}</ul>
     </section>
@@ -158,6 +180,7 @@ export default function PhotoImport() {
   const [creating, setCreating] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [accountWarning, setAccountWarning] = useState("");
+  const [destIds, setDestIds] = useState([]);
 
   const refresh = useCallback(async () => {
     try { const r = await listPhotoImports(); setBatches(r.batches); setSelected((s) => s || r.batches[0]?.id || ""); }
@@ -171,7 +194,7 @@ export default function PhotoImport() {
     else if (result === "cancelled") toast.info("Google connection was cancelled.");
     if (result) window.history.replaceState({}, "", location.pathname);
     void refresh();
-    getPhotoCloudDashboard().then((d) => { const all = d.connections || []; const ok = all.filter((c) => c.status === "connected" && c.oauthMode === "connected"); setAccounts(ok); setSource((s) => ok.some((a) => a.id === s) ? s : (ok[0]?.id || "")); setAccountWarning(ok.length ? "" : (all.length ? "Your saved Google account needs to be reconnected before importing." : "Connect a Google account to start importing.")); }).catch(() => { setAccountWarning("Could not check Google account status. Reconnect or refresh the page."); });
+    getPhotoCloudDashboard().then((d) => { const all = d.connections || []; const ok = all.filter((c) => c.status === "connected" && c.oauthMode === "connected"); setAccounts(ok); setDestIds((d) => (d.length ? d : ok.map((a) => a.id))); setSource((s) => ok.some((a) => a.id === s) ? s : (ok[0]?.id || "")); setAccountWarning(ok.length ? "" : (all.length ? "Your saved Google account needs to be reconnected before importing." : "Connect a Google account to start importing.")); }).catch(() => { setAccountWarning("Could not check Google account status. Reconnect or refresh the page."); });
   }, [refresh, location.pathname, location.search]);
   useEffect(() => { const t = setInterval(() => void refresh(), 10000); return () => clearInterval(t); }, [refresh]);
 
@@ -194,7 +217,7 @@ export default function PhotoImport() {
     }
     setCreating(true);
     try {
-      const { batch } = await createPhotoImport({ label: label.trim(), sourceConnectionId: source, concurrency: parallel });
+      const { batch } = await createPhotoImport({ label: label.trim(), sourceConnectionId: source, destinationIds: destIds, concurrency: parallel });
       setLabel(""); await refresh(); setSelected(batch.id);
       if (pickerWindow && !pickerWindow.closed) pickerWindow.location.href = batch.pickerUri;
       else toast.warn("Your browser blocked the picker popup. Use the Open Google Photos button in the import panel.");
@@ -231,6 +254,16 @@ export default function PhotoImport() {
                 {accounts.length === 0 ? <option value="">No connected account</option> : accounts.map((a) => <option key={a.id} value={a.id}>{a.label} ({a.email})</option>)}
               </select>
             </label>
+            <fieldset className="pi-dest">
+              <legend>Import into these accounts</legend>
+              {accounts.length === 0 ? <p className="pi-muted">Connect a Google account first.</p> : accounts.map((a) => (
+                <label key={a.id} className="pi-dest__row">
+                  <input type="checkbox" checked={destIds.includes(a.id)} onChange={(e) => setDestIds((d) => (e.target.checked ? [...d, a.id] : d.filter((x) => x !== a.id)))} />
+                  <span>{a.label} <small className="pi-muted">{freeOf(a) == null ? "space unknown" : `${freeOf(a).toFixed(1)} GB free`}</small></span>
+                </label>
+              ))}
+              <p className="pi-muted">When one account is full, the next checked account is used automatically.</p>
+            </fieldset>
             {accountWarning ? <div className="pi-connect-notice" role="status"><strong>Google account needs attention</strong><p>{accountWarning}</p><button type="button" className="btn btn--primary btn--full" onClick={() => void reconnect()} disabled={reconnecting}>{reconnecting ? "Opening Google…" : "Reconnect Google account"}</button></div> : null}
             <label>Speed
               <select value={parallel} onChange={(e) => setParallel(Number(e.target.value))}>
@@ -239,7 +272,7 @@ export default function PhotoImport() {
                 <option value={3}>Three at a time</option>
               </select>
             </label>
-            <button className="btn btn--primary btn--full" disabled={creating || !label.trim() || !source}>{creating ? "Opening…" : "Choose photos in Google Photos"} <span aria-hidden="true">→</span></button>
+            <button className="btn btn--primary btn--full" disabled={creating || !label.trim() || !source || !destIds.length}>{creating ? "Opening…" : "Choose photos in Google Photos"} <span aria-hidden="true">→</span></button>
             <p className="pi-muted">Google opens its own secure photo picker. Your Google password is never shared with Stashr.</p>
           </form>
 

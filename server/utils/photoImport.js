@@ -64,10 +64,13 @@ async function stashrFolder(user, key, name, parentId) {
   return folder;
 }
 
-async function createBatch(userId, { label, sourceConnectionId, concurrency = 1 }) {
+async function createBatch(userId, { label, sourceConnectionId, destinationIds = [], concurrency = 1 }) {
   const { user, key } = await loadUser(userId);
   const source = connectionOf(user, key, sourceConnectionId);
   if (!source || source.status !== "connected" || !source.accessToken) throw fail(400, "Pick a connected Google account as the source.");
+  const connected = decode(user.photoConnections, key).filter((c) => c.status === "connected" && c.accessToken).map((c) => c.id);
+  const chosen = destinationIds.length ? destinationIds.filter((id) => connected.includes(id)) : connected;
+  if (!chosen.length) throw fail(400, "Choose at least one connected Google account to import into.");
   await freshToken(user, key, source);
   const response = await authed(user, key, source, `${PICKER}/sessions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pickingConfig: { maxItemCount: "2000" } }) });
   if (response.status === 403 || response.status === 401) throw fail(400, "Google denied the Photos Picker permission. Reconnect the same Google account and approve both Photos Picker and Drive access.");
@@ -76,7 +79,7 @@ async function createBatch(userId, { label, sourceConnectionId, concurrency = 1 
   const root = await stashrFolder(user, key, "Google Photos", null);
   const folder = await stashrFolder(user, key, label, root.id);
   const batch = await Batch.create({
-    userId, label, sourceConnectionId, folderId: folder.id, concurrency: Math.max(1, Math.min(4, Number(concurrency) || 1)),
+    userId, label, sourceConnectionId, destinationIds: chosen, folderId: folder.id, concurrency: Math.max(1, Math.min(4, Number(concurrency) || 1)),
     sessionId: session.id, pickerUri: session.pickerUri, sessionExpires: session.expireTime ? new Date(session.expireTime) : undefined,
     events: [{ at: new Date(), level: "info", message: "Waiting for you to choose photos in Google Photos." }]
   });
@@ -136,6 +139,7 @@ async function pollBatch(batchId) {
     });
     if (docs.length) await Item.insertMany(docs, { ordered: false }).catch((e) => { if (e.code !== 11000 && !e.writeErrors) throw e; });
     urlCache.set(String(batchId), { at: Date.now(), urls });
+    if (docs.length) measureItems(batchId, user, key, source, urls).catch(() => {});
     const total = await Item.countDocuments({ batchId });
     await Batch.updateOne({ _id: batchId }, { $set: { status: total ? "running" : "completed", startedAt: new Date(), "counts.total": total, ...(total ? {} : { finishedAt: new Date() }) } });
     await event(batchId, "info", total ? `${total} items chosen. Importing one after another.` : "Nothing was chosen.");
@@ -145,6 +149,21 @@ async function pollBatch(batchId) {
     await event(batchId, "warn", error.message);
     return null;
   }
+}
+
+/* Google's picker does not report file sizes, so ask each download link for its length: the storage need shows before any copy. */
+async function measureItems(batchId, user, key, connection, urls) {
+  const queue = [...urls.entries()];
+  const worker = async () => {
+    while (queue.length) {
+      const [pickedId, base] = queue.shift();
+      if (!base) continue;
+      const response = await authed(user, key, connection, base + "=d", { method: "HEAD" }).catch(() => null);
+      const bytes = Number(response?.headers.get("content-length"));
+      if (response?.ok && bytes > 0) await Item.updateOne({ batchId, pickedId }, { $set: { bytes } });
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
 }
 
 async function refreshUrls(batch, user, key, connection) {
@@ -239,7 +258,8 @@ async function processItem(item) {
     await Item.updateOne({ _id: item._id }, { $set: { status: "uploading", stageAt: new Date(), bytes: size || 0, leaseUntil: new Date(Date.now() + LEASE_MS) } });
 
     // 2. where it goes
-    const connections = decode(user.photoConnections, key);
+    const allowed = batch.destinationIds?.length ? new Set(batch.destinationIds) : null;
+    const connections = decode(user.photoConnections, key).filter((c) => !allowed || allowed.has(c.id));
     const settings = { safetyBufferGb: 2, defaultConnectionId: "", ...(decode(user.photoSettings, key)[0] || {}) };
     const folders = decode(user.photoFolders, key);
     const folder = folders.find((f) => f.id === batch.folderId) || null;
