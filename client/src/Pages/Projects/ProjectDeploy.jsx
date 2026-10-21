@@ -6,6 +6,7 @@ import GithubConnectModal from "../../Components/Project/GithubConnectModal";
 import EnvImport from "../../Components/Project/EnvImport";
 import EnvText from "../../Components/Project/EnvText";
 import RepoPicker from "../../Components/Project/RepoPicker";
+import { DeployLogs } from "../../Components/Project/DeployParts";
 import HostConnectModal from "../../Components/Project/HostConnectModal";
 import { HOSTS, hostById } from "../../lib/hostGuides";
 import { Arrow, Check, Copy, Plus, Trash, Alert } from "../../Components/Icons/Icons";
@@ -199,7 +200,7 @@ export default function ProjectDeploy() {
   const renderJob = (overrides) => deployProject({ ...form, repoName, template: "existing", useExistingRepo: true, existingRepoUrl: repo.url, branch: form.branch, visibility: "public", ...overrides });
   const hostJob = async (overrides) => {
     const data = await deployToHost({ name: form.name, description: form.description, repoUrl: repo.url, branch: form.branch || codeState.branch || "", githubAccountId: form.githubAccountId, hostAccountId: form.hostAccountId, envVars: form.envVars, buildCommand: form.hostBuild, outputDir: form.hostOutput, ...overrides });
-    return { ok: true, host: data.host, steps: [{ step: "host", status: "done", detail: "Deployed " + data.repo.owner + "/" + data.repo.repo + " (" + data.repo.branch + ") to " + data.host }], repo: data.repo, service: data.service, projectId: data.projectId, firstDeploy: "started", hostNote: data.note };
+    return { ok: true, host: data.host, steps: [{ step: "host", status: "done", detail: "Deployed " + data.repo.owner + "/" + data.repo.repo + " (" + data.repo.branch + ") to " + data.host }], repo: data.repo, service: data.service, projectId: data.projectId, linkId: data.linkId || "", firstDeploy: "started", hostNote: data.note };
   };
   const jobs = [];
   if (scope === "server") jobs.push({ label: "Server", run: () => (host === "render" ? renderJob({}) : hostJob({})) });
@@ -263,6 +264,12 @@ export default function ProjectDeploy() {
                 {part.service?.dashboardUrl ? <a className="btn btn--ghost btn--sm" href={part.service.dashboardUrl} target="_blank" rel="noreferrer noopener">Open in {part.host || "Render"} ↗</a> : null}
                 {part.projectId ? <Link className="btn btn--ghost btn--sm" to={"/projects/" + part.projectId}>Open project in Stashr</Link> : null}
               </div>
+              {part.projectId && (part.service?.id || part.linkId) ? (
+                <div className="dp-logs">
+                  <h3>Deployment progress and logs</h3>
+                  <DeployLogs projectId={part.projectId} target={part.linkId ? { ref: "host:" + part.linkId, provider: "host", label: part.host || "Host", name: part.service?.name || part.repo?.repo || "" } : { ref: "render:" + part.service.id, provider: "render", label: "Render", name: part.service.name || part.repo?.repo || "" }} />
+                </div>
+              ) : null}
               <p className="field__note">
                 {part.firstDeploy === "waiting-for-code"
                   ? "Render is waiting for your code. The first git push below triggers the first deploy automatically."

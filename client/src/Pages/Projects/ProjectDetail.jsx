@@ -59,7 +59,10 @@ export default function ProjectDetail() {
 
         <HostLinks project={project} />
 
-        <RenderEnvSync project={project} />
+        <details className="card proj-optional">
+          <summary className="proj-section__title">Stashr ⇄ Render variables <small>(pull or push the saved variables of a Render service)</small></summary>
+          <RenderEnvSync project={project} />
+        </details>
 
         <section className="card proj-detail__tree">
           <ProjectTree key={project.id} project={project} expanded />

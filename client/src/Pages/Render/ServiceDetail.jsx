@@ -9,6 +9,8 @@ import {
 import { Modal, StatePill, Skeleton, Empty, LineChart, Section } from "./RenderUi";
 import { usePolling, useRequestGate } from "./renderHooks";
 import DomainPanel from "./DomainPanel";
+import EnvText from "../../Components/Project/EnvText";
+import ServiceBranch from "./ServiceBranch";
 import {
   serviceKind, serviceState, normalizeList, normalizeMetricPoints, timeAgo, formatDateTime, formatNumber,
   METRIC_OPTIONS, RANGE_OPTIONS, rangeStart, diagnoseLogText, isErrorLog, safeUrl, errorMessage
@@ -207,17 +209,38 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
     finally { setSnapshotBusy(false); }
   };
 
-  const dirty = envVars.filter((v) => v.isNew || v.value !== v.originalValue);
+  // `remove` marks a variable that was deleted in the text editor; it is deleted on save.
+  const dirty = envVars.filter((v) => v.isNew || v.remove || v.value !== v.originalValue);
+  const textRows = useMemo(() => envVars.filter((v) => !v.remove).map((v) => ({ name: v.key, value: v.value })), [envVars]);
+
+  // Bulk edit from the text box: names that stay get their new value, names left out are removed, new names are added.
+  const applyEnvText = (rows) => {
+    const next = new Map(rows.map((r) => [r.name, r.value]));
+    setEnvVars((old) => {
+      const kept = old.map((v) => {
+        if (!next.has(v.key)) return v.isNew ? null : { ...v, remove: true };
+        return { ...v, value: next.get(v.key), remove: false };
+      }).filter(Boolean);
+      const known = new Set(old.map((v) => v.key));
+      const added = rows.filter((r) => !known.has(r.name)).map((r) => ({ key: r.name, value: r.value, originalValue: "", isNew: true }));
+      return [...kept, ...added];
+    });
+  };
 
   const saveEnv = async () => {
     if (!dirty.length) { toast.info("No environment variable changes to save."); return; }
-    const ok = await askConfirm({ title: "Save environment changes?", message: dirty.length + " variable(s) will be written to " + service.name + ": " + dirty.map((v) => v.key).join(", ") + ". A deploy may be needed for changes to take effect.", confirmLabel: "Save changes" });
+    const ok = await askConfirm({ title: "Save environment changes?", message: dirty.length + " variable(s) will be written to " + service.name + ": " + dirty.map((v) => v.key).join(", ") + ". The latest commit is then deployed so the changes take effect.", confirmLabel: "Save and deploy" });
     if (!ok) return;
     setBusy(true);
     let saved = 0;
     try {
-      for (const item of dirty) { await updateRenderEnvVar(ref.accountId, ref.id, item.key, item.value); saved += 1; }
-      toast.success("Environment variables saved. Deploy if required.");
+      for (const item of dirty) {
+        if (item.remove) await deleteRenderEnvVar(ref.accountId, ref.id, item.key);
+        else await updateRenderEnvVar(ref.accountId, ref.id, item.key, item.value);
+        saved += 1;
+      }
+      try { await triggerRenderDeploy(ref.accountId, ref.id, false); toast.success("Environment variables saved. Deploying the latest commit."); }
+      catch { toast.warn("Variables saved, but the deploy did not start. Deploy it from the Overview tab."); }
     } catch (e) {
       fail(e, "Could not save environment variables.");
       if (saved) toast.warn(saved + " of " + dirty.length + " variable(s) were saved before the error.");
@@ -484,6 +507,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
 
       <div className="rd-detail__body" role="tabpanel" id={"rd-panel-" + tab} aria-labelledby={"rd-tab-" + tab}>
         {tab === "overview" && <>
+          <ServiceBranch service={service} />
           <div className={"rd-health is-" + (health?.state || "unknown")}>
             <div>
               <strong>Endpoint health</strong>
@@ -549,7 +573,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
           )}
         </Section>}
 
-        {tab === "env" && <Section title="Environment variables" subtitle="Direct service variables only. Changes are not deployed automatically."
+        {tab === "env" && <Section title="Environment variables" subtitle="Direct service variables only. Saving deploys the latest commit so the changes take effect."
           actions={<>
             <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setReveal((v) => !v)} aria-pressed={reveal}>{reveal ? "Mask values" : "Reveal values"}</button>
             <button type="button" className="rd-icon-btn" aria-label="Reload variables" onClick={() => void loadEnv()}>↻</button>
@@ -565,7 +589,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
           {newEnv && <form className="rd-newenv" onSubmit={addEnv}><input data-autofocus className="rd-field" value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder="VARIABLE_NAME" aria-label="Variable name" autoComplete="off" spellCheck="false" required /><input className="rd-field" value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder="Value" aria-label="Variable value" autoComplete="off" required /><button type="submit" className="rd-btn rd-btn--primary">Add</button></form>}
           {envBusy ? <Skeleton lines={5} height={34} /> : (
             <div className="rd-envlist">
-              {envVars.filter((v) => v.key.toLowerCase().includes(envSearch.trim().toLowerCase())).map((v) => (
+              {envVars.filter((v) => !v.remove && v.key.toLowerCase().includes(envSearch.trim().toLowerCase())).map((v) => (
                 <div className={"rd-envrow" + (v.isNew || v.value !== v.originalValue ? " is-dirty" : "")} key={v.key}>
                   <strong className="rd-mono">{v.key}{v.isNew && <small> NEW</small>}{!v.isNew && v.value !== v.originalValue && <small> EDITED</small>}</strong>
                   <input className="rd-field" type={reveal ? "text" : "password"} aria-label={"Value of " + v.key} value={v.value} onChange={(e) => setEnvVars((old) => old.map((x) => x.key === v.key ? { ...x, value: e.target.value } : x))} autoComplete="off" spellCheck="false" />
@@ -575,11 +599,12 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
               {!envVars.length && <Empty icon="⌗" title="No direct variables">Render returned no environment variables set directly on this service.</Empty>}
             </div>
           )}
+          {reveal ? <EnvText rows={textRows} onChange={applyEnvText} idPrefix="rd-env" /> : <p className="rd-note">Turn on “Reveal values” to edit all variables as text.</p>}
           <div className="rd-stickybar">
             <small>{dirty.length ? dirty.length + " unsaved change" + (dirty.length === 1 ? "" : "s") : "No unsaved changes"}</small>
             <div>
-              <button type="button" className="rd-btn rd-btn--quiet" disabled={!dirty.length || busy} onClick={() => setEnvVars((old) => old.filter((v) => !v.isNew).map((v) => ({ ...v, value: v.originalValue })))}>Discard</button>
-              <button type="button" className="rd-btn rd-btn--primary" onClick={() => void saveEnv()} disabled={busy || envBusy || !dirty.length}>Save changes</button>
+              <button type="button" className="rd-btn rd-btn--quiet" disabled={!dirty.length || busy} onClick={() => setEnvVars((old) => old.filter((v) => !v.isNew).map((v) => ({ ...v, value: v.originalValue, remove: false })))}>Discard</button>
+              <button type="button" className="rd-btn rd-btn--primary" onClick={() => void saveEnv()} disabled={busy || envBusy || !dirty.length}>Save and deploy</button>
             </div>
           </div>
         </Section>}

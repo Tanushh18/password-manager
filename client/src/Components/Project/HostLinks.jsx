@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Modal } from "react-responsive-modal";
 import "react-responsive-modal/styles.css";
 import { toast } from "react-toastify";
-import { getHostAccounts, getHostLinkBranches, getHostSites, getProjectHostLinks, linkHostSite, redeployHostLink, unlinkHostSite } from "../../api/client";
+import { getHostAccounts, getHostSites, getProjectHostLinks, linkHostSite } from "../../api/client";
 import { usePolling } from "../../Pages/Render/renderHooks";
-import { timeAgo, safeUrl, errorMessage } from "../../Pages/Render/renderUtils";
+import { errorMessage } from "../../Pages/Render/renderUtils";
 import { useVault } from "../../state/vault";
 import { hostById } from "../../lib/hostGuides";
 import HostConnectModal from "./HostConnectModal";
@@ -77,63 +77,7 @@ function LinkModal({ open, onClose, projectId, onLinked, onConnect }) {
 }
 
 /** One linked server: status, last deploy, and a branch picker plus Redeploy where the host supports it. */
-function LinkRow({ row, projectId, onChanged }) {
-  const [branches, setBranches] = useState(null);
-  const [choice, setChoice] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const openBranches = async () => {
-    if (branches || busy) return;
-    setBusy(true);
-    try { const r = await getHostLinkBranches(projectId, row.id); setBranches(r); setChoice(r.current || row.branch || ""); }
-    catch (e) { toast.error(errorMessage(e, "Could not read the branches.")); }
-    finally { setBusy(false); }
-  };
-  const redeploy = async (branch) => {
-    const target = branch || row.branch;
-    if (!window.confirm("Redeploy " + row.name + (target ? " from \"" + target + "\"" : "") + " on " + row.label + "?")) return;
-    setBusy(true);
-    try { await redeployHostLink(projectId, row.id, branch || undefined); toast.success("Redeploy started on " + row.label + "."); setBranches(null); onChanged(); }
-    catch (e) { toast.error(errorMessage(e, "Could not start the redeploy.")); }
-    finally { setBusy(false); }
-  };
-  const unlink = async () => {
-    if (!window.confirm("Unlink " + row.name + " from this project? The server itself is not touched.")) return;
-    try { await unlinkHostSite(projectId, row.id); toast.success("Unlinked."); onChanged(true); }
-    catch (e) { toast.error(errorMessage(e, "Could not unlink.")); }
-  };
-
-  const d = row.latestDeploy;
-  return (
-    <tr>
-      <td><strong>{row.name}</strong><small>{row.label}{row.accountName ? " · " + row.accountName : ""}</small></td>
-      <td>{row.url ? <a href={safeUrl(row.url, row.dashboardUrl)} target="_blank" rel="noopener noreferrer">{row.url.replace(/^https:\/\//, "")}</a> : <span className="pdep__dim">—</span>}</td>
-      <td>{row.error ? <small className="pdep__err">{row.error}</small> : d ? <><span className={"pdep__deploy is-" + (d.status === "live" ? "ok" : d.status === "failed" ? "bad" : "mid")}>{LABEL[d.status] || d.status}</span><small>{timeAgo(d.at)}{d.sha ? " · " + d.sha : ""}</small></> : <span className="pdep__dim">—</span>}</td>
-      <td>
-        {!branches ? (
-          <div className="pdep__branch"><span>{d?.branch || row.branch || "default"}</span>{row.branchDeploy ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => void openBranches()} disabled={busy}>{busy ? "Reading…" : "Change"}</button> : null}</div>
-        ) : !branches.connected ? <small className="pdep__err">Connect GitHub to choose a branch.</small> : (
-          <div className="pdep__branch">
-            <select className="input" value={choice} onChange={(e) => setChoice(e.target.value)} aria-label={"Branch for " + row.name} disabled={busy}>
-              {branches.branches.map((b) => <option key={b} value={b}>{b}{b === branches.default ? " (default)" : ""}</option>)}
-            </select>
-            <button type="button" className="btn btn--primary btn--sm" disabled={busy || !choice} onClick={() => void redeploy(choice)}>{busy ? "Working…" : "Deploy this branch"}</button>
-            <button type="button" className="btn btn--ghost btn--sm" onClick={() => setBranches(null)} disabled={busy}>Cancel</button>
-          </div>
-        )}
-      </td>
-      <td>
-        <div className="pdep__branch">
-          <button type="button" className="btn btn--ghost btn--sm" disabled={busy || Boolean(row.error)} onClick={() => void redeploy("")}>Redeploy</button>
-          {row.dashboardUrl ? <a href={safeUrl(row.dashboardUrl, row.dashboardUrl)} target="_blank" rel="noopener noreferrer" aria-label={"Open " + row.name + " on " + row.label}>Open ↗</a> : null}
-          <button type="button" className="btn btn--ghost btn--sm" onClick={() => void unlink()}>Unlink</button>
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-/** Existing Vercel / Netlify / Railway / Cloudflare servers linked to a project, read live from each host. */
+/** Link existing Vercel / Netlify / Railway / Cloudflare sites to a project. Their status and actions are in the Deployments table. */
 export default function HostLinks({ project }) {
   const { refreshProfile } = useVault();
   const [rows, setRows] = useState(null);
@@ -161,14 +105,7 @@ export default function HostLinks({ project }) {
         <button type="button" className="btn btn--primary btn--sm" onClick={() => setPick(true)}>Link existing server</button>
       </header>
       {error ? <div className="notice notice--err" role="alert">{error}</div> : null}
-      {rows?.length ? (
-        <div className="pdep__scroll">
-          <table className="pdep__table">
-            <thead><tr><th>Server</th><th>URL</th><th>Last deploy</th><th>Branch</th><th /></tr></thead>
-            <tbody>{rows.map((row) => <LinkRow key={row.id} row={row} projectId={project.id} onChanged={(refresh) => (refresh ? void changed() : void load())} />)}</tbody>
-          </table>
-        </div>
-      ) : null}
+      {rows?.length ? <p className="pdep__note">Each linked site is listed in Deployments above, with its logs, variables, branch and redeploy.</p> : null}
       <LinkModal open={pick} onClose={() => setPick(false)} projectId={project.id} onLinked={changed} onConnect={() => setConnect(true)} />
       <HostConnectModal open={connect} onClose={() => setConnect(false)} />
     </section>

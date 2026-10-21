@@ -128,3 +128,5 @@
 .pdep__envcell small { display: block; width: 100%; color: var(--text-muted); }
 .srvlogs__now { display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap; margin: .3rem 0; font-size: .84rem; }
 .srvlogs__now small { color: var(--text-muted); }
+.dp-logs { margin: .6rem 0; display: grid; gap: .4rem; }
+.dp-logs h3 { margin: 0; font-size: .92rem; color: var(--heading); }

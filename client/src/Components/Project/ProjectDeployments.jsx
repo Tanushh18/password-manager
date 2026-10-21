@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
-import { getDeployTargets, redeployDeployTarget, syncDeployEnv } from "../../api/client";
+import { getDeployTargets, redeployDeployTarget, syncDeployEnv, unlinkHostSite } from "../../api/client";
 import { usePolling } from "../../Pages/Render/renderHooks";
 import { timeAgo, errorMessage } from "../../Pages/Render/renderUtils";
 import ServerEnvCopy from "./ServerEnvCopy";
@@ -49,6 +49,7 @@ export default function ProjectDeployments({ project }) {
   }, [list, sort]);
   const platforms = [...new Set(list.map((t) => t.label))];
 
+  // Compare once the servers are known, so the differences are visible without pressing anything.
   const runCompare = async () => {
     if (!main) return;
     setComparing(true);
@@ -59,6 +60,12 @@ export default function ProjectDeployments({ project }) {
     finally { setComparing(false); }
   };
 
+  const unlink = async (t) => {
+    if (!window.confirm(`Unlink ${t.name} from this project? The site itself is not touched.`)) return;
+    try { await unlinkHostSite(project.id, t.ref.replace(/^host:/, "")); toast.success("Unlinked " + t.name + "."); void load({ quiet: true }); }
+    catch (e) { toast.error(errorMessage(e, "Could not unlink.")); }
+  };
+
   const redeploy = async (t) => {
     if (!window.confirm(`Deploy the latest commit of ${t.name} on ${t.label} now?`)) return;
     setBusyRef(t.ref);
@@ -66,6 +73,8 @@ export default function ProjectDeployments({ project }) {
     catch (e) { toast.error(errorMessage(e, "Could not start the deploy.")); }
     finally { setBusyRef(""); }
   };
+
+  useEffect(() => { if (!compare && main && list.length > 1 && !comparing) void runCompare(); }, [main?.ref, list.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleLogs = (ref) => setOpenLogs((old) => { const next = new Set(old); if (next.has(ref)) next.delete(ref); else next.add(ref); return next; });
   const running = list.filter((t) => !t.suspended && !(t.error && !t.url)).length;
@@ -132,6 +141,7 @@ export default function ProjectDeployments({ project }) {
                           <button type="button" className="btn btn--ghost btn--sm" aria-expanded={logsOpen} onClick={() => toggleLogs(t.ref)}>{logsOpen ? "Hide logs" : "Logs"}</button>
                           {t.capabilities?.env ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => setCopyFor(t.ref)}>Copy env</button> : null}
                           <button type="button" className="btn btn--ghost btn--sm" disabled={busyRef === t.ref} onClick={() => void redeploy(t)}>{busyRef === t.ref ? "Deploying…" : "Redeploy"}</button>
+                          {t.provider !== "render" ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => void unlink(t)}>Unlink</button> : null}
                           {t.dashboardUrl ? <a href={t.dashboardUrl} target="_blank" rel="noopener noreferrer" aria-label={"Open " + t.name + " on " + t.label}>{t.label} ↗</a> : null}
                         </div>
                       </td>
