@@ -38,8 +38,8 @@ export default function PhotoCloud() {
   const media = useMemo(() => (data?.media || []).filter((item) => {
     const mime = String(item.mimeType || "").toLowerCase();
     const name = String(item.filename || "").toLowerCase();
-    const isVideo = mime.startsWith("video/") || /\\.(mp4|mov|m4v|webm|avi|mkv)$/i.test(name);
-    const isImage = mime.startsWith("image/") || /\\.(jpe?g|png|gif|webp|heic|heif|bmp|svg|tiff?)$/i.test(name);
+    const isVideo = mime.startsWith("video/") || /\.(mp4|mov|m4v|webm|avi|mkv)$/i.test(name);
+    const isImage = mime.startsWith("image/") || /\.(jpe?g|png|gif|webp|heic|heif|bmp|svg|tiff?)$/i.test(name);
     const isRealMedia = isImage || isVideo;
     const isDriveFile = !isRealMedia;
     const haystack = [item.filename, item.tag, item.account, item.type].join(" ").toLowerCase();
