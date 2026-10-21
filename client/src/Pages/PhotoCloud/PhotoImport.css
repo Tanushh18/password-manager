@@ -75,3 +75,6 @@
 .pi-dest legend { font-weight: 600; padding: 0 4px; }
 .pi-dest__row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .pi-dest__row small { margin-left: 6px; }
+
+.pi-rename { display: flex; align-items: flex-end; gap: 8px; margin: 8px 0 16px; }
+.pi-rename label { flex: 1; }

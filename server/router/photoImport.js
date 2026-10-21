@@ -4,7 +4,7 @@ const router = express.Router();
 const authenticate = require("../middlewares/authenticate");
 const { requireFeature } = require("../utils/features");
 const { PhotoImportBatch: Batch, PhotoImportItem: Item } = require("../models/photoImport");
-const { createBatch, control, removeBatch, unsealItem } = require("../utils/photoImport");
+const { createBatch, control, removeBatch, renameBatch, unsealItem } = require("../utils/photoImport");
 const { estimate } = require("../utils/importPlan");
 const { decode } = require("../utils/photoStore");
 const { serverError } = require("./helpers");
@@ -30,8 +30,8 @@ router.get("/photo-import/batches", ...gate, async (req, res) => {
 });
 
 router.post("/photo-import/batches", ...gate, async (req, res) => {
-    const label = String(req.body?.label || "").trim().slice(0, 60).replace(/[\\/]/g, "-");
-    if (!label) return res.status(400).json({ error: "Give this import a name; it becomes the folder name in Drive." });
+    // The name is optional now: it can be set once the import has run (PATCH below).
+    const label = String(req.body?.label || "").trim().slice(0, 60).replace(/[\\/]/g, "-") || `Import ${new Date().toISOString().slice(0, 10)}`;
     try {
         const destinationIds = Array.isArray(req.body?.destinationIds) ? req.body.destinationIds.map(String).slice(0, 20) : [];
         const batch = await createBatch(req.rootUser._id, { label, sourceConnectionId: String(req.body?.sourceConnectionId || ""), destinationIds, concurrency: req.body?.concurrency });
@@ -82,6 +82,14 @@ const ACTIONS = new Set(["pause", "resume", "cancel", "retry-failed", "check"]);
 router.post("/photo-import/batches/:id/:action", ...gate, async (req, res) => {
     if (!oid(req.params.id) || !ACTIONS.has(req.params.action)) return res.status(404).json({ error: "Import not found." });
     try { return res.json({ batch: publicBatch(await control(req.rootUser._id, req.params.id, req.params.action)) }); }
+    catch (error) { return fail(res, error); }
+});
+
+router.patch("/photo-import/batches/:id", ...gate, async (req, res) => {
+    if (!oid(req.params.id)) return res.status(404).json({ error: "Import not found." });
+    const label = String(req.body?.label || "").trim().slice(0, 60).replace(/[\\/]/g, "-");
+    if (!label) return res.status(400).json({ error: "Give the folder a name." });
+    try { return res.json({ batch: publicBatch(await renameBatch(req.rootUser._id, req.params.id, label)) }); }
     catch (error) { return fail(res, error); }
 });
 

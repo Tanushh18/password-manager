@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
-import { createPhotoImport, deletePhotoImport, errorMessage, getPhotoCloudDashboard, getPhotoImport, listPhotoImports, photoImportAction, startPhotoGoogleOAuth } from "../../api/client";
+import { createPhotoImport, deletePhotoImport, errorMessage, getPhotoCloudDashboard, getPhotoImport, listPhotoImports, photoImportAction, renamePhotoImport, startPhotoGoogleOAuth } from "../../api/client";
 import "./PhotoImport.css";
 
 const size = (n) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(2)} GB` : n >= 1024 ** 2 ? `${(n / 1024 ** 2).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n || 0} B`);
@@ -19,6 +19,27 @@ function Pipeline({ stages, total }) {
     <ol className="pi-flow" aria-label="Pipeline stages">
       {boxes.map(([name, n, cls]) => <li key={cls} className={`pi-flow__step pi-flow__step--${cls} ${n > 0 ? "is-live" : ""}`}><span>{name}</span><strong>{n}</strong></li>)}
     </ol>
+  );
+}
+
+/* Name the folder after the import. Renames it in Stashr and in Drive. */
+function FolderName({ batch, onSaved }) {
+  const [value, setValue] = useState(batch.label);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => setValue(batch.label), [batch.label]);
+  const save = async () => {
+    const next = value.trim();
+    if (!next || next === batch.label) return;
+    setSaving(true);
+    try { await renamePhotoImport(batch.id, next); toast.success("Folder name saved in Stashr and Drive."); onSaved(); }
+    catch (e) { toast.error(errorMessage(e, "Could not rename the folder.")); }
+    finally { setSaving(false); }
+  };
+  return (
+    <div className="pi-rename">
+      <label>Folder name<input value={value} onChange={(e) => setValue(e.target.value)} maxLength={60} /></label>
+      <button className="btn btn--ghost btn--sm" disabled={saving || !value.trim() || value.trim() === batch.label} onClick={() => void save()}>{saving ? "Saving…" : "Save name"}</button>
+    </div>
   );
 }
 
@@ -62,6 +83,8 @@ function Detail({ id, onChanged }) {
         </div>
         <span className={`pi-chip pi-chip--${batch.status}`}>{LABEL[batch.status] || batch.status}</span>
       </header>
+
+      <FolderName batch={batch} onSaved={onChanged} />
 
       {batch.pauseReason && batch.status === "paused" ? <p className="pi-note pi-note--warn">{batch.pauseReason}</p> : null}
 
@@ -248,7 +271,7 @@ export default function PhotoImport() {
         <aside className="pi-side">
           <form className="card pi-new" onSubmit={start}>
             <div className="pi-new__title"><span className="pi-icon" aria-hidden="true">↗</span><div><h2>New import</h2><p className="pi-muted">Choose a destination folder, then pick photos.</p></div></div>
-            <label>Folder name in Drive<input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Holidays 2019" maxLength={60} required /></label>
+            <label>Folder name (optional)<input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Leave empty, name it after the import" maxLength={60} /></label>
             <label>Google account
               <select value={source} onChange={(e) => setSource(e.target.value)} required disabled={!accounts.length}>
                 {accounts.length === 0 ? <option value="">No connected account</option> : accounts.map((a) => <option key={a.id} value={a.id}>{a.label} ({a.email})</option>)}
@@ -272,7 +295,7 @@ export default function PhotoImport() {
                 <option value={3}>Three at a time</option>
               </select>
             </label>
-            <button className="btn btn--primary btn--full" disabled={creating || !label.trim() || !source || !destIds.length}>{creating ? "Opening…" : "Choose photos in Google Photos"} <span aria-hidden="true">→</span></button>
+            <button className="btn btn--primary btn--full" disabled={creating || !source || !destIds.length}>{creating ? "Opening…" : "Choose photos in Google Photos"} <span aria-hidden="true">→</span></button>
             <p className="pi-muted">Google opens its own secure photo picker. Your Google password is never shared with Stashr.</p>
           </form>
 

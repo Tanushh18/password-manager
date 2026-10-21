@@ -209,6 +209,7 @@ export const createPhotoImport = (data) => instance.post("/photo-import/batches"
 export const getPhotoImport = (id) => instance.get(`/photo-import/batches/${encodeURIComponent(id)}`, { timeout: 30000 }).then((r) => r.data);
 export const photoImportAction = (id, action) => instance.post(`/photo-import/batches/${encodeURIComponent(id)}/${action}`, {}, { timeout: 60000 }).then((r) => r.data);
 export const deletePhotoImport = (id) => instance.delete(`/photo-import/batches/${encodeURIComponent(id)}`).then((r) => r.data);
+export const renamePhotoImport = (id, label) => instance.patch(`/photo-import/batches/${encodeURIComponent(id)}`, { label }).then((r) => r.data);
 export const createFolderShare = (data) => instance.post("/photo-cloud/folder-shares", data).then((r) => r.data);
 export const listFolderShares = () => instance.get("/photo-cloud/folder-shares").then((r) => r.data);
 export const revokeFolderShare = (id) => instance.delete(`/photo-cloud/folder-shares/${encodeURIComponent(id)}`).then((r) => r.data);

@@ -432,4 +432,24 @@ async function removeBatch(userId, batchId) {
   urlCache.delete(String(batch._id));
 }
 
-module.exports = { createBatch, pollBatch, control, removeBatch, startImportWorker, unsealItem, tick };
+/* The folder can be named after the import: the Stashr folder and the Drive folders it already has are renamed too. */
+async function renameBatch(userId, batchId, label) {
+  const batch = await Batch.findOne({ _id: batchId, userId });
+  if (!batch) throw fail(404, "Import not found.");
+  const { user, key } = await loadUser(userId);
+  const folder = decode(user.photoFolders, key).find((f) => f.id === batch.folderId);
+  if (folder) {
+    folder.name = label;
+    await updateEntry(user, "photoFolders", folder, key);
+    for (const [connectionId, driveId] of Object.entries(folder.driveIds || {})) {
+      const connection = connectionOf(user, key, connectionId);
+      if (!connection?.accessToken || !driveId) continue;
+      await authed(user, key, connection, `${DRIVE}/drive/v3/files/${encodeURIComponent(driveId)}?fields=id`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: label }) }).catch(() => {});
+    }
+  }
+  batch.label = label;
+  await batch.save();
+  return batch;
+}
+
+module.exports = { createBatch, pollBatch, control, removeBatch, renameBatch, startImportWorker, unsealItem, tick };
