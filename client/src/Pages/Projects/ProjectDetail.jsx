@@ -55,7 +55,7 @@ export default function ProjectDetail() {
 
         {project.repoUrl ? <BranchTree key={"b" + project.id} project={project} /> : null}
 
-        {project.renderServiceId || (project.renderServices || []).length ? <ProjectDeployments project={project} /> : null}
+        {project.renderServiceId || (project.renderServices || []).length || (project.hostLinks || []).length ? <ProjectDeployments project={project} /> : null}
 
         <HostLinks project={project} />
 

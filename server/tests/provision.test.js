@@ -87,7 +87,7 @@ describe("framework templates and presets", () =>
 
     test("every bring-your-own-code preset is a valid Render service type", () =>
     {
-        const runtimes = new Set(["node", "python", "go", "ruby", "rust", "docker"]);
+        const runtimes = new Set(["node", "python", "go", "ruby", "rust", "elixir", "docker"]);
         for (const [key, r] of Object.entries(RUNTIMES))
         {
             expect(key.length <= 20).toBe(true);

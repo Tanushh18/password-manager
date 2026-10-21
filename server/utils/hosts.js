@@ -300,10 +300,11 @@ railway.inspect = async (token, account, link, http = defaultHttp) => {
   return { ok: true, site: { id: link.remoteId, name: link.name, url, dashboardUrl: link.dashboardUrl, repo: link.repo, branch: link.branch, meta: m }, latestDeploy: d ? deployOf(d.status, d.createdAt, d.meta?.commitMessage, d.meta?.commitHash, d.meta?.branch) : null, deployId: d?.id || "" };
 };
 railway.redeploy = async (token, account, link, _opts, http = defaultHttp) => {
-  const seen = await railway.inspect(token, account, link, http);
-  if (!seen.ok) return seen;
-  if (!seen.deployId) return fail("Railway has no earlier deployment to redeploy. Push a commit to start one.");
-  const res = await gql(http, token, "mutation($id: String!) { deploymentRedeploy(id: $id) { id } }", { id: seen.deployId });
+  const list = await railway.deploys(token, account, link, http);
+  if (!list.ok) return list;
+  const id = list.deploys[0]?.id;
+  if (!id) return fail("Railway has no earlier deployment to redeploy. Push a commit to start one.");
+  const res = await gql(http, token, "mutation($id: String!) { deploymentRedeploy(id: $id) { id } }", { id });
   return res.ok ? { ok: true, branch: link.branch } : fail(reason(res, res.message ? "Railway: " + res.message.slice(0, 160) : "Railway could not redeploy."));
 };
 

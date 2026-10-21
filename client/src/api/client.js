@@ -293,6 +293,17 @@ export const getGithubBranches = (githubAccountId, url) => instance.get("/github
 export const deleteGithubBranches = (body) => instance.post("/github/repo/branches/delete", body, { timeout: 120000 }).then((r) => r.data);
 export const syncProjectServers = (projectId, body) => instance.post("/render/projects/" + encodeURIComponent(projectId) + "/env-sync", body, { timeout: 120000 }).then((r) => r.data);
 export const moveProjectServerAccount = (projectId, serviceId, accountId) => instance.put("/render/projects/" + encodeURIComponent(projectId) + "/services/" + encodeURIComponent(serviceId) + "/account", { accountId }).then((r) => r.data);
+const deployOpsPath = (projectId) => "/deploy-ops/projects/" + encodeURIComponent(projectId);
+/* Every hosting provider (Render, Vercel, Netlify, Railway, Cloudflare Pages) behind one set of calls. `ref` names one server. */
+export const getDeployTargets = (projectId) => instance.get(deployOpsPath(projectId) + "/targets", { timeout: 90000 }).then((r) => r.data);
+export const getDeployEnv = (projectId, ref) => instance.get(deployOpsPath(projectId) + "/env", { params: { ref }, timeout: 60000 }).then((r) => r.data);
+export const setDeployEnv = (projectId, ref, key, value) => instance.put(deployOpsPath(projectId) + "/env", { ref, key, value }).then((r) => r.data);
+export const redeployDeployTarget = (projectId, ref, branch = "") => instance.post(deployOpsPath(projectId) + "/redeploy", { ref, branch }, { timeout: 120000 }).then((r) => r.data);
+export const getDeployHistory = (projectId, ref) => instance.get(deployOpsPath(projectId) + "/deploys", { params: { ref }, timeout: 60000 }).then((r) => r.data);
+export const getDeployLogs = (projectId, ref, deployId = "") => instance.get(deployOpsPath(projectId) + "/logs", { params: { ref, deployId }, timeout: 60000 }).then((r) => r.data);
+export const setDeployBranch = (projectId, ref, branch, deploy = true) => instance.put(deployOpsPath(projectId) + "/branch", { ref, branch, deploy }, { timeout: 120000 }).then((r) => r.data);
+export const moveDeployAccount = (projectId, ref, accountId) => instance.put(deployOpsPath(projectId) + "/account", { ref, accountId }).then((r) => r.data);
+export const syncDeployEnv = (projectId, body) => instance.post(deployOpsPath(projectId) + "/sync", body, { timeout: 180000 }).then((r) => r.data);
 
 /* Persistent Render operations: all credentials remain encrypted server-side. */
 export const getRenderOpsConfig = () => instance.get("/render/ops/config").then((r) => r.data);

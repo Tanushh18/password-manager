@@ -185,7 +185,10 @@ const RUNTIMES = {
   // Angular writes to dist/<project>/browser; copy it to a fixed folder so any project name works.
   angular: { label: "Angular — static", type: "static_site", buildCommand: NPM_BUILD + " && mkdir -p site && cp -r dist/*/browser/. site/", startCommand: "", publishPath: "site" },
   astro: { label: "Astro — static", type: "static_site", buildCommand: NPM_BUILD, startCommand: "", publishPath: "dist" },
-  static: { label: "Static site", type: "static_site", buildCommand: "", startCommand: "" }
+  static: { label: "Static site", type: "static_site", buildCommand: "", startCommand: "" },
+  elixir: { label: "Elixir (Phoenix)", type: "web_service", runtime: "elixir", buildCommand: "mix deps.get --only prod && mix compile", startCommand: "mix phx.server" },
+  bun: { label: "Bun (needs a Dockerfile)", type: "web_service", runtime: "docker", buildCommand: "", startCommand: "" },
+  deno: { label: "Deno (needs a Dockerfile)", type: "web_service", runtime: "docker", buildCommand: "", startCommand: "" }
 };
 
 /** Free plan only, Render regions that support it. */

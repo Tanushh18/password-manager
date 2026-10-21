@@ -1,179 +1,105 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
-import { getProjectDeployments, getServiceBranches, setServiceBranch } from "../../api/client";
+import { getDeployTargets, redeployDeployTarget, syncDeployEnv } from "../../api/client";
 import { usePolling } from "../../Pages/Render/renderHooks";
-import { timeAgo, safeUrl, errorMessage } from "../../Pages/Render/renderUtils";
+import { timeAgo, errorMessage } from "../../Pages/Render/renderUtils";
 import ServerEnvCopy from "./ServerEnvCopy";
 import EnvGroupSync from "./EnvGroupSync";
-import { UrlMenu, SortTh, AccountPicker, ServerLogs, DEPLOY_LABEL } from "./ServerParts";
+import RenderMatrix from "./RenderMatrix";
+import { UrlMenu, SortTh, AccountPicker, BranchChange, DeployLogs, PlatformBadge, StatusPill } from "./DeployParts";
 import "./ProjectDeployments.css";
 
-const FILTERS = [["all", "All"], ["common", "Common"], ["different", "Different values"], ["partial", "Only on some"], ["stashr_only", "Only in Stashr"]];
-const COUNT_KEY = { all: "total", common: "common", different: "different", partial: "partial", stashr_only: "stashrOnly" };
-const STATE_RANK = { live: 0, suspended: 1, unknown: 2, gone: 3 };
-
-// One read per project at a time: the server table and the branch tree on the same page share it.
-const inFlight = new Map();
-/** Reads the project's servers from Render. Calls within 20 seconds share one request. */
-export function readDeployments(projectId, { fresh = false } = {}) {
-  const hit = inFlight.get(projectId);
-  if (hit && !fresh && Date.now() - hit.at < 20000) return hit.promise;
-  const promise = getProjectDeployments(projectId);
-  inFlight.set(projectId, { at: Date.now(), promise });
-  promise.catch(() => inFlight.delete(projectId));
-  return promise;
-}
-
-function serverState(s) {
-  if (s.gone) return ["gone", "Deleted on Render"];
-  if (s.error && !s.url) return ["unknown", "Unreadable"];
-  return s.suspended ? ["suspended", "Suspended"] : ["live", "Running"];
-}
-
-/** Sort key for each server column. Missing values sort last. */
+/* Sort keys for each column. */
 const SORTERS = {
-  name: (s) => String(s.name || "").toLowerCase(),
-  status: (s) => STATE_RANK[serverState(s)[0]] ?? 9,
-  deploy: (s) => (s.latestDeploy?.at ? Date.parse(s.latestDeploy.at) : 0),
-  branch: (s) => String(s.branch || ""),
-  plan: (s) => String(s.plan || ""),
-  env: (s) => (s.envCount == null ? -1 : s.envCount)
+  name: (t) => String(t.name || "").toLowerCase(),
+  platform: (t) => t.label,
+  status: (t) => (t.suspended ? 2 : t.error && !t.url ? 3 : /fail|error/.test(String(t.latestDeploy?.status || "")) ? 1 : 0),
+  branch: (t) => String(t.branch || ""),
+  deploy: (t) => (t.latestDeploy?.at ? Date.parse(t.latestDeploy.at) : 0)
 };
 
-function Cell({ cell }) {
-  if (!cell || cell.state === "unknown") return <span className="pdep-cell pdep-cell--unknown" title="Could not be read">?</span>;
-  if (cell.state === "missing") return <span className="pdep-cell pdep-cell--missing" title="Not set on this server">—</span>;
-  if (cell.state === "empty") return <span className="pdep-cell pdep-cell--empty" title="Set, but empty">empty</span>;
-  return <span className={"pdep-cell pdep-v pdep-v--" + cell.variant} title={"Value " + cell.variant + " (same letter = same value)"}>{cell.variant}</span>;
-}
-
-/** Pick which GitHub branch this server deploys. The branch list is read from the repo only when asked. */
-function BranchPicker({ server, onDone }) {
-  const [info, setInfo] = useState(null);
-  const [choice, setChoice] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  const open = async () => {
-    if (info || busy) return;
-    setBusy(true);
-    try { const r = await getServiceBranches(server.accountId, server.id); setInfo(r); setChoice(r.current || server.branch || ""); setErr(""); }
-    catch (e) { setErr(errorMessage(e, "Could not read the branches.")); }
-    finally { setBusy(false); }
-  };
-  const apply = async () => {
-    const same = choice === (info.current || "");
-    if (!window.confirm(same ? `Deploy "${choice}" on ${server.name} again?` : `Switch ${server.name} from "${info.current || "its current branch"}" to "${choice}" and deploy it?`)) return;
-    setBusy(true);
-    try {
-      const r = await setServiceBranch(server.accountId, server.id, choice, true);
-      toast.success(r.deployed ? `Deploying ${r.branch}.` : r.note || `Branch set to ${r.branch}.`);
-      setInfo(null);
-      onDone();
-    } catch (e) { toast.error(errorMessage(e, "Could not change the branch.")); }
-    finally { setBusy(false); }
-  };
-
-  if (server.gone || (server.error && !server.url)) return <span className="pdep__dim">—</span>;
-  if (!info) return (
-    <div className="pdep__branch">
-      <span>{server.branch || "default"}</span>
-      <button type="button" className="btn btn--ghost btn--sm" onClick={() => void open()} disabled={busy}>{busy ? "Reading…" : "Change"}</button>
-      {err ? <small className="pdep__err">{err}</small> : null}
-    </div>
-  );
-  if (!info.connected) return <small className="pdep__err">Connect GitHub (above) to choose a branch.</small>;
-  return (
-    <div className="pdep__branch">
-      <select className="input" value={choice} onChange={(e) => setChoice(e.target.value)} aria-label={`Branch for ${server.name}`} disabled={busy}>
-        {!info.branches.some((b) => b.name === info.current) && info.current ? <option value={info.current}>{info.current}</option> : null}
-        {info.branches.map((b) => <option key={b.name} value={b.name}>{b.name}{b.name === info.default ? " (default)" : ""}</option>)}
-      </select>
-      <button type="button" className="btn btn--primary btn--sm" onClick={() => void apply()} disabled={busy || !choice}>{busy ? "Working…" : choice === info.current ? "Redeploy" : "Switch and deploy"}</button>
-      <button type="button" className="btn btn--ghost btn--sm" onClick={() => setInfo(null)} disabled={busy}>Cancel</button>
-    </div>
-  );
-}
-
-/** "Copy env" button for one server row, opening the copy dialog. */
-function EnvCopyButton({ server, onDone }) {
-  const [open, setOpen] = useState(false);
-  if (server.gone || (server.error && !server.url)) return null;
-  return (
-    <>
-      <button type="button" className="btn btn--ghost btn--sm" onClick={() => setOpen(true)}>Copy env</button>
-      {open ? <ServerEnvCopy server={server} open={open} onClose={() => setOpen(false)} onDone={onDone} /> : null}
-    </>
-  );
-}
-
-/** Every Render server a project is deployed on: account, URLs, status, deploys, branch and variables compared to the main server. */
+/** Every server of the project, on every hosting provider: account, URLs, status, branch, env comparison, logs and actions. */
 export default function ProjectDeployments({ project }) {
-  const [data, setData] = useState(null);
+  const [targets, setTargets] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
-  const [query, setQuery] = useState("");
   const [sort, setSort] = useState({ key: "name", dir: "asc" });
-  const [syncFrom, setSyncFrom] = useState(null); // service id the env sync dialog starts from
+  const [compare, setCompare] = useState(null); // ref -> env comparison against the main server
+  const [comparing, setComparing] = useState(false);
+  const [syncFrom, setSyncFrom] = useState(null);
+  const [copyFor, setCopyFor] = useState(null);
   const [openLogs, setOpenLogs] = useState(() => new Set());
+  const [busyRef, setBusyRef] = useState("");
 
   const load = useCallback(async ({ quiet = false } = {}) => {
     if (!quiet) setLoading(true);
-    try { setData(await readDeployments(project.id, { fresh: quiet })); setError(""); }
-    catch (e) { if (!quiet) setError(errorMessage(e, "Could not read the deployments from Render.")); }
+    try { setTargets((await getDeployTargets(project.id)).targets || []); setError(""); }
+    catch (e) { if (!quiet) setError(errorMessage(e, "Could not read the deployments.")); }
     finally { if (!quiet) setLoading(false); }
   }, [project.id]);
-  useEffect(() => { void load(); }, [load, (project.renderServices || []).length]);
+  useEffect(() => { void load(); }, [load, (project.renderServices || []).length, (project.hostLinks || []).length]);
   usePolling(() => load({ quiet: true }), 120000, true);
 
-  const servers = data?.servers || [];
-  const main = servers.find((s) => s.isMain) || servers[0];
-  const sortedServers = useMemo(() => {
+  const list = targets || [];
+  const main = list.find((t) => t.main) || list[0];
+  const sorted = useMemo(() => {
     const key = SORTERS[sort.key] || SORTERS.name;
     const dir = sort.dir === "asc" ? 1 : -1;
-    return [...servers].sort((a, b) => {
-      const x = key(a), y = key(b);
-      if (x === y) return String(a.name).localeCompare(String(b.name));
-      return (x > y ? 1 : -1) * dir;
-    });
-  }, [servers, sort]);
-  const columns = useMemo(() => [...servers, ...(data?.stashr ? [{ id: "stashr", name: "Stashr", isStashr: true }] : [])], [servers, data]);
-  const rows = useMemo(() => (data?.env?.rows || []).filter((r) => (filter === "all" || r.status === filter) && (!query.trim() || r.name.toLowerCase().includes(query.trim().toLowerCase()))), [data, filter, query]);
-  const summary = data?.env?.summary || {};
-  const running = servers.filter((s) => !s.gone && !s.suspended).length;
+    return [...list].sort((a, b) => { const x = key(a), y = key(b); return x === y ? String(a.name).localeCompare(String(b.name)) : (x > y ? 1 : -1) * dir; });
+  }, [list, sort]);
+  const platforms = [...new Set(list.map((t) => t.label))];
 
-  // How many variables each server differs from the main server (a missing or different value both count).
-  const differsFromMain = useMemo(() => {
-    const out = new Map();
-    if (!main) return out;
-    for (const s of servers) {
-      if (s.id === main.id) continue;
-      let n = 0;
-      for (const r of data?.env?.rows || []) if ((r.cells?.[s.id]?.variant || r.cells?.[s.id]?.state) !== (r.cells?.[main.id]?.variant || r.cells?.[main.id]?.state)) n += 1;
-      out.set(s.id, n);
-    }
-    return out;
-  }, [servers, main, data]);
+  const runCompare = async () => {
+    if (!main) return;
+    setComparing(true);
+    try {
+      const r = await syncDeployEnv(project.id, { apply: false, sourceRef: main.ref, allTargets: true });
+      setCompare(Object.fromEntries(r.targets.map((t) => [t.ref, t])));
+    } catch (e) { toast.error(errorMessage(e, "Could not compare the variables.")); }
+    finally { setComparing(false); }
+  };
 
-  const toggleLogs = (id) => setOpenLogs((old) => { const next = new Set(old); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-  const branchCount = new Set(servers.map((s) => s.branch).filter(Boolean)).size;
+  const redeploy = async (t) => {
+    if (!window.confirm(`Deploy the latest commit of ${t.name} on ${t.label} now?`)) return;
+    setBusyRef(t.ref);
+    try { await redeployDeployTarget(project.id, t.ref); toast.success("Deploy started on " + t.label + "."); void load({ quiet: true }); }
+    catch (e) { toast.error(errorMessage(e, "Could not start the deploy.")); }
+    finally { setBusyRef(""); }
+  };
+
+  const toggleLogs = (ref) => setOpenLogs((old) => { const next = new Set(old); if (next.has(ref)) next.delete(ref); else next.add(ref); return next; });
+  const running = list.filter((t) => !t.suspended && !(t.error && !t.url)).length;
+  const branches = new Set(list.map((t) => t.branch).filter(Boolean)).size;
+
+  const envCell = (t) => {
+    const c = compare?.[t.ref];
+    if (!compare) return <button type="button" className="btn btn--ghost btn--sm" onClick={() => void runCompare()} disabled={comparing || !main}>{comparing ? "Comparing…" : "Compare"}</button>;
+    if (t.main) return <span className="pdep__dim">main</span>;
+    if (!c) return <span className="pdep__dim">—</span>;
+    if (c.error) return <small className="pdep__err" title={c.error}>{c.error}</small>;
+    return (
+      <span className="pdep__envcell" title={[c.create.length && "new: " + c.create.join(", "), c.update.length && "different: " + c.update.join(", "), c.unreadable.length && "hidden by " + t.label + ": " + c.unreadable.join(", ")].filter(Boolean).join("\n")}>
+        <b className="is-add">+{c.create.length}</b><b className="is-change">~{c.update.length}</b><span>{c.same} same</span>
+        {c.unreadable.length ? <small>{c.unreadable.length} hidden</small> : null}
+      </span>
+    );
+  };
 
   return (
     <section className="card pdep" aria-label="Deployments">
       <header className="pdep__head">
         <div>
           <h2>Deployments</h2>
-          <p>{loading && !data ? "Reading every server from Render…" : `${servers.length} Render server${servers.length === 1 ? "" : "s"} · ${running} running · ${branchCount} branch${branchCount === 1 ? "" : "es"}${data ? " · live from Render " + timeAgo(data.checkedAt) : ""}`}</p>
+          <p>{loading && !targets ? "Reading every server…" : `${list.length} server${list.length === 1 ? "" : "s"} on ${platforms.length || 0} platform${platforms.length === 1 ? "" : "s"} · ${running} running · ${branches} branch${branches === 1 ? "" : "es"}`}</p>
         </div>
         <div className="pdep__actions">
-          {main && servers.length > 1 ? <button type="button" className="btn btn--primary btn--sm" onClick={() => setSyncFrom(main.id)}>Sync env to servers on this branch</button> : null}
+          {main && list.length > 1 ? <button type="button" className="btn btn--primary btn--sm" onClick={() => setSyncFrom(main.ref)}>Sync env across servers</button> : null}
           <button type="button" className="btn btn--ghost btn--sm" disabled={loading} onClick={() => void load()}>{loading ? "Reading…" : "↻ Refresh"}</button>
         </div>
       </header>
       {error ? <div className="notice notice--err" role="alert">{error}</div> : null}
 
-      {servers.length > 0 && (
+      {list.length > 0 && (
         <div className="pdep__scroll">
           <table className="pdep__table pdep__servers">
             <thead><tr>
@@ -181,42 +107,36 @@ export default function ProjectDeployments({ project }) {
               <th>URL</th>
               <SortTh id="status" label="Status" sort={sort} onSort={setSort} />
               <SortTh id="deploy" label="Last deploy" sort={sort} onSort={setSort} />
-              <SortTh id="plan" label="Plan · region" sort={sort} onSort={setSort} />
               <SortTh id="branch" label="Branch" sort={sort} onSort={setSort} />
-              <SortTh id="env" label="Env vars" sort={sort} onSort={setSort} />
+              <th>Env vs main</th>
               <th />
             </tr></thead>
             <tbody>
-              {sortedServers.map((s) => {
-                const [state, label] = serverState(s);
-                const diff = differsFromMain.get(s.id) || 0;
-                const logsOpen = openLogs.has(s.id);
+              {sorted.map((t) => {
+                const logsOpen = openLogs.has(t.ref);
                 return (
-                  <React.Fragment key={s.id}>
-                    <tr className={"is-" + state}>
+                  <React.Fragment key={t.ref}>
+                    <tr className={t.suspended ? "is-suspended" : ""}>
                       <td>
-                        <strong>{s.name}</strong>{s.isMain ? <em className="pdep__main">main</em> : null}
-                        <AccountPicker projectId={project.id} server={s} onDone={() => void load({ quiet: true })} />
+                        <strong>{t.name}</strong>
+                        <div><PlatformBadge target={t} /></div>
+                        <AccountPicker projectId={project.id} target={t} onDone={() => void load({ quiet: true })} />
                       </td>
-                      <td><UrlMenu urls={[s.url]} /></td>
-                      <td><span className={"pdep__pill is-" + state}>{label}</span>{s.error && state !== "gone" ? <small className="pdep__err">{s.error}</small> : null}</td>
-                      <td>{s.latestDeploy ? <><span className={"pdep__deploy is-" + (s.latestDeploy.status === "live" ? "ok" : /fail/.test(s.latestDeploy.status) ? "bad" : "mid")}>{DEPLOY_LABEL[s.latestDeploy.status] || s.latestDeploy.status}</span><small>{timeAgo(s.latestDeploy.at)}{s.latestDeploy.sha ? " · " + s.latestDeploy.sha : ""}</small></> : <span className="pdep__dim">—</span>}</td>
-                      <td>{[s.plan, s.region].filter(Boolean).join(" · ") || <span className="pdep__dim">—</span>}</td>
-                      <td><BranchPicker server={s} onDone={() => void load({ quiet: true })} /></td>
-                      <td>
-                        {s.envCount == null ? <span className="pdep__dim">?</span> : s.envCount}
-                        {s.envPartial ? <small className="pdep__err">too many to compare</small> : null}
-                        {main && s.id !== main.id && diff ? <small className="pdep__diff" title="Variables that differ from the main server">{diff} differ from main</small> : null}
-                      </td>
+                      <td><UrlMenu urls={[t.url]} /></td>
+                      <td><StatusPill target={t} />{t.error ? <small className="pdep__err">{t.error}</small> : null}</td>
+                      <td>{t.latestDeploy ? <><span className={"pdep__deploy is-" + (/live|ready|success/.test(t.latestDeploy.status) ? "ok" : /fail|error|cancel/.test(t.latestDeploy.status) ? "bad" : "mid")}>{t.latestDeploy.status}</span><small>{timeAgo(t.latestDeploy.at)}{t.latestDeploy.sha ? " · " + t.latestDeploy.sha : ""}</small></> : <span className="pdep__dim">—</span>}</td>
+                      <td><BranchChange projectId={project.id} project={project} target={t} onDone={() => void load({ quiet: true })} /></td>
+                      <td>{envCell(t)}</td>
                       <td>
                         <div className="pdep__branch">
-                          <button type="button" className="btn btn--ghost btn--sm" aria-expanded={logsOpen} onClick={() => toggleLogs(s.id)}>{logsOpen ? "Hide logs" : "Logs"}</button>
-                          <EnvCopyButton server={s} onDone={() => void load({ quiet: true })} />
-                          {s.dashboardUrl ? <a href={safeUrl(s.dashboardUrl)} target="_blank" rel="noopener noreferrer" aria-label={"Open " + s.name + " in Render"}>Render ↗</a> : null}
+                          <button type="button" className="btn btn--ghost btn--sm" aria-expanded={logsOpen} onClick={() => toggleLogs(t.ref)}>{logsOpen ? "Hide logs" : "Logs"}</button>
+                          {t.capabilities?.env ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => setCopyFor(t.ref)}>Copy env</button> : null}
+                          <button type="button" className="btn btn--ghost btn--sm" disabled={busyRef === t.ref} onClick={() => void redeploy(t)}>{busyRef === t.ref ? "Deploying…" : "Redeploy"}</button>
+                          {t.dashboardUrl ? <a href={t.dashboardUrl} target="_blank" rel="noopener noreferrer" aria-label={"Open " + t.name + " on " + t.label}>{t.label} ↗</a> : null}
                         </div>
                       </td>
                     </tr>
-                    {logsOpen ? <tr className="pdep__logrow"><td colSpan={8}><ServerLogs server={s} /></td></tr> : null}
+                    {logsOpen ? <tr className="pdep__logrow"><td colSpan={7}><DeployLogs projectId={project.id} target={t} /></td></tr> : null}
                   </React.Fragment>
                 );
               })}
@@ -225,46 +145,12 @@ export default function ProjectDeployments({ project }) {
         </div>
       )}
 
-      {data && (data.env?.rows || []).length > 0 && (
-        <details className="pdep__more">
-          <summary>Environment variables by server <small>{summary.common ?? 0} common · {summary.different ?? 0} different · {summary.partial ?? 0} only on some</small></summary>
-          <p className="pdep__note">
-            <b>{summary.common ?? 0}</b> common to every server · <b>{summary.different ?? 0}</b> with different values · <b>{summary.partial ?? 0}</b> only on some
-            {summary.stashrOnly ? <> · <b>{summary.stashrOnly}</b> only saved in Stashr</> : null}. Values are never shown: the same letter means the same value, different letters mean different values.
-          </p>
-          <div className="pdep__tools">
-            <div className="pdep__chips" role="group" aria-label="Filter variables">
-              {FILTERS.map(([id, label]) => (summary[COUNT_KEY[id]] || id === "all") ? (
-                <button key={id} type="button" aria-pressed={filter === id} className={filter === id ? "is-active" : ""} onClick={() => setFilter(id)}>{label} <span>{summary[COUNT_KEY[id]] ?? 0}</span></button>
-              ) : null)}
-            </div>
-            <input className="input pdep__search" type="search" placeholder="Search variables…" aria-label="Search variables" value={query} onChange={(e) => setQuery(e.target.value)} />
-          </div>
-          <div className="pdep__scroll pdep__matrix">
-            <table className="pdep__table pdep__table--matrix">
-              <thead><tr>
-                <th>Variable</th>
-                {columns.map((c) => <th key={c.id} className={c.isStashr ? "is-stashr" : c.suspended ? "is-off" : ""} title={c.name}><span>{c.name}</span>{c.isMain ? <em className="pdep__main">main</em> : null}{c.suspended ? <small>suspended</small> : null}</th>)}
-              </tr></thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.name} className={"is-" + r.status}>
-                    <td><code>{r.name}</code><small className={"pdep__tag is-" + r.status}>{{ common: "common", different: "differs", partial: "some servers", stashr_only: "only Stashr" }[r.status]}</small></td>
-                    {columns.map((c) => <td key={c.id}><Cell cell={r.cells[c.id]} /></td>)}
-                  </tr>
-                ))}
-                {!rows.length && <tr><td colSpan={columns.length + 1} className="pdep__dim">No variables match.</td></tr>}
-              </tbody>
-            </table>
-          </div>
-          <p className="pdep__legend"><span className="pdep-cell pdep-v pdep-v--A">A</span> a value · <span className="pdep-cell pdep-v pdep-v--B">B</span> a different value · <span className="pdep-cell pdep-cell--missing">—</span> not set · <span className="pdep-cell pdep-cell--empty">empty</span> set but empty</p>
-        </details>
-      )}
-      {data && !servers.length && !error ? <p className="pdep__dim">This project is not linked to a Render server yet.</p> : null}
+      {!loading && targets && !list.length && !error ? <p className="pdep__dim">This project has no linked server yet. Link one from Hosting or Render below.</p> : null}
 
-      {syncFrom && main ? (
-        <EnvGroupSync projectId={project.id} servers={servers} initialSource={syncFrom} open={Boolean(syncFrom)} onClose={() => setSyncFrom(null)} onDone={() => void load({ quiet: true })} />
-      ) : null}
+      {list.some((t) => t.provider === "render") ? <RenderMatrix project={project} /> : null}
+
+      {syncFrom ? <EnvGroupSync projectId={project.id} targets={list} initialSource={syncFrom} open={Boolean(syncFrom)} onClose={() => setSyncFrom(null)} onDone={() => { setCompare(null); void load({ quiet: true }); }} /> : null}
+      {copyFor ? <ServerEnvCopy projectId={project.id} target={list.find((t) => t.ref === copyFor)} targets={list} open={Boolean(copyFor)} onClose={() => setCopyFor(null)} onDone={() => { setCompare(null); void load({ quiet: true }); }} /> : null}
     </section>
   );
 }

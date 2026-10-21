@@ -49,7 +49,10 @@ const RUNTIMES = {
   cra: { label: "React (Create React App) — static", build: "npm install && npm run build", start: "", isStatic: true },
   angular: { label: "Angular — static", build: "npm install && npm run build && mkdir -p site && cp -r dist/*/browser/. site/", start: "", isStatic: true },
   astro: { label: "Astro — static", build: "npm install && npm run build", start: "", isStatic: true },
-  static: { label: "Static site", build: "", start: "", isStatic: true }
+  static: { label: "Static site", build: "", start: "", isStatic: true },
+  elixir: { label: "Elixir (Phoenix)", build: "mix deps.get --only prod && mix compile", start: "mix phx.server" },
+  bun: { label: "Bun (needs a Dockerfile)", build: "", start: "", needsDockerfile: true },
+  deno: { label: "Deno (needs a Dockerfile)", build: "", start: "", needsDockerfile: true }
 };
 // Which preset a starter template deploys with.
 const TEMPLATE_PRESET = { nextjs: "nextjs", react: "vite", vue: "vite", svelte: "vite", astro: "astro", node: "node", python: "python", flask: "flask", go: "go", docker: "docker", static: "static" };
@@ -76,7 +79,9 @@ export default function ProjectDeploy() {
   const [render, setRender] = useState(null);
   const [owners, setOwners] = useState([]);
   const [connectOpen, setConnectOpen] = useState(false);
-  const [host, setHost] = useState("render"); // render | vercel | netlify | railway | cloudflare
+  const [host, setHost] = useState("render"); // render | vercel | netlify | railway | cloudflare (the server's host when deploying both)
+  const [clientHost, setClientHost] = useState("render"); // the client's host when deploying both
+  const [clientModal, setClientModal] = useState(false);
   const [hostAccounts, setHostAccounts] = useState(null);
   const [hostModal, setHostModal] = useState(false);
   const [pre, setPre] = useState({ status: "idle", branches: [], default: "", message: "" }); // branches of the repo URL typed above, loaded before "Check repository"
@@ -98,6 +103,7 @@ export default function ProjectDeploy() {
   const loadHosts = () => getHostAccounts().then((r) => setHostAccounts(r.accounts || [])).catch(() => setHostAccounts([]));
   useEffect(() => { void loadHosts(); }, []);
   const hostChoices = (hostAccounts || []).filter((a) => a.provider === host);
+  const clientChoices = (hostAccounts || []).filter((a) => a.provider === clientHost);
   useEffect(() => { if (host !== "render" && !hostChoices.some((a) => a.id === form.hostAccountId)) set({ hostAccountId: hostChoices[0]?.id || "" }); }, [host, hostAccounts]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { void loadGithub(); getRenderAccounts().then((r) => setRender(r.accounts || [])).catch(() => setRender([])); }, []);
 
@@ -127,10 +133,12 @@ export default function ProjectDeploy() {
   const ownCode = form.template === "empty" || form.template === "existing";
   const isStatic = Boolean(RUNTIMES[form.runtime]?.isStatic);
   const scope = form.template === "existing" ? form.deployScope : "server"; // only an existing repo can split into server and client
-  const renderPart = host === "render" || scope === "both"; // a Render service is part of this deploy
+  useEffect(() => { if (scope === "both" && clientHost !== "render" && !clientChoices.some((a) => a.id === form.clientHostAccountId)) set({ clientHostAccountId: clientChoices[0]?.id || "" }); }, [clientHost, hostAccounts, scope]); // eslint-disable-line react-hooks/exhaustive-deps
+  const clientOnRender = scope === "both" ? clientHost === "render" : host === "render";
+  const renderPart = host === "render" || clientOnRender; // a Render service is part of this deploy
   const deployLabel = scope === "both" ? "Deploy server + client" : "Deploy to " + (host === "render" ? "Render" : hostById(host).label);
   const repoName = slug(form.name);
-  const ready = form.name.trim() && repoName && form.githubAccountId && (renderPart ? form.renderAccountId && (owners.length < 2 || form.ownerId) : true) && (host !== "render" ? form.hostAccountId : true) && (form.template !== "existing" || form.existingRepoUrl.trim());
+  const ready = form.name.trim() && repoName && form.githubAccountId && (renderPart ? form.renderAccountId && (owners.length < 2 || form.ownerId) : true) && (host !== "render" ? form.hostAccountId : true) && (scope === "both" && clientHost !== "render" ? form.clientHostAccountId : true) && (form.template !== "existing" || form.existingRepoUrl.trim());
 
   const pickTemplate = (template) => {
     const preset = TEMPLATE_PRESET[template];
@@ -197,10 +205,10 @@ export default function ProjectDeploy() {
   if (scope === "server") jobs.push({ label: "Server", run: () => (host === "render" ? renderJob({}) : hostJob({})) });
   if (scope === "client") jobs.push({ label: "Client", run: () => (host === "render" ? renderJob({ rootDir: form.clientRootDir }) : hostJob({ clientFolder: form.clientRootDir })) });
   if (scope === "both") {
-    jobs.push({ label: "Server", run: () => renderJob({ rootDir: form.rootDir }) });
-    jobs.push({ label: "Client", run: () => (host === "render"
+    jobs.push({ label: "Server", run: () => (host === "render" ? renderJob({ rootDir: form.rootDir }) : hostJob({ clientFolder: form.rootDir })) });
+    jobs.push({ label: "Client", run: () => (clientHost === "render"
       ? renderJob({ name: form.name + " client", repoName: slug(form.name + "-client"), rootDir: form.clientRootDir, runtime: form.clientRuntime, buildCommand: RUNTIMES[form.clientRuntime]?.build || "", startCommand: "" })
-      : hostJob({ name: form.name + " client", clientFolder: form.clientRootDir })) });
+      : hostJob({ name: form.name + " client", clientFolder: form.clientRootDir, hostAccountId: form.clientHostAccountId })) });
   }
 
   const deploy = async () => {
@@ -358,7 +366,7 @@ export default function ProjectDeploy() {
           ) : null}
 
           <section className="card dp-section">
-            <h2>3 · Hosting</h2>
+            <h2>{scope === "both" ? "3 · Server hosting" : "3 · Hosting"}</h2>
             <div className="dp-templates" role="group" aria-label="Hosting provider">
               <button type="button" className="dp-template" aria-pressed={host === "render"} onClick={() => setHost("render")}><strong>Render</strong><small>Servers and static sites, free plan.</small></button>
               {HOSTS.map((h) => <button key={h.id} type="button" className="dp-template" aria-pressed={host === h.id} onClick={() => setHost(h.id)}><strong>{h.label}</strong><small>{h.best}</small></button>)}
@@ -384,6 +392,31 @@ export default function ProjectDeploy() {
               {!hostChoices.length ? <p className="field__note">No {hostById(host).label} token yet. Press Connect for the step-by-step way to get one.</p> : null}
             </section>
           ) : null}
+          {scope === "both" ? (
+            <section className="card dp-section">
+              <h2>Client hosting</h2>
+              <p className="field__note">The client is deployed on its own. Render serves it as a static site on the free plan; the other hosts take the repository’s client folder.</p>
+              <div className="dp-templates" role="group" aria-label="Client hosting provider">
+                <button type="button" className="dp-template" aria-pressed={clientHost === "render"} onClick={() => setClientHost("render")}><strong>Render</strong><small>Static site, free plan.</small></button>
+                {HOSTS.map((h) => <button key={h.id} type="button" className="dp-template" aria-pressed={clientHost === h.id} onClick={() => setClientHost(h.id)}><strong>{h.label}</strong><small>{h.best}</small></button>)}
+              </div>
+              {clientHost !== "render" ? (
+                <>
+                  <div className="dp-grid">
+                    <div className="field">
+                      <label className="field__label" htmlFor="dp-chost">{hostById(clientHost).label} account</label>
+                      <select id="dp-chost" className="input" value={form.clientHostAccountId} onChange={(e) => set({ clientHostAccountId: e.target.value })} disabled={!clientChoices.length}>
+                        {!clientChoices.length ? <option value="">{hostAccounts ? "No " + hostById(clientHost).label + " account connected" : "Loading…"}</option> : null}
+                        {clientChoices.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="gh-panel__row"><button type="button" className="btn btn--ghost btn--sm" onClick={() => setClientModal(true)}>{clientChoices.length ? "Manage " : "Connect "}{hostById(clientHost).label}</button></div>
+                </>
+              ) : null}
+            </section>
+          ) : null}
+
           {renderPart ? (
           <section className="card dp-section">
             <h2>Render</h2>
@@ -393,7 +426,7 @@ export default function ProjectDeploy() {
               {form.runtime !== "static" ? <Field id="dp-build" label="Build command" value={form.buildCommand} onChange={(e) => set({ buildCommand: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
               {!RUNTIMES[form.runtime].isStatic && form.runtime !== "docker" ? <Field id="dp-start" label="Start command" value={form.startCommand} onChange={(e) => set({ startCommand: e.target.value })} autoComplete="off" spellCheck="false" /> : null}
             </div>
-            {scope === "both" && host === "render" ? (
+            {scope === "both" && clientHost === "render" ? (
               <div className="field"><label className="field__label" htmlFor="dp-croute">Client framework (static site)</label><select id="dp-croute" className="input" value={form.clientRuntime} onChange={(e) => set({ clientRuntime: e.target.value })}>{Object.entries(RUNTIMES).filter(([, r]) => r.isStatic).map(([k, r]) => <option key={k} value={k}>{r.label}</option>)}</select></div>
             ) : null}
             {RUNTIMES[form.runtime]?.needsDockerfile ? <p className="field__note">Render builds this from a <code>Dockerfile</code> at the root of the repository. Use it for PHP/Laravel, Java/Spring Boot, .NET and anything else without a native runtime.</p> : null}
@@ -497,6 +530,7 @@ export default function ProjectDeploy() {
         </form>
       </div>
       <HostConnectModal open={hostModal} initial={host === "render" ? "vercel" : host} onClose={() => setHostModal(false)} onChange={(a) => setHostAccounts(a)} />
+      <HostConnectModal open={clientModal} initial={clientHost === "render" ? "vercel" : clientHost} onClose={() => setClientModal(false)} onChange={(a) => setHostAccounts(a)} />
       <GithubConnectModal open={connectOpen} onClose={() => setConnectOpen(false)} onChange={() => void loadGithub()} />
     </div>
   );

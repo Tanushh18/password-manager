@@ -129,3 +129,15 @@ describe("Cloudflare Pages", () =>
         expect(r.vars[1].value).toBe("v");
     });
 });
+
+describe("Railway redeploy", () =>
+{
+    test("redeploys the latest deployment of the service", async () =>
+    {
+        const { http, calls } = fakeHttp({ "POST https://backboard": { body: { data: { deployments: { edges: [{ node: { id: "dep-9", status: "SUCCESS", createdAt: "2026-01-01T00:00:00Z", meta: {} } }] } } } } });
+        const r = await PROVIDERS.railway.redeploy("t", acct, link, {}, (u, o) => http("https://backboard.railway.com/graphql", o));
+        expect(r.ok).toBe(true);
+        const mutation = calls.find((c) => c.json.query.includes("deploymentRedeploy"));
+        expect(mutation.json.variables.id).toBe("dep-9");
+    });
+});

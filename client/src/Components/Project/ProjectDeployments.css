@@ -114,3 +114,17 @@
 .envtext > summary { cursor: pointer; font-weight: 600; font-size: .86rem; color: var(--heading); }
 .envtext > summary small { font-weight: 500; color: var(--text-muted); }
 .envtext__box { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem; margin: .5rem 0; resize: vertical; white-space: pre; }
+.plat { display: inline-block; font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: .12rem .45rem; border-radius: 999px; background: rgba(127, 127, 127, .15); color: var(--text-muted); margin-top: .25rem; }
+.plat--render { background: rgba(70, 229, 165, .16); color: #2f9e74; }
+.plat--vercel { background: rgba(127, 127, 127, .2); color: var(--text); }
+.plat--netlify { background: rgba(0, 199, 183, .16); color: #0a8f86; }
+.plat--railway { background: rgba(138, 96, 255, .16); color: #7c4dff; }
+.plat--cloudflare { background: rgba(246, 130, 31, .18); color: #c8650f; }
+.pdep__pill.is-unknown { background: rgba(127, 127, 127, .15); }
+.pdep__envcell { display: inline-flex; gap: .35rem; align-items: baseline; flex-wrap: wrap; font-size: .8rem; }
+.pdep__envcell b { font-weight: 700; }
+.pdep__envcell b.is-add { color: #3fb950; }
+.pdep__envcell b.is-change { color: #b7791f; }
+.pdep__envcell small { display: block; width: 100%; color: var(--text-muted); }
+.srvlogs__now { display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap; margin: .3rem 0; font-size: .84rem; }
+.srvlogs__now small { color: var(--text-muted); }
