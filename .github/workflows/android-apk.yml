@@ -38,8 +38,7 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: android-actions/setup-android@v3
-
+      # GitHub's Ubuntu runners already ship the Android SDK (ANDROID_HOME), so no separate SDK install is needed.
       - run: npm ci
 
       # Generates the native android/ project from app.json and the plugins (it is not kept in git).
