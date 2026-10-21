@@ -7,6 +7,8 @@ import { useTheme } from "../lib/theme";
 import { useVault } from "../lib/vault";
 import { STATUS_LABEL } from "../lib/projectItems";
 import ProjectTree, { statusColors } from "../components/ProjectTree";
+import Deployments from "../components/Deployments";
+import BranchManager from "../components/BranchManager";
 
 /** One project with its whole structure expanded. */
 export default function ProjectDetail() {
@@ -24,6 +26,8 @@ export default function ProjectDetail() {
         <View style={{ flex: 1 }} />
         <GhostButton title="Edit" icon="pencil" small onPress={() => router.push({ pathname: "/project-editor", params: { id: project.id } })} />
       </View>
+      <Deployments key={"d" + project.id} project={project} />
+      {project.repoUrl ? <BranchManager key={"b" + project.id} project={project} /> : null}
       <Card>
         <ProjectTree key={project.id} project={project} expanded />
       </Card>

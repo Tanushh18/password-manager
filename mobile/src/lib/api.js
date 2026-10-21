@@ -204,6 +204,28 @@ export const api = {
   registrySync: (refresh) => request(`/render/registry-sync${refresh ? "?refresh=1" : ""}`, { timeout: 60000 }),
   registryEnvSync: (app, body) => request(`/render/registry-env-sync/${encodeURIComponent(app)}`, { method: "POST", body, timeout: 90000 }),
 
+  // Every hosting provider behind one set of calls (Render, Vercel, Netlify, Railway, Cloudflare Pages); `ref` names a server.
+  deployTargets: (projectId) => request(`/deploy-ops/projects/${encodeURIComponent(projectId)}/targets`, { timeout: 90000 }),
+  deployRedeploy: (projectId, ref, branch = "") => request(`/deploy-ops/projects/${encodeURIComponent(projectId)}/redeploy`, { method: "POST", body: { ref, branch }, timeout: 120000 }),
+  deployHistory: (projectId, ref) => request(`/deploy-ops/projects/${encodeURIComponent(projectId)}/deploys?ref=${encodeURIComponent(ref)}`, { timeout: 60000 }),
+  deployLogs: (projectId, ref, deployId = "") => request(`/deploy-ops/projects/${encodeURIComponent(projectId)}/logs?ref=${encodeURIComponent(ref)}&deployId=${encodeURIComponent(deployId)}`, { timeout: 60000 }),
+  deployBranch: (projectId, ref, branch, deploy = true) => request(`/deploy-ops/projects/${encodeURIComponent(projectId)}/branch`, { method: "PUT", body: { ref, branch, deploy }, timeout: 120000 }),
+  deployAccount: (projectId, ref, accountId) => request(`/deploy-ops/projects/${encodeURIComponent(projectId)}/account`, { method: "PUT", body: { ref, accountId } }),
+  deploySync: (projectId, body) => request(`/deploy-ops/projects/${encodeURIComponent(projectId)}/sync`, { method: "POST", body, timeout: 180000 }),
+
+  // Move one Render server to another account, one step per call
+  movePlan: (projectId, body) => request(`/move-server/${encodeURIComponent(projectId)}/plan`, { method: "POST", body, timeout: 90000 }),
+  moveCreate: (projectId, body) => request(`/move-server/${encodeURIComponent(projectId)}/create`, { method: "POST", body, timeout: 90000 }),
+  moveStatus: (projectId, accountId, serviceId) => request(`/move-server/${encodeURIComponent(projectId)}/status?accountId=${encodeURIComponent(accountId)}&serviceId=${encodeURIComponent(serviceId)}`, { timeout: 60000 }),
+  moveFrontends: (projectId, body) => request(`/move-server/${encodeURIComponent(projectId)}/frontends`, { method: "POST", body, timeout: 180000 }),
+  moveRelink: (projectId, body) => request(`/move-server/${encodeURIComponent(projectId)}/relink`, { method: "POST", body }),
+  moveDeleteOld: (projectId, body) => request(`/move-server/${encodeURIComponent(projectId)}/delete-old`, { method: "POST", body, timeout: 60000 }),
+
+  // GitHub repositories and branches (branch delete never touches the default branch)
+  githubRepos: (accountId) => request(`/github/accounts/${encodeURIComponent(accountId)}/repos`, { timeout: 40000 }),
+  githubBranches: (accountId, url) => request(`/github/repo/branches?githubAccountId=${encodeURIComponent(accountId)}&url=${encodeURIComponent(url)}`, { timeout: 40000 }),
+  githubDeleteBranches: (body) => request("/github/repo/branches/delete", { method: "POST", body, timeout: 120000 }),
+
   // Vault (server-side encrypted)
   createItem: (data) => request("/vault/items", { method: "POST", body: { data } }),
   createItems: (items) => request("/vault/items/bulk", { method: "POST", body: { items }, timeout: 60000 }),
