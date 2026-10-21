@@ -153,7 +153,7 @@ const railway = {
     }
     const environmentId = node.environments?.edges?.[0]?.node?.id;
     const serviceId = node.services?.edges?.[0]?.node?.id;
-    const out = { id: node.id, url: "", dashboardUrl: "https://railway.com/project/" + node.id };
+    const out = { id: node.id, url: "", dashboardUrl: "https://railway.com/project/" + node.id, meta: { projectId: node.id, serviceId: serviceId || "", environmentId: environmentId || "" } };
     let note = "";
     const vars = envList(input.envVars);
     if (vars.length && environmentId && serviceId) {

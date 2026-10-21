@@ -117,9 +117,12 @@ router.post("/hosts/deploy", deployLimiter, async (req, res) => {
     const fields = {
       name, description: text(b.description, 300), status: "in_progress", priority: "medium", repoUrl, repoAccount: owner,
       hostingProvider: provider.label, hostingServiceName: input.name, autoDeployBranch: input.branch, liveUrl: /^https:\/\//.test(result.service.url || "") ? result.service.url : "",
-      envVars: envVars.map((v) => ({ name: v.name, value: v.value, purpose: "", source: "" })), databases: [], extraFields: []
+      envVars: envVars.map((v) => ({ name: v.name, value: v.value, purpose: "", source: "" })), databases: [], extraFields: [], hostLinks: hostLink ? [hostLink] : []
     };
+    // The host site is recorded as a link on the project, so its variables, deploys, logs and branch can be managed like a Render server.
+    const hostLink = result.service?.id ? { id: crypto.randomBytes(8).toString("hex"), provider: account.provider, hostAccountId: text(b.hostAccountId, 40), remoteId: String(result.service.id), name: input.name, url: result.service.url || "", dashboardUrl: result.service.dashboardUrl || "", repo: owner + "/" + repo, branch: input.branch, meta: result.service.meta || {} } : null;
     let projectId = null;
+    let linkId = hostLink ? hostLink.id : "";
     try {
       // Deploying a repo that already has a project adds a note to it instead of replacing its live URL or hosting.
       const key = groupKey(fields);
@@ -127,7 +130,8 @@ router.post("/hosts/deploy", deployLimiter, async (req, res) => {
       if (existing && key && !key.startsWith("name:")) {
         const current = User.publicEntry(existing, dataKey);
         const extra = Array.isArray(current.extraFields) ? current.extraFields : [];
-        const merged = { ...current, extraFields: [...extra, { label: provider.label + " · " + input.branch, value: result.service.url || result.service.dashboardUrl || input.name }] };
+        const links = Array.isArray(current.hostLinks) ? current.hostLinks : [];
+        const merged = { ...current, extraFields: [...extra, { label: provider.label + " · " + input.branch, value: result.service.url || result.service.dashboardUrl || input.name }], hostLinks: hostLink ? [...links, hostLink] : links };
         await User.updateOne({ _id: req.rootUser._id, "projects._id": existing._id }, { $set: { "projects.$.data": User.sealEntry(dataKey, merged), "projects.$.updatedAt": now } });
         projectId = String(existing._id);
       } else {
@@ -137,7 +141,7 @@ router.post("/hosts/deploy", deployLimiter, async (req, res) => {
       }
     } catch { /* the deploy itself succeeded; saving the Stashr project is best-effort */ }
     res.set("Cache-Control", "no-store");
-    return res.status(201).json({ ok: true, host: provider.label, projectId, repo: { owner, repo, url: repoUrl, branch: input.branch }, service: result.service, note: result.note || "" });
+    return res.status(201).json({ ok: true, host: provider.label, projectId, linkId, repo: { owner, repo, url: repoUrl, branch: input.branch }, service: result.service, note: result.note || "" });
   } catch {
     return res.status(500).json({ ok: false, error: "Could not deploy. Check the host and GitHub for anything already created." });
   }
