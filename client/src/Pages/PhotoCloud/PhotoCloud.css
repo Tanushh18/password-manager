@@ -24,3 +24,4 @@
 .media-card__open{cursor:pointer;outline-offset:3px}.media-card__open:focus-visible{outline:2px solid var(--accent)}.photo__filters select{max-width:100%;border:1px solid var(--line);border-radius:var(--r-pill);padding:.55rem .8rem;background:var(--surface);color:var(--text);font:inherit;font-size:.78rem}.photo-preview{width:min(900px,100%);max-height:90vh;overflow:auto}.photo-preview__head{display:flex;align-items:center;justify-content:space-between;gap:1rem}.photo-preview__head h2{overflow-wrap:anywhere}.photo-preview__image{display:block;max-width:100%;max-height:62vh;object-fit:contain;margin:1rem auto;border-radius:var(--r-md)}.photo-preview .photo-modal__actions{flex-wrap:wrap}
 
 .drive-folder-row{text-decoration:none;color:inherit}.drive-folder-row strong{display:flex;align-items:center;gap:.4rem}
+.photo__loading { display:block; width:100%; aspect-ratio:1; background: var(--line, rgba(127,127,127,.15)); border-radius: 8px; }
