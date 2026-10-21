@@ -1,0 +1,77 @@
+# Builds the Android APK on GitHub's own runner (Gradle), with no Expo cloud build and no EAS quota.
+# The APK is signed with the debug key that Expo's prebuild template ships, which is the same on every run,
+# so builds install over each other. (It is not the key of an APK installed from an EAS build: uninstall that one first.)
+#
+# Secrets used only when "distribute" is on: FIREBASE_APP_ID and FIREBASE_SERVICE_ACCOUNT_JSON.
+name: Android APK (GitHub runner)
+
+on:
+  workflow_dispatch:
+    inputs:
+      distribute:
+        description: "Send the APK to Firebase App Distribution testers"
+        type: boolean
+        default: true
+      testerGroups:
+        description: "Firebase tester group alias(es), comma separated"
+        type: string
+        default: "tester-01"
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - run: npm ci
+
+      # Generates the native android/ project from app.json and the plugins (it is not kept in git).
+      - name: Generate the Android project
+        run: npx expo prebuild --platform android --no-install --clean
+        env:
+          CI: "1"
+
+      - name: Build the release APK
+        working-directory: mobile/android
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
+
+      - name: Collect the APK
+        run: |
+          apk=$(find android/app/build/outputs/apk/release -name '*.apk' | head -n 1)
+          test -n "$apk" || { echo "No APK was produced"; exit 1; }
+          cp "$apk" stashr-release.apk
+          ls -lh stashr-release.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stashr-android-apk
+          path: mobile/stashr-release.apk
+
+      - name: Distribute to Firebase testers
+        if: inputs.distribute
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ secrets.FIREBASE_APP_ID }}
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON || secrets.FIREBASE_SERVICE_ACCOUNT }}
+          groups: ${{ inputs.testerGroups }}
+          file: mobile/stashr-release.apk
+          releaseNotes: ${{ format('Build from {0} ({1})', github.ref_name, github.sha) }}
