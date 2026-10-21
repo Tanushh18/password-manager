@@ -329,6 +329,144 @@ cloudflare.redeploy = async (token, account, link, { branch } = {}, http = defau
   return res.ok ? { ok: true, branch: ref } : fail(cfError(res, "Cloudflare could not start the deployment."));
 };
 
+/* ───────────── Variables, deploy history, logs and branch — the same five operations for every host ─────────────
+ * Each returns { ok, ... } or { ok: false, error }. No function returns a token. A value the provider will not reveal
+ * (Vercel "sensitive", Netlify secrets, Cloudflare secret variables) comes back as null: it can't be compared, so the
+ * sync never overwrites it without showing it. `logsSupported` is false where the provider has no log API.
+ */
+const siteId = (link) => encodeURIComponent(link.remoteId);
+const withTeam = (account, path) => path + (account.teamId ? (path.includes("?") ? "&" : "?") + "teamId=" + encodeURIComponent(account.teamId) : "");
+const plainValue = (v) => (typeof v === "string" ? v : null);
+const dedupe = (rows) => { const seen = new Set(); return rows.filter((r) => (seen.has(r.key) ? false : seen.add(r.key))); };
+const logLines = (rows) => rows.map((r) => ({ at: r.at || null, text: String(r.text || "").slice(0, 400) })).filter((r) => r.text);
+
+/* Vercel */
+vercel.envRead = async (token, account, link, http = defaultHttp) => {
+  const res = await http(withTeam(account, "https://api.vercel.com/v10/projects/" + siteId(link) + "/env?decrypt=true"), { headers: bearer(token) });
+  if (!res.ok) return fail(reason(res, "Could not read the Vercel variables."));
+  return { ok: true, vars: dedupe((res.body?.envs || []).filter((e) => e && typeof e.key === "string").map((e) => ({ key: e.key, value: e.type === "sensitive" ? null : plainValue(e.value) }))) };
+};
+vercel.envWrite = async (token, account, link, name, value, http = defaultHttp) => {
+  const res = await http(withTeam(account, "https://api.vercel.com/v10/projects/" + siteId(link) + "/env?upsert=true"), { method: "POST", headers: bearer(token), json: { key: name, value, type: "encrypted", target: ["production", "preview"] } });
+  return res.ok ? { ok: true } : fail(reason(res, "Vercel refused this variable."));
+};
+vercel.deploys = async (token, account, link, http = defaultHttp) => {
+  const res = await http(withTeam(account, "https://api.vercel.com/v6/deployments?projectId=" + siteId(link) + "&limit=20"), { headers: bearer(token) });
+  if (!res.ok) return fail(reason(res, "Could not read the Vercel deployments."));
+  return { ok: true, deploys: (res.body?.deployments || []).map((d) => ({ id: String(d.uid || ""), ...deployOf(d.readyState || d.state, asAt(d.created), d.meta?.githubCommitMessage, d.meta?.githubCommitSha, d.meta?.githubCommitRef) })) };
+};
+vercel.logs = async (token, account, link, deployId, http = defaultHttp) => {
+  const res = await http(withTeam(account, "https://api.vercel.com/v3/deployments/" + encodeURIComponent(deployId) + "/events?builds=1&limit=200"), { headers: bearer(token) });
+  if (!res.ok) return fail(reason(res, "Could not read the Vercel build log."));
+  return { ok: true, lines: logLines((Array.isArray(res.body) ? res.body : []).map((e) => ({ at: asAt(e.created), text: e.text || e.payload?.text || "" }))) };
+};
+vercel.setBranch = async (token, account, link, branch, http = defaultHttp) => {
+  const res = await http(withTeam(account, "https://api.vercel.com/v9/projects/" + siteId(link)), { method: "PATCH", headers: bearer(token), json: { productionBranch: branch } });
+  return res.ok ? { ok: true, branch } : fail(reason(res, "Vercel could not change the production branch."));
+};
+
+/* Netlify (variables live under the account; the site's account slug is read first) */
+netlify.logsSupported = false;
+const netlifyAccountSlug = async (token, link, http) => {
+  const site = await http("https://api.netlify.com/api/v1/sites/" + siteId(link), { headers: bearer(token) });
+  if (!site.ok) return { error: reason(site, "Could not read the Netlify site.") };
+  return site.body?.account_slug ? { slug: String(site.body.account_slug) } : { error: "Netlify did not return the account for this site." };
+};
+netlify.envRead = async (token, account, link, http = defaultHttp) => {
+  const acc = await netlifyAccountSlug(token, link, http);
+  if (acc.error) return fail(acc.error);
+  const res = await http("https://api.netlify.com/api/v1/accounts/" + encodeURIComponent(acc.slug) + "/env?site_id=" + siteId(link), { headers: bearer(token) });
+  if (!res.ok || !Array.isArray(res.body)) return fail(reason(res, "Could not read the Netlify variables."));
+  return { ok: true, vars: dedupe(res.body.filter((e) => e && typeof e.key === "string").map((e) => {
+    const v = (e.values || []).find((x) => x.context === "all") || (e.values || [])[0];
+    return { key: e.key, value: e.is_secret ? null : plainValue(v?.value) };
+  })) };
+};
+netlify.envWrite = async (token, account, link, name, value, http = defaultHttp) => {
+  const acc = await netlifyAccountSlug(token, link, http);
+  if (acc.error) return fail(acc.error);
+  const base = "https://api.netlify.com/api/v1/accounts/" + encodeURIComponent(acc.slug) + "/env";
+  const values = [{ context: "all", value }];
+  let res = await http(base + "?site_id=" + siteId(link), { method: "POST", headers: bearer(token), json: [{ key: name, values }] });
+  if (res.status === 422 || res.status === 409) res = await http(base + "/" + encodeURIComponent(name) + "?site_id=" + siteId(link), { method: "PATCH", headers: bearer(token), json: { values } });
+  return res.ok ? { ok: true } : fail(reason(res, "Netlify refused this variable."));
+};
+netlify.deploys = async (token, account, link, http = defaultHttp) => {
+  const res = await http("https://api.netlify.com/api/v1/sites/" + siteId(link) + "/deploys?per_page=20", { headers: bearer(token) });
+  if (!res.ok || !Array.isArray(res.body)) return fail(reason(res, "Could not read the Netlify deploys."));
+  return { ok: true, deploys: res.body.map((d) => ({ id: String(d.id || ""), ...deployOf(d.state, d.created_at, d.title, d.commit_ref, d.branch) })) };
+};
+netlify.logs = async () => fail("Netlify does not publish build logs through its API. Open the deploy in Netlify to read them.");
+netlify.setBranch = async (token, account, link, branch, http = defaultHttp) => {
+  const res = await http("https://api.netlify.com/api/v1/sites/" + siteId(link), { method: "PATCH", headers: bearer(token), json: { build_settings: { repo_branch: branch } } });
+  return res.ok ? { ok: true, branch } : fail(reason(res, "Netlify could not change the branch."));
+};
+
+/* Railway (GraphQL; the service, environment and project ids are stored on the link) */
+railway.envRead = async (token, account, link, http = defaultHttp) => {
+  const m = link.meta || {};
+  const res = await gql(http, token, "query($p: String!, $e: String!, $s: String!) { variables(projectId: $p, environmentId: $e, serviceId: $s) }", { p: m.projectId, e: m.environmentId, s: m.serviceId });
+  if (!res.ok) return fail(res.message ? "Railway: " + res.message.slice(0, 160) : reason(res, "Could not read the Railway variables."));
+  const map = res.data?.variables && typeof res.data.variables === "object" ? res.data.variables : {};
+  return { ok: true, vars: Object.entries(map).map(([key, value]) => ({ key, value: plainValue(value) })) };
+};
+railway.envWrite = async (token, account, link, name, value, http = defaultHttp) => {
+  const m = link.meta || {};
+  const res = await gql(http, token, "mutation($i: VariableUpsertInput!) { variableUpsert(input: $i) }", { i: { projectId: m.projectId, environmentId: m.environmentId, serviceId: m.serviceId, name, value } });
+  return res.ok ? { ok: true } : fail(res.message ? "Railway: " + res.message.slice(0, 160) : reason(res, "Railway refused this variable."));
+};
+railway.deploys = async (token, account, link, http = defaultHttp) => {
+  const m = link.meta || {};
+  const res = await gql(http, token, "query($i: DeploymentListInput!) { deployments(first: 20, input: $i) { edges { node { id status createdAt meta } } } }", { i: { projectId: m.projectId, serviceId: m.serviceId, environmentId: m.environmentId } });
+  if (!res.ok) return fail(res.message ? "Railway: " + res.message.slice(0, 160) : "Could not read the Railway deployments.");
+  return { ok: true, deploys: (res.data?.deployments?.edges || []).map((e) => ({ id: String(e.node.id), ...deployOf(e.node.status, e.node.createdAt, e.node.meta?.commitMessage, e.node.meta?.commitHash, e.node.meta?.branch) })) };
+};
+railway.logs = async (token, account, link, deployId, http = defaultHttp) => {
+  const res = await gql(http, token, "query($d: String!) { deploymentLogs(deploymentId: $d, limit: 300) { message timestamp } }", { d: deployId });
+  if (!res.ok) return fail(res.message ? "Railway: " + res.message.slice(0, 160) : "Could not read the Railway logs.");
+  return { ok: true, lines: logLines((res.data?.deploymentLogs || []).map((l) => ({ at: l.timestamp, text: l.message }))) };
+};
+railway.setBranch = async (token, account, link, branch, http = defaultHttp) => {
+  const m = link.meta || {};
+  const res = await gql(http, token, "mutation($s: String!, $e: String!, $i: ServiceInstanceUpdateInput!) { serviceInstanceUpdate(serviceId: $s, environmentId: $e, input: $i) }", { s: m.serviceId, e: m.environmentId, i: { branch } });
+  return res.ok ? { ok: true, branch } : fail(res.message ? "Railway: " + res.message.slice(0, 160) : "Railway could not change the branch.");
+};
+
+/* Cloudflare Pages. Secret variables are never returned, and the API replaces the whole map, so a project
+   with secrets is refused rather than risking them. */
+const cfProject = (token, account, link, http) => http(CF + "/accounts/" + encodeURIComponent(account.accountId) + "/pages/projects/" + siteId(link), { headers: bearer(token) });
+cloudflare.envRead = async (token, account, link, http = defaultHttp) => {
+  const res = await cfProject(token, account, link, http);
+  if (!res.ok) return fail(res.status === 404 ? "That Cloudflare Pages project no longer exists." : cfError(res, "Could not read the Cloudflare variables."));
+  const map = res.body?.result?.deployment_configs?.production?.env_vars || {};
+  return { ok: true, vars: Object.entries(map).map(([key, v]) => ({ key, value: v?.type === "plain_text" ? plainValue(v.value) : null })) };
+};
+cloudflare.envWrite = async (token, account, link, name, value, http = defaultHttp) => {
+  const res = await cfProject(token, account, link, http);
+  if (!res.ok) return fail(cfError(res, "Could not read the Cloudflare project."));
+  const current = res.body?.result?.deployment_configs?.production?.env_vars || {};
+  if (Object.values(current).some((v) => v?.type !== "plain_text")) return fail("This Cloudflare project has secret variables, which Stashr cannot read back, so it will not rewrite the list. Change them in Cloudflare.");
+  const env_vars = {};
+  for (const [key, v] of Object.entries(current)) env_vars[key] = { type: "plain_text", value: v.value };
+  env_vars[name] = { type: "plain_text", value };
+  const put = await http(CF + "/accounts/" + encodeURIComponent(account.accountId) + "/pages/projects/" + siteId(link), { method: "PATCH", headers: bearer(token), json: { deployment_configs: { production: { env_vars } } } });
+  return put.ok ? { ok: true } : fail(cfError(put, "Cloudflare refused this variable."));
+};
+cloudflare.deploys = async (token, account, link, http = defaultHttp) => {
+  const res = await http(CF + "/accounts/" + encodeURIComponent(account.accountId) + "/pages/projects/" + siteId(link) + "/deployments?per_page=20", { headers: bearer(token) });
+  if (!res.ok) return fail(cfError(res, "Could not read the Cloudflare deployments."));
+  return { ok: true, deploys: (res.body?.result || []).map((d) => ({ id: String(d.id || ""), ...cloudflare.deployOf(d) })) };
+};
+cloudflare.logs = async (token, account, link, deployId, http = defaultHttp) => {
+  const res = await http(CF + "/accounts/" + encodeURIComponent(account.accountId) + "/pages/projects/" + siteId(link) + "/deployments/" + encodeURIComponent(deployId) + "/history/logs", { headers: bearer(token) });
+  if (!res.ok) return fail(cfError(res, "Could not read the Cloudflare build log."));
+  return { ok: true, lines: logLines((res.body?.result?.data || []).map((l) => ({ at: l.ts, text: l.line }))) };
+};
+cloudflare.setBranch = async (token, account, link, branch, http = defaultHttp) => {
+  const res = await http(CF + "/accounts/" + encodeURIComponent(account.accountId) + "/pages/projects/" + siteId(link), { method: "PATCH", headers: bearer(token), json: { production_branch: branch } });
+  return res.ok ? { ok: true, branch } : fail(cfError(res, "Cloudflare could not change the production branch."));
+};
+
 const PROVIDERS = { vercel, netlify, railway, cloudflare };
 const ids = () => Object.keys(PROVIDERS);
 
