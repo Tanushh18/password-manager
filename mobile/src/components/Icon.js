@@ -50,6 +50,8 @@ const P = {
   starFill: [<Path key="a" d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.5z" fill="currentColor" />],
   folder: [<Path key="a" d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-10z" />],
   note: [<Path key="a" d="M6 3.5h9l4 4V20a.5.5 0 0 1-.5.5h-12A.5.5 0 0 1 6 20V3.5zM14.5 3.5V8H19M9 12h6M9 15.5h6" />],
+  image: [<Rect key="a" x="3.5" y="4.5" width="17" height="15" rx="2" />, <Circle key="b" cx="8.5" cy="9" r="1.3" />, <Path key="c" d="m5 17 4.5-4 3 2.5 2-2 4.5 4" />],
+  cloud: [<Path key="a" d="M7 18h10a4 4 0 0 0 .6-7.9A5.5 5.5 0 0 0 7 8.8 4.6 4.6 0 0 0 7 18z" />],
   scan: [<Path key="a" d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16M4 12h16" />],
   download: [<Path key="a" d="M12 4v11M7 10l5 5 5-5M5 20h14" />],
   upload: [<Path key="a" d="M12 20V9M7 14l5-5 5 5M5 4h14" />],

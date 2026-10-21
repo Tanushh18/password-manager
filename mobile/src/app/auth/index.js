@@ -67,7 +67,7 @@ export default function Welcome() {
         <View style={{ flex: 1 }} />
 
         <FadeIn delay={520} style={{ gap: 12 }}>
-          <GradientButton title="Create your vault" icon="sparkle" onPress={() => router.push("/auth/signup")} />
+          <GradientButton title="Create your vault" onPress={() => router.push("/auth/signup")} />
           <GhostButton title="I already have an account" onPress={() => router.push("/auth/login")} />
           <View style={{ alignItems: "center", marginTop: 6 }}>
             <StatusPill compact style={{ alignSelf: "center" }} />

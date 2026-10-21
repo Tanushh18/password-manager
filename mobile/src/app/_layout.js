@@ -14,6 +14,8 @@ import { ThemeProvider, useTheme } from "../lib/theme";
 import { VaultProvider, useVault } from "../lib/vault";
 import { ToastProvider } from "../components/Toast";
 import { refreshServers } from "../lib/api";
+import "../lib/photoBackground";
+import { startAutoBackup } from "../lib/photoAuto";
 
 // Load the latest server list from the registry in the background.
 refreshServers().catch(() => {});
@@ -33,6 +35,11 @@ function RootStack({ fontsReady }) {
   useEffect(() => {
     if (booted) SplashScreen.hideAsync().catch(() => {});
   }, [booted]);
+
+  // Once the vault is unlocked, keep camera-roll backup going while the app is open.
+  useEffect(() => {
+    if (status === "ready") startAutoBackup();
+  }, [status]);
 
   // No screenshots / screen recording, and a blank preview in recent apps (FLAG_SECURE).
   useEffect(() => {
@@ -66,6 +73,7 @@ function RootStack({ fontsReady }) {
           <Stack.Screen name="editor" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
           <Stack.Screen name="scan" options={{ presentation: "fullScreenModal", animation: "fade" }} />
           <Stack.Screen name="account" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="photo-viewer" options={{ presentation: "fullScreenModal", animation: "fade" }} />
         </Stack.Protected>
       </Stack>
     </>

@@ -86,7 +86,7 @@ export default function ProjectEditor() {
         toast("Updated and re-encrypted 🔐");
       } else {
         await addProject(form);
-        toast("Encrypted and saved ✨");
+        toast("Encrypted and saved");
       }
       close();
     } catch (e) {

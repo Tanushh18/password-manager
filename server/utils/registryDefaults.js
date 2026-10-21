@@ -5,6 +5,7 @@ const ADMINS = (process.env.REGISTRY_ADMINS || "tanushchawla16@gmail.com")
 // Used until an admin saves something. Mirrors what each app ships with.
 const DEFAULTS = {
     stashr: [
+        "https://stashr-v2.onrender.com",
         "https://password-manager-server-xxdr.onrender.com",
         "https://password-manager-server-8gvj.onrender.com"
     ],

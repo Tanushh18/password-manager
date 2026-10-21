@@ -1,0 +1,13 @@
+{
+  "name": "stashr",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Monorepo entry point so a host that builds from the repo root runs the API server in server/. The website in client/ has its own package.json and is deployed separately.",
+  "scripts": {
+    "postinstall": "npm --prefix server install",
+    "start": "npm --prefix server start"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}

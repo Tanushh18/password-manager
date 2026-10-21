@@ -59,7 +59,7 @@ export default function Login() {
         if (res.error) setErrors({ code: res.error });
         return;
       }
-      toast("Welcome back ✨");
+      toast("Signed in");
     } catch (e) {
       shake();
       toast(e.message, "error");

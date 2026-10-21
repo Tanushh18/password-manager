@@ -26,6 +26,15 @@ const entrySchema = new mongoose.Schema({
     updatedAt: { type: Date, default: Date.now }
 });
 
+const photoShareSchema = new mongoose.Schema({
+    tokenHash: { type: String, index: true },
+    enc: { type: String },
+    data: { type: String },
+    createdAt: { type: Date, default: Date.now },
+    expiresAt: { type: Date },
+    revokedAt: { type: Date }
+}, { _id: true });
+
 const schema = new mongoose.Schema({
     name: { type: String, trim: true },
     email: { type: String, trim: true, index: true },
@@ -86,6 +95,19 @@ const schema = new mongoose.Schema({
     // are sealed with the user's data key before persistence.
     renderOps: [entrySchema],
     renderMetricHistory: [entrySchema],
+
+    // Personal AI Photo Cloud metadata. Originals remain in connected provider accounts;
+    // these records only hold encrypted app-owned metadata and job state.
+    photoConnections: [entrySchema],
+    photoMedia: [entrySchema],
+    photoAlbums: [entrySchema],
+    photoFolders: [entrySchema],
+
+    // Per-person feature switches set in the admin panel: { featureKey: true | false }. See utils/features.js.
+    featureOverrides: { type: mongoose.Schema.Types.Mixed, default: {} },
+    photoBackupJobs: [entrySchema],
+    photoSettings: [entrySchema],
+    photoShares: [photoShareSchema],
     renderIncidents: [entrySchema],
 
     // Live-services dashboard: sealed settings (consent, limits, per-service switches) and a bounded usage history.

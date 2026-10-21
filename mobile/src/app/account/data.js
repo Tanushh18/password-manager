@@ -80,7 +80,7 @@ export default function Data() {
   const finishImport = async (list) => {
     if (!list.length) throw new Error("No items found in that file.");
     const n = await importItems(list.map(normalizeItem));
-    toast(`${n} item${n === 1 ? "" : "s"} imported and encrypted ✨`);
+    toast(`${n} item${n === 1 ? "" : "s"} imported and encrypted`);
   };
 
   const pick = () =>

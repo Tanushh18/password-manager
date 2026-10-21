@@ -7,6 +7,7 @@ const { getProjectStatuses, runAllAutoLink, clearServicesCache } = require("../u
 const { runUsage, runAllUsage, readSettings, saveSettings, getUsageCapabilityCatalog, hasReader } = require("../utils/usageIO");
 const { listNeedsReader } = require("../utils/unsupportedServices");
 const { pushProjectEnv } = require("../utils/renderEnvPush");
+const { alignRegistryEnv } = require("../utils/registryEnvSync");
 const { provision } = require("../utils/provision");
 const { createRepo, checkRepo, repoReadyError } = require("../utils/repoFlow");
 const { probeService, renderOrigin } = require("../utils/healthProbe");
@@ -923,6 +924,19 @@ router.put("/render/registry-sync/:app", async (req, res) => {
     if (!doc) return res.status(404).json({ error: "Unknown app." });
     return res.json({ app: doc.app, autoSync: doc.autoSync !== false });
   } catch { return res.status(500).json({ error: "Could not change auto-sync." }); }
+});
+
+/* Servers tab (admin only): compare env var names across all servers of one app; apply adds the missing ones and optionally redeploys active servers. */
+router.post("/render/registry-env-sync/:app", async (req, res) => {
+  if (!isAdminUser(req.rootUser)) return res.status(403).json({ error: "Not allowed." });
+  try {
+    const result = await alignRegistryEnv(req.rootUser, String(req.params.app || "").toLowerCase(), { apply: req.body?.apply === true, deploy: req.body?.deploy === true });
+    if (result.applied) await recordAudit(req, "registry_env_sync", "", "", { app: result.app, added: result.results.reduce((n, r) => n + r.added.length, 0), deployed: result.results.filter((r) => r.deployed).length });
+    res.set("Cache-Control", "no-store");
+    return res.json(result);
+  } catch (error) {
+    return res.status(Number.isInteger(error.status) ? error.status : 500).json({ error: Number.isInteger(error.status) ? error.message : "Could not sync environment variables." });
+  }
 });
 
 /* Push a project's variables to its linked Render service. Names you approve only; never deletes. */

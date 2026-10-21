@@ -1,0 +1,3 @@
+.authimg { position: relative; background: var(--bg-soft, rgba(127,127,127,.12)); overflow: hidden; }
+.authimg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.authimg span { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-faint); font-size: .72rem; }

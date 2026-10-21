@@ -113,7 +113,7 @@ export default function Signup() {
                   </Text>
                   <Switch value={agree} onValueChange={setAgree} trackColor={{ false: alpha(theme.accent, 0.2), true: theme.accent }} thumbColor="#fff" />
                 </Pressable>
-                <GradientButton title="Create my vault" icon="sparkle" loading={loading} onPress={submit} style={{ marginTop: 6 }} />
+                <GradientButton title="Create vault" loading={loading} onPress={submit} style={{ marginTop: 6 }} />
               </Card>
             </FadeIn>
 
