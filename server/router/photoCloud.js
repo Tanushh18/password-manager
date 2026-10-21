@@ -22,18 +22,20 @@ router.get("/photo-cloud/google/start", photosAuth, async (req, res) => {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const redirectUri = process.env.GOOGLE_PHOTO_REDIRECT_URI || `${process.env.SELF_URL || "http://localhost:8000"}/photo-cloud/google/callback`;
     if (!clientId || !process.env.SECRET_KEY) return res.status(503).json({ error: "Google OAuth is not configured on this server yet." });
-    const state = jwt.sign({ uid: String(req.rootUser._id), mobile: req.query.client === "mobile", label: clean(req.query.label || req.body?.label || "Google account", 80) }, process.env.SECRET_KEY, { expiresIn: "10m" });
+    const requestedReturn = String(req.query.returnTo || "");
+    const returnTo = requestedReturn.startsWith("/") && !requestedReturn.startsWith("//") && !requestedReturn.includes("\\") ? requestedReturn.slice(0, 200) : "/photos";
+    const state = jwt.sign({ uid: String(req.rootUser._id), mobile: req.query.client === "mobile", label: clean(req.query.label || req.body?.label || "Google account", 80), returnTo }, process.env.SECRET_KEY, { expiresIn: "10m" });
     const scope = process.env.GOOGLE_PHOTO_SCOPES || "openid email https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/photospicker.mediaitems.readonly";
     const params = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: "code", access_type: "offline", prompt: "consent", scope, state });
     return res.json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}` });
 });
 
 router.get("/photo-cloud/google/callback", async (req, res) => {
-    let back = (result) => res.redirect(`${clientUrl()}/photos?google=${result}`);
+    let back = (result, returnTo = "/photos") => { const safePath = typeof returnTo === "string" && returnTo.startsWith("/") && !returnTo.startsWith("//") && !returnTo.includes("\\") ? returnTo.slice(0, 200) : "/photos"; return res.redirect(`${clientUrl()}${safePath}${safePath.includes("?") ? "&" : "?"}google=${result}`); };
     try {
         const claims = jwt.verify(String(req.query.state || ""), process.env.SECRET_KEY);
         if (claims.mobile) back = (result) => res.redirect(`stashr://photos?google=${result}`);
-        if (!req.query.code) return back("cancelled");
+        if (!req.query.code) return back("cancelled", claims.returnTo);
         const redirectUri = process.env.GOOGLE_PHOTO_REDIRECT_URI || `${process.env.SELF_URL || "http://localhost:8000"}/photo-cloud/google/callback`;
         const tokenResponse = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code: String(req.query.code), client_id: process.env.GOOGLE_CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET || "", redirect_uri: redirectUri, grant_type: "authorization_code" }) });
         const tokens = await tokenResponse.json();
@@ -45,8 +47,8 @@ router.get("/photo-cloud/google/callback", async (req, res) => {
         const key = await user.getDataKey();
         const connection = { id: crypto.randomUUID(), label: clean(claims.label || profile.name || "Google account", 80), email: clean(profile.email, 160), provider: "Google Drive", status: "connected", eligible: true, priority: (user.photoConnections || []).length + 1, lastScan: null, oauthMode: "connected", accessToken: tokens.access_token, refreshToken: tokens.refresh_token || "", tokenType: tokens.token_type, expiresAt: Date.now() + Number(tokens.expires_in || 3600) * 1000 };
         await User.updateOne({ _id: user._id }, { $push: { photoConnections: encoded(key, connection) } });
-        return back("connected");
-    } catch (error) { return back("error"); }
+        return back("connected", claims.returnTo);
+    } catch (error) { return back("error", "/photos"); }
 });
 
 router.get("/photo-cloud/dashboard", photosAuth, async (req, res) => {

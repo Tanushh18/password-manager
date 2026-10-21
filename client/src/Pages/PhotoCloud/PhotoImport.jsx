@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
-import { createPhotoImport, deletePhotoImport, errorMessage, getPhotoCloudDashboard, getPhotoImport, listPhotoImports, photoImportAction } from "../../api/client";
+import { createPhotoImport, deletePhotoImport, errorMessage, getPhotoCloudDashboard, getPhotoImport, listPhotoImports, photoImportAction, startPhotoGoogleOAuth } from "../../api/client";
 import "./PhotoImport.css";
 
 const size = (n) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(2)} GB` : n >= 1024 ** 2 ? `${(n / 1024 ** 2).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n || 0} B`);
@@ -154,6 +154,8 @@ export default function PhotoImport() {
   const [source, setSource] = useState("");
   const [parallel, setParallel] = useState(1);
   const [creating, setCreating] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
+  const [accountWarning, setAccountWarning] = useState("");
 
   const refresh = useCallback(async () => {
     try { const r = await listPhotoImports(); setBatches(r.batches); setSelected((s) => s || r.batches[0]?.id || ""); }
@@ -161,9 +163,15 @@ export default function PhotoImport() {
   }, []);
   useEffect(() => {
     void refresh();
-    getPhotoCloudDashboard().then((d) => { const ok = (d.connections || []).filter((c) => c.status === "connected" && c.oauthMode === "connected"); setAccounts(ok); setSource((s) => s || ok[0]?.id || ""); }).catch(() => {});
+    getPhotoCloudDashboard().then((d) => { const all = d.connections || []; const ok = all.filter((c) => c.status === "connected" && c.oauthMode === "connected"); setAccounts(ok); setSource((s) => ok.some((a) => a.id === s) ? s : (ok[0]?.id || "")); setAccountWarning(ok.length ? "" : (all.length ? "Your saved Google account needs to be reconnected before importing." : "Connect a Google account to start importing.")); }).catch(() => { setAccountWarning("Could not check Google account status. Reconnect or refresh the page."); });
   }, [refresh]);
   useEffect(() => { const t = setInterval(() => void refresh(), 10000); return () => clearInterval(t); }, [refresh]);
+
+  const reconnect = async () => {
+    setReconnecting(true);
+    try { const result = await startPhotoGoogleOAuth("Google Photos import", "/photos/import"); window.location.assign(result.url); }
+    catch (e) { toast.error(errorMessage(e, "Could not open Google reconnect. Check that Google OAuth is configured.")); setReconnecting(false); }
+  };
 
   const start = async (event) => {
     event.preventDefault();
@@ -173,7 +181,11 @@ export default function PhotoImport() {
       setLabel(""); await refresh(); setSelected(batch.id);
       window.open(batch.pickerUri, "_blank", "noopener");
       toast.info("Google Photos opened in a new tab. Choose your photos there.");
-    } catch (e) { toast.error(errorMessage(e, "Could not start the import.")); }
+    } catch (e) {
+      const message = errorMessage(e, "Could not start the import.");
+      if (/reconnect|permission|pick a connected google account|401|403/i.test(message)) { setAccountWarning("Google needs permission again. Reconnect below, then return here to import."); toast.info("Reconnect your Google account to continue."); }
+      else toast.error(message);
+    }
     finally { setCreating(false); }
   };
   const remove = async (b) => {
@@ -193,13 +205,14 @@ export default function PhotoImport() {
       <div className="pi-layout">
         <aside className="pi-side">
           <form className="card pi-new" onSubmit={start}>
-            <h2>New import</h2>
+            <div className="pi-new__title"><span className="pi-icon" aria-hidden="true">↗</span><div><h2>New import</h2><p className="pi-muted">Choose a destination folder, then pick photos.</p></div></div>
             <label>Folder name in Drive<input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Holidays 2019" maxLength={60} required /></label>
-            <label>Google Photos account
-              <select value={source} onChange={(e) => setSource(e.target.value)} required>
+            <label>Google account
+              <select value={source} onChange={(e) => setSource(e.target.value)} required disabled={!accounts.length}>
                 {accounts.length === 0 ? <option value="">No connected account</option> : accounts.map((a) => <option key={a.id} value={a.id}>{a.label} ({a.email})</option>)}
               </select>
             </label>
+            {accountWarning ? <div className="pi-connect-notice" role="status"><strong>Google account needs attention</strong><p>{accountWarning}</p><button type="button" className="btn btn--primary btn--full" onClick={() => void reconnect()} disabled={reconnecting}>{reconnecting ? "Opening Google…" : "Reconnect Google account"}</button></div> : null}
             <label>Speed
               <select value={parallel} onChange={(e) => setParallel(Number(e.target.value))}>
                 <option value={1}>One file at a time (gentlest)</option>
@@ -207,8 +220,8 @@ export default function PhotoImport() {
                 <option value={3}>Three at a time</option>
               </select>
             </label>
-            <button className="btn btn--primary" disabled={creating || !label.trim() || !source}>{creating ? "Opening…" : "Choose photos in Google Photos"}</button>
-            <p className="pi-muted">If Google says it needs permission, reconnect the account on the Photos page first. The picker needs a new permission.</p>
+            <button className="btn btn--primary btn--full" disabled={creating || !label.trim() || !source}>{creating ? "Opening…" : "Choose photos in Google Photos"} <span aria-hidden="true">→</span></button>
+            <p className="pi-muted">Google opens its own secure photo picker. Your Google password is never shared with Stashr.</p>
           </form>
 
           <div className="card pi-batches">
