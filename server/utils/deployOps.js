@@ -6,7 +6,7 @@ const { fetchAllPages } = require("./renderPaging");
 const { mapWithConcurrency } = require("./renderGuards");
 const { linkedServices } = require("./projectMerge");
 const { planEnvSync, pendingNames, NAME } = require("./serviceEnvSync");
-const { projectsSharingRepo } = require("./projectServiceSync");
+const { projectsSharingRepo, moveServiceAccount } = require("./projectServiceSync");
 
 /*
  * One layer for every hosting provider. A project's Render servers and its linked host sites (Vercel, Netlify,
@@ -260,7 +260,6 @@ async function moveAccount(user, projectId, ref, accountId) {
   const target = targetsOf(user, dataKey, fields).find((t) => t.ref === ref);
   if (!target) throw fail(404, "Could not find that server in this project.");
   if (isRender(target)) {
-    const { moveServiceAccount } = require("./projectServiceSync");
     return moveServiceAccount(user, projectId, target.serviceId, accountId);
   }
   const next = accountById(user, dataKey, user.hostAccounts, accountId);

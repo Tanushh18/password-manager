@@ -291,8 +291,6 @@ export const getGithubRepo = (url, refresh = false) => instance.get("/github/rep
 export const getGithubRepos = (accountId, refresh = false) => instance.get("/github/accounts/" + encodeURIComponent(accountId) + "/repos", { params: refresh ? { refresh: 1 } : {}, timeout: 30000 }).then((r) => r.data);
 export const getGithubBranches = (githubAccountId, url) => instance.get("/github/repo/branches", { params: { githubAccountId, url }, timeout: 30000 }).then((r) => r.data);
 export const deleteGithubBranches = (body) => instance.post("/github/repo/branches/delete", body, { timeout: 120000 }).then((r) => r.data);
-export const syncProjectServers = (projectId, body) => instance.post("/render/projects/" + encodeURIComponent(projectId) + "/env-sync", body, { timeout: 120000 }).then((r) => r.data);
-export const moveProjectServerAccount = (projectId, serviceId, accountId) => instance.put("/render/projects/" + encodeURIComponent(projectId) + "/services/" + encodeURIComponent(serviceId) + "/account", { accountId }).then((r) => r.data);
 const deployOpsPath = (projectId) => "/deploy-ops/projects/" + encodeURIComponent(projectId);
 /* Every hosting provider (Render, Vercel, Netlify, Railway, Cloudflare Pages) behind one set of calls. `ref` names one server. */
 export const getDeployTargets = (projectId) => instance.get(deployOpsPath(projectId) + "/targets", { timeout: 90000 }).then((r) => r.data);

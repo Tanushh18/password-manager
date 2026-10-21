@@ -7,7 +7,6 @@ const { getProjectStatuses, runAllAutoLink, clearServicesCache } = require("../u
 const { runUsage, runAllUsage, readSettings, saveSettings, getUsageCapabilityCatalog, hasReader } = require("../utils/usageIO");
 const { listNeedsReader } = require("../utils/unsupportedServices");
 const { pushProjectEnv } = require("../utils/renderEnvPush");
-const { syncServicesEnv, moveServiceAccount } = require("../utils/projectServiceSync");
 const { provision } = require("../utils/provision");
 const { createRepo, checkRepo, repoReadyError } = require("../utils/repoFlow");
 const { probeService, renderOrigin } = require("../utils/healthProbe");
@@ -936,35 +935,6 @@ router.post("/render/project-push/:projectId", async (req, res) => {
     return res.json(result);
   } catch (error) {
     return res.status(Number.isInteger(error.status) ? error.status : 500).json({ error: Number.isInteger(error.status) ? error.message : "Could not push environment variables." });
-  }
-});
-
-/* Copy one server's variables onto the other servers of the same project (default: same branch). Preview unless apply is set. */
-router.post("/render/projects/:projectId/env-sync", async (req, res) => {
-  const list = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === "string").slice(0, 10) : null);
-  try {
-    const result = await syncServicesEnv(req.rootUser, req.params.projectId, {
-      apply: req.body?.apply === true, overwrite: req.body?.overwrite === true, deploy: req.body?.deploy === true,
-      sourceServiceId: typeof req.body?.sourceServiceId === "string" ? req.body.sourceServiceId : "", targetServiceIds: list(req.body?.targetServiceIds), allServers: req.body?.allServers === true, acrossProjects: req.body?.acrossProjects === true
-    });
-    if (result.applied) await recordAudit(req, "project_env_sync", "", "", { projectId: String(req.params.projectId), servers: result.results.length, written: result.results.reduce((n, r) => n + r.written, 0) });
-    res.set("Cache-Control", "no-store");
-    return res.json(result);
-  } catch (error) {
-    return res.status(Number.isInteger(error.status) ? error.status : 500).json({ error: Number.isInteger(error.status) ? error.message : "Could not sync environment variables." });
-  }
-});
-
-/* Move a linked server to another connected Render account (the dropdown on each server). */
-router.put("/render/projects/:projectId/services/:serviceId/account", async (req, res) => {
-  const accountId = typeof req.body?.accountId === "string" ? req.body.accountId : "";
-  try {
-    const result = await moveServiceAccount(req.rootUser, req.params.projectId, req.params.serviceId, accountId);
-    await recordAudit(req, "service_account_changed", accountId, req.params.serviceId, { projectId: String(req.params.projectId) });
-    res.set("Cache-Control", "no-store");
-    return res.json(result);
-  } catch (error) {
-    return res.status(Number.isInteger(error.status) ? error.status : 500).json({ error: Number.isInteger(error.status) ? error.message : "Could not change the account." });
   }
 });
 
