@@ -3,10 +3,8 @@ import axios from "axios";
 // API servers, in order of preference. If one is down the client falls over
 // to the next. Override with REACT_APP_API_URLS (comma separated) at build time.
 // xxdr is the fixed address apps use to find the current server list (see "Server registry" below).
-// (…-8gvj was deleted on Render; it is no longer listed, and dead servers are skipped automatically anyway.)
+// The main server. Other servers come from the Stashr server list (the Servers page), never from here.
 const DEFAULT_SERVERS = [
-    "https://stashr-v2.onrender.com",
-    // Second address with the same code, so the site still works while the first one is suspended or asleep.
     "https://password-manager-server-xxdr.onrender.com"
 ];
 

@@ -1,5 +1,5 @@
 const API_SERVERS = [
-  'https://password-manager-server-8gvj.onrender.com',
+  'https://password-manager-server-xxdr.onrender.com',
   'https://password-manager-server-xxdr.onrender.com'
 ];
 
