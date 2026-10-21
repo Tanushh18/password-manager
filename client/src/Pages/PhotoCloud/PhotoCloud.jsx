@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useVault } from "../../state/vault";
-import { createFolderShare, createPhotoFolder, createPhotoShare, getSharedWithMe, listFolderShares, revokeFolderShare, deletePhotoFolder, importExistingPhotos, disconnectPhotoConnection, exportPhotoManifest, getPhotoCloudDashboard, getPhotoShares, revokePhotoShare, savePhotoRoutingPolicy, startPhotoGoogleOAuth, syncPhotoGoogleAccount, updatePhotoConnection } from "../../api/client";
+import { createFolderShare, createPhotoFolder, createPhotoShare, getSharedWithMe, listFolderShares, revokeFolderShare, deletePhotoFolder, importExistingPhotos, disconnectPhotoConnection, exportPhotoManifest, getPhotoCloudDashboard, getPhotoShares, revokePhotoShare, removePhotoMedia, savePhotoRoutingPolicy, startPhotoGoogleOAuth, syncPhotoGoogleAccount, updatePhotoConnection } from "../../api/client";
 import { Check, Clock, Folder, HeartLine, Plus, Refresh, Search, Sparkle, Upload } from "../../Components/Icons/Icons";
 import "./PhotoCloud.css";
 
@@ -17,6 +17,7 @@ export default function PhotoCloud() {
   const [sortBy, setSortBy] = useState("newest");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [previewMedia, setPreviewMedia] = useState(null);
+  const [deletingMediaId, setDeletingMediaId] = useState("");
   const [viewTab, setViewTab] = useState("photos");
   const [syncStartedAt, setSyncStartedAt] = useState(null);
   const [syncElapsed, setSyncElapsed] = useState(0);
@@ -93,9 +94,21 @@ export default function PhotoCloud() {
   const removeFolder = async (folder) => { if (!window.confirm(`Remove "${folder.name}" from Stashr? Files and Drive folders are not deleted.`)) return; try { await deletePhotoFolder(folder.id); await load(); } catch { toast.error("Could not remove the folder."); } };
   const shareLibrary = async () => { try { const result = await createPhotoShare({ mediaIds: media.map((item) => item.id), title: "Shared from Photo Cloud", expiresInDays: 7, allowDownload: false }); const link = `${window.location.origin}/share/photos/${result.token}`; setShareLink(link); await navigator.clipboard?.writeText(link); toast.success("Share link copied. It expires in 7 days."); } catch { toast.error("Could not create the share link."); } };
   const revokeShare = async (id) => { try { await revokePhotoShare(id); setShares((list) => list.filter((share) => share.id !== id)); toast.success("Share link revoked."); } catch { toast.error("Could not revoke that link."); } };
+  const removeMedia = async (item) => {
+    if (!window.confirm(`Remove "${item.filename || item.name || "this item"}" from Stashr Photo Cloud? The original in Google Drive will remain untouched.`)) return;
+    setDeletingMediaId(item.id);
+    try {
+      await removePhotoMedia(item.id);
+      setPreviewMedia(null);
+      await load();
+      toast.success("Removed from Photo Cloud. Original file was not deleted.");
+    } catch (e) {
+      toast.error(e?.response?.data?.error || "Could not remove this item.");
+    } finally { setDeletingMediaId(""); }
+  };
 
   return <main className="photo page"><div className="shell">
-    {previewMedia && <div className="photo-modal__scrim" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) setPreviewMedia(null); }}><section className="photo-modal photo-preview" role="dialog" aria-modal="true" aria-label={previewMedia.filename || "Media preview"}><div className="photo-preview__head"><h2>{previewMedia.filename || "Preview"}</h2><button className="text-button" onClick={() => setPreviewMedia(null)}>Close ✕</button></div>{previewMedia.thumbnailUrl ? <img className="photo-preview__image" src={previewMedia.thumbnailUrl} alt={previewMedia.filename || "Preview"} /> : <p>Preview is not available. Open the original in Google Drive.</p>}{previewMedia.webViewUrl ? <div className="photo-modal__actions"><button className="btn btn--primary" onClick={() => window.open(previewMedia.webViewUrl, "_blank", "noopener,noreferrer")}>Open original in Drive</button></div> : null}<small className="photo-modal__note">Original files remain in their source account.</small></section></div>}
+    {previewMedia && <div className="photo-modal__scrim" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) setPreviewMedia(null); }}><section className="photo-modal photo-preview" role="dialog" aria-modal="true" aria-label={previewMedia.filename || "Media preview"}><div className="photo-preview__head"><h2>{previewMedia.filename || "Preview"}</h2><button className="text-button" onClick={() => setPreviewMedia(null)}>Close ✕</button></div>{previewMedia.thumbnailUrl ? <img className="photo-preview__image" src={previewMedia.thumbnailUrl} alt={previewMedia.filename || "Preview"} /> : <p>Preview is not available. Open the original in Google Drive.</p>}{<div className="photo-modal__actions">{previewMedia.webViewUrl ? <button className="btn btn--primary" onClick={() => window.open(previewMedia.webViewUrl, "_blank", "noopener,noreferrer")}>Open original in Drive</button> : null}<button className="btn btn--ghost" disabled={deletingMediaId === previewMedia.id} onClick={() => void removeMedia(previewMedia)}>{deletingMediaId === previewMedia.id ? "Removing…" : "Remove from library"}</button></div>}<small className="photo-modal__note">Remove only hides this item from Stashr; the original stays in Google Drive.</small></section></div>}
 
     <header className="photo__head"><div><p className="eyebrow">Personal AI Photo Cloud</p><h1>One library. Every account.</h1><p className="photo__lede">Browse your connected storage as one calm, searchable timeline. Originals stay in Google Drive; Photo Cloud manages the index, albums and backup decisions.</p></div><div className="photo__head-actions"><button className="btn btn--ghost" onClick={() => void refreshIndex()}><Refresh size={15} /> Refresh index</button>{profile?.features?.photoImport ? <Link className="btn btn--ghost" to="/photos/import">Import from Google Photos</Link> : null}<button className="btn btn--ghost" onClick={() => void shareLibrary()}>Share link</button><button className="btn btn--primary" onClick={() => setShowConnect(true)}><Plus size={15} /> Connect Google</button></div></header>
     <section className="photo__stats"><div className="photo-stat"><span>Indexed library</span><strong>{media.length}</strong><small>items across connected accounts</small></div><div className="photo-stat"><span>Connected storage</span><strong>{gb(storage)} <em>/ {gb(capacity)}</em></strong><div className="photo-meter"><i style={{ width: `${capacity ? Math.min(100, storage / capacity * 100) : 0}%` }} /></div><small>{accounts.length} Google account{accounts.length === 1 ? "" : "s"} · {gb(data?.totals?.freeGb)} free{data?.totals?.unknownLimit ? ` (${data.totals.unknownLimit} limit unknown)` : ""}</small></div><div className="photo-stat"><span>Backup status</span><strong className={failedJobs ? "" : "is-good"}>{(data?.jobs || []).length ? `${doneJobs} backed up${failedJobs ? `, ${failedJobs} need attention` : ""}` : "No uploads yet"}</strong><small>Uploads start from the Android app and are verified before they count</small></div></section>
