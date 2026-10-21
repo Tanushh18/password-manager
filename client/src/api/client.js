@@ -198,6 +198,7 @@ export const checkServer = (url) => instance.post("/registry/check", { url }, { 
 
 /* ── Personal AI Photo Cloud ── */
 export const getPhotoCloudDashboard = () => instance.get("/photo-cloud/dashboard", { timeout: 30000 }).then((r) => r.data);
+export const removePhotoMedia = (id) => instance.delete(`/photo-cloud/media/${encodeURIComponent(id)}`).then((r) => r.data);
 export const connectPhotoGoogleAccount = (data) => instance.post("/photo-cloud/connections", data).then((r) => r.data);
 export const startPhotoGoogleOAuth = (label) => instance.get("/photo-cloud/google/start", { params: { label } }).then((r) => r.data);
 export const getBlob = (path) => instance.get(path, { responseType: "blob", timeout: 60000 }).then((r) => r.data);
