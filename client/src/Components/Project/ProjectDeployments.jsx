@@ -93,7 +93,7 @@ export default function ProjectDeployments({ project }) {
           <p>{loading && !targets ? "Reading every server…" : `${list.length} server${list.length === 1 ? "" : "s"} on ${platforms.length || 0} platform${platforms.length === 1 ? "" : "s"} · ${running} running · ${branches} branch${branches === 1 ? "" : "es"}`}</p>
         </div>
         <div className="pdep__actions">
-          {main && list.length > 1 ? <button type="button" className="btn btn--primary btn--sm" onClick={() => setSyncFrom(main.ref)}>Sync env across servers</button> : null}
+          {main ? <button type="button" className="btn btn--primary btn--sm" disabled={list.length < 2} title={list.length < 2 ? "Link a second server to sync variables between servers" : "Copy variables from the main server to the others"} onClick={() => setSyncFrom(main.ref)}>Sync env across servers</button> : null}
           <button type="button" className="btn btn--ghost btn--sm" disabled={loading} onClick={() => void load()}>{loading ? "Reading…" : "↻ Refresh"}</button>
         </div>
       </header>
