@@ -2,6 +2,9 @@
 
 Stashr cannot transfer an existing Render service object between workspaces. This workflow recreates the service under the destination Render account, updates connected frontend environment variables, transfers custom-domain mappings, verifies the replacement, relinks the project, and only then permits deletion of the original service.
 
+
+The Deployments table's Render account selector opens this migration workflow and preselects the chosen destination account; it does not simply rewrite the project's account reference. The generic `/deploy-ops/.../account` route explicitly rejects Render reference-only switches. The old service remains intact until the destination is configured, deployed, relinked, and the user confirms the final deletion step.
+
 ## Workflow
 
 1. **Plan:** Check the source service, destination account/workspace, direct environment variables, direct secret files, linked Render Environment Groups, connected frontend URL references and custom domains. For custom domains the wizard performs a read-only DNS preflight (CNAME, A and AAAA lookups) and shows the destination Render hostname. The old service remains untouched.
