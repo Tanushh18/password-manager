@@ -29,11 +29,11 @@ const STEPS = [
  * Moves one Render server to another connected account, step by step. Every step is a button you press; the old
  * server is only deleted at the very end, after the project points at the new one, and only when you type its name.
  */
-export default function MoveServerWizard({ projectId, target, open, onClose, onDone }) {
+export default function MoveServerWizard({ projectId, target, open, onClose, onDone, initialTargetAccountId = "" }) {
   const serviceId = target.ref.replace(/^render:/, "");
   const [accounts, setAccounts] = useState([]);
   const [origin, setOrigin] = useState(null);
-  const [targetAccountId, setTargetAccountId] = useState("");
+  const [targetAccountId, setTargetAccountId] = useState(initialTargetAccountId || "");
   const [ownerId, setOwnerId] = useState("");
   const [plan, setPlan] = useState(null);
   const [step, setStep] = useState("plan");
