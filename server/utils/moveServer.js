@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const dns = require("node:dns").promises;
 const User = require("../models/schema");
 const { renderRequest } = require("./renderOps");
 const { fetchAllPages } = require("./renderPaging");
@@ -30,6 +31,62 @@ async function listDomains(apiKey, serviceId) {
   const result = await fetchAllPages((path) => renderRequest(apiKey, path), domainPath(serviceId), { limit: 100, maxPages: 5 });
   if (result.truncated) throw fail(422, "Too many custom domains to migrate safely.");
   return normalizeDomains(result);
+}
+async function listDirectEnvVars(apiKey, serviceId) {
+  const result = await fetchAllPages((path) => renderRequest(apiKey, path), servicePath(serviceId) + "/env-vars", { limit: 100, maxPages: 10 });
+  if (result.truncated) throw fail(422, "Environment-variable pagination was incomplete. No migration was started.");
+  return result.items.map((item) => item?.envVar || item)
+    .filter((item) => item && typeof item.key === "string" && typeof item.value === "string")
+    .map((item) => ({ key: item.key, value: item.value }));
+}
+async function listDirectSecretFiles(apiKey, serviceId) {
+  const result = await fetchAllPages((path) => renderRequest(apiKey, path), servicePath(serviceId) + "/secret-files", { limit: 100, maxPages: 10 });
+  if (result.truncated) throw fail(422, "Secret-file pagination was incomplete. No migration was started.");
+  return result.items.map((item) => item?.secretFile || item)
+    .filter((item) => item && typeof item.name === "string" && typeof item.content === "string")
+    .map((item) => ({ name: item.name, content: item.content }));
+}
+async function listLinkedEnvGroups(apiKey, ownerId, serviceId) {
+  const query = ownerId ? "?ownerId=" + encodeURIComponent(ownerId) : "";
+  const result = await fetchAllPages((path) => renderRequest(apiKey, path), "/v1/env-groups" + query, { limit: 100, maxPages: 10 });
+  if (result.truncated) throw fail(422, "Environment-group pagination was incomplete. No migration was started.");
+  const groups = result.items.map((item) => item?.envGroup || item)
+    .filter((group) => group?.id && Array.isArray(group.serviceLinks) && group.serviceLinks.some((link) => String(link.id) === String(serviceId)));
+  const details = [];
+  for (const listed of groups) {
+    let raw;
+    try { raw = await renderRequest(apiKey, "/v1/env-groups/" + encodeURIComponent(listed.id)); }
+    catch { throw fail(502, "Could not read linked environment group " + String(listed.name || listed.id) + ". Reconnect the source Render account and retry."); }
+    const group = raw?.envGroup || raw;
+    if (!Array.isArray(group.envVars) || !Array.isArray(group.secretFiles)) {
+      throw fail(502, "Render did not return the full configuration for linked environment group " + String(listed.name || listed.id) + ".");
+    }
+    details.push({
+      id: String(group.id || listed.id),
+      name: String(group.name || listed.name || listed.id),
+      environmentId: group.environmentId ? String(group.environmentId) : "",
+      envVars: group.envVars.filter((v) => v && typeof v.key === "string" && typeof v.value === "string").map((v) => ({ key: v.key, value: v.value })),
+      secretFiles: group.secretFiles.filter((v) => v && typeof v.name === "string" && typeof v.content === "string").map((v) => ({ name: v.name, content: v.content }))
+    });
+  }
+  return details;
+}
+async function inspectDomainDns(name, sourceUrl = "", targetUrl = "") {
+  const sourceHost = (() => { try { return new URL(sourceUrl).hostname.toLowerCase(); } catch { return ""; } })();
+  const targetHost = (() => { try { return new URL(targetUrl).hostname.toLowerCase(); } catch { return ""; } })();
+  const [cnameResult, aResult, aaaaResult] = await Promise.allSettled([
+    dns.resolveCname(name), dns.resolve4(name), dns.resolve6(name)
+  ]);
+  const cname = cnameResult.status === "fulfilled" ? cnameResult.value.map((v) => String(v).replace(/\\.$/, "").toLowerCase()) : [];
+  const a = aResult.status === "fulfilled" ? aResult.value : [];
+  const aaaa = aaaaResult.status === "fulfilled" ? aaaaResult.value : [];
+  const pointsToTarget = Boolean(targetHost && cname.some((v) => v === targetHost || v.endsWith("." + targetHost)));
+  const pointsToSource = Boolean(sourceHost && cname.some((v) => v === sourceHost || v.endsWith("." + sourceHost)));
+  return {
+    status: pointsToTarget ? "points_to_target" : pointsToSource ? "points_to_old_target" : cname.length ? "other_cname" : "no_cname_detected",
+    cname, a, aaaa, sourceHost, targetHost,
+    note: aaaa.length ? "An AAAA record exists; Render's custom-domain guidance says to remove conflicting AAAA records." : ""
+  };
 }
 function missingVerifiedDomains(expectedNames, domains) {
   return (Array.isArray(expectedNames) ? expectedNames : []).filter((name) =>
@@ -85,14 +142,44 @@ function originalAccountId(fields, serviceId, currentAccountId) {
   return String(currentAccountId);
 }
 
-/** Create-service body from the old service, so the new one matches it: same repo, branch, runtime, commands, region and variables. */
-function payloadFrom(old, envVars, ownerId, name) {
+/** Copy supported service settings without silently converting unsupported service types. */
+function payloadFrom(old, envVars, secretFiles, ownerId, name) {
   const d = old.serviceDetails || {};
-  const base = { ownerId, name, repo: old.repo, branch: old.branch, autoDeploy: old.autoDeploy === "no" ? "no" : "yes", envVars: envVars.map((v) => ({ key: v.key, value: v.value })) };
+  const trigger = ["commit", "checksPass", "off"].includes(old.autoDeployTrigger)
+    ? old.autoDeployTrigger
+    : old.autoDeploy === "no" ? "off" : "commit";
+  const base = {
+    ownerId, name, repo: old.repo, branch: old.branch,
+    autoDeployTrigger: trigger,
+    envVars: envVars.map((v) => ({ key: v.key, value: v.value })),
+    secretFiles: secretFiles.map((file) => ({ name: file.name, content: file.content }))
+  };
+  if (old.buildFilter || d.buildFilter) base.buildFilter = old.buildFilter || d.buildFilter;
+  if (old.notifyOnFail) base.notifyOnFail = old.notifyOnFail;
   if (old.rootDir) base.rootDir = old.rootDir;
-  if (old.type === "static_site") return { ...base, type: "static_site", serviceDetails: { buildCommand: d.buildCommand || "", publishPath: d.publishPath || "." } };
-  const details = { runtime: d.runtime, plan: d.plan || "free", region: d.region, envSpecificDetails: { buildCommand: d.envSpecificDetails?.buildCommand || "", startCommand: d.envSpecificDetails?.startCommand || "" } };
-  if (d.healthCheckPath) details.healthCheckPath = d.healthCheckPath;
+  if (old.type === "static_site") {
+    const details = { buildCommand: d.buildCommand || "", publishPath: d.publishPath || "." };
+    if (d.pullRequestPreviewsEnabled !== undefined) details.pullRequestPreviewsEnabled = d.pullRequestPreviewsEnabled;
+    if (d.previews) details.previews = d.previews;
+    if (d.renderSubdomainPolicy) details.renderSubdomainPolicy = d.renderSubdomainPolicy;
+    return { ...base, type: "static_site", serviceDetails: details };
+  }
+  const details = {
+    runtime: d.runtime, plan: d.plan || "free", region: d.region,
+    envSpecificDetails: {
+      buildCommand: d.envSpecificDetails?.buildCommand ?? d.buildCommand ?? "",
+      startCommand: d.envSpecificDetails?.startCommand ?? d.startCommand ?? ""
+    }
+  };
+  for (const key of ["dockerfilePath", "dockerContext", "dockerCommand", "preDeployCommand"]) {
+    const value = d.envSpecificDetails?.[key] ?? d[key];
+    if (value !== undefined && value !== null && value !== "") details.envSpecificDetails[key] = value;
+  }
+  for (const key of ["healthCheckPath", "numInstances", "ipAllowList", "pullRequestPreviewsEnabled", "renderSubdomainPolicy"]) {
+    if (d[key] !== undefined && d[key] !== null) details[key] = d[key];
+  }
+  if (d.disk) throw fail(422, "This service has a persistent disk. Copying disk data requires a separate data migration; the old service will not be moved automatically.");
+  if (d.plan && d.plan !== "free") { /* preserved above; destination billing may differ */ }
   return { ...base, type: "web_service", serviceDetails: details };
 }
 
@@ -123,9 +210,16 @@ async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "" 
   if (target.id === src.accountId) throw fail(400, "Choose a different account. This server is already in that one.");
 
   const old = await readService(from.apiKey, serviceId);
-  const envList = await fetchAllPages((p) => renderRequest(from.apiKey, p), servicePath(serviceId) + "/env-vars");
-  const envCount = envList.items.map((i) => i?.envVar || i).filter((i) => i && typeof i.key === "string").length;
+  if (!supportsDomains(old.type)) throw fail(422, "Only Render web services and static sites can be migrated by this wizard today. This service type will not be silently converted.");
+  const envVars = await listDirectEnvVars(from.apiKey, serviceId);
+  const secretFiles = await listDirectSecretFiles(from.apiKey, serviceId);
+  const envGroups = await listLinkedEnvGroups(from.apiKey, old.ownerId, serviceId);
+  const envCount = envVars.length;
   const domains = supportsDomains(old.type) ? await listDomains(from.apiKey, serviceId) : [];
+  const domainsWithDns = await Promise.all(domains.map(async (domain) => ({
+    ...domain,
+    dns: await inspectDomainDns(domain.name, old.serviceDetails?.url || "", "")
+  })));
 
   const owners = (await renderRequest(target.apiKey, "/v1/owners?limit=20") || []).map((o) => o?.owner || o).filter((o) => o?.id).map((o) => ({ id: o.id, name: String(o.name || o.id), type: o.type || "" }));
   if (!owners.length) throw fail(422, "No Render workspace was found in the target account.");
@@ -138,16 +232,23 @@ async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "" 
   if (old.suspended === "suspended") warnings.push("The old server is suspended. Resume it first if the new one should replace a running service.");
   if (old.serviceDetails?.plan && old.serviceDetails.plan !== "free") warnings.push("The old server is on the “" + old.serviceDetails.plan + "” plan. The new server uses the same plan, so it may bill in the target account.");
   if (!old.serviceDetails?.url) warnings.push("The old server has no public address yet, so there is no frontend address to replace.");
-  if (domains.length) warnings.push("Custom domains are attached to the old service. Transfer and verify every domain on the new service before deleting the old one; DNS settings are managed by your DNS provider.");
+  if (domains.length) warnings.push("Custom domains are attached to the old service. The previous verified status does not automatically verify the replacement; DNS must point at the new Render hostname before final verification.");
+  if (envGroups.some((group) => group.environmentId)) warnings.push("Some linked environment groups are scoped to a Render environment. Their values will be copied into destination groups linked only to this server; the source environment scope cannot be carried across accounts automatically.");
+  if (secretFiles.length) warnings.push("Direct secret files will be copied to the new service. Review any certificates or keys whose contents are rotated or tied to a specific environment.");
 
   const originId = originalAccountId(fields, serviceId, src.accountId);
   const originAccount = accountOf(user, dataKey, originId);
   return {
-    source: { serviceId, accountId: String(src.accountId), name: old.name, accountName: from.name, url: old.serviceDetails?.url || "", branch: old.branch || "", type: old.type || "", plan: old.serviceDetails?.plan || "", region: old.serviceDetails?.region || "", envCount, live: old.suspended !== "suspended" },
+    source: { serviceId, accountId: String(src.accountId), name: old.name, accountName: from.name, url: old.serviceDetails?.url || "", branch: old.branch || "", type: old.type || "", plan: old.serviceDetails?.plan || "", region: old.serviceDetails?.region || "", envCount, secretFileCount: secretFiles.length, envGroupCount: envGroups.length, live: old.suspended !== "suspended" },
     target: { accountId: target.id, accountName: target.name, ownerId: chosenOwner, owners },
     origin: { accountId: String(originId), accountName: originAccount?.name || (originId === src.accountId ? from.name : ""), available: Boolean(originAccount), isCurrent: String(originId) === String(src.accountId) },
-    domains,
-    frontends: frontends.map((r) => ({ accountId: r.accountId, serviceId: r.serviceId, serviceName: r.serviceName, key: r.key, accountName: r.accountName })),
+    domains: domainsWithDns,
+    config: {
+      directEnvVarCount: envVars.length,
+      directSecretFileCount: secretFiles.length,
+      envGroups: envGroups.map((group) => ({ id: group.id, name: group.name, envVarCount: group.envVars.length, secretFileCount: group.secretFiles.length, environmentScoped: Boolean(group.environmentId) }))
+    },
+    frontends: frontends.map((r) => ({ accountId: r.accountId, serviceId: r.serviceId, envGroupId: r.envGroupId, envGroupName: r.envGroupName, secretFile: Boolean(r.secretFile), serviceName: r.serviceName, key: r.key, accountName: r.accountName, ref: r.ref, provider: r.provider })),
     warnings
   };
 }
@@ -161,14 +262,16 @@ async function create(user, projectId, { serviceId, targetAccountId, ownerId, na
   const target = accountOf(user, dataKey, targetAccountId);
   if (!from || !target) throw fail(422, "A Render account is no longer connected.");
   const old = await readService(from.apiKey, serviceId);
-  const envList = await fetchAllPages((p) => renderRequest(from.apiKey, p), servicePath(serviceId) + "/env-vars");
-  const envVars = envList.items.map((i) => i?.envVar || i).filter((i) => i && typeof i.key === "string" && typeof i.value === "string").map((i) => ({ key: i.key, value: i.value }));
-  // Read the source domain list before creating anything so a permissions/API error cannot leave an untracked replacement server.
+  if (!supportsDomains(old.type)) throw fail(422, "Only Render web services and static sites can be migrated by this wizard today. This service type will not be silently converted.");
+  const envVars = await listDirectEnvVars(from.apiKey, serviceId);
+  const secretFiles = await listDirectSecretFiles(from.apiKey, serviceId);
+  const sourceGroups = await listLinkedEnvGroups(from.apiKey, old.ownerId, serviceId);
+  // Read all source dependencies before creation so an API/permission error cannot create a partial destination.
   const sourceDomains = supportsDomains(old.type) ? await listDomains(from.apiKey, serviceId) : [];
   const originId = originalAccountId(fields, serviceId, src.accountId);
   const wanted = String(name || "").trim().slice(0, 60) || old.name;
   try {
-    const raw = await renderRequest(target.apiKey, "/v1/services", { method: "POST", body: payloadFrom(old, envVars, ownerId, wanted) });
+    const raw = await renderRequest(target.apiKey, "/v1/services", { method: "POST", body: payloadFrom(old, envVars, secretFiles, ownerId, wanted) });
     const created = raw?.service || raw;
     if (!created?.id) throw fail(502, "Render did not return the new service.");
     const migration = {
@@ -177,14 +280,76 @@ async function create(user, projectId, { serviceId, targetAccountId, ownerId, na
       targetServiceId: String(created.id), targetAccountId: target.id, targetAccountName: target.name,
       targetName: created.name || wanted, targetUrl: created.serviceDetails?.url || "",
       originAccountId: String(originId),
+      sourceOwnerId: String(old.ownerId || ""),
+      targetOwnerId: String(ownerId),
       domains: sourceDomains.map((domain) => domain.name),
+      envGroupCount: sourceGroups.length,
+      envGroupMap: {},
+      configComplete: sourceGroups.length === 0,
       stage: "created", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     };
     await saveProjectFields(user, entry, dataKey, { ...fields, renderMigration: migration });
-    return { serviceId: created.id, name: created.name || wanted, accountId: target.id, url: created.serviceDetails?.url || "", envCount: envVars.length };
+    return { serviceId: created.id, name: created.name || wanted, accountId: target.id, url: created.serviceDetails?.url || "", envCount: envVars.length, secretFileCount: secretFiles.length, envGroupCount: sourceGroups.length, configComplete: migration.configComplete };
   } catch (error) {
     throw fail(error.status === 400 || error.status === 409 || error.status === 422 ? 422 : 502, error.message || "Render could not create the new server. Check the name and the workspace.");
   }
+}
+
+/** Live state of a server in an account, for the wait step. */
+/** Copy linked environment groups after service creation. Each group is checkpointed for safe retry. */
+async function copyEnvGroups(user, projectId, { sourceServiceId, targetAccountId, targetServiceId }) {
+  if (!safeId(sourceServiceId) || !safeId(targetServiceId)) throw fail(400, "Choose valid source and target servers.");
+  const { entry, dataKey, fields } = await loadProject(user, projectId);
+  const migration = fields.renderMigration;
+  if (!migration || migration.sourceServiceId !== sourceServiceId || migration.targetServiceId !== targetServiceId || migration.targetAccountId !== String(targetAccountId) || !["created", "config_pending"].includes(migration.stage)) {
+    throw fail(409, "The saved migration does not match these source and destination servers.");
+  }
+  const sourceAccount = accountOf(user, dataKey, migration.sourceAccountId);
+  const targetAccount = accountOf(user, dataKey, targetAccountId);
+  if (!sourceAccount || !targetAccount) throw fail(422, "A source or destination Render account is no longer connected.");
+  const sourceService = await readService(sourceAccount.apiKey, sourceServiceId);
+  const groups = await listLinkedEnvGroups(sourceAccount.apiKey, sourceService.ownerId, sourceServiceId);
+  const targetOwnerId = migration.targetOwnerId;
+  if (!targetOwnerId) throw fail(409, "The destination workspace was not saved. Start the migration plan again.");
+  let nextMigration = { ...migration, envGroupMap: { ...(migration.envGroupMap || {}) }, configComplete: false, stage: "config_pending" };
+  await saveProjectFields(user, entry, dataKey, { ...fields, renderMigration: nextMigration });
+  const results = [];
+  for (const group of groups) {
+    if (nextMigration.envGroupMap[group.id]) {
+      results.push({ sourceGroupId: group.id, name: group.name, copied: true, reused: true });
+      continue;
+    }
+    const suffix = String(targetServiceId).slice(-8);
+    const targetName = (String(group.name || "Environment group").slice(0, 70) + " - migrated " + suffix).slice(0, 100);
+    try {
+      const raw = await renderRequest(targetAccount.apiKey, "/v1/env-groups", {
+        method: "POST",
+        body: {
+          ownerId: targetOwnerId,
+          name: targetName,
+          envVars: group.envVars,
+          secretFiles: group.secretFiles,
+          serviceIds: [targetServiceId]
+        }
+      });
+      const copied = raw?.envGroup || raw;
+      if (!copied?.id) throw new Error("Render did not return the new environment-group ID.");
+      nextMigration = {
+        ...nextMigration,
+        envGroupMap: { ...nextMigration.envGroupMap, [group.id]: { id: String(copied.id), name: String(copied.name || targetName) } },
+        updatedAt: new Date().toISOString()
+      };
+      await saveProjectFields(user, entry, dataKey, { ...fields, renderMigration: nextMigration });
+      results.push({ sourceGroupId: group.id, targetGroupId: String(copied.id), name: group.name, copied: true, environmentScopeFlattened: Boolean(group.environmentId) });
+    } catch (error) {
+      results.push({ sourceGroupId: group.id, name: group.name, copied: false, error: error?.message || "Render refused to copy the environment group." });
+      break;
+    }
+  }
+  const complete = results.every((result) => result.copied) && results.length === groups.length;
+  nextMigration = { ...nextMigration, configComplete: complete, stage: complete ? "created" : "config_pending", envGroupCount: groups.length, updatedAt: new Date().toISOString() };
+  await saveProjectFields(user, entry, dataKey, { ...fields, renderMigration: nextMigration });
+  return { complete, groups: results, expectedGroups: groups.length };
 }
 
 /** Live state of a server in an account, for the wait step. */
@@ -328,7 +493,9 @@ async function origin(user, projectId, serviceId) {
     targetName: savedMigration.targetName || "",
     targetUrl: savedMigration.targetUrl || "",
     originAccountId: savedMigration.originAccountId || originId,
-    domains: Array.isArray(savedMigration.domains) ? savedMigration.domains : []
+    domains: Array.isArray(savedMigration.domains) ? savedMigration.domains : [],
+    configComplete: savedMigration.configComplete !== false,
+    envGroupCount: Number(savedMigration.envGroupCount || 0)
   } : null;
   return {
     currentAccountId: String(linked.accountId),
@@ -351,7 +518,7 @@ async function relink(user, projectId, { oldServiceId, newAccountId, newServiceI
   const { entry, dataKey, fields } = await loadProject(user, projectId);
   const sourceLink = linkedSource(fields, oldServiceId);
   const migration = fields.renderMigration;
-  if (!migration || migration.stage !== "domains_verified" || migration.sourceServiceId !== oldServiceId || migration.targetServiceId !== newServiceId || migration.targetAccountId !== String(newAccountId)) {
+  if (!migration || migration.stage !== "domains_verified" || migration.configComplete === false || migration.sourceServiceId !== oldServiceId || migration.targetServiceId !== newServiceId || migration.targetAccountId !== String(newAccountId)) {
     throw fail(409, "Prepare the replacement, DNS handoff and custom-domain verification before relinking the project.");
   }
   const destination = accountOf(user, dataKey, newAccountId);
@@ -390,7 +557,7 @@ async function deleteOld(user, projectId, { serviceId, accountId, confirmName })
   const { entry, dataKey, fields } = await loadProject(user, projectId);
   if (fields.renderServiceId === serviceId) throw fail(409, "The project still uses this server. Relink it to the new server first.");
   const migration = fields.renderMigration;
-  if (!migration || migration.stage !== "relinked" || migration.sourceServiceId !== serviceId || migration.sourceAccountId !== String(accountId)) {
+  if (!migration || migration.stage !== "relinked" || migration.configComplete === false || migration.sourceServiceId !== serviceId || migration.sourceAccountId !== String(accountId)) {
     throw fail(409, "The old server can only be deleted after the project has been relinked through the migration wizard.");
   }
   const targetAccount = accountOf(user, dataKey, migration.targetAccountId);
@@ -422,4 +589,4 @@ async function deleteOld(user, projectId, { serviceId, accountId, confirmName })
   return { deleted: true, name: service.name, domainsVerified: (migration.domains || []).length };
 }
 
-module.exports = { plan, create, status, frontends, prepareDomains, verifyDomains, origin, relink, deleteOld, supportsDomains, normalizeDomains, missingVerifiedDomains };
+module.exports = { plan, create, status, frontends, prepareDomains, verifyDomains, copyEnvGroups, origin, relink, deleteOld, supportsDomains, normalizeDomains, missingVerifiedDomains, inspectDomainDns, listDirectEnvVars, listDirectSecretFiles, listLinkedEnvGroups, payloadFrom };
