@@ -17,7 +17,7 @@ router.get("/move-server/:projectId/origin", async (req, res) => {
   catch (error) { return send(res, error); }
 });
 router.post("/move-server/:projectId/plan", async (req, res) => {
-  try { return ok(res, await move.plan(req.rootUser, req.params.projectId, { serviceId: text(req.body?.serviceId, 160), targetAccountId: text(req.body?.targetAccountId, 40), ownerId: text(req.body?.ownerId, 160) })); }
+  try { return ok(res, await move.plan(req.rootUser, req.params.projectId, { serviceId: text(req.body?.serviceId, 160), targetAccountId: text(req.body?.targetAccountId, 40), ownerId: text(req.body?.ownerId, 160), targetServiceId: text(req.body?.targetServiceId, 160) })); }
   catch (error) { return send(res, error); }
 });
 router.post("/move-server/:projectId/create", async (req, res) => {
