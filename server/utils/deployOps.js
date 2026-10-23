@@ -6,7 +6,7 @@ const { fetchAllPages } = require("./renderPaging");
 const { mapWithConcurrency } = require("./renderGuards");
 const { linkedServices } = require("./projectMerge");
 const { planEnvSync, pendingNames, NAME } = require("./serviceEnvSync");
-const { projectsSharingRepo, moveServiceAccount } = require("./projectServiceSync");
+const { projectsSharingRepo } = require("./projectServiceSync");
 
 /*
  * One layer for every hosting provider. A project's Render servers and its linked host sites (Vercel, Netlify,
@@ -254,13 +254,13 @@ async function syncEnv(user, projectId, { apply = false, overwrite = false, depl
   return { ...summary, applied: true, results };
 }
 
-/** Moves a target to another connected account of the same provider. The new account must be able to see the site. */
+/** Switches a linked hosting account for non-Render sites. Render needs a real service migration, never an account-reference swap. */
 async function moveAccount(user, projectId, ref, accountId) {
   const { entry, dataKey, fields } = await loadProject(user, projectId);
   const target = targetsOf(user, dataKey, fields).find((t) => t.ref === ref);
   if (!target) throw fail(404, "Could not find that server in this project.");
   if (isRender(target)) {
-    return moveServiceAccount(user, projectId, target.serviceId, accountId);
+    throw fail(409, "A Render service cannot be moved by changing its account reference. Use the Move to account migration wizard to create and verify a replacement in the destination account.");
   }
   const next = accountById(user, dataKey, user.hostAccounts, accountId);
   if (!next || next.provider !== target.link.provider) throw fail(400, "Choose a connected " + target.label + " account.");
