@@ -39,8 +39,14 @@ async function findUrlReferences(user, fromUrl, { strict = false, projectId = ""
     }
     const scanResults = await mapWithConcurrency(services, 3, async (s) => {
       try {
-        const vars = (await fetchAllPages((p) => renderRequest(account.apiKey, p), "/v1/services/" + encodeURIComponent(s.id) + "/env-vars")).items.map((i) => i?.envVar || i);
-        for (const v of vars) if (v && typeof v.value === "string" && v.value.toLowerCase().includes(host)) refs.push({ accountId: account.id, accountName: account.name || "", serviceId: s.id, serviceName: s.name, type: s.type || "", key: v.key, suspended: s.suspended === "suspended" });
+        const base = "/v1/services/" + encodeURIComponent(s.id);
+        const varsResult = await fetchAllPages((p) => renderRequest(account.apiKey, p), base + "/env-vars");
+        const filesResult = await fetchAllPages((p) => renderRequest(account.apiKey, p), base + "/secret-files");
+        if (strict && (varsResult.truncated || filesResult.truncated)) throw new Error("A service config list was truncated.");
+        const vars = varsResult.items.map((i) => i?.envVar || i);
+        const files = filesResult.items.map((i) => i?.secretFile || i);
+        for (const v of vars) if (v && typeof v.value === "string" && v.value.toLowerCase().includes(host)) refs.push({ accountId: account.id, accountName: account.name || "", serviceId: s.id, serviceName: s.name, type: s.type || "", key: v.key, secretFile: false, suspended: s.suspended === "suspended" });
+        for (const file of files) if (file && typeof file.content === "string" && file.content.toLowerCase().includes(host)) refs.push({ accountId: account.id, accountName: account.name || "", serviceId: s.id, serviceName: s.name, type: s.type || "", key: file.name, secretFile: true, suspended: s.suspended === "suspended" });
         return { ok: true };
       } catch {
         return { ok: false };
@@ -48,6 +54,35 @@ async function findUrlReferences(user, fromUrl, { strict = false, projectId = ""
     });
     if (strict && scanResults.some((result) => result?.ok === false)) {
       throw Object.assign(new Error("Could not scan a connected service's environment variables safely. Retry after checking its Render access."), { status: 502 });
+    }
+  }
+  // Render environment groups can be linked to many services; inventory their variables and secret files too.
+  for (const account of accountsOf(user, dataKey)) {
+    try {
+      const groupResult = await fetchAllPages((p) => renderRequest(account.apiKey, p), "/v1/env-groups");
+      if (strict && groupResult.truncated) throw new Error("Environment-group list was truncated.");
+      for (const listed of groupResult.items.map((i) => i?.envGroup || i).filter((g) => g?.id)) {
+        let raw;
+        try { raw = await renderRequest(account.apiKey, "/v1/env-groups/" + encodeURIComponent(listed.id)); }
+        catch { if (strict) throw new Error("Could not read an environment group."); else continue; }
+        const group = raw?.envGroup || raw;
+        if (!Array.isArray(group.envVars) || !Array.isArray(group.secretFiles)) {
+          if (strict) throw new Error("Environment-group configuration was not returned.");
+          continue;
+        }
+        for (const v of group.envVars) if (v && typeof v.value === "string" && v.value.toLowerCase().includes(host)) refs.push({
+          accountId: account.id, accountName: account.name || "", envGroupId: String(group.id || listed.id),
+          envGroupName: group.name || listed.name || listed.id, key: v.key, secretFile: false, type: "env_group",
+          serviceName: (group.name || listed.name || "Environment group") + " (shared group)"
+        });
+        for (const file of group.secretFiles) if (file && typeof file.content === "string" && file.content.toLowerCase().includes(host)) refs.push({
+          accountId: account.id, accountName: account.name || "", envGroupId: String(group.id || listed.id),
+          envGroupName: group.name || listed.name || listed.id, key: file.name, secretFile: true, type: "env_group",
+          serviceName: (group.name || listed.name || "Environment group") + " (shared group)"
+        });
+      }
+    } catch {
+      if (strict) throw Object.assign(new Error("Could not scan Render environment groups safely. Check the connected account permissions before continuing."), { status: 502 });
     }
   }
   // Linked Vercel, Netlify, Railway and Cloudflare Pages frontends also need their environment updated.
@@ -85,6 +120,7 @@ async function replaceUrlReferences(user, { projectId = "", fromUrl, toUrl, targ
   const dataKey = await user.getDataKey();
   const accounts = new Map(accountsOf(user, dataKey).map((a) => [a.id, a]));
   const byService = new Map();
+  const byGroup = new Map();
   const byHost = new Map();
   for (const t of targets.slice(0, 100)) {
     if (typeof t?.ref === "string" && t.ref.startsWith("host:") && typeof t.key === "string") {
@@ -92,10 +128,16 @@ async function replaceUrlReferences(user, { projectId = "", fromUrl, toUrl, targ
       byHost.get(t.ref).keys.add(t.key);
       continue;
     }
+    if (typeof t?.envGroupId === "string" && t.envGroupId && typeof t.key === "string" && mongoose.isValidObjectId(t?.accountId)) {
+      const k = t.accountId + ":" + t.envGroupId;
+      if (!byGroup.has(k)) byGroup.set(k, { accountId: t.accountId, envGroupId: t.envGroupId, variables: new Set(), secretFiles: new Set() });
+      byGroup.get(k)[t.secretFile ? "secretFiles" : "variables"].add(t.key);
+      continue;
+    }
     if (!mongoose.isValidObjectId(t?.accountId) || !/^[A-Za-z0-9_-]{1,160}$/.test(String(t?.serviceId || "")) || typeof t?.key !== "string") continue;
     const k = t.accountId + ":" + t.serviceId;
-    if (!byService.has(k)) byService.set(k, { accountId: t.accountId, serviceId: t.serviceId, keys: new Set() });
-    byService.get(k).keys.add(t.key);
+    if (!byService.has(k)) byService.set(k, { accountId: t.accountId, serviceId: t.serviceId, variables: new Set(), secretFiles: new Set() });
+    byService.get(k)[t.secretFile ? "secretFiles" : "variables"].add(t.key);
   }
   const results = [];
   for (const svc of byService.values()) {
@@ -104,23 +146,67 @@ async function replaceUrlReferences(user, { projectId = "", fromUrl, toUrl, targ
     const base = "/v1/services/" + encodeURIComponent(svc.serviceId);
     let changed = 0;
     try {
-      const vars = (await fetchAllPages((p) => renderRequest(account.apiKey, p), base + "/env-vars")).items.map((i) => i?.envVar || i);
+      const varsResult = await fetchAllPages((p) => renderRequest(account.apiKey, p), base + "/env-vars");
+      const filesResult = await fetchAllPages((p) => renderRequest(account.apiKey, p), base + "/secret-files");
+      if (varsResult.truncated || filesResult.truncated) throw new Error("Render returned an incomplete service config list.");
+      const vars = varsResult.items.map((i) => i?.envVar || i);
+      const files = filesResult.items.map((i) => i?.secretFile || i);
       for (const v of vars) {
-        if (!svc.keys.has(v.key)) continue;
+        if (!svc.variables.has(v.key)) continue;
         const next = replaceHost(v.value, fromUrl, toUrl);
         if (next === v.value) continue;
         await renderRequest(account.apiKey, base + "/env-vars/" + encodeURIComponent(v.key), { method: "PUT", body: { value: next } });
         changed += 1;
       }
+      for (const file of files) {
+        if (!svc.secretFiles.has(file.name)) continue;
+        const next = replaceHost(file.content, fromUrl, toUrl);
+        if (next === file.content) continue;
+        await renderRequest(account.apiKey, base + "/secret-files/" + encodeURIComponent(file.name), { method: "PUT", body: { content: next } });
+        changed += 1;
+      }
       let deployed = false;
       let deployError = "";
-      // Retry deploys even when variables already match: a previous attempt may have saved them but failed to deploy.
-      if (deploy && svc.keys.size) {
+      // Retry deploys even when selected values already match: a previous attempt may have saved them but failed to deploy.
+      if (deploy && (svc.variables.size || svc.secretFiles.size)) {
         try { await renderRequest(account.apiKey, base + "/deploys", { method: "POST", body: { clearCache: "do_not_clear" } }); deployed = true; }
         catch { deployError = "Variables were saved, but the frontend redeploy failed. Retry this migration step before continuing."; }
       }
       results.push({ serviceId: svc.serviceId, ok: !deployError, changed, deployed, ...(deployError ? { error: deployError } : {}) });
     } catch (error) { results.push({ serviceId: svc.serviceId, ok: false, error: error?.message || "Render refused the change." }); }
+  }
+  for (const svc of byGroup.values()) {
+    const account = accounts.get(svc.accountId);
+    if (!account) { results.push({ envGroupId: svc.envGroupId, ok: false, error: "Render account not connected." }); continue; }
+    let changed = 0, deployed = false, error = "", groupName = svc.envGroupId;
+    try {
+      const base = "/v1/env-groups/" + encodeURIComponent(svc.envGroupId);
+      const raw = await renderRequest(account.apiKey, base);
+      const group = raw?.envGroup || raw;
+      groupName = group.name || groupName;
+      for (const v of group.envVars || []) {
+        if (!svc.variables.has(v.key)) continue;
+        const next = replaceHost(v.value, fromUrl, toUrl);
+        if (next === v.value) continue;
+        await renderRequest(account.apiKey, base + "/env-vars/" + encodeURIComponent(v.key), { method: "PUT", body: { value: next } });
+        changed += 1;
+      }
+      for (const file of group.secretFiles || []) {
+        if (!svc.secretFiles.has(file.name)) continue;
+        const next = replaceHost(file.content, fromUrl, toUrl);
+        if (next === file.content) continue;
+        await renderRequest(account.apiKey, base + "/secret-files/" + encodeURIComponent(file.name), { method: "PUT", body: { content: next } });
+        changed += 1;
+      }
+      if (deploy && (svc.variables.size || svc.secretFiles.size)) {
+        const serviceIds = (group.serviceLinks || []).map((link) => link?.id).filter((id) => typeof id === "string").slice(0, 50);
+        for (const serviceId of serviceIds) {
+          try { await renderRequest(account.apiKey, "/v1/services/" + encodeURIComponent(serviceId) + "/deploys", { method: "POST", body: { clearCache: "do_not_clear" } }); deployed = true; }
+          catch { error = "The environment group was updated but at least one linked service could not be redeployed. Retry the migration step."; }
+        }
+      }
+    } catch (e) { error = e?.message || "Could not update the environment group."; }
+    results.push({ envGroupId: svc.envGroupId, serviceName: groupName + " (shared group)", ok: !error, changed, deployed, ...(error ? { error } : {}) });
   }
   for (const svc of byHost.values()) {
     let changed = 0, deployed = false, error = "", serviceName = svc.ref;
