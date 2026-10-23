@@ -109,8 +109,15 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
     try {
       const s = await moveStatus(projectId, { accountId: created.accountId, serviceId: created.serviceId });
       setLive(s);
-      if (s.ready) setStep((cur) => (cur === "live" ? "frontends" : cur));
-      else if (/fail|cancel/.test(s.deploy?.status || "")) setError("The new server's deploy failed. Check it in Render; the old server is untouched.");
+      if (s.ready) {
+        // The new service now exists in Render; refresh the URL-reference inventory so its copied env vars can be migrated too.
+        const refreshedPlan = await movePlan(projectId, { serviceId, targetAccountId: created.accountId });
+        setPlan(refreshedPlan);
+        setPicked(new Set(refreshedPlan.frontends.map(frontendKey)));
+        setStep((cur) => (cur === "live" ? "frontends" : cur));
+      } else if (/fail|cancel/.test(s.deploy?.status || "")) {
+        setError("The new server's deploy failed. Check it in Render; the old server is untouched.");
+      }
     } catch (e) { setError(errorMessage(e, "Could not read the new server.")); }
   }, [created, projectId]);
   useEffect(() => {
