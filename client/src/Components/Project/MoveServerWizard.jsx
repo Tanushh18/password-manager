@@ -38,6 +38,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
   const [plan, setPlan] = useState(null);
   const [step, setStep] = useState("plan");
   const [busy, setBusy] = useState(false);
+  const [initializing, setInitializing] = useState(false);
   const [error, setError] = useState("");
   const [created, setCreated] = useState(null);
   const [live, setLive] = useState(null);
@@ -51,12 +52,24 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
   const [typed, setTyped] = useState("");
   const [understood, setUnderstood] = useState(false);
   const [name, setName] = useState("");
+  const activityMessage = {
+    plan: "Checking source and destination account access…",
+    create: "Creating the replacement server in the destination account…",
+    config: "Copying linked environment groups and secret files…",
+    live: "Waiting for the replacement server to become live…",
+    frontends: "Updating frontend URLs and starting redeploys…",
+    domains: "Preparing and verifying custom domains…",
+    verify: "Saving the server verification step…",
+    relink: "Switching the project link to the replacement server…",
+    delete: "Finalizing the move and deleting the old server…"
+  };
   const timer = useRef(null);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    getRenderAccounts().then((r) => { if (!cancelled) setAccounts((r.accounts || []).filter((a) => a.id !== target.accountId)); }).catch(() => { if (!cancelled) setAccounts([]); });
+    setInitializing(true);
+    const accountsRequest = getRenderAccounts().then((r) => { if (!cancelled) setAccounts((r.accounts || []).filter((a) => a.id !== target.accountId)); }).catch(() => { if (!cancelled) setAccounts([]); });
     const restore = async () => {
       try {
         const info = await moveOrigin(projectId, serviceId);
@@ -89,6 +102,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
         if (m.stage === "domains_verified") { setDomainCheck({ verified: true, domains: [] }); setStep("verify"); }
         else { setDomainCheck(null); setDnsAcknowledged(false); setStep("domains"); }
       } catch (e) { if (!cancelled) setError(errorMessage(e, "Could not resume the saved migration. The old server has not been deleted.")); }
+      finally { await accountsRequest; if (!cancelled) setInitializing(false); }
     };
     void restore();
     return () => { cancelled = true; };
@@ -206,15 +220,33 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
   const state = (id) => (step === "done" || order.indexOf(id) < order.indexOf(step) ? "done" : id === step ? "active" : "todo");
 
   return (
-    <Modal open={open} onClose={busy ? () => {} : onClose} center classNames={{ modal: "mv-modal" }}>
+    <Modal open={open} onClose={busy || initializing ? () => {} : onClose} center classNames={{ modal: "mv-modal" }}>
       <h2 className="mv__title">Move {target.name} to another account</h2>
       <p className="field__note">The new server is built first, and the old one is deleted last. You can stop at any step: nothing is deleted until the final one.</p>
       <ol className="mv__steps">
         {visibleSteps.map(([id, label]) => <li key={id} className={"is-" + state(id)}><span className="mv__dot">{state(id) === "done" ? "✓" : ""}</span>{label}</li>)}
       </ol>
       {error ? <div className="notice notice--err" role="alert">{error}</div> : null}
+      {initializing ? (
+        <div className="mv__activity" role="status" aria-live="polite">
+          <span className="mv__spinner" aria-hidden="true" />
+          <div className="mv__activity-copy">
+            <strong>Preparing account change</strong>
+            <span>Connecting to Render and checking whether a previous migration needs to resume…</span>
+          </div>
+        </div>
+      ) : null}
+      {busy ? (
+        <div className="mv__activity" role="status" aria-live="polite">
+          <span className="mv__spinner" aria-hidden="true" />
+          <div className="mv__activity-copy">
+            <strong>{activityMessage[step] || "Working on the account migration…"}</strong>
+            <span>Render is processing this step. Keep this window open; the old server is kept until the final confirmation.</span>
+          </div>
+        </div>
+      ) : null}
 
-      {step === "plan" ? (
+      {!initializing && step === "plan" ? (
         <div className="mv__panel">
           <div className="field">
             <label className="field__label" htmlFor="mv-acc">Move to this account</label>
@@ -252,14 +284,14 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
         </div>
       ) : null}
 
-      {step === "create" ? (
+      {!initializing && step === "create" ? (
         <div className="mv__panel">
           <p>This creates <b>{name}</b> in <b>{plan?.target.accountName}</b> from the same repository and branch, with all {plan?.source.envCount} variables. The old server keeps running.</p>
           <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void doCreate()}>{busy ? "Creating…" : "Create the new server"}</button>
         </div>
       ) : null}
 
-      {step === "config" ? (
+      {!initializing && step === "config" ? (
         <div className="mv__panel">
           <p>Direct environment variables and service-level secret files are copied when the replacement is created. Linked Render Environment Groups need a separate copy so their variables and secret files remain available in the new account.</p>
           <p><b>Linked groups:</b> {plan?.source?.envGroupCount ?? created?.envGroupCount ?? 0}</p>
@@ -271,14 +303,21 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
         </div>
       ) : null}
 
-      {step === "live" ? (
+      {!initializing && step === "live" ? (
         <div className="mv__panel">
-          <p>Building <b>{created?.name}</b>… {live?.deploy ? <span className="pdep__pill is-mid">{live.deploy.status.replace(/_/g, " ")}</span> : "starting"}</p>
-          <p className="field__note">This page checks every few seconds and moves on by itself when the server is live.</p>
+          <div className="mv__activity mv__activity--live" role="status" aria-live="polite">
+            <span className="mv__spinner" aria-hidden="true" />
+            <div className="mv__activity-copy">
+              <strong>Building {created?.name || "the replacement server"} in the destination account</strong>
+              <span>Render status: {live?.deploy?.status ? live.deploy.status.replace(/_/g, " ") : "starting"} · The original server is still running.</span>
+            </div>
+            <div className="mv__progress" aria-hidden="true"><span /></div>
+          </div>
+          <p className="field__note">Checking Render every few seconds. The wizard advances automatically once the replacement is live.</p>
         </div>
       ) : null}
 
-      {step === "frontends" ? (
+      {!initializing && step === "frontends" ? (
         <div className="mv__panel">
           <p>New address: <a href={newUrl} target="_blank" rel="noopener noreferrer">{newUrl || "—"}</a></p>
           {plan.frontends.length ? (
@@ -298,7 +337,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
         </div>
       ) : null}
 
-      {step === "domains" ? (
+      {!initializing && step === "domains" ? (
         <div className="mv__panel">
           <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => setStep("frontends")}>Back to frontend URL updates</button>
           <p>Custom domains are separate from the generated Render URL. This DNS check is read-only: it reports observed CNAME/A/AAAA records but cannot edit your registrar or DNS provider. Render can transfer the domain mapping, while hard-coded old server URLs inside source code still need manual review.</p>
@@ -339,7 +378,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
         </div>
       ) : null}
 
-      {step === "verify" ? (
+      {!initializing && step === "verify" ? (
         <div className="mv__panel">
           {frontResult ? <p className="field__note">Changed {frontResult.changed} variable{frontResult.changed === 1 ? "" : "s"}.</p> : null}
           {plan?.domains?.length ? <p>Verify the backend custom domains below and confirm the frontend still loads them correctly.</p> : <p>No custom domain is attached to this backend. The existing Stashr client domain stays on the client service; only its backend API URL is being updated here.</p>}
@@ -350,14 +389,14 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
         </div>
       ) : null}
 
-      {step === "relink" ? (
+      {!initializing && step === "relink" ? (
         <div className="mv__panel">
           <p>The project will point at <b>{live?.name || created?.name}</b> instead of the old server. Nothing is deleted yet.</p>
           <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void doRelink()}>{busy ? "Saving…" : "Move the project link"}</button>
         </div>
       ) : null}
 
-      {step === "delete" ? (
+      {!initializing && step === "delete" ? (
         <div className="mv__panel mv__danger">
           <p>The last step. This permanently deletes <b>{plan?.source.name}</b> from {plan?.source.accountName}. Keep it a day first if you want a fallback. Its variables are all on the new server.</p>
           <div className="field"><label className="field__label" htmlFor="mv-type">Type <code>{plan?.source.name}</code> to confirm</label>
@@ -370,7 +409,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
         </div>
       ) : null}
 
-      {step === "done" ? (
+      {!initializing && step === "done" ? (
         <div className="mv__panel">
           <p><b>Done.</b> {created?.name} is the project’s server in {plan?.target.accountName}.</p>
           <button type="button" className="btn btn--primary" onClick={onClose}>Close</button>

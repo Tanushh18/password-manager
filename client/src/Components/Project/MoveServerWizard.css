@@ -15,3 +15,62 @@
 .mv__facts dd { margin: 0; overflow-wrap: anywhere; }
 .mv__refs { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; font-size: .84rem; }
 @media (max-width: 520px) { .mv__facts div { grid-template-columns: 1fr; } }
+
+/* Visible feedback while an account migration step is running. */
+.mv__activity {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .85rem;
+  border: 1px solid rgba(var(--accent-rgb), .45);
+  border-radius: var(--r-md);
+  background: rgba(var(--accent-rgb), .06);
+  margin: .65rem 0;
+  animation: mv-enter .22s ease-out both;
+}
+.mv__spinner {
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  flex: none;
+  animation: mv-spin .8s linear infinite;
+}
+.mv__activity-copy { display: grid; gap: .18rem; min-width: 0; }
+.mv__activity-copy strong { font-size: .88rem; }
+.mv__activity-copy span { color: var(--text-muted); font-size: .8rem; line-height: 1.45; }
+.mv__activity--live { display: grid; grid-template-columns: auto minmax(0, 1fr); }
+.mv__progress {
+  grid-column: 1 / -1;
+  height: .22rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+.mv__progress span {
+  display: block;
+  width: 38%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: mv-progress 1.35s ease-in-out infinite;
+}
+.mv__steps li.is-active .mv__dot {
+  animation: mv-pulse 1.7s ease-out infinite;
+}
+@keyframes mv-spin { to { transform: rotate(360deg); } }
+@keyframes mv-progress { from { transform: translateX(-115%); } to { transform: translateX(285%); } }
+@keyframes mv-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); }
+  50% { box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .12); }
+}
+@keyframes mv-enter {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mv__activity, .mv__spinner, .mv__progress span, .mv__steps li.is-active .mv__dot {
+    animation: none !important;
+  }
+}
