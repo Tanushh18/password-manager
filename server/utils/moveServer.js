@@ -198,9 +198,9 @@ async function prepareDomains(user, projectId, { sourceServiceId, targetAccountI
     : sourceDomains.map((d) => d.name);
   const migration = {
     ...(sameMigration ? fields.renderMigration : {}),
-    sourceServiceId, sourceAccountId: String(src.accountId), sourceAccountName: sourceAccount.name,
+    sourceServiceId, sourceAccountId: String(src.accountId), sourceAccountName: sourceAccount.name, sourceName: sourceService.name || src.name || sourceServiceId,
     sourceUrl: sourceService.serviceDetails?.url || src.url || "",
-    targetServiceId, targetAccountId: targetAccount.id,
+    targetServiceId, targetAccountId: targetAccount.id, targetAccountName: targetAccount.name, targetName: targetService.name || targetServiceId,
     targetUrl: targetService.serviceDetails?.url || "",
     domains: [...new Set(expectedNames.map((n) => String(n).toLowerCase()))],
     stage: "domains_preparing",
@@ -280,12 +280,30 @@ async function origin(user, projectId, serviceId) {
   const current = accountOf(user, dataKey, linked.accountId);
   const originId = String(fields.renderAccountOriginId || linked.accountId);
   const original = accountOf(user, dataKey, originId);
+  const savedMigration = fields.renderMigration;
+  const migrationMatches = savedMigration && (savedMigration.sourceServiceId === serviceId || savedMigration.targetServiceId === serviceId)
+    && ["domains_preparing", "domains_prepared", "domains_verified", "relinked"].includes(savedMigration.stage);
+  const migration = migrationMatches ? {
+    stage: savedMigration.stage,
+    sourceServiceId: savedMigration.sourceServiceId,
+    sourceAccountId: savedMigration.sourceAccountId,
+    sourceAccountName: savedMigration.sourceAccountName || "",
+    sourceName: savedMigration.sourceName || "",
+    sourceUrl: savedMigration.sourceUrl || "",
+    targetServiceId: savedMigration.targetServiceId,
+    targetAccountId: savedMigration.targetAccountId,
+    targetAccountName: savedMigration.targetAccountName || "",
+    targetName: savedMigration.targetName || "",
+    targetUrl: savedMigration.targetUrl || "",
+    domains: Array.isArray(savedMigration.domains) ? savedMigration.domains : []
+  } : null;
   return {
     currentAccountId: String(linked.accountId),
     originalAccountId: originId,
     originalAccountName: original?.name || (originId === String(linked.accountId) ? current?.name || "" : fields.renderAccountOriginName || ""),
     available: Boolean(original),
-    canReturn: Boolean(original && originId !== String(linked.accountId))
+    canReturn: Boolean(original && originId !== String(linked.accountId)),
+    migration
   };
 }
 
