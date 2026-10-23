@@ -48,7 +48,7 @@ router.post("/move-server/:projectId/domains/verify", async (req, res) => {
 router.post("/move-server/:projectId/frontends", async (req, res) => {
   try {
     const targets = Array.isArray(req.body?.targets) ? req.body.targets.slice(0, 100) : [];
-    return ok(res, await move.frontends(req.rootUser, { fromUrl: text(req.body?.fromUrl, 300), toUrl: text(req.body?.toUrl, 300), targets, deploy: req.body?.deploy === true }));
+    return ok(res, await move.frontends(req.rootUser, req.params.projectId, { fromUrl: text(req.body?.fromUrl, 300), toUrl: text(req.body?.toUrl, 300), targets, deploy: req.body?.deploy === true }));
   } catch (error) { return send(res, error); }
 });
 router.post("/move-server/:projectId/relink", async (req, res) => {
