@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { toast } from "react-toastify";
 import { getServiceBranches, setServiceBranch } from "../../api/client";
 import { AccountPicker } from "../../Components/Project/DeployParts";
+import MoveServerWizard from "../../Components/Project/MoveServerWizard";
 import { useVault } from "../../state/vault";
 import { errorMessage } from "./renderUtils";
 
@@ -12,7 +13,9 @@ export default function ServiceBranch({ service }) {
   const [info, setInfo] = useState(null);
   const [choice, setChoice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [moveAccountId, setMoveAccountId] = useState(null); // null = wizard closed
   const linked = (projects || []).find((p) => p.renderServiceId === service.id || (p.renderServices || []).some((s) => s.serviceId === service.id));
+  const moveTarget = { ref: "render:" + service.id, provider: "render", accountId: service.accountId, accountName: service.accountName, name: service.name };
 
   const open = async () => {
     setBusy(true);
@@ -51,9 +54,13 @@ export default function ServiceBranch({ service }) {
       {linked ? (
         <div>
           <strong>Account</strong>
-          <AccountPicker projectId={linked.id} target={{ ref: "render:" + service.id, provider: "render", accountId: service.accountId, accountName: service.accountName, name: service.name }} onDone={() => toast.info("Account changed. Reopen this service to see it under the new account.")} />
+          <AccountPicker projectId={linked.id} target={moveTarget} onDone={() => {}} onMove={(accountId) => setMoveAccountId(accountId)} />
+          <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setMoveAccountId("")}>Move to another account</button>
         </div>
-      ) : <p className="rd-note">Account changes are made from the service’s Stashr project.</p>}
+      ) : <p className="rd-note">Link this server to a Stashr project to move it to another account.</p>}
+      {linked && moveAccountId !== null ? (
+        <MoveServerWizard projectId={linked.id} target={moveTarget} initialTargetAccountId={moveAccountId} open onClose={() => setMoveAccountId(null)} onDone={() => toast.info("Moved. Reopen the server list to see it under the new account.")} />
+      ) : null}
     </section>
   );
 }
