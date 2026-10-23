@@ -339,7 +339,11 @@ const movePath = (projectId) => "/move-server/" + encodeURIComponent(projectId);
 /* Move one Render server to another account, one step per call (plan, create, status, frontends, relink, delete-old). */
 export const movePlan = (projectId, body) => instance.post(movePath(projectId) + "/plan", body, { timeout: 90000 }).then((r) => r.data);
 export const moveCreate = (projectId, body) => instance.post(movePath(projectId) + "/create", body, { timeout: 90000 }).then((r) => r.data);
+export const moveCopyGroups = (projectId, body) => instance.post(movePath(projectId) + "/config/copy-groups", body, { timeout: 180000 }).then((r) => r.data);
 export const moveStatus = (projectId, params) => instance.get(movePath(projectId) + "/status", { params, timeout: 60000 }).then((r) => r.data);
+export const moveOrigin = (projectId, serviceId) => instance.get(movePath(projectId) + "/origin", { params: { serviceId } }).then((r) => r.data);
+export const movePrepareDomains = (projectId, body) => instance.post(movePath(projectId) + "/domains/prepare", body, { timeout: 120000 }).then((r) => r.data);
+export const moveVerifyDomains = (projectId, body) => instance.post(movePath(projectId) + "/domains/verify", body, { timeout: 120000 }).then((r) => r.data);
 export const moveFrontends = (projectId, body) => instance.post(movePath(projectId) + "/frontends", body, { timeout: 180000 }).then((r) => r.data);
 export const moveRelink = (projectId, body) => instance.post(movePath(projectId) + "/relink", body).then((r) => r.data);
 export const moveDeleteOld = (projectId, body) => instance.post(movePath(projectId) + "/delete-old", body, { timeout: 60000 }).then((r) => r.data);

@@ -2,16 +2,25 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Modal } from "react-responsive-modal";
 import "react-responsive-modal/styles.css";
 import { toast } from "react-toastify";
-import { getRenderAccounts, moveCreate, moveDeleteOld, moveFrontends, movePlan, moveRelink, moveStatus } from "../../api/client";
+import { getRenderAccounts, moveCopyGroups, moveCreate, moveDeleteOld, moveFrontends, moveOrigin, movePlan, movePrepareDomains, moveRelink, moveStatus, moveVerifyDomains } from "../../api/client";
 import { errorMessage } from "../../Pages/Render/renderUtils";
 import "./MoveServerWizard.css";
+
+const frontendKey = (item) => String(item.ref || item.envGroupId || item.serviceId) + ":" + (item.secretFile ? "file:" : "var:") + item.key;
+const frontendTarget = (item) => item.ref
+  ? { ref: item.ref, key: item.key }
+  : item.envGroupId
+    ? { accountId: item.accountId, envGroupId: item.envGroupId, key: item.key, secretFile: Boolean(item.secretFile) }
+    : { accountId: item.accountId, serviceId: item.serviceId, key: item.key, secretFile: Boolean(item.secretFile) };
 
 const STEPS = [
   ["plan", "Check the plan"],
   ["create", "Create the new server"],
+  ["config", "Copy environment groups"],
   ["live", "Wait until it is live"],
   ["frontends", "Point the frontends at it"],
-  ["verify", "Check it yourself"],
+  ["domains", "Transfer custom domains"],
+  ["verify", "Verify the new server"],
   ["relink", "Move the project link"],
   ["delete", "Delete the old server"]
 ];
@@ -23,6 +32,7 @@ const STEPS = [
 export default function MoveServerWizard({ projectId, target, open, onClose, onDone }) {
   const serviceId = target.ref.replace(/^render:/, "");
   const [accounts, setAccounts] = useState([]);
+  const [origin, setOrigin] = useState(null);
   const [targetAccountId, setTargetAccountId] = useState("");
   const [ownerId, setOwnerId] = useState("");
   const [plan, setPlan] = useState(null);
@@ -32,8 +42,11 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
   const [created, setCreated] = useState(null);
   const [live, setLive] = useState(null);
   const [picked, setPicked] = useState(new Set());
-  const [redeployFront, setRedeployFront] = useState(true);
   const [frontResult, setFrontResult] = useState(null);
+  const [configResult, setConfigResult] = useState(null);
+  const [domainPrep, setDomainPrep] = useState(null);
+  const [domainCheck, setDomainCheck] = useState(null);
+  const [dnsAcknowledged, setDnsAcknowledged] = useState(false);
   const [verified, setVerified] = useState(false);
   const [typed, setTyped] = useState("");
   const [understood, setUnderstood] = useState(false);
@@ -42,8 +55,44 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
 
   useEffect(() => {
     if (!open) return;
-    getRenderAccounts().then((r) => setAccounts((r.accounts || []).filter((a) => a.id !== target.accountId))).catch(() => setAccounts([]));
-  }, [open, target.accountId]);
+    let cancelled = false;
+    getRenderAccounts().then((r) => { if (!cancelled) setAccounts((r.accounts || []).filter((a) => a.id !== target.accountId)); }).catch(() => { if (!cancelled) setAccounts([]); });
+    const restore = async () => {
+      try {
+        const info = await moveOrigin(projectId, serviceId);
+        if (cancelled) return;
+        setOrigin(info);
+        const m = info.migration;
+        if (!m) return;
+        if (m.stage === "relinked" && m.targetServiceId === serviceId) {
+          setTargetAccountId(m.targetAccountId);
+          setCreated({ serviceId: m.targetServiceId, accountId: m.targetAccountId, name: m.targetName || target.name, url: m.targetUrl || "" });
+          setPlan({ source: { serviceId: m.sourceServiceId, accountId: m.sourceAccountId, name: m.sourceName || "Previous server", accountName: m.sourceAccountName || "", url: m.sourceUrl || "", envCount: 0 }, target: { accountId: m.targetAccountId, accountName: m.targetAccountName || "" } });
+          const s = await moveStatus(projectId, { accountId: m.targetAccountId, serviceId: m.targetServiceId });
+          if (cancelled) return;
+          setLive(s); setStep("delete"); return;
+        }
+        if (m.sourceServiceId !== serviceId || !["created", "config_pending", "domains_preparing", "domains_prepared", "domains_verified"].includes(m.stage)) return;
+        setTargetAccountId(m.targetAccountId);
+        const p = await movePlan(projectId, { serviceId, targetAccountId: m.targetAccountId, ownerId: "", targetServiceId: m.targetServiceId });
+        const s = await moveStatus(projectId, { accountId: m.targetAccountId, serviceId: m.targetServiceId });
+        if (cancelled) return;
+        setPlan(p); setOwnerId(p.target.ownerId || ""); setName(m.targetName || p.source.name);
+        setPicked(new Set(p.frontends.map(frontendKey)));
+        setCreated({ serviceId: m.targetServiceId, accountId: m.targetAccountId, name: m.targetName || s.name, url: s.url || m.targetUrl || "" }); setLive(s);
+        if (m.stage === "created" || m.stage === "config_pending") {
+          setStep(m.configComplete === false ? "config" : s.ready ? "frontends" : "live");
+          return;
+        }
+        if (m.stage === "domains_preparing") { setDomainPrep(null); setStep("domains"); return; }
+        setDomainPrep({ expectedDomains: m.domains || [], domains: [], targetUrl: s.url || m.targetUrl || "", dnsTarget: (() => { try { return new URL(s.url || m.targetUrl).hostname; } catch { return ""; } })(), detachedFromOld: [] });
+        if (m.stage === "domains_verified") { setDomainCheck({ verified: true, domains: [] }); setStep("verify"); }
+        else { setDomainCheck(null); setDnsAcknowledged(false); setStep("domains"); }
+      } catch (e) { if (!cancelled) setError(errorMessage(e, "Could not resume the saved migration. The old server has not been deleted.")); }
+    };
+    void restore();
+    return () => { cancelled = true; };
+  }, [open, target.accountId, target.name, projectId, serviceId]);
 
   const run = async (fn) => {
     setBusy(true); setError("");
@@ -53,12 +102,28 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
   const doPlan = () => run(async () => {
     const p = await movePlan(projectId, { serviceId, targetAccountId, ownerId });
     setPlan(p); setOwnerId(p.target.ownerId); setName(p.source.name);
-    setPicked(new Set(p.frontends.map((f) => f.serviceId + ":" + f.key)));
+    setPicked(new Set(p.frontends.map(frontendKey)));
   });
 
   const doCreate = () => run(async () => {
     const c = await moveCreate(projectId, { serviceId, targetAccountId, ownerId, name });
-    setCreated(c); setStep("live");
+    setCreated(c);
+    setConfigResult(null);
+    setStep(c.configComplete ? "live" : "config");
+  });
+
+  const doCopyGroups = () => run(async () => {
+    if (!created?.serviceId || !created?.accountId) throw new Error("The replacement server has not been created yet.");
+    const result = await moveCopyGroups(projectId, { sourceServiceId: serviceId, targetAccountId: created.accountId, targetServiceId: created.serviceId });
+    setConfigResult(result);
+    if (!result.complete) {
+      const failed = (result.groups || []).filter((g) => !g.copied);
+      throw new Error("Some linked environment groups were not copied. " + failed.map((g) => (g.name || g.sourceGroupId) + ": " + (g.error || "retry required")).join(" · "));
+    }
+    const s = await moveStatus(projectId, { accountId: created.accountId, serviceId: created.serviceId });
+    setLive(s);
+    // The copy step queues a new build. Wait for that deploy to become live before touching frontend config.
+    setStep(result.deployRequested || !s.ready ? "live" : "frontends");
   });
 
   // While the new server builds, ask Render every few seconds.
@@ -67,8 +132,15 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
     try {
       const s = await moveStatus(projectId, { accountId: created.accountId, serviceId: created.serviceId });
       setLive(s);
-      if (s.ready) setStep((cur) => (cur === "live" ? "frontends" : cur));
-      else if (/fail|cancel/.test(s.deploy?.status || "")) setError("The new server's deploy failed. Check it in Render; the old server is untouched.");
+      if (s.ready) {
+        // The new service now exists in Render; refresh the URL-reference inventory so its copied env vars can be migrated too.
+        const refreshedPlan = await movePlan(projectId, { serviceId, targetAccountId: created.accountId, targetServiceId: created.serviceId });
+        setPlan(refreshedPlan);
+        setPicked(new Set(refreshedPlan.frontends.map(frontendKey)));
+        setStep((cur) => (cur === "live" ? "frontends" : cur));
+      } else if (/fail|cancel/.test(s.deploy?.status || "")) {
+        setError("The new server's deploy failed. Check it in Render; the old server is untouched.");
+      }
     } catch (e) { setError(errorMessage(e, "Could not read the new server.")); }
   }, [created, projectId]);
   useEffect(() => {
@@ -80,9 +152,42 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
 
   const newUrl = live?.url || created?.url || "";
   const doFrontends = () => run(async () => {
-    const targets = plan.frontends.filter((f) => picked.has(f.serviceId + ":" + f.key)).map((f) => ({ accountId: f.accountId, serviceId: f.serviceId, key: f.key }));
-    if (targets.length) setFrontResult(await moveFrontends(projectId, { fromUrl: plan.source.url, toUrl: newUrl, targets, deploy: redeployFront }));
-    setStep("verify");
+    const targets = plan.frontends.filter((f) => picked.has(frontendKey(f))).map(frontendTarget);
+    const result = targets.length
+      ? await moveFrontends(projectId, { fromUrl: plan.source.url, toUrl: newUrl, targets, deploy: true })
+      : { changed: 0, results: [] };
+    setFrontResult(result);
+    const failures = (result.results || []).filter((item) => !item.ok);
+    if (failures.length) {
+      setError("Some frontend environment updates or redeploys failed. Fix or retry those services before continuing.");
+      return;
+    }
+    // A custom domain on the client/static site is independent of the backend's Render domain mapping.
+    // Only run the DNS cutover step if the source backend itself has custom domains attached.
+    if (!plan.domains?.length) {
+      const prepared = await movePrepareDomains(projectId, { sourceServiceId: serviceId, targetAccountId: created.accountId, targetServiceId: created.serviceId });
+      setDomainPrep(prepared);
+      setDomainCheck({ verified: true, domains: [] });
+      setStep("verify");
+      return;
+    }
+    setStep("domains");
+  });
+  const doPrepareDomains = () => run(async () => {
+    if (!created?.accountId || !created?.serviceId) throw new Error("The replacement server has not been created yet.");
+    const result = await movePrepareDomains(projectId, { sourceServiceId: serviceId, targetAccountId: created.accountId, targetServiceId: created.serviceId });
+    setDomainPrep(result);
+    setDomainCheck(null);
+    if (!result.expectedDomains?.length) {
+      setDomainCheck({ verified: true, domains: [] });
+      setStep("verify");
+    }
+  });
+  const doVerifyDomains = () => run(async () => {
+    const result = await moveVerifyDomains(projectId, { accountId: created.accountId, serviceId: created.serviceId });
+    setDomainCheck(result);
+    if (result.verified) setStep("verify");
+    else setError("Render has not verified every domain yet. Check the DNS records and try again after propagation.");
   });
   const doRelink = () => run(async () => {
     await moveRelink(projectId, { oldServiceId: serviceId, newAccountId: created.accountId, newServiceId: created.serviceId, newName: live?.name || created.name, newUrl });
@@ -90,13 +195,14 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
     onDone?.();
   });
   const doDelete = () => run(async () => {
-    await moveDeleteOld(projectId, { serviceId, accountId: target.accountId, confirmName: typed });
+    await moveDeleteOld(projectId, { serviceId: plan?.source?.serviceId || serviceId, accountId: plan?.source?.accountId || target.accountId, confirmName: typed, newServiceId: created?.serviceId, newAccountId: created?.accountId });
     toast.success("Moved. The old server is deleted.");
     setStep("done");
     onDone?.();
   });
 
-  const order = STEPS.map((s) => s[0]);
+  const visibleSteps = plan && !plan.domains?.length ? STEPS.filter(([id]) => id !== "domains") : STEPS;
+  const order = visibleSteps.map((s) => s[0]);
   const state = (id) => (step === "done" || order.indexOf(id) < order.indexOf(step) ? "done" : id === step ? "active" : "todo");
 
   return (
@@ -104,7 +210,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
       <h2 className="mv__title">Move {target.name} to another account</h2>
       <p className="field__note">The new server is built first, and the old one is deleted last. You can stop at any step: nothing is deleted until the final one.</p>
       <ol className="mv__steps">
-        {STEPS.map(([id, label]) => <li key={id} className={"is-" + state(id)}><span className="mv__dot">{state(id) === "done" ? "✓" : ""}</span>{label}</li>)}
+        {visibleSteps.map(([id, label]) => <li key={id} className={"is-" + state(id)}><span className="mv__dot">{state(id) === "done" ? "✓" : ""}</span>{label}</li>)}
       </ol>
       {error ? <div className="notice notice--err" role="alert">{error}</div> : null}
 
@@ -114,8 +220,13 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
             <label className="field__label" htmlFor="mv-acc">Move to this account</label>
             <select id="mv-acc" className="input" value={targetAccountId} disabled={busy} onChange={(e) => { setTargetAccountId(e.target.value); setPlan(null); }}>
               <option value="">Choose…</option>
-              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.id === origin?.originalAccountId ? " (original account)" : ""}</option>)}
             </select>
+            {origin?.canReturn && origin.available && accounts.some((a) => a.id === origin.originalAccountId) ? (
+              <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => { setTargetAccountId(origin.originalAccountId); setPlan(null); setOwnerId(""); }}>
+                Return to original account: {origin.originalAccountName || "original"}
+              </button>
+            ) : null}
           </div>
           {!plan ? <button type="button" className="btn btn--primary" disabled={busy || !targetAccountId} onClick={() => void doPlan()}>{busy ? "Checking…" : "Check the plan"}</button> : (
             <>
@@ -123,8 +234,10 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
                 <div><dt>Server</dt><dd>{plan.source.name} · {plan.source.accountName}</dd></div>
                 <div><dt>Address</dt><dd>{plan.source.url || "—"}</dd></div>
                 <div><dt>Branch · plan · region</dt><dd>{[plan.source.branch, plan.source.plan, plan.source.region].filter(Boolean).join(" · ") || "—"}</dd></div>
-                <div><dt>Variables copied</dt><dd>{plan.source.envCount}</dd></div>
-                <div><dt>Frontend variables to update</dt><dd>{plan.frontends.length}</dd></div>
+                <div><dt>Direct environment variables</dt><dd>{plan.source.envCount}</dd></div>
+                <div><dt>Direct secret files</dt><dd>{plan.source.secretFileCount || 0}</dd></div>
+                <div><dt>Linked environment groups</dt><dd>{plan.source.envGroupCount || 0}</dd></div>
+                <div><dt>Connected URL references to review</dt><dd>{plan.frontends.length}</dd></div>
               </dl>
               {plan.warnings.map((w) => <div key={w} className="notice" role="status">{w}</div>)}
               {plan.target.owners.length > 1 ? (
@@ -146,6 +259,18 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
         </div>
       ) : null}
 
+      {step === "config" ? (
+        <div className="mv__panel">
+          <p>Direct environment variables and service-level secret files are copied when the replacement is created. Linked Render Environment Groups need a separate copy so their variables and secret files remain available in the new account.</p>
+          <p><b>Linked groups:</b> {plan?.source?.envGroupCount ?? created?.envGroupCount ?? 0}</p>
+          {plan?.config?.envGroups?.length ? <ul className="mv__refs">{plan.config.envGroups.map((g) => <li key={g.id}><b>{g.name}</b> · {g.envVarCount} variables · {g.secretFileCount} secret files{g.environmentScoped ? " · source environment-scoped" : ""}</li>)}</ul> : null}
+          {plan?.source?.secretFileCount ? <p className="field__note">Copied {plan.source.secretFileCount} direct secret file(s); file contents are not displayed.</p> : null}
+          {configResult?.groups?.length ? <ul className="mv__refs">{configResult.groups.map((g) => <li key={g.sourceGroupId}><b>{g.name}</b> · {g.copied ? "copied" : g.error || "failed"}{g.environmentScopeFlattened ? " · copied as a destination workspace-level group" : ""}</li>)}</ul> : null}
+          <p className="field__note">Render environment IDs are workspace-specific. An environment-scoped group is copied into the target workspace and linked only to the replacement; review its scope if the source group was environment-scoped.</p>
+          <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void doCopyGroups()}>{busy ? "Copying configuration…" : configResult?.complete ? "Verify copied configuration" : (plan?.source?.envGroupCount ?? created?.envGroupCount ?? 0) ? "Copy linked environment groups" : "Confirm configuration"}</button>
+        </div>
+      ) : null}
+
       {step === "live" ? (
         <div className="mv__panel">
           <p>Building <b>{created?.name}</b>… {live?.deploy ? <span className="pdep__pill is-mid">{live.deploy.status.replace(/_/g, " ")}</span> : "starting"}</p>
@@ -161,20 +286,63 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
               <p className="field__note">These variables still hold the old address. Untick any you want to leave.</p>
               <ul className="mv__refs">
                 {plan.frontends.map((f) => {
-                  const key = f.serviceId + ":" + f.key;
-                  return <li key={key}><label><input type="checkbox" checked={picked.has(key)} onChange={() => setPicked((old) => { const n = new Set(old); if (n.has(key)) n.delete(key); else n.add(key); return n; })} /> <b>{f.serviceName}</b> · <code>{f.key}</code> <small>{f.accountName}</small></label></li>;
+                  const key = frontendKey(f);
+                  return <li key={key}><label><input type="checkbox" checked={picked.has(key)} onChange={() => setPicked((old) => { const n = new Set(old); if (n.has(key)) n.delete(key); else n.add(key); return n; })} /> <b>{f.serviceName}</b> · <code>{f.secretFile ? "secret file " : "env "}{f.key}</code> <small>{f.accountName}</small></label></li>;
                 })}
               </ul>
-              <label className="field__note"><input type="checkbox" checked={redeployFront} onChange={(e) => setRedeployFront(e.target.checked)} /> Redeploy these frontends after the change</label>
+              <p className="field__note">Selected variables and secret files will be updated and the affected services redeployed. Warning: a selected shared Render Environment Group changes every service linked to that group, not just this project.</p>
             </>
           ) : <p className="field__note">No other service holds the old address, so there is nothing to change.</p>}
-          <button type="button" className="btn btn--primary" disabled={busy || !newUrl} onClick={() => void doFrontends()}>{busy ? "Updating…" : plan.frontends.length ? "Update the frontends" : "Continue"}</button>
+          {frontResult?.results?.some((item) => !item.ok) ? <div className="notice notice--err" role="alert">{frontResult.results.filter((item) => !item.ok).map((item) => <p key={item.serviceId || item.envGroupId || item.ref || item.key}>{item.serviceName || item.ref || item.serviceId || item.envGroupName}: {item.error || "Update failed"}</p>)}</div> : null}
+          <button type="button" className="btn btn--primary" disabled={busy || !newUrl} onClick={() => void doFrontends()}>{busy ? "Updating…" : frontResult?.results?.some((item) => !item.ok) ? "Retry failed updates" : plan.frontends.length ? "Update the frontends" : "Continue"}</button>
+        </div>
+      ) : null}
+
+      {step === "domains" ? (
+        <div className="mv__panel">
+          <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => setStep("frontends")}>Back to frontend URL updates</button>
+          <p>Custom domains are separate from the generated Render URL. This DNS check is read-only: it reports observed CNAME/A/AAAA records but cannot edit your registrar or DNS provider. Render can transfer the domain mapping, while hard-coded old server URLs inside source code still need manual review.</p>
+          {!domainPrep ? (
+            <>
+              <p>{plan?.domains?.length ? "Domains on the old service: " + plan.domains.map((d) => d.name).join(", ") : "No existing custom domains were found on the old service."}</p>
+              {plan?.domains?.length ? (
+                <>
+                  <p><b>New Render target:</b> <code>{(() => { try { return new URL(newUrl).hostname; } catch { return newUrl || "—"; } })()}</code></p>
+                  <ul className="mv__refs">{plan.domains.map((d) => <li key={d.name}><b>{d.name}</b> · DNS preflight: {d.dns?.status === "points_to_old_target" ? "CNAME still points to the old Render hostname; change it to the new target" : d.dns?.status === "points_to_target" ? "CNAME points to the replacement hostname" : d.dns?.status === "other_cname" ? "CNAME points to a different host; verify this is intentional" : d.domainType === "apex" ? "No CNAME detected; for an apex/root use the provider-specific Render A or ALIAS/ANAME instructions (Cloudflare uses CNAME flattening)" : "No CNAME detected; check the provider-specific subdomain CNAME record"}{d.dns?.cname?.length ? <div className="field__note">CNAME: {d.dns.cname.join(", ")}</div> : null}{d.dns?.a?.length ? <div className="field__note">A: {d.dns.a.join(", ")}</div> : null}{d.dns?.aaaa?.length ? <div className="field__note">AAAA: {d.dns.aaaa.join(", ")} · Render recommends removing AAAA records because it uses IPv4.</div> : null}</li>)}</ul>
+                  <p className="field__note">For a subdomain such as www, set its CNAME to the new Render hostname shown above. For an apex/root domain, follow Render's DNS instructions for your provider: this may be A record 216.24.57.1 or ALIAS/ANAME; Cloudflare uses CNAME flattening. Render uses IPv4, so remove conflicting AAAA records. This tool only reads DNS and cannot edit your DNS provider.</p>
+                  <label className="field__note"><input type="checkbox" checked={dnsAcknowledged} onChange={(e) => setDnsAcknowledged(e.target.checked)} /> I have updated or verified the domain DNS records for the new Render target.</label>
+                </>
+              ) : null}
+              <button type="button" className="btn btn--primary" disabled={busy || Boolean(plan?.domains?.length && !dnsAcknowledged)} onClick={() => void doPrepareDomains()}>{busy ? "Preparing…" : plan?.domains?.length ? "Transfer custom domains to new server" : "Confirm no custom domains"}</button>
+            </>
+          ) : (
+            <>
+              {domainPrep.detachedFromOld?.length ? <div className="notice notice--err" role="alert">Render required these domains to be released from the old service before attaching them to the new one: {domainPrep.detachedFromOld.join(", ")}. Update DNS promptly and verify below; do not delete the old server until verification succeeds.</div> : null}
+              {domainPrep.expectedDomains?.length ? (
+                <>
+                  <p><b>New Render target:</b> <code>{domainPrep.dnsTarget || newUrl}</code></p>
+                  <ul className="mv__refs">
+                    {domainPrep.expectedDomains.map((name) => {
+                      const found = domainPrep.domains?.find((d) => d.name === name);
+                      const status = domainCheck?.domains?.find((d) => d.name === name)?.verificationStatus || found?.verificationStatus || "pending";
+                      return <li key={name}><b>{name}</b> · <span>{status}</span></li>;
+                    })}
+                  </ul>
+                  <p className="field__note">The DNS target should now point at the replacement service. Render verification checks the current DNS configuration; an old service's verified status does not automatically make the new service verified. If verification fails, check the provider records and retry after DNS propagation.</p>
+                  <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void doVerifyDomains()}>{busy ? "Checking…" : "Verify custom domains"}</button>
+                  {domainCheck && !domainCheck.verified ? <p className="field__note">Not all domains are verified yet. DNS propagation can take time; leave the old service in place and retry.</p> : null}
+                </>
+              ) : <p className="field__note">No custom domains need to move. Continue to the service checks.</p>}
+              {!domainPrep.expectedDomains?.length ? <button type="button" className="btn btn--primary" onClick={() => setStep("verify")}>Continue</button> : null}
+            </>
+          )}
         </div>
       ) : null}
 
       {step === "verify" ? (
         <div className="mv__panel">
           {frontResult ? <p className="field__note">Changed {frontResult.changed} variable{frontResult.changed === 1 ? "" : "s"}.</p> : null}
+          {plan?.domains?.length ? <p>Verify the backend custom domains below and confirm the frontend still loads them correctly.</p> : <p>No custom domain is attached to this backend. The existing Stashr client domain stays on the client service; only its backend API URL is being updated here.</p>}
           <p>Open the new address and a frontend, and use one feature that calls the server.</p>
           <p><a href={newUrl} target="_blank" rel="noopener noreferrer">{newUrl}</a></p>
           <label className="field__note"><input type="checkbox" checked={verified} onChange={(e) => setVerified(e.target.checked)} /> I checked it and the new server answers</label>
