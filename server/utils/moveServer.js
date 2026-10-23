@@ -125,7 +125,7 @@ async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "" 
   if (ownerId && !owners.some((o) => o.id === ownerId)) throw fail(400, "That workspace is not in the target account.");
   const chosenOwner = ownerId || (owners.length === 1 ? owners[0].id : "");
 
-  const frontends = (old.serviceDetails?.url ? await findUrlReferences(user, old.serviceDetails.url, { strict: true }) : [])
+  const frontends = (old.serviceDetails?.url ? await findUrlReferences(user, old.serviceDetails.url, { strict: true, projectId }) : [])
     .filter((r) => r.serviceId !== serviceId || r.accountId !== String(src.accountId));
   const warnings = [];
   if (old.suspended === "suspended") warnings.push("The old server is suspended. Resume it first if the new one should replace a running service.");
@@ -328,8 +328,8 @@ async function origin(user, projectId, serviceId) {
 }
 
 /** Points the frontends' variables from the old address to the new one, optionally redeploying them. */
-async function frontends(user, { fromUrl, toUrl, targets, deploy }) {
-  return replaceUrlReferences(user, { fromUrl, toUrl, targets: Array.isArray(targets) ? targets : [], deploy: deploy === true });
+async function frontends(user, projectId, { fromUrl, toUrl, targets, deploy }) {
+  return replaceUrlReferences(user, { projectId, fromUrl, toUrl, targets: Array.isArray(targets) ? targets : [], deploy: deploy === true });
 }
 
 /** Links the project to the new service in place of the old one (the old link is removed, nothing is deleted). */
@@ -381,7 +381,7 @@ async function deleteOld(user, projectId, { serviceId, accountId, confirmName })
   if (newService.suspended === "suspended") throw fail(409, "The replacement server is suspended. The old server will not be deleted.");
   await requireLiveDeploy(targetAccount.apiKey, migration.targetServiceId);
   if (migration.sourceUrl) {
-    const remainingReferences = await findUrlReferences(user, migration.sourceUrl, { strict: true });
+    const remainingReferences = await findUrlReferences(user, migration.sourceUrl, { strict: true, projectId });
     const blocking = remainingReferences.filter((ref) => !(ref.serviceId === serviceId && ref.accountId === String(accountId)));
     if (blocking.length) {
       const sample = blocking.slice(0, 8).map((ref) => ref.serviceName + " · " + ref.key);
