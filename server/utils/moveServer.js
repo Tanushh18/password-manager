@@ -125,8 +125,8 @@ async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "" 
   if (ownerId && !owners.some((o) => o.id === ownerId)) throw fail(400, "That workspace is not in the target account.");
   const chosenOwner = ownerId || (owners.length === 1 ? owners[0].id : "");
 
-  const frontends = (old.serviceDetails?.url ? await findUrlReferences(user, old.serviceDetails.url).catch(() => []) : [])
-    .filter((r) => r.serviceId !== serviceId);
+  const frontends = (old.serviceDetails?.url ? await findUrlReferences(user, old.serviceDetails.url, { strict: true }) : [])
+    .filter((r) => r.serviceId !== serviceId || r.accountId !== String(src.accountId));
   const warnings = [];
   if (old.suspended === "suspended") warnings.push("The old server is suspended. Resume it first if the new one should replace a running service.");
   if (old.serviceDetails?.plan && old.serviceDetails.plan !== "free") warnings.push("The old server is on the “" + old.serviceDetails.plan + "” plan. The new server uses the same plan, so it may bill in the target account.");
@@ -380,6 +380,14 @@ async function deleteOld(user, projectId, { serviceId, accountId, confirmName })
   const newService = await readService(targetAccount.apiKey, migration.targetServiceId);
   if (newService.suspended === "suspended") throw fail(409, "The replacement server is suspended. The old server will not be deleted.");
   await requireLiveDeploy(targetAccount.apiKey, migration.targetServiceId);
+  if (migration.sourceUrl) {
+    const remainingReferences = await findUrlReferences(user, migration.sourceUrl, { strict: true });
+    const blocking = remainingReferences.filter((ref) => !(ref.serviceId === serviceId && ref.accountId === String(accountId)));
+    if (blocking.length) {
+      const sample = blocking.slice(0, 8).map((ref) => ref.serviceName + " · " + ref.key);
+      throw fail(409, "The old server URL is still referenced by frontend/service variables: " + sample.join(", ") + ". Update and redeploy these before deleting the old server.");
+    }
+  }
   const account = accountOf(user, dataKey, accountId);
   if (!account) throw fail(404, "Choose a connected Render account.");
   const service = await readService(account.apiKey, serviceId);
