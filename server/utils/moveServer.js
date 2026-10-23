@@ -180,9 +180,10 @@ async function prepareDomains(user, projectId, { sourceServiceId, targetAccountI
   if (!sourceAccount || !targetAccount) throw fail(422, "A source or target Render account is no longer connected.");
   const targetService = await readService(targetAccount.apiKey, targetServiceId);
   if (targetService.suspended === "suspended") throw fail(409, "The replacement server is suspended. Resume it before moving custom domains.");
-  if (!supportsDomains(targetService.type)) throw fail(422, "Render custom domains are supported only on web services and static sites.");
   const sourceService = await readService(sourceAccount.apiKey, sourceServiceId);
+  const targetSupportsDomains = supportsDomains(targetService.type);
   const sourceDomains = supportsDomains(sourceService.type) ? await listDomains(sourceAccount.apiKey, sourceServiceId) : [];
+  if (sourceDomains.length && !targetSupportsDomains) throw fail(422, "The replacement service type cannot accept the custom domains on the source service.");
   const sameMigration = fields.renderMigration
     && fields.renderMigration.sourceServiceId === sourceServiceId
     && fields.renderMigration.targetServiceId === targetServiceId
@@ -202,7 +203,7 @@ async function prepareDomains(user, projectId, { sourceServiceId, targetAccountI
   };
   await saveProjectFields(user, entry, dataKey, { ...fields, renderMigration: migration });
 
-  let targetDomains = await listDomains(targetAccount.apiKey, targetServiceId);
+  let targetDomains = targetSupportsDomains ? await listDomains(targetAccount.apiKey, targetServiceId) : [];
   const detachedFromOld = [];
   for (const name of migration.domains) {
     if (targetDomains.some((d) => d.name === name)) continue;
@@ -222,9 +223,9 @@ async function prepareDomains(user, projectId, { sourceServiceId, targetAccountI
         throw fail(502, "Could not attach " + name + " to the new service. Stashr attempted to restore it to the old service; check Render before proceeding.");
       }
     }
-    targetDomains = await listDomains(targetAccount.apiKey, targetServiceId);
+    targetDomains = targetSupportsDomains ? await listDomains(targetAccount.apiKey, targetServiceId) : [];
   }
-  targetDomains = await listDomains(targetAccount.apiKey, targetServiceId);
+  targetDomains = targetSupportsDomains ? await listDomains(targetAccount.apiKey, targetServiceId) : [];
   const verified = migration.domains.every((n) => targetDomains.some((d) => d.name === n && d.verificationStatus === "verified"));
   migration.stage = migration.domains.length === 0 || verified ? "domains_verified" : "domains_prepared";
   migration.updatedAt = new Date().toISOString();
@@ -299,7 +300,7 @@ async function relink(user, projectId, { oldServiceId, newAccountId, newServiceI
   }
   const destination = accountOf(user, dataKey, newAccountId);
   if (!destination) throw fail(404, "The target Render account is no longer connected.");
-  const targetDomains = await listDomains(destination.apiKey, newServiceId);
+  const targetDomains = (migration.domains || []).length ? await listDomains(destination.apiKey, newServiceId) : [];
   const missingDomains = (migration.domains || []).filter((name) => !targetDomains.some((d) => d.name === name && d.verificationStatus === "verified"));
   if (missingDomains.length) throw fail(409, "Do not relink yet. These custom domains are not verified on the new service: " + missingDomains.join(", "));
   const sourceAccount = accountOf(user, dataKey, sourceLink.accountId);
@@ -329,7 +330,7 @@ async function deleteOld(user, projectId, { serviceId, accountId, confirmName })
   }
   const targetAccount = accountOf(user, dataKey, migration.targetAccountId);
   if (!targetAccount) throw fail(409, "The destination account is no longer connected; keep the old server until it is restored.");
-  const targetDomainList = await listDomains(targetAccount.apiKey, migration.targetServiceId);
+  const targetDomainList = (migration.domains || []).length ? await listDomains(targetAccount.apiKey, migration.targetServiceId) : [];
   const missingDomains = (migration.domains || []).filter((name) => !targetDomainList.some((d) => d.name === name && d.verificationStatus === "verified"));
   if (missingDomains.length) throw fail(409, "The old server is being kept because these domains are not verified on the replacement: " + missingDomains.join(", "));
   const newService = await readService(targetAccount.apiKey, migration.targetServiceId);
