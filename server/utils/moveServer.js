@@ -25,6 +25,8 @@ const normalizeDomains = (result) => (result.items || []).map((item) => item?.cu
   id: String(item.id || item.name),
   name: String(item.name).toLowerCase(),
   verificationStatus: String(item.verificationStatus || "unknown").toLowerCase(),
+  domainType: String(item.domainType || "").toLowerCase(),
+  publicSuffix: String(item.publicSuffix || ""),
   redirectForName: item.redirectForName || ""
 }));
 async function listDomains(apiKey, serviceId) {
