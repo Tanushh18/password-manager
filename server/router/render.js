@@ -30,7 +30,6 @@ const rateLimit = require("../middlewares/rateLimit");
 
 const router = express.Router();
 const RENDER_API = "https://api.render.com";
-const MAX_ACCOUNTS = 10;
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 90, message: "Too many Render dashboard requests. Please slow down." });
 const text = (value, max = 200) => typeof value === "string" ? value.trim().slice(0, max) : "";
 
@@ -415,9 +414,6 @@ router.post("/render/accounts", async (req, res) => {
   const apiKey = typeof req.body.apiKey === "string" ? req.body.apiKey.trim() : "";
   if (!apiKey || apiKey.length > 4096 || /[\r\n]/.test(apiKey)) {
     return res.status(400).json({ error: "Enter a valid Render API key." });
-  }
-  if ((req.rootUser.renderAccounts || []).length >= MAX_ACCOUNTS) {
-    return res.status(400).json({ error: "You can connect up to 10 Render accounts." });
   }
   try {
     // Validate the credential before saving it. The key is never returned in this response.
