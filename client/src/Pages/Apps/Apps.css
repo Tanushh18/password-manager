@@ -1,0 +1,8 @@
+.apps__doc { padding: clamp(1.6rem, 5vw, 3rem); }
+.apps__doc h1 { font-size: clamp(2rem, 5vw, 2.8rem); margin: 0.4rem 0 0.8rem; }
+.apps__doc h2 { font-size: 1.25rem; margin: 1.8rem 0 0.6rem; }
+.apps__doc p, .apps__doc li { color: var(--text-muted); line-height: 1.75; }
+.apps__doc ul, .apps__doc ol { padding-left: 1.2rem; display: grid; gap: 0.45rem; }
+.apps__doc strong { color: var(--heading); }
+.apps__download { display: inline-block; margin-top: 1rem; }
+.apps__note { margin-top: 1.4rem; font-size: 0.9rem; }

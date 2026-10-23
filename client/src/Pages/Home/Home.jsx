@@ -41,7 +41,7 @@ const PREVIEW = [
 ];
 
 const ANDROID_URL =
-  import.meta.env.VITE_ANDROID_URL || import.meta.env.REACT_APP_ANDROID_URL || "https://github.com/tanushh18/password-manager/releases/latest";
+  import.meta.env.VITE_ANDROID_URL || import.meta.env.REACT_APP_ANDROID_URL || "/apps";
 
 function Home() {
   const { status, profile, items } = useVault();
@@ -140,7 +140,7 @@ function Home() {
             <h2 className="hm-section__title" style={{ marginBottom: "0.35rem" }}>Stashr for Android</h2>
             <p className="hm-android__body">Fingerprint unlock, one-tap copy and autofill in other apps. Same account as the website.</p>
           </div>
-          <a className="btn btn--primary" href={ANDROID_URL} target="_blank" rel="noopener noreferrer">
+          <a className="btn btn--primary" href={ANDROID_URL}>
             Get the app <Arrow size={15} />
           </a>
         </div>

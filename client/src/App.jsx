@@ -25,6 +25,7 @@ const Cron = lazy(() => import("./Pages/Cron/Cron"));
 const Forgot = lazy(() => import("./Pages/Forgot/Forgot"));
 const RenderDashboard = lazy(() => import("./Pages/Render/RenderDashboard"));
 import Privacy from "./Pages/Privacy/Privacy";
+import Apps from "./Pages/Apps/Apps";
 import Logout from "./Pages/Logout/Logout";
 import PhotoCloud from "./Pages/PhotoCloud/PhotoCloud";
 import PhotoShare from "./Pages/PhotoCloud/PhotoShare";
@@ -111,6 +112,7 @@ export default function App() {
           <Route path="/services" element={<RequireVault><Suspense fallback={<Splash />}><Services /></Suspense></RequireVault>} />
           <Route path="/cron" element={<RequireVault><Suspense fallback={<Splash />}><Cron /></Suspense></RequireVault>} />
           <Route path="/render" element={<RequireVault><Suspense fallback={<Splash />}><RenderDashboard /></Suspense></RequireVault>} />
+          <Route path="/apps" element={<Apps />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/logout" element={<Logout />} />
           <Route path="*" element={<Navigate to="/" replace />} />

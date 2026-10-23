@@ -3,11 +3,11 @@
     "name": "Stashr",
     "slug": "aurelia-vault",
     "scheme": "stashr",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "backgroundColor": "#0D0303",
+    "backgroundColor": "#0F1113",
     "description": "Stashr — a private vault for every password and project. Same account and server as the Stashr website.",
     "ios": {
       "supportsTablet": true,
@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "com.tanush.stashr.com",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#31AAA9"
@@ -42,7 +42,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0D0303",
+          "backgroundColor": "#0F1113",
           "image": "./assets/splash-icon.png",
           "imageWidth": 180
         }
