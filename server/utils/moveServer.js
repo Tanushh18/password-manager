@@ -246,7 +246,7 @@ async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "",
     dns: await inspectDomainDns(domain.name, old.serviceDetails?.url || "", replacementUrl)
   })));
 
-  const owners = (await renderRequest(target.apiKey, "/v1/owners?limit=20") || []).map((o) => o?.owner || o).filter((o) => o?.id).map((o) => ({ id: o.id, name: String(o.name || o.id), type: o.type || "" }));
+  const owners = (await renderRequest(target.apiKey, "/v1/owners?limit=100") || []).map((o) => o?.owner || o).filter((o) => o?.id).map((o) => ({ id: o.id, name: String(o.name || o.id), type: o.type || "" }));
   if (!owners.length) throw fail(422, "No Render workspace was found in the target account.");
   if (ownerId && !owners.some((o) => o.id === ownerId)) throw fail(400, "That workspace is not in the target account.");
   const chosenOwner = ownerId || (owners.length === 1 ? owners[0].id : "");
