@@ -94,6 +94,16 @@ async function readService(apiKey, id) {
   return raw?.service || raw;
 }
 
+async function requireLiveDeploy(apiKey, serviceId) {
+  let rows;
+  try { rows = await renderRequest(apiKey, servicePath(serviceId) + "/deploys?limit=1"); }
+  catch { throw fail(409, "The replacement deployment status could not be confirmed. Keep the old server until Render reports Live."); }
+  const deploy = (Array.isArray(rows) ? rows : []).map((row) => row?.deploy || row).find(Boolean);
+  if (!deploy || String(deploy.status || "").toLowerCase() !== "live") {
+    throw fail(409, "The replacement server's latest deployment is not Live. The old server will be kept.");
+  }
+}
+
 /** Everything the user needs to decide, with no variable values in the answer. */
 async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "" }) {
   if (!safeId(serviceId)) throw fail(400, "Invalid service.");
@@ -333,6 +343,7 @@ async function relink(user, projectId, { oldServiceId, newAccountId, newServiceI
   }
   const destination = accountOf(user, dataKey, newAccountId);
   if (!destination) throw fail(404, "The target Render account is no longer connected.");
+  await requireLiveDeploy(destination.apiKey, newServiceId);
   const targetDomains = (migration.domains || []).length ? await listDomains(destination.apiKey, newServiceId) : [];
   const missingDomains = missingVerifiedDomains(migration.domains, targetDomains);
   if (missingDomains.length) throw fail(409, "Do not relink yet. These custom domains are not verified on the new service: " + missingDomains.join(", "));
@@ -368,6 +379,7 @@ async function deleteOld(user, projectId, { serviceId, accountId, confirmName })
   if (missingDomains.length) throw fail(409, "The old server is being kept because these domains are not verified on the replacement: " + missingDomains.join(", "));
   const newService = await readService(targetAccount.apiKey, migration.targetServiceId);
   if (newService.suspended === "suspended") throw fail(409, "The replacement server is suspended. The old server will not be deleted.");
+  await requireLiveDeploy(targetAccount.apiKey, migration.targetServiceId);
   const account = accountOf(user, dataKey, accountId);
   if (!account) throw fail(404, "Choose a connected Render account.");
   const service = await readService(account.apiKey, serviceId);
