@@ -24,6 +24,15 @@ router.post("/move-server/:projectId/create", async (req, res) => {
   try { return ok(res, await move.create(req.rootUser, req.params.projectId, { serviceId: text(req.body?.serviceId, 160), targetAccountId: text(req.body?.targetAccountId, 40), ownerId: text(req.body?.ownerId, 160), name: text(req.body?.name, 60) })); }
   catch (error) { return send(res, error); }
 });
+router.post("/move-server/:projectId/config/copy-groups", async (req, res) => {
+  try {
+    return ok(res, await move.copyEnvGroups(req.rootUser, req.params.projectId, {
+      sourceServiceId: text(req.body?.sourceServiceId, 160),
+      targetAccountId: text(req.body?.targetAccountId, 40),
+      targetServiceId: text(req.body?.targetServiceId, 160)
+    }));
+  } catch (error) { return send(res, error); }
+});
 router.get("/move-server/:projectId/status", async (req, res) => {
   try { return ok(res, await move.status(req.rootUser, req.params.projectId, { accountId: text(req.query.accountId, 40), serviceId: text(req.query.serviceId, 160) })); }
   catch (error) { return send(res, error); }
