@@ -225,6 +225,8 @@ async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "",
 
   const old = await readService(from.apiKey, serviceId);
   if (!supportsDomains(old.type)) throw fail(422, "Only Render web services and static sites can be migrated by this wizard today. This service type will not be silently converted.");
+  if (old.environmentId || old.serviceDetails?.environmentId) throw fail(422, "This service belongs to a Render Environment. Recreate the destination environment isolation before migrating.");
+  if (old.disk || old.serviceDetails?.disk) throw fail(422, "This service has a persistent disk. Migrate and verify its data separately before moving the service.");
   let replacementUrl = "";
   if (targetServiceId) {
     const existingMigration = fields.renderMigration;
@@ -290,6 +292,8 @@ async function create(user, projectId, { serviceId, targetAccountId, ownerId, na
   const envVars = await listDirectEnvVars(from.apiKey, serviceId);
   const secretFiles = await listDirectSecretFiles(from.apiKey, serviceId);
   const sourceGroups = await listLinkedEnvGroups(from.apiKey, old.ownerId, serviceId);
+  const owners = (await renderRequest(target.apiKey, "/v1/owners?limit=100") || []).map((item) => item?.owner || item).filter((item) => item?.id);
+  if (!owners.some((owner) => String(owner.id) === String(ownerId))) throw fail(400, "The selected workspace does not belong to the destination Render account.");
   // Read all source dependencies before creation so an API/permission error cannot create a partial destination.
   const sourceDomains = supportsDomains(old.type) ? await listDomains(from.apiKey, serviceId) : [];
   const originId = originalAccountId(fields, serviceId, src.accountId);
