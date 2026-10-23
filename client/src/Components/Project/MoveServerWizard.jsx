@@ -2,18 +2,21 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Modal } from "react-responsive-modal";
 import "react-responsive-modal/styles.css";
 import { toast } from "react-toastify";
-import { getRenderAccounts, moveCreate, moveDeleteOld, moveFrontends, moveOrigin, movePlan, movePrepareDomains, moveRelink, moveStatus, moveVerifyDomains } from "../../api/client";
+import { getRenderAccounts, moveCopyGroups, moveCreate, moveDeleteOld, moveFrontends, moveOrigin, movePlan, movePrepareDomains, moveRelink, moveStatus, moveVerifyDomains } from "../../api/client";
 import { errorMessage } from "../../Pages/Render/renderUtils";
 import "./MoveServerWizard.css";
 
-const frontendKey = (item) => String(item.ref || item.serviceId) + ":" + item.key;
+const frontendKey = (item) => String(item.ref || item.envGroupId || item.serviceId) + ":" + (item.secretFile ? "file:" : "var:") + item.key;
 const frontendTarget = (item) => item.ref
   ? { ref: item.ref, key: item.key }
-  : { accountId: item.accountId, serviceId: item.serviceId, key: item.key };
+  : item.envGroupId
+    ? { accountId: item.accountId, envGroupId: item.envGroupId, key: item.key, secretFile: Boolean(item.secretFile) }
+    : { accountId: item.accountId, serviceId: item.serviceId, key: item.key, secretFile: Boolean(item.secretFile) };
 
 const STEPS = [
   ["plan", "Check the plan"],
   ["create", "Create the new server"],
+  ["config", "Copy environment groups"],
   ["live", "Wait until it is live"],
   ["frontends", "Point the frontends at it"],
   ["domains", "Transfer custom domains"],
@@ -40,6 +43,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
   const [live, setLive] = useState(null);
   const [picked, setPicked] = useState(new Set());
   const [frontResult, setFrontResult] = useState(null);
+  const [configResult, setConfigResult] = useState(null);
   const [domainPrep, setDomainPrep] = useState(null);
   const [domainCheck, setDomainCheck] = useState(null);
   const [dnsAcknowledged, setDnsAcknowledged] = useState(false);
@@ -68,7 +72,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
           if (cancelled) return;
           setLive(s); setStep("delete"); return;
         }
-        if (m.sourceServiceId !== serviceId || !["created", "domains_preparing", "domains_prepared", "domains_verified"].includes(m.stage)) return;
+        if (m.sourceServiceId !== serviceId || !["created", "config_pending", "domains_preparing", "domains_prepared", "domains_verified"].includes(m.stage)) return;
         setTargetAccountId(m.targetAccountId);
         const p = await movePlan(projectId, { serviceId, targetAccountId: m.targetAccountId, ownerId: "" });
         const s = await moveStatus(projectId, { accountId: m.targetAccountId, serviceId: m.targetServiceId });
@@ -76,7 +80,10 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
         setPlan(p); setOwnerId(p.target.ownerId || ""); setName(m.targetName || p.source.name);
         setPicked(new Set(p.frontends.map(frontendKey)));
         setCreated({ serviceId: m.targetServiceId, accountId: m.targetAccountId, name: m.targetName || s.name, url: s.url || m.targetUrl || "" }); setLive(s);
-        if (m.stage === "created") { setStep(s.ready ? "frontends" : "live"); return; }
+        if (m.stage === "created" || m.stage === "config_pending") {
+          setStep(m.configComplete === false ? "config" : s.ready ? "frontends" : "live");
+          return;
+        }
         if (m.stage === "domains_preparing") { setDomainPrep(null); setStep("domains"); return; }
         setDomainPrep({ expectedDomains: m.domains || [], domains: [], targetUrl: s.url || m.targetUrl || "", dnsTarget: (() => { try { return new URL(s.url || m.targetUrl).hostname; } catch { return ""; } })(), detachedFromOld: [] });
         if (m.stage === "domains_verified") { setDomainCheck({ verified: true, domains: [] }); setStep("verify"); }
@@ -100,7 +107,22 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
 
   const doCreate = () => run(async () => {
     const c = await moveCreate(projectId, { serviceId, targetAccountId, ownerId, name });
-    setCreated(c); setStep("live");
+    setCreated(c);
+    setConfigResult(null);
+    setStep(c.configComplete ? "live" : "config");
+  });
+
+  const doCopyGroups = () => run(async () => {
+    if (!created?.serviceId || !created?.accountId) throw new Error("The replacement server has not been created yet.");
+    const result = await moveCopyGroups(projectId, { sourceServiceId: serviceId, targetAccountId: created.accountId, targetServiceId: created.serviceId });
+    setConfigResult(result);
+    if (!result.complete) {
+      const failed = (result.groups || []).filter((g) => !g.copied);
+      throw new Error("Some linked environment groups were not copied. " + failed.map((g) => (g.name || g.sourceGroupId) + ": " + (g.error || "retry required")).join(" · "));
+    }
+    const s = await moveStatus(projectId, { accountId: created.accountId, serviceId: created.serviceId });
+    setLive(s);
+    setStep(s.ready ? "frontends" : "live");
   });
 
   // While the new server builds, ask Render every few seconds.
@@ -201,8 +223,10 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
                 <div><dt>Server</dt><dd>{plan.source.name} · {plan.source.accountName}</dd></div>
                 <div><dt>Address</dt><dd>{plan.source.url || "—"}</dd></div>
                 <div><dt>Branch · plan · region</dt><dd>{[plan.source.branch, plan.source.plan, plan.source.region].filter(Boolean).join(" · ") || "—"}</dd></div>
-                <div><dt>Variables copied</dt><dd>{plan.source.envCount}</dd></div>
-                <div><dt>Frontend variables to update</dt><dd>{plan.frontends.length}</dd></div>
+                <div><dt>Direct environment variables</dt><dd>{plan.source.envCount}</dd></div>
+                <div><dt>Direct secret files</dt><dd>{plan.source.secretFileCount || 0}</dd></div>
+                <div><dt>Linked environment groups</dt><dd>{plan.source.envGroupCount || 0}</dd></div>
+                <div><dt>Connected URL references to review</dt><dd>{plan.frontends.length}</dd></div>
               </dl>
               {plan.warnings.map((w) => <div key={w} className="notice" role="status">{w}</div>)}
               {plan.target.owners.length > 1 ? (
@@ -224,6 +248,18 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
         </div>
       ) : null}
 
+      {step === "config" ? (
+        <div className="mv__panel">
+          <p>Direct environment variables and service-level secret files are copied when the replacement is created. Linked Render Environment Groups need a separate copy so their variables and secret files remain available in the new account.</p>
+          <p><b>Linked groups:</b> {plan?.source?.envGroupCount ?? created?.envGroupCount ?? 0}</p>
+          {plan?.config?.envGroups?.length ? <ul className="mv__refs">{plan.config.envGroups.map((g) => <li key={g.id}><b>{g.name}</b> · {g.envVarCount} variables · {g.secretFileCount} secret files{g.environmentScoped ? " · source environment-scoped" : ""}</li>)}</ul> : null}
+          {plan?.source?.secretFileCount ? <p className="field__note">Copied {plan.source.secretFileCount} direct secret file(s); file contents are not displayed.</p> : null}
+          {configResult?.groups?.length ? <ul className="mv__refs">{configResult.groups.map((g) => <li key={g.sourceGroupId}><b>{g.name}</b> · {g.copied ? "copied" : g.error || "failed"}{g.environmentScopeFlattened ? " · copied as a destination workspace-level group" : ""}</li>)}</ul> : null}
+          <p className="field__note">Render environment IDs are workspace-specific. An environment-scoped group is copied into the target workspace and linked only to the replacement; review its scope if the source group was environment-scoped.</p>
+          <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void doCopyGroups()}>{busy ? "Copying configuration…" : configResult?.complete ? "Verify copied configuration" : (plan?.source?.envGroupCount ?? created?.envGroupCount ?? 0) ? "Copy linked environment groups" : "Confirm configuration"}</button>
+        </div>
+      ) : null}
+
       {step === "live" ? (
         <div className="mv__panel">
           <p>Building <b>{created?.name}</b>… {live?.deploy ? <span className="pdep__pill is-mid">{live.deploy.status.replace(/_/g, " ")}</span> : "starting"}</p>
@@ -240,7 +276,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
               <ul className="mv__refs">
                 {plan.frontends.map((f) => {
                   const key = frontendKey(f);
-                  return <li key={key}><label><input type="checkbox" checked={picked.has(key)} onChange={() => setPicked((old) => { const n = new Set(old); if (n.has(key)) n.delete(key); else n.add(key); return n; })} /> <b>{f.serviceName}</b> · <code>{f.key}</code> <small>{f.accountName}</small></label></li>;
+                  return <li key={key}><label><input type="checkbox" checked={picked.has(key)} onChange={() => setPicked((old) => { const n = new Set(old); if (n.has(key)) n.delete(key); else n.add(key); return n; })} /> <b>{f.serviceName}</b> · <code>{f.secretFile ? "secret file " : "env "}{f.key}</code> <small>{f.accountName}</small></label></li>;
                 })}
               </ul>
               <p className="field__note">Selected frontend variables will be updated and those services will be redeployed automatically.</p>
@@ -254,13 +290,14 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
       {step === "domains" ? (
         <div className="mv__panel">
           <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => setStep("frontends")}>Back to frontend URL updates</button>
-          <p>Custom domains are separate from the generated Render URL. Render can transfer the domain mapping, but DNS records live with your domain provider. Hard-coded old server URLs inside source code are not changed by environment-variable updates.</p>
+          <p>Custom domains are separate from the generated Render URL. This DNS check is read-only: it reports observed CNAME/A/AAAA records but cannot edit your registrar or DNS provider. Render can transfer the domain mapping, while hard-coded old server URLs inside source code still need manual review.</p>
           {!domainPrep ? (
             <>
               <p>{plan?.domains?.length ? "Domains on the old service: " + plan.domains.map((d) => d.name).join(", ") : "No existing custom domains were found on the old service."}</p>
               {plan?.domains?.length ? (
                 <>
                   <p><b>New Render target:</b> <code>{(() => { try { return new URL(newUrl).hostname; } catch { return newUrl || "—"; } })()}</code></p>
+                  <ul className="mv__refs">{plan.domains.map((d) => <li key={d.name}><b>{d.name}</b> · DNS: {d.dns?.status === "points_to_old_target" ? "CNAME still points to old Render hostname" : d.dns?.status === "points_to_target" ? "CNAME points to replacement hostname" : d.dns?.status === "other_cname" ? "CNAME points to a different host" : "no CNAME detected; apex/ALIAS can use A records"}{d.dns?.cname?.length ? <div className="field__note">CNAME: {d.dns.cname.join(", ")}</div> : null}{d.dns?.a?.length ? <div className="field__note">A: {d.dns.a.join(", ")}</div> : null}{d.dns?.aaaa?.length ? <div className="field__note">AAAA: {d.dns.aaaa.join(", ")} · remove conflicting AAAA records if Render instructs you to.</div> : null}</li>)}</ul>
                   <p className="field__note">Before the mapping is moved, update each affected domain's DNS target from the old .onrender.com hostname to this new hostname. For apex/root domains, use the exact provider-specific DNS instructions shown by Render; remove conflicting records if Render instructs you to do so.</p>
                   <label className="field__note"><input type="checkbox" checked={dnsAcknowledged} onChange={(e) => setDnsAcknowledged(e.target.checked)} /> I have updated or verified the domain DNS records for the new Render target.</label>
                 </>
