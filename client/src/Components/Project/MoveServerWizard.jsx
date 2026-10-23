@@ -74,7 +74,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
         }
         if (m.sourceServiceId !== serviceId || !["created", "config_pending", "domains_preparing", "domains_prepared", "domains_verified"].includes(m.stage)) return;
         setTargetAccountId(m.targetAccountId);
-        const p = await movePlan(projectId, { serviceId, targetAccountId: m.targetAccountId, ownerId: "" });
+        const p = await movePlan(projectId, { serviceId, targetAccountId: m.targetAccountId, ownerId: "", targetServiceId: m.targetServiceId });
         const s = await moveStatus(projectId, { accountId: m.targetAccountId, serviceId: m.targetServiceId });
         if (cancelled) return;
         setPlan(p); setOwnerId(p.target.ownerId || ""); setName(m.targetName || p.source.name);
@@ -122,7 +122,8 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
     }
     const s = await moveStatus(projectId, { accountId: created.accountId, serviceId: created.serviceId });
     setLive(s);
-    setStep(s.ready ? "frontends" : "live");
+    // The copy step queues a new build. Wait for that deploy to become live before touching frontend config.
+    setStep(result.deployRequested || !s.ready ? "live" : "frontends");
   });
 
   // While the new server builds, ask Render every few seconds.
@@ -341,6 +342,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
       {step === "verify" ? (
         <div className="mv__panel">
           {frontResult ? <p className="field__note">Changed {frontResult.changed} variable{frontResult.changed === 1 ? "" : "s"}.</p> : null}
+          {plan?.domains?.length ? <p>Verify the backend custom domains below and confirm the frontend still loads them correctly.</p> : <p>No custom domain is attached to this backend. The existing Stashr client domain stays on the client service; only its backend API URL is being updated here.</p>}
           <p>Open the new address and a frontend, and use one feature that calls the server.</p>
           <p><a href={newUrl} target="_blank" rel="noopener noreferrer">{newUrl}</a></p>
           <label className="field__note"><input type="checkbox" checked={verified} onChange={(e) => setVerified(e.target.checked)} /> I checked it and the new server answers</label>
