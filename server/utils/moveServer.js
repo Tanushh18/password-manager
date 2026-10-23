@@ -246,6 +246,7 @@ async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "",
   if (domains.length) warnings.push("Custom domains are attached to the old service. The previous verified status does not automatically verify the replacement; DNS must point at the new Render hostname before final verification.");
   if (envGroups.some((group) => group.environmentId)) warnings.push("Some linked environment groups are scoped to a Render environment. Their values will be copied into destination groups linked only to this server; the source environment scope cannot be carried across accounts automatically.");
   if (secretFiles.length) warnings.push("Direct secret files will be copied to the new service. Review any certificates or keys whose contents are rotated or tied to a specific environment.");
+  warnings.push("This workflow recreates the web/static service, its readable direct environment variables, direct secret files and linked environment groups. It does not transfer database contents, Redis/Key Value data, external provider resources or persistent-disk data; persistent-disk services are blocked until their data is migrated separately.");
 
   const originId = originalAccountId(fields, serviceId, src.accountId);
   const originAccount = accountOf(user, dataKey, originId);
