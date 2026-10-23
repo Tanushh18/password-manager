@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
-import { getDeployHistory, getDeployLogs, getGithubAccounts, getGithubBranches, getHostAccounts, getRenderAccounts, moveDeployAccount, setDeployBranch } from "../../api/client";
+import { getDeployHistory, getDeployLogs, getGithubAccounts, getGithubBranches, getHostAccounts, getRenderAccounts, setDeployBranch } from "../../api/client";
 import { timeAgo, safeUrl, errorMessage } from "../../Pages/Render/renderUtils";
 
 export const hostOf = (url) => String(url || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
@@ -51,7 +51,7 @@ export function StatusPill({ target }) {
 }
 
 /** Which connected account this server is read through (Render or the same host). Hidden when there is only one. */
-export function AccountPicker({ projectId, target, onDone }) {
+export function AccountPicker({ projectId, target, onDone, onMove }) {
   const [accounts, setAccounts] = useState(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -64,6 +64,11 @@ export function AccountPicker({ projectId, target, onDone }) {
     if (accountId === target.accountId) return;
     setBusy(true);
     try {
+      if (target.provider === "render") {
+        // A Render service cannot be moved by changing the account reference; create a replacement instead.
+        if (typeof onMove === "function") onMove(accountId);
+        return;
+      }
       await moveDeployAccount(projectId, target.ref, accountId);
       toast.success("Now read through " + (accounts.find((a) => a.id === accountId)?.name || "that account") + ".");
       onDone();
@@ -71,7 +76,7 @@ export function AccountPicker({ projectId, target, onDone }) {
     finally { setBusy(false); }
   };
   return (
-    <select className="input pdep__account" value={target.accountId} disabled={busy} aria-label={"Account for " + target.name} onChange={(e) => void change(e.target.value)}>
+    <select className="input pdep__account" value={target.accountId} disabled={busy} aria-label={target.provider === "render" ? "Move " + target.name + " to another account" : "Account for " + target.name} onChange={(e) => void change(e.target.value)}>
       {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
       {!accounts.some((a) => a.id === target.accountId) ? <option value={target.accountId}>{target.accountName || "Unknown account"}</option> : null}
     </select>
