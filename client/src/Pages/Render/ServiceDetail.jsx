@@ -66,6 +66,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
   const [envGroups, setEnvGroups] = useState([]);
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncTarget, setSyncTarget] = useState("all");
+  const [syncDirection, setSyncDirection] = useState("to");
   const [syncOverwrite, setSyncOverwrite] = useState(false);
   const [syncDeploy, setSyncDeploy] = useState(true);
   const [syncBusy, setSyncBusy] = useState(false);
@@ -272,30 +273,37 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
   };
 
   const syncEnv = async () => {
-    const targets = syncTarget === "all" ? siblings : siblings.filter((s) => serviceKey(s) === syncTarget);
-    const source = envVars.filter((v) => !v.remove && !v.isNew && v.key && v.originalValue !== "");
-    if (!targets.length) { toast.info("Pick a server to sync to."); return; }
-    if (!source.length) { toast.info("This server has no variables with a value to copy."); return; }
+    const others = syncTarget === "all" ? siblings : siblings.filter((s) => serviceKey(s) === syncTarget);
+    const push = syncDirection === "to"; // "to": this server is the source; "from": this server receives
+    const own = envVars.filter((v) => !v.remove && !v.isNew && v.key && v.originalValue !== "");
+    if (!others.length) { toast.info("Pick a server to sync with."); return; }
+    if (push && !own.length) { toast.info("This server has no variables with a value to copy."); return; }
+    const names = others.map((t) => t.name).join(", ");
     const ok = await askConfirm({
       title: "Sync environment variables?",
-      message: "Copy " + (syncOverwrite ? "all " + source.length + " variables from " : "the variables that are missing from ") + service.name + " to " + targets.map((t) => t.name).join(", ") + (syncOverwrite ? ", replacing values that already exist there" : ". Existing values are not changed") + "." + (syncDeploy ? " Servers that receive changes are redeployed." : ""),
+      message: (push ? "Copy " + (syncOverwrite ? "all variables" : "the missing variables") + " from " + service.name + " to " + names : "Copy " + (syncOverwrite ? "all variables" : "the missing variables") + " from " + names + " to " + service.name) + (syncOverwrite ? ", replacing values that already exist" : ". Existing values are not changed") + "." + (syncDeploy ? " Servers that receive changes are redeployed." : ""),
       confirmLabel: "Sync", danger: syncOverwrite
     });
     if (!ok) return;
     setSyncBusy(true);
     const report = [];
+    const readEnv = async (svc) => normalizeList(await getRenderEnvVars(svc.accountId, svc.id), "envVar").map((v) => ({ key: v.key || "", value: v.value || "" })).filter((v) => v.key);
+    const copy = async (from, to) => {
+      const source = from === service ? own.map((v) => ({ key: v.key, value: v.originalValue })) : (await readEnv(from)).filter((v) => v.value !== "");
+      const have = new Map((to === service ? envVars.filter((v) => !v.isNew).map((v) => ({ key: v.key, value: v.originalValue })) : await readEnv(to)).map((v) => [v.key, v.value]));
+      const todo = source.filter((v) => syncOverwrite ? have.get(v.key) !== v.value : !have.has(v.key));
+      for (const v of todo) await updateRenderEnvVar(to.accountId, to.id, v.key, v.value);
+      let deployed = false;
+      if (todo.length && syncDeploy && serviceState(to, incidentKeys) !== "suspended") { try { await triggerRenderDeploy(to.accountId, to.id, false); deployed = true; } catch { /* the variables are saved either way */ } }
+      return to.name + ": " + todo.length + " synced" + (deployed ? ", deploying" : "");
+    };
     try {
-      for (const target of targets) {
-        try {
-          const have = new Map(normalizeList(await getRenderEnvVars(target.accountId, target.id), "envVar").map((v) => [v.key, v.value || ""]));
-          const todo = source.filter((v) => syncOverwrite ? have.get(v.key) !== v.originalValue : !have.has(v.key));
-          for (const v of todo) await updateRenderEnvVar(target.accountId, target.id, v.key, v.originalValue);
-          let deployed = false;
-          if (todo.length && syncDeploy && serviceState(target, incidentKeys) !== "suspended") { try { await triggerRenderDeploy(target.accountId, target.id, false); deployed = true; } catch { /* the variables are saved either way */ } }
-          report.push(target.name + ": " + todo.length + " synced" + (deployed ? ", deploying" : ""));
-        } catch (e) { report.push(target.name + ": failed (" + errorMessage(e, "error") + ")"); }
+      for (const other of others) {
+        try { report.push(push ? await copy(service, other) : await copy(other, service)); }
+        catch (e) { report.push((push ? other.name : service.name) + ": failed (" + errorMessage(e, "error") + ")"); }
       }
       toast.info(report.join(" · "), { autoClose: 9000 });
+      if (!push) await loadEnv();
     } finally { setSyncBusy(false); void onAudit(); }
   };
 
@@ -636,7 +644,11 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
             <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setNewEnv((v) => !v)} aria-expanded={newEnv}>＋ Add variable</button>
           </div>
           {syncOpen && siblings.length > 0 && <div className="rd-listbox">
-            <strong>Sync from {service.name} to</strong>
+            <strong>Sync environment variables</strong>
+            <select className="rd-field" aria-label="Sync direction" value={syncDirection} onChange={(e) => setSyncDirection(e.target.value)}>
+              <option value="to">From {service.name} (this server) → to the server below</option>
+              <option value="from">From the server below → to {service.name} (this server)</option>
+            </select>
             <select className="rd-field" aria-label="Server to sync to" value={syncTarget} onChange={(e) => setSyncTarget(e.target.value)}>
               <option value="all">All {siblings.length} other server{siblings.length === 1 ? "" : "s"} of this repo</option>
               {siblings.map((t) => <option key={serviceKey(t)} value={serviceKey(t)}>{t.name} · {t.accountName || "account"}{serviceState(t, incidentKeys) === "suspended" ? " (suspended)" : ""}</option>)}
