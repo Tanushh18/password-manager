@@ -24,19 +24,25 @@ function accountsOf(user, dataKey) {
   return (user.renderAccounts || []).filter((e) => e.enc === "udk").map((e) => ({ id: String(e._id), ...User.publicEntry(e, dataKey) })).filter((a) => a.apiKey);
 }
 
-async function findUrlReferences(user, fromUrl) {
+async function findUrlReferences(user, fromUrl, { strict = false } = {}) {
   const host = hostOf(fromUrl);
   if (!host) throw Object.assign(new Error("Enter the old address."), { status: 400 });
   const dataKey = await user.getDataKey();
   const refs = [];
   for (const account of accountsOf(user, dataKey)) {
     let services = [];
-    try { services = (await fetchAllPages((p) => renderRequest(account.apiKey, p), "/v1/services")).items.map((i) => i?.service || i).filter((s) => s?.id); } catch { continue; }
+    try { services = (await fetchAllPages((p) => renderRequest(account.apiKey, p), "/v1/services")).items.map((i) => i?.service || i).filter((s) => s?.id); }
+    catch {
+      if (strict) throw Object.assign(new Error("Could not scan one connected Render account for old URL references. Check its connection before continuing."), { status: 502 });
+      continue;
+    }
     await mapWithConcurrency(services, 3, async (s) => {
       try {
         const vars = (await fetchAllPages((p) => renderRequest(account.apiKey, p), "/v1/services/" + encodeURIComponent(s.id) + "/env-vars")).items.map((i) => i?.envVar || i);
         for (const v of vars) if (v && typeof v.value === "string" && v.value.toLowerCase().includes(host)) refs.push({ accountId: account.id, accountName: account.name || "", serviceId: s.id, serviceName: s.name, type: s.type || "", key: v.key, suspended: s.suspended === "suspended" });
-      } catch { /* unreadable service: skipped */ }
+      } catch {
+        if (strict) throw Object.assign(new Error("Could not scan a connected service's environment variables safely. Retry after checking its Render access."), { status: 502 });
+      }
     });
   }
   return refs.sort((a, b) => a.serviceName.localeCompare(b.serviceName) || a.key.localeCompare(b.key));
