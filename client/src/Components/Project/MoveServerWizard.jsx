@@ -247,6 +247,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
 
       {step === "domains" ? (
         <div className="mv__panel">
+          <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => setStep("frontends")}>Back to frontend URL updates</button>
           <p>Custom domains are separate from the generated Render URL. The wizard transfers the Render domain mapping and verifies it, but DNS records live with your domain provider. Hard-coded old server URLs inside source code are not changed by environment-variable updates.</p>
           {!domainPrep ? (
             <>
