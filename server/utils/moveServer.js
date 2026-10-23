@@ -351,8 +351,8 @@ async function relink(user, projectId, { oldServiceId, newAccountId, newServiceI
   const { entry, dataKey, fields } = await loadProject(user, projectId);
   const sourceLink = linkedSource(fields, oldServiceId);
   const migration = fields.renderMigration;
-  if (!migration || migration.sourceServiceId !== oldServiceId || migration.targetServiceId !== newServiceId || migration.targetAccountId !== String(newAccountId)) {
-    throw fail(409, "Prepare the replacement and custom-domain handoff before relinking the project.");
+  if (!migration || migration.stage !== "domains_verified" || migration.sourceServiceId !== oldServiceId || migration.targetServiceId !== newServiceId || migration.targetAccountId !== String(newAccountId)) {
+    throw fail(409, "Prepare the replacement, DNS handoff and custom-domain verification before relinking the project.");
   }
   const destination = accountOf(user, dataKey, newAccountId);
   if (!destination) throw fail(404, "The target Render account is no longer connected.");
@@ -360,6 +360,14 @@ async function relink(user, projectId, { oldServiceId, newAccountId, newServiceI
   const targetDomains = (migration.domains || []).length ? await listDomains(destination.apiKey, newServiceId) : [];
   const missingDomains = missingVerifiedDomains(migration.domains, targetDomains);
   if (missingDomains.length) throw fail(409, "Do not relink yet. These custom domains are not verified on the new service: " + missingDomains.join(", "));
+  if (migration.sourceUrl) {
+    const remainingReferences = await findUrlReferences(user, migration.sourceUrl, { strict: true, projectId });
+    const blocking = remainingReferences.filter((ref) => !(ref.serviceId === oldServiceId && ref.accountId === String(sourceLink.accountId)));
+    if (blocking.length) {
+      const sample = blocking.slice(0, 8).map((ref) => (ref.serviceName || ref.ref || ref.serviceId) + " · " + ref.key);
+      throw fail(409, "Do not relink yet. Update and redeploy frontend/service variables still pointing at the old URL: " + sample.join(", "));
+    }
+  }
   const sourceAccount = accountOf(user, dataKey, sourceLink.accountId);
   const others = (Array.isArray(fields.renderServices) ? fields.renderServices : []).filter((s) => s && s.serviceId !== oldServiceId && s.serviceId !== newServiceId);
   const added = { accountId: String(newAccountId), serviceId: newServiceId, name: String(newName || newServiceId), url: /^https:\/\//i.test(String(newUrl || "")) ? newUrl : "", suspended: false };
