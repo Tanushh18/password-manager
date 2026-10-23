@@ -37,16 +37,20 @@ async function listDomains(apiKey, serviceId) {
 async function listDirectEnvVars(apiKey, serviceId) {
   const result = await fetchAllPages((path) => renderRequest(apiKey, path), servicePath(serviceId) + "/env-vars", { limit: 100, maxPages: 10 });
   if (result.truncated) throw fail(422, "Environment-variable pagination was incomplete. No migration was started.");
-  return result.items.map((item) => item?.envVar || item)
-    .filter((item) => item && typeof item.key === "string" && typeof item.value === "string")
-    .map((item) => ({ key: item.key, value: item.value }));
+  const rows = result.items.map((item) => item?.envVar || item).filter((item) => item && typeof item.key === "string");
+  if (rows.some((item) => typeof item.value !== "string")) {
+    throw fail(422, "Render did not return every direct environment-variable value. No partial copy was started.");
+  }
+  return rows.map((item) => ({ key: item.key, value: item.value }));
 }
 async function listDirectSecretFiles(apiKey, serviceId) {
   const result = await fetchAllPages((path) => renderRequest(apiKey, path), servicePath(serviceId) + "/secret-files", { limit: 100, maxPages: 10 });
   if (result.truncated) throw fail(422, "Secret-file pagination was incomplete. No migration was started.");
-  return result.items.map((item) => item?.secretFile || item)
-    .filter((item) => item && typeof item.name === "string" && typeof item.content === "string")
-    .map((item) => ({ name: item.name, content: item.content }));
+  const rows = result.items.map((item) => item?.secretFile || item).filter((item) => item && typeof item.name === "string");
+  if (rows.some((item) => typeof item.content !== "string")) {
+    throw fail(422, "Render did not return every direct secret-file content. No partial copy was started.");
+  }
+  return rows.map((item) => ({ name: item.name, content: item.content }));
 }
 async function listLinkedEnvGroups(apiKey, ownerId, serviceId) {
   const query = ownerId ? "?ownerId=" + encodeURIComponent(ownerId) : "";
@@ -67,8 +71,16 @@ async function listLinkedEnvGroups(apiKey, ownerId, serviceId) {
       id: String(group.id || listed.id),
       name: String(group.name || listed.name || listed.id),
       environmentId: group.environmentId ? String(group.environmentId) : "",
-      envVars: group.envVars.filter((v) => v && typeof v.key === "string" && typeof v.value === "string").map((v) => ({ key: v.key, value: v.value })),
-      secretFiles: group.secretFiles.filter((v) => v && typeof v.name === "string" && typeof v.content === "string").map((v) => ({ name: v.name, content: v.content }))
+      envVars: (() => {
+        const rows = group.envVars.filter((v) => v && typeof v.key === "string");
+        if (rows.some((v) => typeof v.value !== "string")) throw fail(422, "Render did not return every environment-group variable value.");
+        return rows.map((v) => ({ key: v.key, value: v.value }));
+      })(),
+      secretFiles: (() => {
+        const rows = group.secretFiles.filter((v) => v && typeof v.name === "string");
+        if (rows.some((v) => typeof v.content !== "string")) throw fail(422, "Render did not return every environment-group secret-file content.");
+        return rows.map((v) => ({ name: v.name, content: v.content }));
+      })()
     });
   }
   return details;
