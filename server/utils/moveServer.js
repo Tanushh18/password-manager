@@ -138,7 +138,7 @@ async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "" 
 /** Creates the new service in the target account. Returns its id and address; the old one is untouched. */
 async function create(user, projectId, { serviceId, targetAccountId, ownerId, name = "" }) {
   if (!safeId(serviceId) || !ownerId) throw fail(400, "Choose the source server and the target workspace.");
-  const { dataKey, fields } = await loadProject(user, projectId);
+  const { entry, dataKey, fields } = await loadProject(user, projectId);
   const src = linkedSource(fields, serviceId);
   const from = accountOf(user, dataKey, src.accountId);
   const target = accountOf(user, dataKey, targetAccountId);
@@ -151,6 +151,16 @@ async function create(user, projectId, { serviceId, targetAccountId, ownerId, na
     const raw = await renderRequest(target.apiKey, "/v1/services", { method: "POST", body: payloadFrom(old, envVars, ownerId, wanted) });
     const created = raw?.service || raw;
     if (!created?.id) throw fail(502, "Render did not return the new service.");
+    const sourceDomains = supportsDomains(old.type) ? await listDomains(from.apiKey, serviceId) : [];
+    const migration = {
+      sourceServiceId: serviceId, sourceAccountId: String(src.accountId), sourceAccountName: from.name,
+      sourceName: old.name || serviceId, sourceUrl: old.serviceDetails?.url || src.url || "",
+      targetServiceId: String(created.id), targetAccountId: target.id, targetAccountName: target.name,
+      targetName: created.name || wanted, targetUrl: created.serviceDetails?.url || "",
+      domains: sourceDomains.map((domain) => domain.name),
+      stage: "created", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    };
+    await saveProjectFields(user, entry, dataKey, { ...fields, renderMigration: migration });
     return { serviceId: created.id, name: created.name || wanted, accountId: target.id, url: created.serviceDetails?.url || "", envCount: envVars.length };
   } catch (error) {
     throw fail(error.status === 400 || error.status === 409 || error.status === 422 ? 422 : 502, error.message || "Render could not create the new server. Check the name and the workspace.");
@@ -282,7 +292,7 @@ async function origin(user, projectId, serviceId) {
   const original = accountOf(user, dataKey, originId);
   const savedMigration = fields.renderMigration;
   const migrationMatches = savedMigration && (savedMigration.sourceServiceId === serviceId || savedMigration.targetServiceId === serviceId)
-    && ["domains_preparing", "domains_prepared", "domains_verified", "relinked"].includes(savedMigration.stage);
+    && ["created", "domains_preparing", "domains_prepared", "domains_verified", "relinked"].includes(savedMigration.stage);
   const migration = migrationMatches ? {
     stage: savedMigration.stage,
     sourceServiceId: savedMigration.sourceServiceId,
