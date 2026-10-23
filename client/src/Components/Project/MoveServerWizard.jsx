@@ -34,7 +34,6 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
   const [created, setCreated] = useState(null);
   const [live, setLive] = useState(null);
   const [picked, setPicked] = useState(new Set());
-  const [redeployFront, setRedeployFront] = useState(true);
   const [frontResult, setFrontResult] = useState(null);
   const [domainPrep, setDomainPrep] = useState(null);
   const [domainCheck, setDomainCheck] = useState(null);
@@ -119,7 +118,15 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
   const newUrl = live?.url || created?.url || "";
   const doFrontends = () => run(async () => {
     const targets = plan.frontends.filter((f) => picked.has(f.serviceId + ":" + f.key)).map((f) => ({ accountId: f.accountId, serviceId: f.serviceId, key: f.key }));
-    if (targets.length) setFrontResult(await moveFrontends(projectId, { fromUrl: plan.source.url, toUrl: newUrl, targets, deploy: redeployFront }));
+    const result = targets.length
+      ? await moveFrontends(projectId, { fromUrl: plan.source.url, toUrl: newUrl, targets, deploy: true })
+      : { changed: 0, results: [] };
+    setFrontResult(result);
+    const failures = (result.results || []).filter((item) => !item.ok);
+    if (failures.length) {
+      setError("Some frontend environment updates or redeploys failed. Fix or retry those services before continuing.");
+      return;
+    }
     setStep("domains");
   });
   const doPrepareDomains = () => run(async () => {
@@ -225,16 +232,17 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
                   return <li key={key}><label><input type="checkbox" checked={picked.has(key)} onChange={() => setPicked((old) => { const n = new Set(old); if (n.has(key)) n.delete(key); else n.add(key); return n; })} /> <b>{f.serviceName}</b> · <code>{f.key}</code> <small>{f.accountName}</small></label></li>;
                 })}
               </ul>
-              <label className="field__note"><input type="checkbox" checked={redeployFront} onChange={(e) => setRedeployFront(e.target.checked)} /> Redeploy these frontends after the change</label>
+              <p className="field__note">Selected frontend variables will be updated and those services will be redeployed automatically.</p>
             </>
           ) : <p className="field__note">No other service holds the old address, so there is nothing to change.</p>}
-          <button type="button" className="btn btn--primary" disabled={busy || !newUrl} onClick={() => void doFrontends()}>{busy ? "Updating…" : plan.frontends.length ? "Update the frontends" : "Continue"}</button>
+          {frontResult?.results?.some((item) => !item.ok) ? <div className="notice notice--err" role="alert">{frontResult.results.filter((item) => !item.ok).map((item) => <p key={item.serviceId}>Service {item.serviceId}: {item.error || "Update failed"}</p>)}</div> : null}
+          <button type="button" className="btn btn--primary" disabled={busy || !newUrl} onClick={() => void doFrontends()}>{busy ? "Updating…" : frontResult?.results?.some((item) => !item.ok) ? "Retry failed updates" : plan.frontends.length ? "Update the frontends" : "Continue"}</button>
         </div>
       ) : null}
 
       {step === "domains" ? (
         <div className="mv__panel">
-          <p>Custom domains are separate from the generated Render URL. The wizard transfers the domain mapping, but your DNS provider may still need a target change before the domain reaches the replacement.</p>
+          <p>Custom domains are separate from the generated Render URL. The wizard transfers the Render domain mapping and verifies it, but DNS records live with your domain provider. Hard-coded old server URLs inside source code are not changed by environment-variable updates.</p>
           {!domainPrep ? (
             <>
               <p>{plan?.domains?.length ? "Domains on the old service: " + plan.domains.map((d) => d.name).join(", ") : "No existing custom domains were found on the old service."}</p>
