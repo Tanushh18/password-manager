@@ -78,6 +78,13 @@ function linkedSource(fields, serviceId) {
   return hit;
 }
 
+function originalAccountId(fields, serviceId, currentAccountId) {
+  const previous = fields?.renderMigration;
+  if (previous?.targetServiceId === serviceId && previous.originAccountId) return String(previous.originAccountId);
+  if (fields?.renderServiceId === serviceId && fields?.renderAccountOriginId) return String(fields.renderAccountOriginId);
+  return String(currentAccountId);
+}
+
 /** Create-service body from the old service, so the new one matches it: same repo, branch, runtime, commands, region and variables. */
 function payloadFrom(old, envVars, ownerId, name) {
   const d = old.serviceDetails || {};
@@ -133,7 +140,7 @@ async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "" 
   if (!old.serviceDetails?.url) warnings.push("The old server has no public address yet, so there is no frontend address to replace.");
   if (domains.length) warnings.push("Custom domains are attached to the old service. Transfer and verify every domain on the new service before deleting the old one; DNS settings are managed by your DNS provider.");
 
-  const originId = fields.renderAccountOriginId || src.accountId;
+  const originId = originalAccountId(fields, serviceId, src.accountId);
   const originAccount = accountOf(user, dataKey, originId);
   return {
     source: { serviceId, accountId: String(src.accountId), name: old.name, accountName: from.name, url: old.serviceDetails?.url || "", branch: old.branch || "", type: old.type || "", plan: old.serviceDetails?.plan || "", region: old.serviceDetails?.region || "", envCount, live: old.suspended !== "suspended" },
@@ -156,17 +163,20 @@ async function create(user, projectId, { serviceId, targetAccountId, ownerId, na
   const old = await readService(from.apiKey, serviceId);
   const envList = await fetchAllPages((p) => renderRequest(from.apiKey, p), servicePath(serviceId) + "/env-vars");
   const envVars = envList.items.map((i) => i?.envVar || i).filter((i) => i && typeof i.key === "string" && typeof i.value === "string").map((i) => ({ key: i.key, value: i.value }));
+  // Read the source domain list before creating anything so a permissions/API error cannot leave an untracked replacement server.
+  const sourceDomains = supportsDomains(old.type) ? await listDomains(from.apiKey, serviceId) : [];
+  const originId = originalAccountId(fields, serviceId, src.accountId);
   const wanted = String(name || "").trim().slice(0, 60) || old.name;
   try {
     const raw = await renderRequest(target.apiKey, "/v1/services", { method: "POST", body: payloadFrom(old, envVars, ownerId, wanted) });
     const created = raw?.service || raw;
     if (!created?.id) throw fail(502, "Render did not return the new service.");
-    const sourceDomains = supportsDomains(old.type) ? await listDomains(from.apiKey, serviceId) : [];
     const migration = {
       sourceServiceId: serviceId, sourceAccountId: String(src.accountId), sourceAccountName: from.name,
       sourceName: old.name || serviceId, sourceUrl: old.serviceDetails?.url || src.url || "",
       targetServiceId: String(created.id), targetAccountId: target.id, targetAccountName: target.name,
       targetName: created.name || wanted, targetUrl: created.serviceDetails?.url || "",
+      originAccountId: String(originId),
       domains: sourceDomains.map((domain) => domain.name),
       stage: "created", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     };
@@ -213,9 +223,11 @@ async function prepareDomains(user, projectId, { sourceServiceId, targetAccountI
     && fields.renderMigration.sourceServiceId === sourceServiceId
     && fields.renderMigration.targetServiceId === targetServiceId
     && fields.renderMigration.targetAccountId === targetAccount.id;
-  const expectedNames = sameMigration && Array.isArray(fields.renderMigration.domains) && fields.renderMigration.domains.length
-    ? fields.renderMigration.domains
-    : sourceDomains.map((d) => d.name);
+  // Preserve names from an interrupted transfer (the old mapping may already have been detached) and include any newly attached domains.
+  const expectedNames = [...new Set([
+    ...(sameMigration && Array.isArray(fields.renderMigration.domains) ? fields.renderMigration.domains : []),
+    ...sourceDomains.map((d) => d.name)
+  ].map((name) => String(name).toLowerCase()))];
   const migration = {
     ...(sameMigration ? fields.renderMigration : {}),
     sourceServiceId, sourceAccountId: String(src.accountId), sourceAccountName: sourceAccount.name, sourceName: sourceService.name || src.name || sourceServiceId,
@@ -298,11 +310,11 @@ async function origin(user, projectId, serviceId) {
   const { dataKey, fields } = await loadProject(user, projectId);
   const linked = linkedSource(fields, serviceId);
   const current = accountOf(user, dataKey, linked.accountId);
-  const originId = String(fields.renderAccountOriginId || linked.accountId);
+  const originId = originalAccountId(fields, serviceId, linked.accountId);
   const original = accountOf(user, dataKey, originId);
   const savedMigration = fields.renderMigration;
   const migrationMatches = savedMigration && (savedMigration.sourceServiceId === serviceId || savedMigration.targetServiceId === serviceId)
-    && ["created", "domains_preparing", "domains_prepared", "domains_verified", "relinked"].includes(savedMigration.stage);
+    && ["created", "domains_preparing", "domains_prepared", "domains_verified", "relinked", "complete"].includes(savedMigration.stage);
   const migration = migrationMatches ? {
     stage: savedMigration.stage,
     sourceServiceId: savedMigration.sourceServiceId,
@@ -315,6 +327,7 @@ async function origin(user, projectId, serviceId) {
     targetAccountName: savedMigration.targetAccountName || "",
     targetName: savedMigration.targetName || "",
     targetUrl: savedMigration.targetUrl || "",
+    originAccountId: savedMigration.originAccountId || originId,
     domains: Array.isArray(savedMigration.domains) ? savedMigration.domains : []
   } : null;
   return {
@@ -355,8 +368,8 @@ async function relink(user, projectId, { oldServiceId, newAccountId, newServiceI
     next.renderAccountId = String(newAccountId); next.renderServiceId = newServiceId; next.renderServiceName = added.name;
   }
   if (!next.renderAccountOriginId) {
-    next.renderAccountOriginId = String(sourceLink.accountId);
-    next.renderAccountOriginName = sourceAccount?.name || "";
+    next.renderAccountOriginId = String(migration.originAccountId || sourceLink.accountId);
+    next.renderAccountOriginName = accountOf(user, dataKey, next.renderAccountOriginId)?.name || sourceAccount?.name || "";
   }
   next.renderMigration = { ...migration, stage: "relinked", relinkedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   await saveProjectFields(user, entry, dataKey, next);
