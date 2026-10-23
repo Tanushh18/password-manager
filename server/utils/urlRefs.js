@@ -69,8 +69,13 @@ async function replaceUrlReferences(user, { fromUrl, toUrl, targets = [], deploy
         changed += 1;
       }
       let deployed = false;
-      if (deploy && changed) { try { await renderRequest(account.apiKey, base + "/deploys", { method: "POST", body: { clearCache: "do_not_clear" } }); deployed = true; } catch { /* variables are saved */ } }
-      results.push({ serviceId: svc.serviceId, ok: true, changed, deployed });
+      let deployError = "";
+      // Retry deploys even when variables already match: a previous attempt may have saved them but failed to deploy.
+      if (deploy && svc.keys.size) {
+        try { await renderRequest(account.apiKey, base + "/deploys", { method: "POST", body: { clearCache: "do_not_clear" } }); deployed = true; }
+        catch { deployError = "Variables were saved, but the frontend redeploy failed. Retry this migration step before continuing."; }
+      }
+      results.push({ serviceId: svc.serviceId, ok: !deployError, changed, deployed, ...(deployError ? { error: deployError } : {}) });
     } catch (error) { results.push({ serviceId: svc.serviceId, ok: false, error: error?.message || "Render refused the change." }); }
   }
   return { results, changed: results.reduce((n, r) => n + (r.changed || 0), 0) };
