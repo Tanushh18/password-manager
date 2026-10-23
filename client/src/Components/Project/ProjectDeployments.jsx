@@ -30,6 +30,8 @@ export default function ProjectDeployments({ project }) {
   const [syncFrom, setSyncFrom] = useState(null);
   const [copyFor, setCopyFor] = useState(null);
   const [moveFor, setMoveFor] = useState(null);
+  const [moveTargetAccountId, setMoveTargetAccountId] = useState("");
+  const [moveTargetSnapshot, setMoveTargetSnapshot] = useState(null);
   const [openLogs, setOpenLogs] = useState(() => new Set());
   const [busyRef, setBusyRef] = useState("");
 
@@ -131,7 +133,7 @@ export default function ProjectDeployments({ project }) {
                       <td>
                         <strong>{t.name}</strong>
                         <div><PlatformBadge target={t} /></div>
-                        <AccountPicker projectId={project.id} target={t} onDone={() => void load({ quiet: true })} />
+                        <AccountPicker projectId={project.id} target={t} onDone={() => void load({ quiet: true })} onMove={(accountId) => { setMoveTargetAccountId(accountId); setMoveTargetSnapshot(t); setMoveFor(t.ref); }} />
                       </td>
                       <td><UrlMenu urls={[t.url]} /></td>
                       <td><StatusPill target={t} />{t.error ? <small className="pdep__err">{t.error}</small> : null}</td>
@@ -143,7 +145,7 @@ export default function ProjectDeployments({ project }) {
                           <button type="button" className="btn btn--ghost btn--sm" aria-expanded={logsOpen} onClick={() => toggleLogs(t.ref)}>{logsOpen ? "Hide logs" : "Logs"}</button>
                           {t.capabilities?.env ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => setCopyFor(t.ref)}>Copy env</button> : null}
                           <button type="button" className="btn btn--ghost btn--sm" disabled={busyRef === t.ref} onClick={() => void redeploy(t)}>{busyRef === t.ref ? "Deploying…" : "Redeploy"}</button>
-                          {t.provider !== "render" ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => void unlink(t)}>Unlink</button> : <button type="button" className="btn btn--ghost btn--sm" onClick={() => setMoveFor(t.ref)}>Move to account</button>}
+                          {t.provider !== "render" ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => void unlink(t)}>Unlink</button> : <button type="button" className="btn btn--ghost btn--sm" onClick={() => { setMoveTargetAccountId(""); setMoveTargetSnapshot(t); setMoveFor(t.ref); }}>Move to account</button>}
                           {t.dashboardUrl ? <a href={t.dashboardUrl} target="_blank" rel="noopener noreferrer" aria-label={"Open " + t.name + " on " + t.label}>{t.label} ↗</a> : null}
                         </div>
                       </td>
@@ -162,7 +164,7 @@ export default function ProjectDeployments({ project }) {
       {list.some((t) => t.provider === "render") ? <RenderMatrix project={project} /> : null}
 
       {syncFrom ? <EnvGroupSync projectId={project.id} targets={list} initialSource={syncFrom} open={Boolean(syncFrom)} onClose={() => setSyncFrom(null)} onDone={() => { setCompare(null); void load({ quiet: true }); }} /> : null}
-      {moveFor ? <MoveServerWizard projectId={project.id} target={list.find((t) => t.ref === moveFor)} open={Boolean(moveFor)} onClose={() => setMoveFor(null)} onDone={() => { setCompare(null); void load({ quiet: true }); }} /> : null}
+      {moveFor ? <MoveServerWizard projectId={project.id} target={list.find((t) => t.ref === moveFor) || moveTargetSnapshot} initialTargetAccountId={moveTargetAccountId} open={Boolean(moveFor)} onClose={() => { setMoveFor(null); setMoveTargetAccountId(""); setMoveTargetSnapshot(null); }} onDone={() => { setCompare(null); void load({ quiet: true }); }} /> : null}
       {copyFor ? <ServerEnvCopy projectId={project.id} target={list.find((t) => t.ref === copyFor)} targets={list} open={Boolean(copyFor)} onClose={() => setCopyFor(null)} onDone={() => { setCompare(null); void load({ quiet: true }); }} /> : null}
     </section>
   );
