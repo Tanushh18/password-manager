@@ -69,7 +69,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
     if (!open) return;
     let cancelled = false;
     setInitializing(true);
-    getRenderAccounts().then((r) => { if (!cancelled) setAccounts((r.accounts || []).filter((a) => a.id !== target.accountId)); }).catch(() => { if (!cancelled) setAccounts([]); });
+    const accountsRequest = getRenderAccounts().then((r) => { if (!cancelled) setAccounts((r.accounts || []).filter((a) => a.id !== target.accountId)); }).catch(() => { if (!cancelled) setAccounts([]); });
     const restore = async () => {
       try {
         const info = await moveOrigin(projectId, serviceId);
@@ -102,7 +102,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
         if (m.stage === "domains_verified") { setDomainCheck({ verified: true, domains: [] }); setStep("verify"); }
         else { setDomainCheck(null); setDnsAcknowledged(false); setStep("domains"); }
       } catch (e) { if (!cancelled) setError(errorMessage(e, "Could not resume the saved migration. The old server has not been deleted.")); }
-      finally { if (!cancelled) setInitializing(false); }
+      finally { await accountsRequest; if (!cancelled) setInitializing(false); }
     };
     void restore();
     return () => { cancelled = true; };
