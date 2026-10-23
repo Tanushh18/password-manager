@@ -37,14 +37,18 @@ async function findUrlReferences(user, fromUrl, { strict = false, projectId = ""
       if (strict) throw Object.assign(new Error("Could not scan one connected Render account for old URL references. Check its connection before continuing."), { status: 502 });
       continue;
     }
-    await mapWithConcurrency(services, 3, async (s) => {
+    const scanResults = await mapWithConcurrency(services, 3, async (s) => {
       try {
         const vars = (await fetchAllPages((p) => renderRequest(account.apiKey, p), "/v1/services/" + encodeURIComponent(s.id) + "/env-vars")).items.map((i) => i?.envVar || i);
         for (const v of vars) if (v && typeof v.value === "string" && v.value.toLowerCase().includes(host)) refs.push({ accountId: account.id, accountName: account.name || "", serviceId: s.id, serviceName: s.name, type: s.type || "", key: v.key, suspended: s.suspended === "suspended" });
+        return { ok: true };
       } catch {
-        if (strict) throw Object.assign(new Error("Could not scan a connected service's environment variables safely. Retry after checking its Render access."), { status: 502 });
+        return { ok: false };
       }
     });
+    if (strict && scanResults.some((result) => result?.ok === false)) {
+      throw Object.assign(new Error("Could not scan a connected service's environment variables safely. Retry after checking its Render access."), { status: 502 });
+    }
   }
   // Linked Vercel, Netlify, Railway and Cloudflare Pages frontends also need their environment updated.
   if (projectId) {
