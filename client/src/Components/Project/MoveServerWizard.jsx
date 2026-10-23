@@ -139,7 +139,6 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
     const result = await movePrepareDomains(projectId, { sourceServiceId: serviceId, targetAccountId: created.accountId, targetServiceId: created.serviceId });
     setDomainPrep(result);
     setDomainCheck(null);
-    setDnsAcknowledged(false);
     if (!result.expectedDomains?.length) {
       setDomainCheck({ verified: true, domains: [] });
       setStep("verify");
@@ -248,11 +247,18 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
       {step === "domains" ? (
         <div className="mv__panel">
           <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => setStep("frontends")}>Back to frontend URL updates</button>
-          <p>Custom domains are separate from the generated Render URL. The wizard transfers the Render domain mapping and verifies it, but DNS records live with your domain provider. Hard-coded old server URLs inside source code are not changed by environment-variable updates.</p>
+          <p>Custom domains are separate from the generated Render URL. Render can transfer the domain mapping, but DNS records live with your domain provider. Hard-coded old server URLs inside source code are not changed by environment-variable updates.</p>
           {!domainPrep ? (
             <>
               <p>{plan?.domains?.length ? "Domains on the old service: " + plan.domains.map((d) => d.name).join(", ") : "No existing custom domains were found on the old service."}</p>
-              <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void doPrepareDomains()}>{busy ? "Preparing…" : plan?.domains?.length ? "Attach custom domains to new server" : "Confirm no custom domains"}</button>
+              {plan?.domains?.length ? (
+                <>
+                  <p><b>New Render target:</b> <code>{(() => { try { return new URL(newUrl).hostname; } catch { return newUrl || "—"; } })()}</code></p>
+                  <p className="field__note">Before the mapping is moved, update each affected domain's DNS target from the old .onrender.com hostname to this new hostname. For apex/root domains, use the exact provider-specific DNS instructions shown by Render; remove conflicting records if Render instructs you to do so.</p>
+                  <label className="field__note"><input type="checkbox" checked={dnsAcknowledged} onChange={(e) => setDnsAcknowledged(e.target.checked)} /> I have updated or verified the domain DNS records for the new Render target.</label>
+                </>
+              ) : null}
+              <button type="button" className="btn btn--primary" disabled={busy || Boolean(plan?.domains?.length && !dnsAcknowledged)} onClick={() => void doPrepareDomains()}>{busy ? "Preparing…" : plan?.domains?.length ? "Transfer custom domains to new server" : "Confirm no custom domains"}</button>
             </>
           ) : (
             <>
@@ -267,9 +273,8 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
                       return <li key={name}><b>{name}</b> · <span>{status}</span></li>;
                     })}
                   </ul>
-                  <p className="field__note">At your DNS provider, update any CNAME/ALIAS record that targets the old .onrender.com hostname to the new target shown above. Apex/root domains may instead use Render's recommended A record, so follow the DNS instructions for that domain and provider rather than changing records blindly. Domain verification from the old service does not by itself route traffic to this service.</p>
-                  <label className="field__note"><input type="checkbox" checked={dnsAcknowledged} onChange={(e) => setDnsAcknowledged(e.target.checked)} /> I updated/reviewed the DNS records for the new Render target.</label>
-                  <button type="button" className="btn btn--primary" disabled={busy || !dnsAcknowledged} onClick={() => void doVerifyDomains()}>{busy ? "Checking…" : "Verify custom domains"}</button>
+                  <p className="field__note">The DNS target should now point at the replacement service. Render verification checks the current DNS configuration; an old service's verified status does not automatically make the new service verified. If verification fails, check the provider records and retry after DNS propagation.</p>
+                  <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void doVerifyDomains()}>{busy ? "Checking…" : "Verify custom domains"}</button>
                   {domainCheck && !domainCheck.verified ? <p className="field__note">Not all domains are verified yet. DNS propagation can take time; leave the old service in place and retry.</p> : null}
                 </>
               ) : <p className="field__note">No custom domains need to move. Continue to the service checks.</p>}
