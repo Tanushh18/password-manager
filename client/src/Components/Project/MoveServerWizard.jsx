@@ -6,6 +6,11 @@ import { getRenderAccounts, moveCreate, moveDeleteOld, moveFrontends, moveOrigin
 import { errorMessage } from "../../Pages/Render/renderUtils";
 import "./MoveServerWizard.css";
 
+const frontendKey = (item) => String(item.ref || item.serviceId) + ":" + item.key;
+const frontendTarget = (item) => item.ref
+  ? { ref: item.ref, key: item.key }
+  : { accountId: item.accountId, serviceId: item.serviceId, key: item.key };
+
 const STEPS = [
   ["plan", "Check the plan"],
   ["create", "Create the new server"],
@@ -69,7 +74,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
         const s = await moveStatus(projectId, { accountId: m.targetAccountId, serviceId: m.targetServiceId });
         if (cancelled) return;
         setPlan(p); setOwnerId(p.target.ownerId || ""); setName(m.targetName || p.source.name);
-        setPicked(new Set(p.frontends.map((item) => item.serviceId + ":" + item.key)));
+        setPicked(new Set(p.frontends.map(frontendKey)));
         setCreated({ serviceId: m.targetServiceId, accountId: m.targetAccountId, name: m.targetName || s.name, url: s.url || m.targetUrl || "" }); setLive(s);
         if (m.stage === "created") { setStep(s.ready ? "frontends" : "live"); return; }
         if (m.stage === "domains_preparing") { setDomainPrep(null); setStep("domains"); return; }
@@ -90,7 +95,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
   const doPlan = () => run(async () => {
     const p = await movePlan(projectId, { serviceId, targetAccountId, ownerId });
     setPlan(p); setOwnerId(p.target.ownerId); setName(p.source.name);
-    setPicked(new Set(p.frontends.map((f) => f.serviceId + ":" + f.key)));
+    setPicked(new Set(p.frontends.map(frontendKey)));
   });
 
   const doCreate = () => run(async () => {
@@ -117,7 +122,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
 
   const newUrl = live?.url || created?.url || "";
   const doFrontends = () => run(async () => {
-    const targets = plan.frontends.filter((f) => picked.has(f.serviceId + ":" + f.key)).map((f) => ({ accountId: f.accountId, serviceId: f.serviceId, key: f.key }));
+    const targets = plan.frontends.filter((f) => picked.has(frontendKey(f))).map(frontendTarget);
     const result = targets.length
       ? await moveFrontends(projectId, { fromUrl: plan.source.url, toUrl: newUrl, targets, deploy: true })
       : { changed: 0, results: [] };
@@ -228,14 +233,14 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
               <p className="field__note">These variables still hold the old address. Untick any you want to leave.</p>
               <ul className="mv__refs">
                 {plan.frontends.map((f) => {
-                  const key = f.serviceId + ":" + f.key;
+                  const key = frontendKey(f);
                   return <li key={key}><label><input type="checkbox" checked={picked.has(key)} onChange={() => setPicked((old) => { const n = new Set(old); if (n.has(key)) n.delete(key); else n.add(key); return n; })} /> <b>{f.serviceName}</b> · <code>{f.key}</code> <small>{f.accountName}</small></label></li>;
                 })}
               </ul>
               <p className="field__note">Selected frontend variables will be updated and those services will be redeployed automatically.</p>
             </>
           ) : <p className="field__note">No other service holds the old address, so there is nothing to change.</p>}
-          {frontResult?.results?.some((item) => !item.ok) ? <div className="notice notice--err" role="alert">{frontResult.results.filter((item) => !item.ok).map((item) => <p key={item.serviceId}>Service {item.serviceId}: {item.error || "Update failed"}</p>)}</div> : null}
+          {frontResult?.results?.some((item) => !item.ok) ? <div className="notice notice--err" role="alert">{frontResult.results.filter((item) => !item.ok).map((item) => <p key={item.serviceId}>{item.serviceName || item.ref || item.serviceId}: {item.error || "Update failed"}</p>)}</div> : null}
           <button type="button" className="btn btn--primary" disabled={busy || !newUrl} onClick={() => void doFrontends()}>{busy ? "Updating…" : frontResult?.results?.some((item) => !item.ok) ? "Retry failed updates" : plan.frontends.length ? "Update the frontends" : "Continue"}</button>
         </div>
       ) : null}
