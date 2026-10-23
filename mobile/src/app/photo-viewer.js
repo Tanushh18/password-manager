@@ -11,10 +11,13 @@ import { GhostButton, IconButton } from "../components/ui";
 import { api, mediaSource } from "../lib/api";
 import { WEBSITE } from "../lib/config";
 import { dropMedia, getViewerList, patchMedia, usePhotoData } from "../lib/photoData";
+import { localMap } from "../lib/localMedia";
 import { useTheme } from "../lib/theme";
 
+const srcOf = (item, size = "full") => (item.local ? { uri: item.localUri } : mediaSource(item.id, size));
+
 function VideoPage({ item, width, height }) {
-  const source = useMemo(() => mediaSource(item.id, "full"), [item.id]);
+  const source = useMemo(() => srcOf(item), [item.id]);
   const player = useVideoPlayer(source, (p) => { p.loop = false; });
   return <VideoView player={player} nativeControls contentFit="contain" style={{ width, height }} />;
 }
@@ -24,7 +27,7 @@ function PhotoPage({ item, width, height }) {
   const [zoom, setZoom] = useState(false);
   const last = useRef(0);
   const tap = () => { const now = Date.now(); if (now - last.current < 300) setZoom((z) => !z); last.current = now; };
-  const img = <Image source={mediaSource(item.id, "full")} contentFit="contain" cachePolicy="memory-disk" transition={150} style={zoom ? { width: width * 2.5, height: height * 2.5 } : { width, height }} />;
+  const img = <Image source={srcOf(item)} contentFit="contain" cachePolicy="memory-disk" transition={150} style={zoom ? { width: width * 2.5, height: height * 2.5 } : { width, height }} />;
   if (!zoom) return <Pressable onPress={tap} style={{ width, height }}>{img}</Pressable>;
   return (
     <ScrollView style={{ width, height }} contentContainerStyle={{}} nestedScrollEnabled>
@@ -40,7 +43,7 @@ export default function PhotoViewer() {
   const { id } = useLocalSearchParams();
   const { data } = usePhotoData();
   const ids = useMemo(() => { const l = getViewerList(); return l.length ? l : [String(id)]; }, [id]);
-  const media = useMemo(() => new Map((data?.media || []).map((m) => [m.id, m])), [data]);
+  const media = useMemo(() => new Map([...localMap(), ...(data?.media || []).map((m) => [m.id, m])]), [data]);
   const start = Math.max(0, ids.indexOf(String(id)));
   const [current, setCurrent] = useState(String(id));
   const [info, setInfo] = useState(false);
@@ -96,7 +99,7 @@ export default function PhotoViewer() {
         <View style={styles.topRow}>
           <IconButton name="close" onPress={() => router.back()} />
           <Text style={{ flex: 1, color: "#fff", fontSize: 14 }} numberOfLines={1}>{item?.filename}</Text>
-          {item ? <IconButton name={item.favorite ? "starFill" : "star"} active={item.favorite} onPress={favourite} /> : null}
+          {item && !item.local ? <IconButton name={item.favorite ? "starFill" : "star"} active={item.favorite} onPress={favourite} /> : null}
         </View>
       </SafeAreaView>
       {item ? (
@@ -109,14 +112,14 @@ export default function PhotoViewer() {
               {row("Dimensions", item.width && item.height ? `${item.width} × ${item.height}` : "")}
               {row("Type", item.mimeType)}
               {row("Checksum", item.checksum)}
-              {row("Status", item.availabilityState === "available" ? "In Google Drive" : "Source unavailable")}
+              {row("Status", item.local ? "On this phone" : item.availabilityState === "available" ? "In Google Drive" : "Source unavailable")}
             </View>
           ) : null}
           <View style={styles.actions}>
             <GhostButton small title={info ? "Hide details" : "Details"} color="#fff" onPress={() => setInfo((v) => !v)} />
-            <GhostButton small title="Download" color="#fff" onPress={download} />
-            <GhostButton small title="Link" color="#fff" onPress={link} />
-            <GhostButton small title="Remove" color={theme.danger} onPress={remove} />
+            {item.local ? null : <GhostButton small title="Download" color="#fff" onPress={download} />}
+            {item.local ? null : <GhostButton small title="Link" color="#fff" onPress={link} />}
+            {item.local ? null : <GhostButton small title="Remove" color={theme.danger} onPress={remove} />}
           </View>
         </SafeAreaView>
       ) : null}

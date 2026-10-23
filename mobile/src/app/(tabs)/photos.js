@@ -11,6 +11,7 @@ import { api, mediaSource } from "../../lib/api";
 import { WEBSITE } from "../../lib/config";
 import { dropMedia, monthLabel, patchAlbum, patchMedia, setViewerList, usePhotoData } from "../../lib/photoData";
 import { counts, getState, loadState, subscribe } from "../../lib/photoSync";
+import { useLocalMedia } from "../../lib/localMedia";
 import { alpha, useTheme } from "../../lib/theme";
 
 const FILTERS = [["all", "All"], ["photo", "Photos"], ["video", "Videos"], ["screenshot", "Screenshots"], ["favorites", "Favourites"], ["archived", "Archived"]];
@@ -56,6 +57,7 @@ export default function Photos() {
   const [pickAlbum, setPickAlbum] = useState(false);
   const [pickFolder, setPickFolder] = useState(false);
   const [folder, setFolder] = useState(null);
+  const local = useLocalMedia();
   const [queue, setQueue] = useState(counts());
   const cell = (width - 36 - GAP * 2) / 3;
 
@@ -76,14 +78,17 @@ export default function Photos() {
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     const inAlbum = album ? new Set((albums.find((a) => a.id === album) || {}).mediaIds || []) : null;
-    return (data?.media || [])
+    const cloud = data?.media || [];
+    const have = new Set(cloud.map((m) => String(m.filename || "").toLowerCase()));
+    const onPhone = folder || album ? [] : local.items.filter((m) => !have.has(String(m.filename || "").toLowerCase()));
+    return [...cloud, ...onPhone]
       .filter((m) => (filter === "archived" ? m.archived : !m.archived))
       .filter((m) => filter === "all" || filter === "archived" || (filter === "favorites" ? m.favorite : m.type === filter))
       .filter((m) => !inAlbum || inAlbum.has(m.id))
       .filter((m) => !folder || m.folderId === folder)
       .filter((m) => !q || [m.filename, m.account, m.type, m.tag].join(" ").toLowerCase().includes(q))
       .sort((a, b) => new Date(b.takenAt || 0) - new Date(a.takenAt || 0));
-  }, [data, query, filter, album, albums, folder]);
+  }, [data, local.items, query, filter, album, albums, folder]);
 
   const sections = useMemo(() => {
     const months = new Map();
@@ -100,7 +105,7 @@ export default function Photos() {
     setViewerList(visible.map((m) => m.id));
     router.push({ pathname: "/photo-viewer", params: { id: item.id } });
   };
-  const toggle = (id) => setPicked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggle = (id) => id.startsWith("local:") ? null : setPicked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const clear = () => setPicked(new Set());
 
   const connect = async () => {
@@ -206,6 +211,7 @@ export default function Photos() {
       </View>
       {folder ? <Chip label={`Folder: ${(data?.folders || []).find((f) => f.id === folder)?.name || ""}  ✕`} active onPress={() => setFolder(null)} /> : null}
       {album ? <Chip label={`Album: ${albums.find((a) => a.id === album)?.name || ""}  ✕`} active onPress={() => setAlbum(null)} /> : null}
+      {local.needsPermission ? <Pressable onPress={() => local.refresh(true)}><Note>Allow access to photos to see the pictures and videos on this phone here. Tap to allow.</Note></Pressable> : null}
       {error ? <Note tone="bad">{error}</Note> : null}
     </View>
   );
@@ -232,7 +238,7 @@ export default function Photos() {
                 const gone = m.availabilityState !== "available";
                 return (
                   <Pressable key={m.id} onPress={() => open(m)} onLongPress={() => toggle(m.id)} style={{ width: cell, height: cell, backgroundColor: theme.surfaceRaised, borderRadius: 4, overflow: "hidden" }}>
-                    {!gone && m.hasThumbnail ? <Image source={mediaSource(m.id)} recyclingKey={m.id} contentFit="cover" cachePolicy="memory-disk" style={{ width: cell, height: cell }} /> : (
+                    {!gone && m.hasThumbnail ? <Image source={m.local ? { uri: m.localUri } : mediaSource(m.id)} recyclingKey={m.id} contentFit="cover" cachePolicy="memory-disk" style={{ width: cell, height: cell }} /> : (
                       <View style={styles.noThumb}><Text style={{ color: theme.textFaint, fontFamily: theme.font.bodyMedium, fontSize: 11, textAlign: "center" }}>{gone ? "Source\nunavailable" : m.type}</Text></View>
                     )}
                     {m.type === "video" ? <View style={styles.tag}><Icon name="clock" size={11} color="#fff" /></View> : null}

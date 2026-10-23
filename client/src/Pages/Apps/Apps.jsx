@@ -4,12 +4,12 @@ import Ambience from "../../Components/Ambience/Ambience";
 import "./Apps.css";
 
 // The APK is a static file served by this site, so /apps works with no extra server. Keep in step with mobile/app.json.
-const APK = { file: "/apps/stashr.apk", version: "2.1.0" };
+const APK = { file: "/apps/stashr.apk", version: "2.2.0" };
 
 const FEATURES = [
   "Passwords, 2FA codes and secure notes, unlocked with your fingerprint or face",
   "Photo backup: new photos and videos upload automatically to your connected Google accounts",
-  "Photo folders, albums, people and a full viewer, the same as the website",
+  "Photo folders, albums, people and a full viewer, the same as the website, plus the photos and videos already on your phone",
   "Servers, deployments, monitoring and moving a server between Render accounts",
   "Same account and same server as the website, so everything stays in sync",
 ];
