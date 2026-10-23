@@ -47,9 +47,41 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
 
   useEffect(() => {
     if (!open) return;
-    getRenderAccounts().then((r) => setAccounts((r.accounts || []).filter((a) => a.id !== target.accountId))).catch(() => setAccounts([]));
-    moveOrigin(projectId, serviceId).then(setOrigin).catch(() => setOrigin(null));
-  }, [open, target.accountId, projectId, serviceId]);
+    let cancelled = false;
+    getRenderAccounts().then((r) => { if (!cancelled) setAccounts((r.accounts || []).filter((a) => a.id !== target.accountId)); }).catch(() => { if (!cancelled) setAccounts([]); });
+    const restore = async () => {
+      try {
+        const info = await moveOrigin(projectId, serviceId);
+        if (cancelled) return;
+        setOrigin(info);
+        const m = info.migration;
+        if (!m) return;
+        if (m.stage === "relinked" && m.targetServiceId === serviceId) {
+          setTargetAccountId(m.targetAccountId);
+          setCreated({ serviceId: m.targetServiceId, accountId: m.targetAccountId, name: m.targetName || target.name, url: m.targetUrl || "" });
+          setPlan({ source: { serviceId: m.sourceServiceId, accountId: m.sourceAccountId, name: m.sourceName || "Previous server", accountName: m.sourceAccountName || "", url: m.sourceUrl || "", envCount: 0 }, target: { accountId: m.targetAccountId, accountName: m.targetAccountName || "" } });
+          const s = await moveStatus(projectId, { accountId: m.targetAccountId, serviceId: m.targetServiceId });
+          if (cancelled) return;
+          setLive(s); setStep("delete"); return;
+        }
+        if (m.sourceServiceId !== serviceId || !["created", "domains_preparing", "domains_prepared", "domains_verified"].includes(m.stage)) return;
+        setTargetAccountId(m.targetAccountId);
+        const p = await movePlan(projectId, { serviceId, targetAccountId: m.targetAccountId, ownerId: "" });
+        const s = await moveStatus(projectId, { accountId: m.targetAccountId, serviceId: m.targetServiceId });
+        if (cancelled) return;
+        setPlan(p); setOwnerId(p.target.ownerId || ""); setName(m.targetName || p.source.name);
+        setPicked(new Set(p.frontends.map((item) => item.serviceId + ":" + item.key)));
+        setCreated({ serviceId: m.targetServiceId, accountId: m.targetAccountId, name: m.targetName || s.name, url: s.url || m.targetUrl || "" }); setLive(s);
+        if (m.stage === "created") { setStep(s.ready ? "frontends" : "live"); return; }
+        if (m.stage === "domains_preparing") { setDomainPrep(null); setStep("domains"); return; }
+        setDomainPrep({ expectedDomains: m.domains || [], domains: [], targetUrl: s.url || m.targetUrl || "", dnsTarget: (() => { try { return new URL(s.url || m.targetUrl).hostname; } catch { return ""; } })(), detachedFromOld: [] });
+        if (m.stage === "domains_verified") { setDomainCheck({ verified: true, domains: [] }); setStep("verify"); }
+        else { setDomainCheck(null); setDnsAcknowledged(false); setStep("domains"); }
+      } catch (e) { if (!cancelled) setError(errorMessage(e, "Could not resume the saved migration. The old server has not been deleted.")); }
+    };
+    void restore();
+    return () => { cancelled = true; };
+  }, [open, target.accountId, target.name, projectId, serviceId]);
 
   const run = async (fn) => {
     setBusy(true); setError("");
@@ -113,7 +145,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
     onDone?.();
   });
   const doDelete = () => run(async () => {
-    await moveDeleteOld(projectId, { serviceId, accountId: target.accountId, confirmName: typed, newServiceId: created?.serviceId, newAccountId: created?.accountId });
+    await moveDeleteOld(projectId, { serviceId: plan?.source?.serviceId || serviceId, accountId: plan?.source?.accountId || target.accountId, confirmName: typed, newServiceId: created?.serviceId, newAccountId: created?.accountId });
     toast.success("Moved. The old server is deleted.");
     setStep("done");
     onDone?.();
