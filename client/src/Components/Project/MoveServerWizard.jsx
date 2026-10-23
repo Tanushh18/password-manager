@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Modal } from "react-responsive-modal";
 import "react-responsive-modal/styles.css";
 import { toast } from "react-toastify";
-import { getRenderAccounts, moveCreate, moveDeleteOld, moveFrontends, movePlan, moveRelink, moveStatus } from "../../api/client";
+import { getRenderAccounts, moveCreate, moveDeleteOld, moveFrontends, moveOrigin, movePlan, movePrepareDomains, moveRelink, moveStatus, moveVerifyDomains } from "../../api/client";
 import { errorMessage } from "../../Pages/Render/renderUtils";
 import "./MoveServerWizard.css";
 
@@ -11,7 +11,8 @@ const STEPS = [
   ["create", "Create the new server"],
   ["live", "Wait until it is live"],
   ["frontends", "Point the frontends at it"],
-  ["verify", "Check it yourself"],
+  ["domains", "Transfer custom domains"],
+  ["verify", "Verify the new server"],
   ["relink", "Move the project link"],
   ["delete", "Delete the old server"]
 ];
@@ -23,6 +24,7 @@ const STEPS = [
 export default function MoveServerWizard({ projectId, target, open, onClose, onDone }) {
   const serviceId = target.ref.replace(/^render:/, "");
   const [accounts, setAccounts] = useState([]);
+  const [origin, setOrigin] = useState(null);
   const [targetAccountId, setTargetAccountId] = useState("");
   const [ownerId, setOwnerId] = useState("");
   const [plan, setPlan] = useState(null);
@@ -34,6 +36,9 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
   const [picked, setPicked] = useState(new Set());
   const [redeployFront, setRedeployFront] = useState(true);
   const [frontResult, setFrontResult] = useState(null);
+  const [domainPrep, setDomainPrep] = useState(null);
+  const [domainCheck, setDomainCheck] = useState(null);
+  const [dnsAcknowledged, setDnsAcknowledged] = useState(false);
   const [verified, setVerified] = useState(false);
   const [typed, setTyped] = useState("");
   const [understood, setUnderstood] = useState(false);
@@ -43,7 +48,8 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
   useEffect(() => {
     if (!open) return;
     getRenderAccounts().then((r) => setAccounts((r.accounts || []).filter((a) => a.id !== target.accountId))).catch(() => setAccounts([]));
-  }, [open, target.accountId]);
+    moveOrigin(projectId, serviceId).then(setOrigin).catch(() => setOrigin(null));
+  }, [open, target.accountId, projectId, serviceId]);
 
   const run = async (fn) => {
     setBusy(true); setError("");
@@ -82,7 +88,24 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
   const doFrontends = () => run(async () => {
     const targets = plan.frontends.filter((f) => picked.has(f.serviceId + ":" + f.key)).map((f) => ({ accountId: f.accountId, serviceId: f.serviceId, key: f.key }));
     if (targets.length) setFrontResult(await moveFrontends(projectId, { fromUrl: plan.source.url, toUrl: newUrl, targets, deploy: redeployFront }));
-    setStep("verify");
+    setStep("domains");
+  });
+  const doPrepareDomains = () => run(async () => {
+    if (!created?.accountId || !created?.serviceId) throw new Error("The replacement server has not been created yet.");
+    const result = await movePrepareDomains(projectId, { sourceServiceId: serviceId, targetAccountId: created.accountId, targetServiceId: created.serviceId });
+    setDomainPrep(result);
+    setDomainCheck(null);
+    setDnsAcknowledged(false);
+    if (!result.expectedDomains?.length) {
+      setDomainCheck({ verified: true, domains: [] });
+      setStep("verify");
+    }
+  });
+  const doVerifyDomains = () => run(async () => {
+    const result = await moveVerifyDomains(projectId, { accountId: created.accountId, serviceId: created.serviceId });
+    setDomainCheck(result);
+    if (result.verified) setStep("verify");
+    else setError("Render has not verified every domain yet. Check the DNS records and try again after propagation.");
   });
   const doRelink = () => run(async () => {
     await moveRelink(projectId, { oldServiceId: serviceId, newAccountId: created.accountId, newServiceId: created.serviceId, newName: live?.name || created.name, newUrl });
@@ -90,7 +113,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
     onDone?.();
   });
   const doDelete = () => run(async () => {
-    await moveDeleteOld(projectId, { serviceId, accountId: target.accountId, confirmName: typed });
+    await moveDeleteOld(projectId, { serviceId, accountId: target.accountId, confirmName: typed, newServiceId: created?.serviceId, newAccountId: created?.accountId });
     toast.success("Moved. The old server is deleted.");
     setStep("done");
     onDone?.();
@@ -114,8 +137,13 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
             <label className="field__label" htmlFor="mv-acc">Move to this account</label>
             <select id="mv-acc" className="input" value={targetAccountId} disabled={busy} onChange={(e) => { setTargetAccountId(e.target.value); setPlan(null); }}>
               <option value="">Choose…</option>
-              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.id === origin?.originalAccountId ? " (original account)" : ""}</option>)}
             </select>
+            {origin?.canReturn && origin.available && accounts.some((a) => a.id === origin.originalAccountId) ? (
+              <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => { setTargetAccountId(origin.originalAccountId); setPlan(null); setOwnerId(""); }}>
+                Return to original account: {origin.originalAccountName || "original"}
+              </button>
+            ) : null}
           </div>
           {!plan ? <button type="button" className="btn btn--primary" disabled={busy || !targetAccountId} onClick={() => void doPlan()}>{busy ? "Checking…" : "Check the plan"}</button> : (
             <>
@@ -169,6 +197,39 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
             </>
           ) : <p className="field__note">No other service holds the old address, so there is nothing to change.</p>}
           <button type="button" className="btn btn--primary" disabled={busy || !newUrl} onClick={() => void doFrontends()}>{busy ? "Updating…" : plan.frontends.length ? "Update the frontends" : "Continue"}</button>
+        </div>
+      ) : null}
+
+      {step === "domains" ? (
+        <div className="mv__panel">
+          <p>Custom domains are separate from the generated Render URL. The wizard transfers the domain mapping, but your DNS provider may still need a target change before the domain reaches the replacement.</p>
+          {!domainPrep ? (
+            <>
+              <p>{plan?.domains?.length ? "Domains on the old service: " + plan.domains.map((d) => d.name).join(", ") : "No existing custom domains were found on the old service."}</p>
+              <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void doPrepareDomains()}>{busy ? "Preparing…" : plan?.domains?.length ? "Attach custom domains to new server" : "Confirm no custom domains"}</button>
+            </>
+          ) : (
+            <>
+              {domainPrep.detachedFromOld?.length ? <div className="notice notice--err" role="alert">Render required these domains to be released from the old service before attaching them to the new one: {domainPrep.detachedFromOld.join(", ")}. Update DNS promptly and verify below; do not delete the old server until verification succeeds.</div> : null}
+              {domainPrep.expectedDomains?.length ? (
+                <>
+                  <p><b>New Render target:</b> <code>{domainPrep.dnsTarget || newUrl}</code></p>
+                  <ul className="mv__refs">
+                    {domainPrep.expectedDomains.map((name) => {
+                      const found = domainPrep.domains?.find((d) => d.name === name);
+                      const status = domainCheck?.domains?.find((d) => d.name === name)?.verificationStatus || found?.verificationStatus || "pending";
+                      return <li key={name}><b>{name}</b> · <span>{status}</span></li>;
+                    })}
+                  </ul>
+                  <p className="field__note">At your DNS provider, update any CNAME/ALIAS record that targets the old .onrender.com hostname to the new target shown above. Apex/root domains may instead use Render's recommended A record, so follow the DNS instructions for that domain and provider rather than changing records blindly. Domain verification from the old service does not by itself route traffic to this service.</p>
+                  <label className="field__note"><input type="checkbox" checked={dnsAcknowledged} onChange={(e) => setDnsAcknowledged(e.target.checked)} /> I updated/reviewed the DNS records for the new Render target.</label>
+                  <button type="button" className="btn btn--primary" disabled={busy || !dnsAcknowledged} onClick={() => void doVerifyDomains()}>{busy ? "Checking…" : "Verify custom domains"}</button>
+                  {domainCheck && !domainCheck.verified ? <p className="field__note">Not all domains are verified yet. DNS propagation can take time; leave the old service in place and retry.</p> : null}
+                </>
+              ) : <p className="field__note">No custom domains need to move. Continue to the service checks.</p>}
+              {!domainPrep.expectedDomains?.length ? <button type="button" className="btn btn--primary" onClick={() => setStep("verify")}>Continue</button> : null}
+            </>
+          )}
         </div>
       ) : null}
 
