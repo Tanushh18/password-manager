@@ -133,7 +133,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
       setLive(s);
       if (s.ready) {
         // The new service now exists in Render; refresh the URL-reference inventory so its copied env vars can be migrated too.
-        const refreshedPlan = await movePlan(projectId, { serviceId, targetAccountId: created.accountId });
+        const refreshedPlan = await movePlan(projectId, { serviceId, targetAccountId: created.accountId, targetServiceId: created.serviceId });
         setPlan(refreshedPlan);
         setPicked(new Set(refreshedPlan.frontends.map(frontendKey)));
         setStep((cur) => (cur === "live" ? "frontends" : cur));
@@ -297,7 +297,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
               {plan?.domains?.length ? (
                 <>
                   <p><b>New Render target:</b> <code>{(() => { try { return new URL(newUrl).hostname; } catch { return newUrl || "—"; } })()}</code></p>
-                  <ul className="mv__refs">{plan.domains.map((d) => <li key={d.name}><b>{d.name}</b> · DNS: {d.dns?.status === "points_to_old_target" ? "CNAME still points to old Render hostname" : d.dns?.status === "points_to_target" ? "CNAME points to replacement hostname" : d.dns?.status === "other_cname" ? "CNAME points to a different host" : "no CNAME detected; apex/ALIAS can use A records"}{d.dns?.cname?.length ? <div className="field__note">CNAME: {d.dns.cname.join(", ")}</div> : null}{d.dns?.a?.length ? <div className="field__note">A: {d.dns.a.join(", ")}</div> : null}{d.dns?.aaaa?.length ? <div className="field__note">AAAA: {d.dns.aaaa.join(", ")} · remove conflicting AAAA records if Render instructs you to.</div> : null}</li>)}</ul>
+                  <ul className="mv__refs">{plan.domains.map((d) => <li key={d.name}><b>{d.name}</b> · DNS preflight: {d.dns?.status === "points_to_old_target" ? "CNAME points to the current service (update it to the new target)" : d.dns?.status === "points_to_target" ? "CNAME points to the replacement target" : d.dns?.status === "other_cname" ? "CNAME points to a different host; verify this is intentional" : "no CNAME detected; apex A/ALIAS/ANAME setups are possible"}{d.dns?.cname?.length ? <div className="field__note">CNAME: {d.dns.cname.join(", ")}</div> : null}{d.dns?.a?.length ? <div className="field__note">A: {d.dns.a.join(", ")}</div> : null}{d.dns?.aaaa?.length ? <div className="field__note">AAAA: {d.dns.aaaa.join(", ")} · Render recommends removing AAAA records because it uses IPv4.</div> : null}</li>)}</ul>
                   <p className="field__note">Before the mapping is moved, update each affected domain's DNS target from the old .onrender.com hostname to this new hostname. For apex/root domains, use the exact provider-specific DNS instructions shown by Render; remove conflicting records if Render instructs you to do so.</p>
                   <label className="field__note"><input type="checkbox" checked={dnsAcknowledged} onChange={(e) => setDnsAcknowledged(e.target.checked)} /> I have updated or verified the domain DNS records for the new Render target.</label>
                 </>
