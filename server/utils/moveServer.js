@@ -31,6 +31,11 @@ async function listDomains(apiKey, serviceId) {
   if (result.truncated) throw fail(422, "Too many custom domains to migrate safely.");
   return normalizeDomains(result);
 }
+function missingVerifiedDomains(expectedNames, domains) {
+  return (Array.isArray(expectedNames) ? expectedNames : []).filter((name) =>
+    !(domains || []).some((domain) => domain.name === String(name).toLowerCase() && domain.verificationStatus === "verified")
+  );
+}
 async function addDomain(apiKey, serviceId, name) {
   return renderRequest(apiKey, domainPath(serviceId), { method: "POST", body: { name } });
 }
@@ -226,7 +231,7 @@ async function prepareDomains(user, projectId, { sourceServiceId, targetAccountI
     targetDomains = targetSupportsDomains ? await listDomains(targetAccount.apiKey, targetServiceId) : [];
   }
   targetDomains = targetSupportsDomains ? await listDomains(targetAccount.apiKey, targetServiceId) : [];
-  const verified = migration.domains.every((n) => targetDomains.some((d) => d.name === n && d.verificationStatus === "verified"));
+  const verified = missingVerifiedDomains(migration.domains, targetDomains).length === 0;
   migration.stage = migration.domains.length === 0 || verified ? "domains_verified" : "domains_prepared";
   migration.updatedAt = new Date().toISOString();
   await saveProjectFields(user, entry, dataKey, { ...fields, renderMigration: migration });
@@ -301,7 +306,7 @@ async function relink(user, projectId, { oldServiceId, newAccountId, newServiceI
   const destination = accountOf(user, dataKey, newAccountId);
   if (!destination) throw fail(404, "The target Render account is no longer connected.");
   const targetDomains = (migration.domains || []).length ? await listDomains(destination.apiKey, newServiceId) : [];
-  const missingDomains = (migration.domains || []).filter((name) => !targetDomains.some((d) => d.name === name && d.verificationStatus === "verified"));
+  const missingDomains = missingVerifiedDomains(migration.domains, targetDomains);
   if (missingDomains.length) throw fail(409, "Do not relink yet. These custom domains are not verified on the new service: " + missingDomains.join(", "));
   const sourceAccount = accountOf(user, dataKey, sourceLink.accountId);
   const others = (Array.isArray(fields.renderServices) ? fields.renderServices : []).filter((s) => s && s.serviceId !== oldServiceId && s.serviceId !== newServiceId);
@@ -331,7 +336,7 @@ async function deleteOld(user, projectId, { serviceId, accountId, confirmName })
   const targetAccount = accountOf(user, dataKey, migration.targetAccountId);
   if (!targetAccount) throw fail(409, "The destination account is no longer connected; keep the old server until it is restored.");
   const targetDomainList = (migration.domains || []).length ? await listDomains(targetAccount.apiKey, migration.targetServiceId) : [];
-  const missingDomains = (migration.domains || []).filter((name) => !targetDomainList.some((d) => d.name === name && d.verificationStatus === "verified"));
+  const missingDomains = missingVerifiedDomains(migration.domains, targetDomainList);
   if (missingDomains.length) throw fail(409, "The old server is being kept because these domains are not verified on the replacement: " + missingDomains.join(", "));
   const newService = await readService(targetAccount.apiKey, migration.targetServiceId);
   if (newService.suspended === "suspended") throw fail(409, "The replacement server is suspended. The old server will not be deleted.");
@@ -348,4 +353,4 @@ async function deleteOld(user, projectId, { serviceId, accountId, confirmName })
   return { deleted: true, name: service.name, domainsVerified: (migration.domains || []).length };
 }
 
-module.exports = { plan, create, status, frontends, prepareDomains, verifyDomains, origin, relink, deleteOld };
+module.exports = { plan, create, status, frontends, prepareDomains, verifyDomains, origin, relink, deleteOld, supportsDomains, normalizeDomains, missingVerifiedDomains };
