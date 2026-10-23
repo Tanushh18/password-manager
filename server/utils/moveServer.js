@@ -77,7 +77,7 @@ async function inspectDomainDns(name, sourceUrl = "", targetUrl = "") {
   const [cnameResult, aResult, aaaaResult] = await Promise.allSettled([
     dns.resolveCname(name), dns.resolve4(name), dns.resolve6(name)
   ]);
-  const cname = cnameResult.status === "fulfilled" ? cnameResult.value.map((v) => String(v).replace(/\\.$/, "").toLowerCase()) : [];
+  const cname = cnameResult.status === "fulfilled" ? cnameResult.value.map((v) => String(v).replace(/\.$/, "").toLowerCase()) : [];
   const a = aResult.status === "fulfilled" ? aResult.value : [];
   const aaaa = aaaaResult.status === "fulfilled" ? aaaaResult.value : [];
   const pointsToTarget = Boolean(targetHost && cname.some((v) => v === targetHost || v.endsWith("." + targetHost)));
@@ -199,7 +199,7 @@ async function requireLiveDeploy(apiKey, serviceId) {
 }
 
 /** Everything the user needs to decide, with no variable values in the answer. */
-async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "" }) {
+async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "", targetServiceId = "" }) {
   if (!safeId(serviceId)) throw fail(400, "Invalid service.");
   const { dataKey, fields } = await loadProject(user, projectId);
   const src = linkedSource(fields, serviceId);
@@ -211,6 +211,15 @@ async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "" 
 
   const old = await readService(from.apiKey, serviceId);
   if (!supportsDomains(old.type)) throw fail(422, "Only Render web services and static sites can be migrated by this wizard today. This service type will not be silently converted.");
+  let replacementUrl = "";
+  if (targetServiceId) {
+    const existingMigration = fields.renderMigration;
+    if (!existingMigration || existingMigration.sourceServiceId !== serviceId || existingMigration.targetServiceId !== targetServiceId || existingMigration.targetAccountId !== String(targetAccountId)) {
+      throw fail(409, "The DNS preflight target does not match the saved migration.");
+    }
+    const replacement = await readService(target.apiKey, targetServiceId);
+    replacementUrl = replacement.serviceDetails?.url || "";
+  }
   const envVars = await listDirectEnvVars(from.apiKey, serviceId);
   const secretFiles = await listDirectSecretFiles(from.apiKey, serviceId);
   const envGroups = await listLinkedEnvGroups(from.apiKey, old.ownerId, serviceId);
@@ -218,7 +227,7 @@ async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "" 
   const domains = supportsDomains(old.type) ? await listDomains(from.apiKey, serviceId) : [];
   const domainsWithDns = await Promise.all(domains.map(async (domain) => ({
     ...domain,
-    dns: await inspectDomainDns(domain.name, old.serviceDetails?.url || "", "")
+    dns: await inspectDomainDns(domain.name, old.serviceDetails?.url || "", replacementUrl)
   })));
 
   const owners = (await renderRequest(target.apiKey, "/v1/owners?limit=20") || []).map((o) => o?.owner || o).filter((o) => o?.id).map((o) => ({ id: o.id, name: String(o.name || o.id), type: o.type || "" }));
@@ -346,10 +355,21 @@ async function copyEnvGroups(user, projectId, { sourceServiceId, targetAccountId
       break;
     }
   }
-  const complete = results.every((result) => result.copied) && results.length === groups.length;
-  nextMigration = { ...nextMigration, configComplete: complete, stage: complete ? "created" : "config_pending", envGroupCount: groups.length, updatedAt: new Date().toISOString() };
+  let complete = results.every((result) => result.copied) && results.length === groups.length;
+  let deployRequested = false;
+  if (complete && groups.length) {
+    try {
+      // The first build may start before linked environment groups are attached.
+      await renderRequest(targetAccount.apiKey, servicePath(targetServiceId) + "/deploys", { method: "POST", body: { clearCache: "do_not_clear" } });
+      deployRequested = true;
+    } catch {
+      complete = false;
+      results.push({ name: "Replacement service deployment", copied: false, error: "Environment groups were copied, but Render did not accept a deploy. Retry this step; the source service is still preserved." });
+    }
+  }
+  nextMigration = { ...nextMigration, configComplete: complete, stage: complete ? "created" : "config_pending", envGroupCount: groups.length, envGroupDeployRequested: deployRequested, updatedAt: new Date().toISOString() };
   await saveProjectFields(user, entry, dataKey, { ...fields, renderMigration: nextMigration });
-  return { complete, groups: results, expectedGroups: groups.length };
+  return { complete, groups: results, expectedGroups: groups.length, deployRequested };
 }
 
 /** Live state of a server in an account, for the wait step. */
@@ -479,7 +499,7 @@ async function origin(user, projectId, serviceId) {
   const original = accountOf(user, dataKey, originId);
   const savedMigration = fields.renderMigration;
   const migrationMatches = savedMigration && (savedMigration.sourceServiceId === serviceId || savedMigration.targetServiceId === serviceId)
-    && ["created", "domains_preparing", "domains_prepared", "domains_verified", "relinked", "complete"].includes(savedMigration.stage);
+    && ["created", "config_pending", "domains_preparing", "domains_prepared", "domains_verified", "relinked", "complete"].includes(savedMigration.stage);
   const migration = migrationMatches ? {
     stage: savedMigration.stage,
     sourceServiceId: savedMigration.sourceServiceId,
