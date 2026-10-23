@@ -18,6 +18,36 @@ const STRIP = ["_id", "createdAt", "updatedAt", "broken"];
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const servicePath = (id) => "/v1/services/" + encodeURIComponent(id);
 
+const domainPath = (id) => servicePath(id) + "/custom-domains";
+const supportsDomains = (type) => ["web_service", "static_site"].includes(String(type || "").toLowerCase());
+const normalizeDomains = (result) => (result.items || []).map((item) => item?.customDomain || item).filter((item) => item && typeof item.name === "string").map((item) => ({
+  id: String(item.id || item.name),
+  name: String(item.name).toLowerCase(),
+  verificationStatus: String(item.verificationStatus || "unknown").toLowerCase(),
+  redirectForName: item.redirectForName || ""
+}));
+async function listDomains(apiKey, serviceId) {
+  const result = await fetchAllPages((path) => renderRequest(apiKey, path), domainPath(serviceId), { limit: 100, maxPages: 5 });
+  if (result.truncated) throw fail(422, "Too many custom domains to migrate safely.");
+  return normalizeDomains(result);
+}
+async function addDomain(apiKey, serviceId, name) {
+  return renderRequest(apiKey, domainPath(serviceId), { method: "POST", body: { name } });
+}
+async function removeDomain(apiKey, serviceId, name) {
+  return renderRequest(apiKey, domainPath(serviceId) + "/" + encodeURIComponent(name), { method: "DELETE" });
+}
+async function saveProjectFields(user, entry, dataKey, fields) {
+  const next = { ...fields };
+  STRIP.forEach((key) => delete next[key]);
+  const sealed = User.sealEntry(dataKey, next);
+  await User.updateOne({ _id: user._id, "projects._id": entry._id }, { $set: { "projects.$.enc": "udk", "projects.$.data": sealed, "projects.$.updatedAt": new Date() } });
+  entry.enc = "udk";
+  entry.data = sealed;
+  return next;
+}
+
+
 async function loadProject(user, projectId) {
   if (!mongoose.isValidObjectId(projectId)) throw fail(404, "Could not find that project.");
   const dataKey = await user.getDataKey();
@@ -73,6 +103,7 @@ async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "" 
   const old = await readService(from.apiKey, serviceId);
   const envList = await fetchAllPages((p) => renderRequest(from.apiKey, p), servicePath(serviceId) + "/env-vars");
   const envCount = envList.items.map((i) => i?.envVar || i).filter((i) => i && typeof i.key === "string").length;
+  const domains = supportsDomains(old.type) ? await listDomains(from.apiKey, serviceId) : [];
 
   const owners = (await renderRequest(target.apiKey, "/v1/owners?limit=20") || []).map((o) => o?.owner || o).filter((o) => o?.id).map((o) => ({ id: o.id, name: String(o.name || o.id), type: o.type || "" }));
   if (!owners.length) throw fail(422, "No Render workspace was found in the target account.");
@@ -85,10 +116,15 @@ async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "" 
   if (old.suspended === "suspended") warnings.push("The old server is suspended. Resume it first if the new one should replace a running service.");
   if (old.serviceDetails?.plan && old.serviceDetails.plan !== "free") warnings.push("The old server is on the “" + old.serviceDetails.plan + "” plan. The new server uses the same plan, so it may bill in the target account.");
   if (!old.serviceDetails?.url) warnings.push("The old server has no public address yet, so there is no frontend address to replace.");
+  if (domains.length) warnings.push("Custom domains are attached to the old service. Transfer and verify every domain on the new service before deleting the old one; DNS settings are managed by your DNS provider.");
 
+  const originId = fields.renderAccountOriginId || src.accountId;
+  const originAccount = accountOf(user, dataKey, originId);
   return {
-    source: { serviceId, name: old.name, accountName: from.name, url: old.serviceDetails?.url || "", branch: old.branch || "", type: old.type || "", plan: old.serviceDetails?.plan || "", region: old.serviceDetails?.region || "", envCount, live: old.suspended !== "suspended" },
+    source: { serviceId, accountId: String(src.accountId), name: old.name, accountName: from.name, url: old.serviceDetails?.url || "", branch: old.branch || "", type: old.type || "", plan: old.serviceDetails?.plan || "", region: old.serviceDetails?.region || "", envCount, live: old.suspended !== "suspended" },
     target: { accountId: target.id, accountName: target.name, ownerId: chosenOwner, owners },
+    origin: { accountId: String(originId), accountName: originAccount?.name || (originId === src.accountId ? from.name : ""), available: Boolean(originAccount), isCurrent: String(originId) === String(src.accountId) },
+    domains,
     frontends: frontends.map((r) => ({ accountId: r.accountId, serviceId: r.serviceId, serviceName: r.serviceName, key: r.key, accountName: r.accountName })),
     warnings
   };
@@ -133,6 +169,120 @@ async function status(user, projectId, { accountId, serviceId }) {
   return { name: service.name, url: service.serviceDetails?.url || "", suspended: service.suspended === "suspended", deploy, ready: st === "live" };
 }
 
+
+/** Persist the source/target mapping and attach each existing custom domain to the replacement service. */
+async function prepareDomains(user, projectId, { sourceServiceId, targetAccountId, targetServiceId }) {
+  if (!safeId(sourceServiceId) || !safeId(targetServiceId)) throw fail(400, "Choose valid source and target servers.");
+  const { entry, dataKey, fields } = await loadProject(user, projectId);
+  const src = linkedSource(fields, sourceServiceId);
+  const sourceAccount = accountOf(user, dataKey, src.accountId);
+  const targetAccount = accountOf(user, dataKey, targetAccountId);
+  if (!sourceAccount || !targetAccount) throw fail(422, "A source or target Render account is no longer connected.");
+  const targetService = await readService(targetAccount.apiKey, targetServiceId);
+  if (targetService.suspended === "suspended") throw fail(409, "The replacement server is suspended. Resume it before moving custom domains.");
+  if (!supportsDomains(targetService.type)) throw fail(422, "Render custom domains are supported only on web services and static sites.");
+  const sourceService = await readService(sourceAccount.apiKey, sourceServiceId);
+  const sourceDomains = supportsDomains(sourceService.type) ? await listDomains(sourceAccount.apiKey, sourceServiceId) : [];
+  const sameMigration = fields.renderMigration
+    && fields.renderMigration.sourceServiceId === sourceServiceId
+    && fields.renderMigration.targetServiceId === targetServiceId
+    && fields.renderMigration.targetAccountId === targetAccount.id;
+  const expectedNames = sameMigration && Array.isArray(fields.renderMigration.domains) && fields.renderMigration.domains.length
+    ? fields.renderMigration.domains
+    : sourceDomains.map((d) => d.name);
+  const migration = {
+    ...(sameMigration ? fields.renderMigration : {}),
+    sourceServiceId, sourceAccountId: String(src.accountId), sourceAccountName: sourceAccount.name,
+    sourceUrl: sourceService.serviceDetails?.url || src.url || "",
+    targetServiceId, targetAccountId: targetAccount.id,
+    targetUrl: targetService.serviceDetails?.url || "",
+    domains: [...new Set(expectedNames.map((n) => String(n).toLowerCase()))],
+    stage: "domains_preparing",
+    updatedAt: new Date().toISOString()
+  };
+  await saveProjectFields(user, entry, dataKey, { ...fields, renderMigration: migration });
+
+  let targetDomains = await listDomains(targetAccount.apiKey, targetServiceId);
+  const detachedFromOld = [];
+  for (const name of migration.domains) {
+    if (targetDomains.some((d) => d.name === name)) continue;
+    try {
+      await addDomain(targetAccount.apiKey, targetServiceId, name);
+    } catch (error) {
+      // Render can reject a hostname while it remains attached to the source service.
+      if (Number(error?.status) !== 409) throw fail(502, "Render could not attach custom domain " + name + ". The old server has been kept; check domain limits and permissions.");
+      try { await removeDomain(sourceAccount.apiKey, sourceServiceId, name); }
+      catch {
+        throw fail(409, "Domain " + name + " is still attached to the old service and could not be released. The old server was not deleted.");
+      }
+      detachedFromOld.push(name);
+      try { await addDomain(targetAccount.apiKey, targetServiceId, name); }
+      catch {
+        try { await addDomain(sourceAccount.apiKey, sourceServiceId, name); } catch { /* best-effort restore */ }
+        throw fail(502, "Could not attach " + name + " to the new service. Stashr attempted to restore it to the old service; check Render before proceeding.");
+      }
+    }
+    targetDomains = await listDomains(targetAccount.apiKey, targetServiceId);
+  }
+  targetDomains = await listDomains(targetAccount.apiKey, targetServiceId);
+  const verified = migration.domains.every((n) => targetDomains.some((d) => d.name === n && d.verificationStatus === "verified"));
+  migration.stage = migration.domains.length === 0 || verified ? "domains_verified" : "domains_prepared";
+  migration.updatedAt = new Date().toISOString();
+  await saveProjectFields(user, entry, dataKey, { ...fields, renderMigration: migration });
+  return {
+    domains: targetDomains.filter((d) => migration.domains.includes(d.name)),
+    expectedDomains: migration.domains,
+    detachedFromOld,
+    sourceUrl: migration.sourceUrl,
+    targetUrl: migration.targetUrl,
+    dnsTarget: (() => { try { return new URL(migration.targetUrl).hostname; } catch { return ""; } })(),
+    verified: migration.stage === "domains_verified"
+  };
+}
+
+/** Trigger DNS checks for migrated custom domains and persist a server-side readiness gate. */
+async function verifyDomains(user, projectId, { accountId, serviceId }) {
+  if (!safeId(serviceId)) throw fail(400, "Choose a valid target server.");
+  const { entry, dataKey, fields } = await loadProject(user, projectId);
+  const migration = fields.renderMigration;
+  if (!migration || migration.targetServiceId !== serviceId || migration.targetAccountId !== String(accountId)) throw fail(409, "Prepare the custom-domain transfer for this migration first.");
+  const account = accountOf(user, dataKey, accountId);
+  if (!account) throw fail(404, "The target Render account is no longer connected.");
+  for (const name of migration.domains || []) {
+    try {
+      await renderRequest(account.apiKey, domainPath(serviceId) + "/" + encodeURIComponent(name) + "/verify", { method: "POST" });
+    } catch (error) {
+      if (![400, 404, 409, 422].includes(Number(error?.status))) throw fail(502, "Could not request verification for " + name + ". Check Render and retry.");
+    }
+  }
+  const domains = await listDomains(account.apiKey, serviceId);
+  const results = (migration.domains || []).map((name) => {
+    const item = domains.find((d) => d.name === name);
+    return { name, verificationStatus: item?.verificationStatus || "missing", verified: item?.verificationStatus === "verified" };
+  });
+  const verified = results.every((d) => d.verified);
+  const nextMigration = { ...migration, stage: verified ? "domains_verified" : "domains_prepared", domainCheckAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  await saveProjectFields(user, entry, dataKey, { ...fields, renderMigration: nextMigration });
+  return { verified, domains: results, targetUrl: migration.targetUrl };
+}
+
+/** Expose the original Render account so the user can move the service back to it. */
+async function origin(user, projectId, serviceId) {
+  if (!safeId(serviceId)) throw fail(400, "Choose a valid server.");
+  const { dataKey, fields } = await loadProject(user, projectId);
+  const linked = linkedSource(fields, serviceId);
+  const current = accountOf(user, dataKey, linked.accountId);
+  const originId = String(fields.renderAccountOriginId || linked.accountId);
+  const original = accountOf(user, dataKey, originId);
+  return {
+    currentAccountId: String(linked.accountId),
+    originalAccountId: originId,
+    originalAccountName: original?.name || (originId === String(linked.accountId) ? current?.name || "" : fields.renderAccountOriginName || ""),
+    available: Boolean(original),
+    canReturn: Boolean(original && originId !== String(linked.accountId))
+  };
+}
+
 /** Points the frontends' variables from the old address to the new one, optionally redeploying them. */
 async function frontends(user, { fromUrl, toUrl, targets, deploy }) {
   return replaceUrlReferences(user, { fromUrl, toUrl, targets: Array.isArray(targets) ? targets : [], deploy: deploy === true });
@@ -142,23 +292,48 @@ async function frontends(user, { fromUrl, toUrl, targets, deploy }) {
 async function relink(user, projectId, { oldServiceId, newAccountId, newServiceId, newName, newUrl }) {
   if (!safeId(oldServiceId) || !safeId(newServiceId) || !mongoose.isValidObjectId(newAccountId)) throw fail(400, "Invalid servers.");
   const { entry, dataKey, fields } = await loadProject(user, projectId);
+  const sourceLink = linkedSource(fields, oldServiceId);
+  const migration = fields.renderMigration;
+  if (!migration || migration.sourceServiceId !== oldServiceId || migration.targetServiceId !== newServiceId || migration.targetAccountId !== String(newAccountId)) {
+    throw fail(409, "Prepare the replacement and custom-domain handoff before relinking the project.");
+  }
+  const destination = accountOf(user, dataKey, newAccountId);
+  if (!destination) throw fail(404, "The target Render account is no longer connected.");
+  const targetDomains = await listDomains(destination.apiKey, newServiceId);
+  const missingDomains = (migration.domains || []).filter((name) => !targetDomains.some((d) => d.name === name && d.verificationStatus === "verified"));
+  if (missingDomains.length) throw fail(409, "Do not relink yet. These custom domains are not verified on the new service: " + missingDomains.join(", "));
+  const sourceAccount = accountOf(user, dataKey, sourceLink.accountId);
   const others = (Array.isArray(fields.renderServices) ? fields.renderServices : []).filter((s) => s && s.serviceId !== oldServiceId && s.serviceId !== newServiceId);
   const added = { accountId: String(newAccountId), serviceId: newServiceId, name: String(newName || newServiceId), url: /^https:\/\//i.test(String(newUrl || "")) ? newUrl : "", suspended: false };
   const next = { ...fields, renderServices: [...others, added] };
   if (fields.renderServiceId === oldServiceId || !fields.renderServiceId) {
     next.renderAccountId = String(newAccountId); next.renderServiceId = newServiceId; next.renderServiceName = added.name;
   }
-  STRIP.forEach((key) => delete next[key]);
-  const now = new Date();
-  await User.updateOne({ _id: user._id, "projects._id": entry._id }, { $set: { "projects.$.enc": "udk", "projects.$.data": User.sealEntry(dataKey, next), "projects.$.updatedAt": now } });
-  return { renderServiceId: newServiceId, renderAccountId: String(newAccountId) };
+  if (!next.renderAccountOriginId) {
+    next.renderAccountOriginId = String(sourceLink.accountId);
+    next.renderAccountOriginName = sourceAccount?.name || "";
+  }
+  next.renderMigration = { ...migration, stage: "relinked", relinkedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  await saveProjectFields(user, entry, dataKey, next);
+  return { renderServiceId: newServiceId, renderAccountId: String(newAccountId), originAccountId: String(next.renderAccountOriginId) };
 }
 
 /** Deletes the old service. Refused while the project still points at it, and needs the exact name typed. */
 async function deleteOld(user, projectId, { serviceId, accountId, confirmName }) {
   if (!safeId(serviceId)) throw fail(400, "Invalid service.");
-  const { dataKey, fields } = await loadProject(user, projectId);
+  const { entry, dataKey, fields } = await loadProject(user, projectId);
   if (fields.renderServiceId === serviceId) throw fail(409, "The project still uses this server. Relink it to the new server first.");
+  const migration = fields.renderMigration;
+  if (!migration || migration.stage !== "relinked" || migration.sourceServiceId !== serviceId || migration.sourceAccountId !== String(accountId)) {
+    throw fail(409, "The old server can only be deleted after the project has been relinked through the migration wizard.");
+  }
+  const targetAccount = accountOf(user, dataKey, migration.targetAccountId);
+  if (!targetAccount) throw fail(409, "The destination account is no longer connected; keep the old server until it is restored.");
+  const targetDomainList = await listDomains(targetAccount.apiKey, migration.targetServiceId);
+  const missingDomains = (migration.domains || []).filter((name) => !targetDomainList.some((d) => d.name === name && d.verificationStatus === "verified"));
+  if (missingDomains.length) throw fail(409, "The old server is being kept because these domains are not verified on the replacement: " + missingDomains.join(", "));
+  const newService = await readService(targetAccount.apiKey, migration.targetServiceId);
+  if (newService.suspended === "suspended") throw fail(409, "The replacement server is suspended. The old server will not be deleted.");
   const account = accountOf(user, dataKey, accountId);
   if (!account) throw fail(404, "Choose a connected Render account.");
   const service = await readService(account.apiKey, serviceId);
@@ -166,7 +341,10 @@ async function deleteOld(user, projectId, { serviceId, accountId, confirmName })
   if (!verdict.ok) throw fail(verdict.status, verdict.error);
   try { await renderRequest(account.apiKey, servicePath(serviceId), { method: "DELETE" }); }
   catch (error) { throw fail(error.status === 404 ? 404 : 502, "Render could not delete the old server."); }
-  return { deleted: true, name: service.name };
+  try {
+    await saveProjectFields(user, entry, dataKey, { ...fields, renderMigration: { ...migration, stage: "complete", completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } });
+  } catch { /* Service deletion succeeded; retain the migration record for recovery if the metadata write fails. */ }
+  return { deleted: true, name: service.name, domainsVerified: (migration.domains || []).length };
 }
 
-module.exports = { plan, create, status, frontends, relink, deleteOld };
+module.exports = { plan, create, status, frontends, prepareDomains, verifyDomains, origin, relink, deleteOld };
