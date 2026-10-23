@@ -3,6 +3,7 @@ const User = require("../models/schema");
 const { renderRequest } = require("./renderOps");
 const { fetchAllPages } = require("./renderPaging");
 const { mapWithConcurrency } = require("./renderGuards");
+const deploymentOps = require("./deployOps");
 
 /*
  * Moving a backend to a new address: find every environment variable (in every connected Render account) that
@@ -24,7 +25,7 @@ function accountsOf(user, dataKey) {
   return (user.renderAccounts || []).filter((e) => e.enc === "udk").map((e) => ({ id: String(e._id), ...User.publicEntry(e, dataKey) })).filter((a) => a.apiKey);
 }
 
-async function findUrlReferences(user, fromUrl, { strict = false } = {}) {
+async function findUrlReferences(user, fromUrl, { strict = false, projectId = "" } = {}) {
   const host = hostOf(fromUrl);
   if (!host) throw Object.assign(new Error("Enter the old address."), { status: 400 });
   const dataKey = await user.getDataKey();
@@ -45,15 +46,48 @@ async function findUrlReferences(user, fromUrl, { strict = false } = {}) {
       }
     });
   }
-  return refs.sort((a, b) => a.serviceName.localeCompare(b.serviceName) || a.key.localeCompare(b.key));
+  // Linked Vercel, Netlify, Railway and Cloudflare Pages frontends also need their environment updated.
+  if (projectId) {
+    let linked = [];
+    try { linked = await deploymentOps.listTargets(user, projectId); }
+    catch {
+      if (strict) throw Object.assign(new Error("Could not inspect the project's linked frontend providers safely."), { status: 502 });
+    }
+    for (const view of linked.filter((item) => String(item.ref || "").startsWith("host:"))) {
+      try {
+        const target = await deploymentOps.findTarget(user, projectId, view.ref);
+        const read = await deploymentOps.readVars(target);
+        if (!read.ok) throw new Error(read.error || "Environment variables could not be read.");
+        for (const variable of read.vars || []) {
+          const key = variable.key || variable.name;
+          if (typeof key === "string" && typeof variable.value === "string" && variable.value.toLowerCase().includes(host)) {
+            refs.push({
+              ref: view.ref, provider: view.provider, accountId: view.accountId || "",
+              accountName: view.accountName || "", serviceName: view.name || target.name || view.ref,
+              key, type: view.provider || "host", suspended: false
+            });
+          }
+        }
+      } catch {
+        if (strict) throw Object.assign(new Error("Could not scan a linked hosting provider's frontend variables safely. Reconnect that provider or check its access before continuing."), { status: 502 });
+      }
+    }
+  }
+  return refs.sort((a, b) => String(a.serviceName || "").localeCompare(String(b.serviceName || "")) || String(a.key || "").localeCompare(String(b.key || "")));
 }
 
-async function replaceUrlReferences(user, { fromUrl, toUrl, targets = [], deploy = false }) {
+async function replaceUrlReferences(user, { projectId = "", fromUrl, toUrl, targets = [], deploy = false }) {
   if (!hostOf(fromUrl) || !originOf(toUrl)) throw Object.assign(new Error("Enter the old address and a new https address."), { status: 400 });
   const dataKey = await user.getDataKey();
   const accounts = new Map(accountsOf(user, dataKey).map((a) => [a.id, a]));
   const byService = new Map();
+  const byHost = new Map();
   for (const t of targets.slice(0, 100)) {
+    if (typeof t?.ref === "string" && t.ref.startsWith("host:") && typeof t.key === "string") {
+      if (!byHost.has(t.ref)) byHost.set(t.ref, { ref: t.ref, keys: new Set() });
+      byHost.get(t.ref).keys.add(t.key);
+      continue;
+    }
     if (!mongoose.isValidObjectId(t?.accountId) || !/^[A-Za-z0-9_-]{1,160}$/.test(String(t?.serviceId || "")) || typeof t?.key !== "string") continue;
     const k = t.accountId + ":" + t.serviceId;
     if (!byService.has(k)) byService.set(k, { accountId: t.accountId, serviceId: t.serviceId, keys: new Set() });
@@ -83,6 +117,32 @@ async function replaceUrlReferences(user, { fromUrl, toUrl, targets = [], deploy
       }
       results.push({ serviceId: svc.serviceId, ok: !deployError, changed, deployed, ...(deployError ? { error: deployError } : {}) });
     } catch (error) { results.push({ serviceId: svc.serviceId, ok: false, error: error?.message || "Render refused the change." }); }
+  }
+  for (const svc of byHost.values()) {
+    let changed = 0, deployed = false, error = "", serviceName = svc.ref;
+    try {
+      if (!projectId) throw new Error("Project context is required for a linked hosting-provider frontend.");
+      const target = await deploymentOps.findTarget(user, projectId, svc.ref);
+      serviceName = target.name || svc.ref;
+      const read = await deploymentOps.readVars(target);
+      if (!read.ok) throw new Error(read.error || "Could not read the hosting provider's variables.");
+      for (const variable of read.vars || []) {
+        const key = variable.key || variable.name;
+        if (!svc.keys.has(key)) continue;
+        if (typeof variable.value !== "string") throw new Error("A selected variable is hidden by the provider and cannot be rewritten safely.");
+        const next = replaceHost(variable.value, fromUrl, toUrl);
+        if (next === variable.value) continue;
+        const written = await deploymentOps.writeVar(target, key, next);
+        if (!written.ok) throw new Error(written.error || "The hosting provider refused the variable update.");
+        changed += 1;
+      }
+      if (deploy && svc.keys.size) {
+        const redeploy = await deploymentOps.redeployTarget(target);
+        deployed = Boolean(redeploy.ok);
+        if (!redeploy.ok) error = redeploy.error || "The frontend redeploy failed. Retry this migration step.";
+      }
+    } catch (e) { error = e?.message || "Could not update the linked frontend."; }
+    results.push({ ref: svc.ref, serviceName, ok: !error, changed, deployed, ...(error ? { error } : {}) });
   }
   return { results, changed: results.reduce((n, r) => n + (r.changed || 0), 0) };
 }
