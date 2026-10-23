@@ -161,6 +161,15 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
       setError("Some frontend environment updates or redeploys failed. Fix or retry those services before continuing.");
       return;
     }
+    // A custom domain on the client/static site is independent of the backend's Render domain mapping.
+    // Only run the DNS cutover step if the source backend itself has custom domains attached.
+    if (!plan.domains?.length) {
+      const prepared = await movePrepareDomains(projectId, { sourceServiceId: serviceId, targetAccountId: created.accountId, targetServiceId: created.serviceId });
+      setDomainPrep(prepared);
+      setDomainCheck({ verified: true, domains: [] });
+      setStep("verify");
+      return;
+    }
     setStep("domains");
   });
   const doPrepareDomains = () => run(async () => {
@@ -191,7 +200,8 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
     onDone?.();
   });
 
-  const order = STEPS.map((s) => s[0]);
+  const visibleSteps = plan && !plan.domains?.length ? STEPS.filter(([id]) => id !== "domains") : STEPS;
+  const order = visibleSteps.map((s) => s[0]);
   const state = (id) => (step === "done" || order.indexOf(id) < order.indexOf(step) ? "done" : id === step ? "active" : "todo");
 
   return (
@@ -199,7 +209,7 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
       <h2 className="mv__title">Move {target.name} to another account</h2>
       <p className="field__note">The new server is built first, and the old one is deleted last. You can stop at any step: nothing is deleted until the final one.</p>
       <ol className="mv__steps">
-        {STEPS.map(([id, label]) => <li key={id} className={"is-" + state(id)}><span className="mv__dot">{state(id) === "done" ? "✓" : ""}</span>{label}</li>)}
+        {visibleSteps.map(([id, label]) => <li key={id} className={"is-" + state(id)}><span className="mv__dot">{state(id) === "done" ? "✓" : ""}</span>{label}</li>)}
       </ol>
       {error ? <div className="notice notice--err" role="alert">{error}</div> : null}
 
