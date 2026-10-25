@@ -8,7 +8,7 @@
     "@react-native-ml-kit/face-detection": "^2.0.1",
     "expo": "~57.0.30",
     "expo-background-task": "~57.0.0",
-    "expo-battery": "~57.0.0",
+    "expo-battery": "~58.0.3",
     "expo-build-properties": "~57.0.22",
     "expo-camera": "~57.0.6",
     "expo-clipboard": "~57.0.2",
