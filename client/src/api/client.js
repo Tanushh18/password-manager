@@ -78,6 +78,18 @@ const instance = axios.create({
     withCredentials: true
 });
 
+// In-flight request count, so the page can show a loader while the server works (see Components/NetBar).
+let inflight = 0;
+const watchers = new Set();
+export const onActivity = (fn) => { watchers.add(fn); fn(inflight); return () => watchers.delete(fn); };
+const track = (d) => { inflight = Math.max(0, inflight + d); watchers.forEach((fn) => fn(inflight)); };
+const baseAdapter = axios.getAdapter(instance.defaults.adapter);
+instance.defaults.adapter = (config) =>
+{
+    track(1);
+    return baseAdapter(config).finally(() => track(-1));
+};
+
 // Fallback for browsers that refuse the cross-site session cookie: the sign-in token is kept here and sent as a
 // Bearer header instead. Only used after the cookie was seen to fail; cleared on sign-out or a rejected session.
 const BEARER_KEY = "pm_bearer";

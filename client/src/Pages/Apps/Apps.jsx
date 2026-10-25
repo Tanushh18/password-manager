@@ -4,7 +4,8 @@ import Ambience from "../../Components/Ambience/Ambience";
 import "./Apps.css";
 
 // The APK is a static file served by this site, so /apps works with no extra server. Keep in step with mobile/app.json.
-const APK = { file: "/apps/stashr.apk", version: "2.2.0" };
+const EXT = { file: "/apps/stashr-extension.zip", version: "1.0.1" };
+const APK = { file: "/apps/stashr.apk", version: "2.3.0" };
 
 const FEATURES = [
   "Passwords, 2FA codes and secure notes, unlocked with your fingerprint or face",
@@ -33,6 +34,13 @@ export default function Apps() {
           <li>Open Stashr, sign in, and turn on photo backup in the Photos tab.</li>
         </ol>
         <p className="apps__note">Updates install over the old app and keep your data. If a previous build refuses to update, uninstall it first.</p>
+        <h2>Browser extension</h2>
+        <p>Autofill from your vault in Chrome, Edge and Brave. Version {EXT.version}.</p>
+        <a className="btn btn--primary apps__download" href={EXT.file} download="stashr-extension.zip">Download extension</a>
+        <ol>
+          <li>Unzip the file, then open <code>chrome://extensions</code> and turn on Developer mode.</li>
+          <li>Choose <strong>Load unpacked</strong> and pick the unzipped folder.</li>
+        </ol>
         <p className="privacy__back"><Link to="/">← Back to Stashr</Link></p>
       </article>
     </div>

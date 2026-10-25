@@ -64,17 +64,54 @@ class StashrAutofillService : AccessibilityService() {
       hideOverlay()
       return
     }
-    if (event.eventType != AccessibilityEvent.TYPE_VIEW_FOCUSED) return
-
-    val source = event.source ?: return
     try {
-      if (!source.isEditable) {
-        hideOverlay()
-        return
+      handleEvent(event, pkg)
+    } catch (e: Exception) {
+      // Some apps hand back stale or protected nodes; never let that take the service down.
+      hideOverlay()
+    }
+  }
+
+  private var lastScan = 0L
+
+  private fun handleEvent(event: AccessibilityEvent, pkg: String) {
+    when (event.eventType) {
+      AccessibilityEvent.TYPE_VIEW_FOCUSED, AccessibilityEvent.TYPE_VIEW_CLICKED -> {
+        val source = event.source ?: return scanFocus(pkg)
+        try {
+          if (!source.isEditable) {
+            hideOverlay()
+            return
+          }
+          if (isLoginField(source, pkg)) showFor(pkg, source) else hideOverlay()
+        } finally {
+          @Suppress("DEPRECATION") source.recycle()
+        }
       }
-      if (isLoginField(source)) showFor(pkg, source) else hideOverlay()
-    } finally {
-      @Suppress("DEPRECATION") source.recycle()
+      // Apps that draw their own fields (or hide them from focus events) only show up when the window changes.
+      AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED, AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+        val now = System.currentTimeMillis()
+        if (now - lastScan < 600) return
+        lastScan = now
+        scanFocus(pkg)
+      }
+    }
+  }
+
+  /** Find the focused input by walking the window, for apps whose focus events carry no source. */
+  private fun scanFocus(pkg: String) {
+    val root = rootFor(pkg) ?: return
+    val focus = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return
+    if (focus.isEditable && isLoginField(focus, pkg)) showFor(pkg, focus)
+  }
+
+  /** The active window's root, or the root of any window that belongs to the app (some apps report no active window). */
+  private fun rootFor(pkg: String): AccessibilityNodeInfo? {
+    rootInActiveWindow?.let { return it }
+    return try {
+      windows.mapNotNull { it.root }.firstOrNull { it.packageName?.toString() == pkg }
+    } catch (e: Exception) {
+      null
     }
   }
 
@@ -101,9 +138,9 @@ class StashrAutofillService : AccessibilityService() {
   }
 
   /** A password field, or the field right before one on the same screen (the username box). */
-  private fun isLoginField(node: AccessibilityNodeInfo): Boolean {
+  private fun isLoginField(node: AccessibilityNodeInfo, pkg: String): Boolean {
     if (node.isPassword) return true
-    val root = rootInActiveWindow ?: return false
+    val root = rootFor(pkg) ?: return false
     val fields = editableNodes(root)
     val idx = fields.indexOfFirst { it == node }
     return idx >= 0 && idx + 1 < fields.size && fields[idx + 1].isPassword
@@ -126,7 +163,7 @@ class StashrAutofillService : AccessibilityService() {
 
   private fun showFor(pkg: String, anchor: AccessibilityNodeInfo) {
     val all = CredentialStore.load(this)
-    val root = rootInActiveWindow ?: return
+    val root = rootFor(pkg) ?: return
     val url = if (Matcher.isBrowser(pkg)) browserUrl(root, pkg) else null
     val key = Matcher.siteKey(pkg, url)
     val linked = key?.let { CredentialStore.linksFor(this, it) }.orEmpty()
@@ -298,7 +335,7 @@ class StashrAutofillService : AccessibilityService() {
 
   /** Fills only if the app in front is still the one the list was shown for. */
   private fun fill(c: Credential, expectedPackage: String?): Boolean {
-    val root = rootInActiveWindow ?: return false
+    val root = (expectedPackage?.let { rootFor(it) } ?: rootInActiveWindow) ?: return false
     if (expectedPackage != null && root.packageName?.toString() != expectedPackage) return false
     val password = passwordNodes(root).firstOrNull() ?: return false
     val fields = editableNodes(root)

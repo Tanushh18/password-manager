@@ -1,0 +1,9 @@
+.netbar { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 9999; opacity: 0; transition: opacity .2s; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--accent, #6d5efc), transparent); background-size: 40% 100%; background-repeat: no-repeat; }
+.netbar--on { opacity: 1; animation: netbar-run 1.1s ease-in-out infinite; }
+@keyframes netbar-run { from { background-position: -40% 0; } to { background-position: 140% 0; } }
+.netpill { position: fixed; right: 16px; bottom: 16px; z-index: 9999; display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px;
+  font-size: .85rem; background: var(--surface, #1e1e2a); color: var(--text, #fff); box-shadow: 0 4px 18px rgba(0,0,0,.25); }
+.netpill__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent, #6d5efc); animation: netpill-pulse 1s ease-in-out infinite; }
+@keyframes netpill-pulse { 50% { opacity: .3; transform: scale(.7); } }
+@media (prefers-reduced-motion: reduce) { .netbar--on, .netpill__dot { animation: none; } }
