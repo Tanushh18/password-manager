@@ -143,7 +143,7 @@ export default function RenderDashboard() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
   useEffect(() => {
-    document.title = "Render Control Center · Stashr";
+    document.title = "Control Center · Stashr";
     const onKey = (event) => {
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(event.target?.tagName) || event.target?.isContentEditable;
       if (((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") || (!typing && event.key === "/")) {
@@ -341,7 +341,7 @@ export default function RenderDashboard() {
         <div className="rd-shell rd-topbar__inner">
           <div className="rd-topbar__title">
             <div className="rd-eyebrow"><span />ROBOT HQ · INFRASTRUCTURE</div>
-            <h1>🤖 Render Control Center</h1>
+            <h1>🤖 Control Center</h1>
           </div>
           <div className="rd-topbar__tools">
             <span className="rd-sync" role="status" aria-live="polite">{loading ? "Loading…" : lastSync ? "Synced " + timeAgo(lastSync.toISOString()) : "Not synced"}</span>
@@ -350,7 +350,7 @@ export default function RenderDashboard() {
             <button type="button" className="rd-btn rd-btn--primary" onClick={() => { setConnectError(""); setConnectOpen(true); }}>＋ Connect account</button>
           </div>
         </div>
-        <nav className="rd-shell rd-nav" aria-label="Render control center sections">
+        <nav className="rd-shell rd-nav" aria-label="Control center sections">
           {VIEWS.map(([id, label]) => (
             <button key={id} type="button" className={view === id ? "is-active" : ""} aria-current={view === id ? "page" : undefined} onClick={() => go(id)}>
               {label}

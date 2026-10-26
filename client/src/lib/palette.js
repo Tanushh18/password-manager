@@ -8,7 +8,7 @@ export function buildEntries({ items = [], projects = [], profile = null, signed
     { label: "Projects", to: "/projects" },
     { label: "New project", to: "/projects/new" },
     { label: "Services", to: "/services" },
-    { label: "Render", to: "/render" },
+    { label: "Control Center", to: "/render" },
     { label: "Cron", to: "/cron" },
     { label: "Settings", to: "/settings" },
     ...(features.photos ? [{ label: "Photo Cloud", to: "/photos" }] : []),

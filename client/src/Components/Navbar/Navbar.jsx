@@ -47,7 +47,7 @@ function Navbar() {
         { to: "/passwords", label: "Passwords" },
         ...(profile?.features?.photos !== false ? [{ to: "/photos", label: "Photos" }] : []),
         ...(profile?.features?.projects !== false ? [{ to: "/projects", label: "Projects" }] : []),
-        ...(["servers", "services", "cron"].some((k) => profile?.features?.[k] !== false) ? [{ to: "/render", label: "Infrastructure", also: ["/services", "/cron"] }] : []),
+        ...(["servers", "services", "cron"].some((k) => profile?.features?.[k] !== false) ? [{ to: "/render", label: "Control Center", also: ["/services", "/cron"] }] : []),
       ]
     : [
         { to: "/", label: "Home" },

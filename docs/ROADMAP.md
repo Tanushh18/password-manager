@@ -16,7 +16,7 @@ This is a planning list, not a record of live competitor research.
 | Command palette (`Ctrl/Cmd+K`), clipboard auto-clear | yes | clipboard clear already existed | - |
 | Incident bell with desktop notifications | yes | not yet | uses `/render/ops/incidents` |
 | Opt-in weekly breach check | yes | not yet | - |
-| Infrastructure tab bar (Servers / Usage / Map / Cron) | yes | n/a | - |
+| Control Center tab bar (Control Center / Usage / Map / Cron) | yes | n/a | - |
 | Photo Cloud: lazy thumbnails, paging, favourites | yes | already native | `PATCH /photo-cloud/media/:id` |
 | Photo Cloud: multi-select (favourite, share link, remove) | yes | - | - |
 | Secure notes, cards and identities as item types | yes | yes | stored inside the item |
