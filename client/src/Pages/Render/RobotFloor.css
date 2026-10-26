@@ -1,10 +1,10 @@
 /* Robot Floor: a dark factory floor. Always dark on purpose, like the Robot Army. */
-.fl { --fl-bg: #080b14; --fl-panel: rgba(18, 24, 40, 0.9); --fl-line: rgba(122, 255, 196, 0.16); --fl-text: #e6fff4; --fl-dim: #8aa3b5; --fl-ok: #39ff9c; --fl-mid: #ffd447; --fl-bad: #ff4d6d;
-  color: var(--fl-text); padding: 16px; border-radius: 18px; display: grid; gap: 14px; border: 1px solid rgba(200, 107, 255, 0.35);
-  background: radial-gradient(800px 360px at 0% -10%, rgba(200, 107, 255, 0.16), transparent 60%), linear-gradient(var(--fl-line) 1px, transparent 1px) 0 0 / 32px 32px, linear-gradient(90deg, var(--fl-line) 1px, transparent 1px) 0 0 / 32px 32px, var(--fl-bg); }
+.fl { --fl-bg: #07121c; --fl-panel: rgba(12, 28, 42, 0.9); --fl-line: rgba(143, 224, 220, 0.16); --fl-text: #e6fff4; --fl-dim: #8aa3b5; --fl-ok: #3ccf9a; --fl-mid: #f5c86a; --fl-bad: #ef6b6b;
+  color: var(--fl-text); padding: 16px; border-radius: 18px; display: grid; gap: 14px; border: 1px solid rgba(43, 179, 177, 0.35);
+  background: radial-gradient(800px 360px at 0% -10%, rgba(43, 179, 177, 0.16), transparent 60%), linear-gradient(var(--fl-line) 1px, transparent 1px) 0 0 / 32px 32px, linear-gradient(90deg, var(--fl-line) 1px, transparent 1px) 0 0 / 32px 32px, var(--fl-bg); }
 .fl-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
 .fl-top h3 { margin: 0; font-size: 1.05rem; } .fl-top p { margin: 0.2rem 0 0; font-size: 0.8rem; color: var(--fl-dim); }
-.fl-demo { font-style: normal; font-size: 0.65rem; padding: 0.1rem 0.45rem; border-radius: 999px; background: rgba(255, 212, 71, 0.18); color: var(--fl-mid); vertical-align: middle; }
+.fl-demo { font-style: normal; font-size: 0.65rem; padding: 0.1rem 0.45rem; border-radius: 999px; background: rgba(245, 200, 106, 0.18); color: var(--fl-mid); vertical-align: middle; }
 .fl-demo-note { margin: 0; font-size: 0.8rem; color: var(--fl-dim); }
 
 /* runway with a plane that lands while something is deploying */
@@ -18,7 +18,7 @@
 
 .fl-lanes { display: grid; gap: 10px; }
 .fl-lane { display: grid; grid-template-columns: 230px 1fr; gap: 12px; padding: 10px; border-radius: 14px; background: var(--fl-panel); border: 1px solid var(--fl-line); }
-.fl-lane.is-burning { border-color: rgba(255, 106, 61, 0.55); } .fl-lane.is-down { border-color: rgba(255, 77, 109, 0.6); } .fl-lane.has-incident { box-shadow: 0 0 0 1px rgba(255, 77, 109, 0.4) inset; }
+.fl-lane.is-burning { border-color: rgba(255, 106, 61, 0.55); } .fl-lane.is-down { border-color: rgba(239, 107, 107, 0.6); } .fl-lane.has-incident { box-shadow: 0 0 0 1px rgba(239, 107, 107, 0.4) inset; }
 .fl-hud { display: grid; gap: 4px; font-size: 0.78rem; align-content: start; }
 .fl-hud__head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
 .fl-hud__head strong, .fl-hud__head button { font-size: 0.9rem; color: var(--fl-text); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; font-weight: 700; overflow-wrap: anywhere; }
