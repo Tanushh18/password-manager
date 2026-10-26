@@ -7,6 +7,10 @@
 - [ ] Android: these changes are in the source but `client/public/apps/stashr.apk` is the OLD build. Build a new APK
       (`npm run build:apk` in mobile/) before expecting them on the phone. The extension zip was rebuilt.
 - [ ] Set `EXTENSION_ORIGINS=chrome-extension://<id>` on the server if the extension calls the API with cookies.
+- [ ] Sign-in limits now live in MongoDB (`rate_hits`): confirm repeated bad logins return 429 and survive a restart.
+- [ ] Settings -> Devices and activity: sign out another device; check the activity log fills in.
+- [ ] Add a card, a secure note and an identity (web and app); export CSV and re-import to confirm they round-trip.
+- [ ] Photos -> Select: favourite / share link / remove several photos.
 - [ ] Infrastructure tab bar: check spacing on Servers / Usage / Map / Cron pages (could not be viewed in a browser here).
 
 # Earlier notes (planned 15 Oct 2026)

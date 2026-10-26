@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Alert, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -13,6 +13,8 @@ import { Bounce, Card, Chip, FadeIn, GradientButton, IconButton } from "../../co
 import { useTheme, alpha } from "../../lib/theme";
 import { useVault } from "../../lib/vault";
 import { domainOf } from "../../lib/items";
+import { api } from "../../lib/api";
+import { openIncidents } from "../../lib/alerts";
 
 const SORTS = [
   { key: "recent", label: "Recent" },
@@ -38,6 +40,14 @@ export default function Vault() {
   const [moving, setMoving] = useState(false); // showing the folder picker for "Move"
   const [renaming, setRenaming] = useState(null); // null | string (new name being typed)
   const [busy, setBusy] = useState(false);
+  const [incidents, setIncidents] = useState([]); // open server incidents (empty when there is no Render setup)
+
+  useEffect(() => {
+    if (offline) return undefined;
+    let live = true;
+    api.opsIncidents().then((r) => { if (live) setIncidents(openIncidents(r && r.incidents)); }).catch(() => {});
+    return () => { live = false; };
+  }, [offline, syncing]);
 
   const toggleSelect = (id) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const stopSelecting = () => { setSelecting(false); setSelected(new Set()); setMoving(false); };
@@ -129,6 +139,16 @@ export default function Vault() {
             Offline — showing your last synced vault. Editing is paused.
           </Text>
         </View>
+      ) : null}
+      {incidents.length ? (
+        <Bounce onPress={() => router.push("/monitoring")} scaleTo={0.98}>
+          <View style={[styles.banner, { backgroundColor: alpha(theme.danger, 0.1), borderColor: alpha(theme.danger, 0.4) }]}>
+            <Icon name="alert" size={16} color={theme.danger} />
+            <Text style={{ flex: 1, color: theme.danger, fontFamily: theme.font.bodyMedium, fontSize: 13 }}>
+              {incidents.length} open incident{incidents.length === 1 ? "" : "s"}: {incidents[0].serviceName || "a service"}{incidents.length > 1 ? " and more" : ""}. Tap to review.
+            </Text>
+          </View>
+        </Bounce>
       ) : null}
       {broken ? (
         <View style={[styles.banner, { backgroundColor: alpha(theme.danger, 0.1), borderColor: alpha(theme.danger, 0.4) }]}>

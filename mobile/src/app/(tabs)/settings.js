@@ -267,6 +267,15 @@ export default function Settings() {
             />
           </Section>
 
+          <Section title="WEEKLY CHECK" delay={170}>
+            <Row
+              icon="shield"
+              title="Weekly breach check"
+              subtitle="Checks your passwords against Have I Been Pwned about once a week. Only the first 5 characters of each password's hash are sent."
+              right={<Switch value={Boolean(prefs.autoBreach)} onValueChange={(v) => setPrefs({ autoBreach: v })} trackColor={{ false: alpha(theme.accent, 0.2), true: theme.accent }} thumbColor="#fff" />}
+            />
+          </Section>
+
           <Section title="YOUR DATA" delay={180}>
             <Row icon="download" title="Export & import" subtitle="Encrypted backups, CSV, and imports from other managers" onPress={() => router.push("/account/data")} />
             <Row icon="note" title="Privacy policy" onPress={() => Linking.openURL(`${WEBSITE}/privacy`)} />

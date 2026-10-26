@@ -25,3 +25,10 @@
 
 .drive-folder-row{text-decoration:none;color:inherit}.drive-folder-row strong{display:flex;align-items:center;gap:.4rem}
 .photo__loading { display:block; width:100%; aspect-ratio:1; background: var(--line, rgba(127,127,127,.15)); border-radius: 8px; }
+
+/* bulk selection */
+.media-card { position: relative; }
+.media-card.is-picked { outline: 2px solid var(--accent); }
+.media-card__pick { position: absolute; top: 0.5rem; left: 0.5rem; z-index: 3; width: 1.15rem; height: 1.15rem; cursor: pointer; }
+.photo-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 0.8rem; padding: 0.6rem 0.8rem; border: 1px solid var(--accent); border-radius: 12px; background: rgba(var(--accent-rgb), 0.08); }
+.photo-bulk strong { margin-right: auto; }

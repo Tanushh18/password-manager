@@ -18,6 +18,22 @@ This is a planning list, not a record of live competitor research.
 | Opt-in weekly breach check | yes | not yet | - |
 | Infrastructure tab bar (Servers / Usage / Map / Cron) | yes | n/a | - |
 | Photo Cloud: lazy thumbnails, paging, favourites | yes | already native | `PATCH /photo-cloud/media/:id` |
+| Photo Cloud: multi-select (favourite, share link, remove) | yes | - | - |
+| Secure notes, cards and identities as item types | yes | yes | stored inside the item |
+| Devices list with per-device sign-out, security activity log | yes | - | `GET /account/sessions`, `DELETE /account/sessions/:id`, `GET /account/audit` |
+| Sign-in rate limits that survive restarts, per-account lockout | n/a | n/a | MongoDB `rate_hits` (TTL) |
+| Opt-in weekly breach check, open-incident banner | web | yes | - |
+
+## Still open, and why it was not built yet
+| Item | Why it is not done |
+|---|---|
+| Passkeys (WebAuthn) sign-in | Security-critical; needs a real authenticator to test end to end. A bug would weaken sign-in, so it needs a careful, separately reviewed change. |
+| Shared folders between users | Needs a sharing/ACL model decision first (items are encrypted with a per-account key). |
+| Attachments | Needs blob storage and size/abuse limits chosen. |
+| Emergency access | Needs outbound email and a waiting-period workflow. |
+| Vault entries in their own collection | Rewrites every route that touches `passwords`; needs a backup and a reversible migration. Delta sync already removes the main performance pain. |
+| Offline web vault | A readable local copy of the vault is a security trade-off that needs a decision. |
+| Android notifications / APK pipeline | Needs the build and push credentials. |
 
 ## Next, in priority order
 

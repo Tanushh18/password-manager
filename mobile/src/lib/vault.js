@@ -29,8 +29,9 @@ const K = {
   server: "aurelia_server",
   bio: "aurelia_biometric",
   prefs: "aurelia_prefs",
+  breachAt: "aurelia_breach_at",
 };
-const DEFAULT_PREFS = { autoLock: 0.5, icons: false, autofill: false, autofillBiometric: true }; // minutes; -1 = never
+const DEFAULT_PREFS = { autoLock: 0.5, icons: false, autofill: false, autofillBiometric: true, autoBreach: false }; // minutes; -1 = never
 const BIO_OPTIONS = { promptMessage: "Unlock Stashr" };
 
 const VaultContext = createContext(null);
@@ -457,6 +458,20 @@ export function VaultProvider({ children }) {
     return () => { stopped = true; controller.abort(); clearInterval(timer); sub.remove(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, offline]);
+
+  /* Opt-in weekly breach check (Settings). Runs quietly; the result shows up on the Health tab. */
+  const autoBreachRan = useRef(false);
+  useEffect(() => {
+    if (status !== "ready" || offline || !prefs.autoBreach || !items.length || autoBreachRan.current) return;
+    autoBreachRan.current = true;
+    (async () => {
+      const last = Number((await safe(() => SecureStore.getItemAsync(K.breachAt))) || 0);
+      if (Date.now() - last < 7 * 86400000) return;
+      await safe(() => SecureStore.setItemAsync(K.breachAt, String(Date.now())));
+      try { await runBreachCheck(); } catch (e) { await safe(() => SecureStore.deleteItemAsync(K.breachAt)); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, offline, prefs.autoBreach, items.length]);
 
   /* ── Autofill: keep the native service's encrypted copy of the vault in step with it ── */
   useEffect(() => {
