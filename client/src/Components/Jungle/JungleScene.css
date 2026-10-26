@@ -75,3 +75,6 @@ body.has-jungle { padding-bottom: 58px; }
 
 /* With the phone bottom bar the scene ends above it, so the grass and walking animals stay visible. */
 body.has-bottomnav .jungle { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+
+/* Phones: the vines would sit on top of page headings, so they are hidden; grass, leaves and animals stay. */
+@media (max-width: 720px) { .jg-vine { display: none; } }
