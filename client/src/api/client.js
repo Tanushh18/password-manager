@@ -303,7 +303,9 @@ export const getRenderAudit = (limit = 50) => instance.get("/render/audit?limit=
 export const getRenderEnvGroups = (accountId) => instance.get(`/render/accounts/${encodeURIComponent(accountId)}/env-groups`).then((r) => r.data);
 
 
-export const getRenderMetrics = (accountId, serviceId, metric, startTime) => instance.get(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/metrics`, { params: { metric, startTime, resolutionSeconds: 60 } }).then((r) => r.data);
+// Aim for ~120 points whatever the range: a fixed 60s step makes 24h/7d pull 1,440+ points from Render, which is what made charts slow.
+const metricResolution = (startTime) => Math.max(60, Math.min(3600, Math.ceil((Date.now() - Date.parse(startTime)) / 1000 / 120 / 30) * 30 || 60));
+export const getRenderMetrics = (accountId, serviceId, metric, startTime) => instance.get(`/render/accounts/${encodeURIComponent(accountId)}/services/${encodeURIComponent(serviceId)}/metrics`, { params: { metric, startTime, resolutionSeconds: metricResolution(startTime) } }).then((r) => r.data);
 
 export const getRenderDbExports = (accountId, postgresId) => instance.get(`/render/accounts/${encodeURIComponent(accountId)}/postgres/${encodeURIComponent(postgresId)}/exports`).then((r) => r.data);
 export const createRenderDbExport = (accountId, postgresId) => instance.post(`/render/accounts/${encodeURIComponent(accountId)}/postgres/${encodeURIComponent(postgresId)}/exports`).then((r) => r.data);
