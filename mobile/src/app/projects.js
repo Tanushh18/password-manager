@@ -79,7 +79,7 @@ export default function Projects() {
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={{ color: theme.heading, fontFamily: theme.font.display, fontSize: 26, letterSpacing: -0.4 }}>Projects</Text>
           <Text style={{ color: theme.textMuted, fontFamily: theme.font.body, fontSize: 13 }}>
-            {projects.length} project{projects.length === 1 ? "" : "s"} · end-to-end encrypted
+            {projects.length} project{projects.length === 1 ? "" : "s"} · encrypted
           </Text>
         </View>
         <GhostButton small title="Create & deploy" onPress={() => router.push("/deploy-new")} />

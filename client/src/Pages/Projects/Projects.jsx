@@ -132,7 +132,7 @@ export default function Projects() {
             <p className="vault__count">
               {projects.length === 0
                 ? "No projects yet."
-                : `${tiles.active} active project${tiles.active === 1 ? "" : "s"}${tiles.archived ? ` · ${tiles.archived} archived` : ""} · end-to-end encrypted`}
+                : `${tiles.active} active project${tiles.active === 1 ? "" : "s"}${tiles.archived ? ` · ${tiles.archived} archived` : ""} · encrypted`}
             </p>
           </div>
         </header>

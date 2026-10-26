@@ -109,7 +109,7 @@ export default function Editor() {
               <Text numberOfLines={1} style={{ color: theme.heading, fontFamily: theme.font.displayHeavy, fontSize: 22, marginTop: 10 }}>
                 {form.name || "Something new"}
               </Text>
-              <Text style={{ color: theme.textFaint, fontFamily: theme.font.body, marginTop: 4, fontSize: 13 }}>Encrypted on this phone before it's saved</Text>
+              <Text style={{ color: theme.textFaint, fontFamily: theme.font.body, marginTop: 4, fontSize: 13 }}>Encrypted before it's saved</Text>
             </FadeIn>
 
             {!existing ? (

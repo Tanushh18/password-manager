@@ -37,7 +37,7 @@ export default function AuthShell({ stage, children, loading, aside }) {
           <h2 className="auth__aside-title">
             {aside?.title || (
               <>
-                Encrypted on your device,
+                Encrypted before it is stored,
                 <br />
                 <em>readable only by you.</em>
               </>

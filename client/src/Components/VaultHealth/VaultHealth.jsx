@@ -40,7 +40,7 @@ export default function VaultHealth({ insights, loading, filter, onFilter, onBre
   const tone = toneFor(score);
 
   const tiles = [
-    { key: "all", label: "Total", value: insights?.total ?? 0, icon: <KeyLine size={16} />, tone: "accent" },
+    { key: "all", label: "Logins", value: insights?.total ?? 0, icon: <KeyLine size={16} />, tone: "accent" },
     { key: "strong", label: "Strong", value: insights?.strong ?? 0, icon: <Check size={16} />, tone: "ok" },
     { key: "weak", label: "Weak", value: insights?.weak ?? 0, icon: <Close size={16} />, tone: "danger" },
     { key: "reused", label: "Reused", value: insights?.reused ?? 0, icon: <Repeat size={16} />, tone: "warn" },

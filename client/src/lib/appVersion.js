@@ -5,10 +5,10 @@ export const APP_VERSION = pkg.version;
 export const APP_MAJOR_MINOR = APP_VERSION.split(".").slice(0, 2).join(".");
 
 export const WHATS_NEW = [
-  ["Everything stays in sync on its own", "Projects, Render and Services re-read GitHub and every connected Render account in the background. Add or delete something and it shows up here without pressing anything."],
-  ["One app, many servers", "Render services built from the same GitHub repo are grouped into a single app with a dropdown for every server, across all your Render accounts."],
-  ["Every GitHub repo is a project", "Connect a GitHub token and all the repos it can see appear as projects, new repos included. Projects you add yourself are never touched."],
-  ["No stale leftovers", "Links to deleted Render services drop off; projects Stashr created are archived when their repo disappears, and return if it does."],
-  ["Env vars to every deployment", "Push a variable once and it goes to every server of that app, then redeploy them all in one step."],
-  ["A cleaner, organised layout", "A status bar for sync, summary tiles, status and source filters, and a card layout that shows the servers behind each project."]
+  ["Live sync between devices", "Changes made on your phone, another browser or the extension appear here within seconds, and only what changed is downloaded."],
+  ["Trash and password history", "Deleted items wait 30 days in Trash. Each login keeps its last five passwords so you can copy or restore an old one."],
+  ["Select several at once", "Select mode on Passwords and Photos: favourite, move, share or trash many items in one go. Folders can be renamed or merged."],
+  ["Cards, notes and identities", "Store more than logins: payment cards, secure notes and ID details, in the same vault, on the web and in the app."],
+  ["Ctrl+K and the Control Center", "Jump anywhere with Ctrl+K. Servers, usage, map and cron now sit together in the Control Center, with one combined status report of what is up and what failed."],
+  ["Devices and activity", "See where you are signed in, sign out any device, and read your recent security activity in Settings."]
 ];

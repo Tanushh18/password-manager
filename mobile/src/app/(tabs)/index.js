@@ -166,7 +166,7 @@ export default function Vault() {
             <View style={{ flex: 1, gap: 8 }}>
               <Text style={{ color: theme.accentSoft, fontFamily: theme.font.bodySemi, fontSize: 12 }}>Vault health</Text>
               <Text style={{ color: theme.heading, fontFamily: theme.font.bodySemi, fontSize: 15 }}>
-                {items.length} item{items.length === 1 ? "" : "s"} · end-to-end encrypted
+                {items.length} item{items.length === 1 ? "" : "s"} · encrypted
               </Text>
               <View style={{ flexDirection: "row", gap: 14 }}>
                 <Stat n={health.weak} label="weak" color={theme.danger} />
@@ -316,7 +316,7 @@ export default function Vault() {
                   {items.length ? "Nothing here" : "Your vault is empty"}
                 </Text>
                 <Text style={{ color: theme.textMuted, fontFamily: theme.font.body, textAlign: "center", marginBottom: 8 }}>
-                  {items.length ? "Try another search or clear the filters." : "Add your first login — it's encrypted on this phone before it's saved."}
+                  {items.length ? "Try another search or clear the filters." : "Add your first login — it's encrypted before it's saved."}
                 </Text>
                 {items.length ? (
                   <Chip label="Show everything" active onPress={() => { setQuery(""); setFilter("all"); setFolder("__all"); }} />

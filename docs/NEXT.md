@@ -1,5 +1,18 @@
 # Next up
 
+## Live check 26 Oct (public URLs, from outside)
+| URL | Result |
+|---|---|
+| stashr.tanush.qd.je | 200 OK |
+| password-manager-server-xxdr.onrender.com /health | 200 OK (DB connected) |
+| dealradar-0oza.onrender.com | 200 OK |
+| password-manager-server.onrender.com /health | 503, Render says `suspend-by-user` (suspended on purpose) |
+| password-manager-server-8gvj.onrender.com /health | 404, deleted on Render but STILL in the live server registry (`/registry/stashr`): remove it on the Servers page |
+| password-website.onrender.com | 404 (service gone; still listed in the API's CORS list in `server/app.js`) |
+| stashr.ggnhome.com, dealradar.ggnhome.com | 403 from Cloudflare to a script (bot challenge; probably fine in a browser) |
+| GitHub "Monitor tick" workflow | last 10 runs: 9 success, 1 cancelled; GitHub fires it every 2 to 6 hours, not every 5 minutes. The in-server scheduler is the real 5-minute cron |
+Cron page now has a "Combined status report" (200 OK vs failed, copy and CSV).
+
 ## Shipped 26 Oct (upgrade)  see docs/ROADMAP.md
 - [ ] Verify live: Trash (Passwords -> Trash chip), password history in the editor, Select mode, folder rename/merge.
 - [ ] Verify live: change an item on one device and watch it appear on another within seconds (needs `/vault/events`

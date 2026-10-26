@@ -150,7 +150,7 @@ export default function Passwords() {
           <div>
             <h1 className="vault__title">Vault</h1>
             <p className="vault__count">
-              {items.length === 0 ? "Nothing saved yet." : `${items.length} item${items.length === 1 ? "" : "s"} · end-to-end encrypted`}
+              {items.length === 0 ? "Nothing saved yet." : `${items.length} item${items.length === 1 ? "" : "s"} · encrypted`}
             </p>
           </div>
           <div className="vault__status">

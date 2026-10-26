@@ -99,7 +99,7 @@ const buildHealthPayload = () =>
     status: "ok",
     service: "password-manager-api",
     message: "Server is awake and healthy 💗",
-    update: 462074, // changed on every deploy so /health shows which version is live
+    update: 462075, // changed on every deploy so /health shows which version is live
     uptime: Number(process.uptime().toFixed(2)),
     startedAt: STARTED_AT.toISOString(),
     timestamp: new Date().toISOString(),

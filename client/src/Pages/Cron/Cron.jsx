@@ -1,3 +1,4 @@
+import StatusReport from "../../Components/StatusReport/StatusReport";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -196,6 +197,15 @@ export default function Cron() {
       </header>
       <div className="rd-shell rd-content cr-stack">
         {!loading && <MascotBanner kind="clock" {...cronMood(web.length, results)} />}
+        {!loading && (
+          <StatusReport
+            pings={web.map((sv) => ({ name: sv.name, result: results[serviceKey(sv)] || null }))}
+            scan={scan}
+            crons={crons}
+            tick={status ? status.lastTick || null : undefined}
+            onRecheck={async () => { await runNow(); await runScan(); }}
+          />
+        )}
         <div className="cr-kpis">
           <div><span>Background scheduler</span><b className={lastTickAge != null && lastTickAge < 15 * 60000 ? "is-ok" : "is-warn"}>{status?.lastTick ? "Ran " + timeAgo(status.lastTick.completedAt) : status?.schedulerEnabled === false ? "Off" : "Starting…"}</b><small>{status?.lastTick ? (status.lastTick.status === "success" ? "All scheduler steps completed" : "Review recent step results below") : "first run ~90 s after the server starts"}</small></div>
           <div><span>Ping jobs</span><b>{enabledCount}</b><small>of {web.length} running web services</small></div>

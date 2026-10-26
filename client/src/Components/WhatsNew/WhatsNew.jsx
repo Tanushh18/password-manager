@@ -20,7 +20,7 @@ export default function VersionBadge({ autoOpen = false }) {
       <Modal open={open} onClose={close} center classNames={{ modal: "whatsnew" }} aria-labelledby="whatsnew-title">
         <div className="whatsnew__head">
           <span className="whatsnew__icon"><Sparkle size={20} /></span>
-          <div><h2 id="whatsnew-title">Stashr {APP_VERSION}</h2><p>A new, organised way to manage your projects and servers.</p></div>
+          <div><h2 id="whatsnew-title">Stashr {APP_VERSION}</h2><p>Faster sync, Trash and bulk actions.</p></div>
         </div>
         <ul className="whatsnew__list">{WHATS_NEW.map(([title, body]) => <li key={title}><strong>{title}</strong><span>{body}</span></li>)}</ul>
         <button type="button" className="btn btn--primary" onClick={close}>Got it</button>

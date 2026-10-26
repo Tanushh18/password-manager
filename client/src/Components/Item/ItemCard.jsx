@@ -65,7 +65,7 @@ export default function ItemCard({ item, info, icons, onEdit, onFavorite, select
   const [revealed, setRevealed] = useState({});
 
   return (
-    <article className={`vault-card card card--hover ${selected ? "is-selected" : ""}`} style={style}>
+    <article className={`vault-card card card--hover ${selected ? "is-selected" : ""} ${selecting ? "is-selecting" : ""}`} style={style}>
       <span className="card__ribbon" />
       {selecting ? <label className="vault-card__select"><input type="checkbox" checked={Boolean(selected)} onChange={onSelect} aria-label={`Select ${item.name || "item"}`} /></label> : null}
       <div className="vault-card__head">
@@ -118,7 +118,7 @@ export default function ItemCard({ item, info, icons, onEdit, onFavorite, select
             const hide = d.secret && !revealed[d.key];
             return (
               <div className="secret secret--plain secret--field" key={d.key}>
-                <span className="secret__icon" title={d.label}>{d.label.slice(0, 1)}</span>
+                <span className="secret__label">{d.label}</span>
                 <span className="secret__text secret__text--plain" title={d.label}>{hide ? "•••• " + value.slice(-4) : value}</span>
                 {d.secret ? <button type="button" className="icon-btn" onClick={() => setRevealed((r) => ({ ...r, [d.key]: !r[d.key] }))} aria-label={hide ? "Reveal " + d.label : "Hide " + d.label}>{hide ? <Eye size={15} /> : <EyeOff size={15} />}</button> : null}
                 <button type="button" className={`icon-btn ${copied === d.key ? "is-done" : ""}`} onClick={async () => (await copyText(value, d.label, Boolean(d.secret))) && flash(d.key)} aria-label={"Copy " + d.label}>
