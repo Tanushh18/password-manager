@@ -21,15 +21,14 @@ export default function Privacy() {
         <h2>What we store</h2>
         <ul>
           <li><strong>Your account:</strong> name, email address and a bcrypt hash of your master password (used to sign you in).</li>
-          <li><strong>Your vault:</strong> items encrypted on your device with AES-256-GCM. The key is derived from your master password with PBKDF2-SHA256 (600,000 rounds) and never leaves your device. We store only the encrypted data, a random salt and an encrypted check value.</li>
+          <li><strong>Your vault:</strong> items encrypted with AES-256-GCM before they are stored. Each account has its own data key, which is itself protected by a key held by the server. This keeps your data unreadable if the database alone is exposed, but the server can decrypt it, so this is not end-to-end encryption.</li>
           <li><strong>Sessions:</strong> signed login tokens so you stay signed in, for up to 30 days per device.</li>
           <li><strong>Two-factor login (optional):</strong> your authenticator secret, encrypted on the server, and hashes of your recovery codes.</li>
         </ul>
 
-        <h2>What we can't see</h2>
+        <h2>What is protected</h2>
         <p>
-          Item names, usernames, passwords, websites, notes and stored 2FA secrets are encrypted before they reach us. Accounts created
-          before end-to-end encryption are migrated automatically the first time you unlock them on an updated app or website.
+          Item names, usernames, passwords, websites, notes and stored 2FA secrets are encrypted by the server before they are stored. The server can decrypt them to serve your vault to you; we do not read them, and they are never sold or shared.
         </p>
 
         <h2>Third parties</h2>
@@ -48,8 +47,7 @@ export default function Privacy() {
 
         <h2>Your master password</h2>
         <p>
-          Because only you hold the key, <strong>we cannot reset or recover your master password</strong>. If you forget it, your vault
-          can't be decrypted. Keep an encrypted backup somewhere safe.
+          Your sign-in password is stored only as a bcrypt hash. Use the password-reset flow if you forget it, and keep an exported backup of your vault somewhere safe.
         </p>
 
         <h2>Contact</h2>

@@ -4,14 +4,14 @@
 
 ## Description
 
-**Stashr** is a zero-knowledge password vault and project manager with a comprehensive web interface and native Android app that share a unified API and database. All stored data—passwords, project hosting details, databases, environment variables, and custom fields—is **encrypted on your device** with a key derived from your master password.
+**Stashr** is an encrypted password vault and project manager with a comprehensive web interface and native Android app that share a unified API and database. All stored data—passwords, project hosting details, databases, environment variables, and custom fields—is **encrypted at rest** with AES-256-GCM before it is written to the database.
 
-The server only ever stores encrypted ciphertext, never plaintext. This ensures that even if the server is compromised, your sensitive data remains protected. The encryption uses industry-standard **PBKDF2-SHA256 (600,000 iterations)** for key derivation and **AES-256-GCM** for symmetric encryption.
+> **Current encryption model (read this):** vault items and projects are encrypted **on the server** with a per-account data key that is itself wrapped by the server key (`CRYPTO_SECRET_KEY`), see `server/router/vault.js`. There is no user-typed vault password, so signing in is enough to unlock the vault. This protects a leaked database on its own, but **it is not zero-knowledge**: whoever has both the database and the server key (or runs the server) can read the data. The device-side PBKDF2 design described in the older sections below is the previous/planned model. Treat those sections as design notes until they are brought back in line with the code.
 
 ### Key Highlights
 
-- **End-to-End Encryption**: Your data is encrypted on your device before transmission; the server never has access to plaintext.
-- **Zero-Knowledge Architecture**: No master password recovery, by design—only you control your vault.
+- **Encryption at rest**: Items are sealed with AES-256-GCM using a per-account key; the server can decrypt them (not end-to-end, not zero-knowledge).
+- **Protect the server key**: `CRYPTO_SECRET_KEY` and the database together unlock every vault; keep them in separate places.
 - **Cross-Platform Sync**: Same account works seamlessly on web and Android with identical data format.
 - **Project Tracker**: Store not just passwords, but entire project configurations (hosting, databases, Firebase/GCP, Play Store, environment variables).
 - **Bulk Import**: Import projects from Excel templates directly into your encrypted vault.

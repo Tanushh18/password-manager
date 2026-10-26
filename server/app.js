@@ -12,9 +12,15 @@ const allowedOrigins = [
   'https://stashr-client.onrender.com',
   'https://stashr-v2-frontend.onrender.com',
   'https://stashr.ggnhome.com',
-  'https://stashr.tanush.qd.je',
-  'chrome-extension://*'  // Allow Chrome extension
+  'https://stashr.tanush.qd.je'
 ];
+
+// Chrome extension origins are exact (chrome-extension://<id>); list them in EXTENSION_ORIGINS.
+// A wildcard entry never matched anything, so it was removed.
+if (process.env.EXTENSION_ORIGINS)
+{
+  process.env.EXTENSION_ORIGINS.split(",").map((o) => o.trim()).filter((o) => o.startsWith("chrome-extension://")).forEach((o) => allowedOrigins.push(o));
+}
 
 // Extra origins can be supplied as a comma separated list (CLIENT_ORIGINS)
 if (process.env.CLIENT_ORIGINS)

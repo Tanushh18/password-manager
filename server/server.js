@@ -32,9 +32,12 @@ process.on("unhandledRejection", (reason) =>
     console.error("Unhandled promise rejection:", reason);
 });
 
+// After an uncaught exception the process state is undefined: log, then exit so the host restarts it cleanly.
 process.on("uncaughtException", (error) =>
 {
     console.error("Uncaught exception:", error);
+    server.close(() => process.exit(1));
+    setTimeout(() => process.exit(1), 5000).unref();
 });
 
 // GRACEFUL SHUTDOWN
