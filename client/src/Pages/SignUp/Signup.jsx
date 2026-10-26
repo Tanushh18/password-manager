@@ -61,7 +61,7 @@ export default function Signup() {
   };
 
   return (
-    <AuthShell loading={loading} stage={{ label: loading ? "Creating your account…" : "Get started" }}>
+    <AuthShell variant="signup" loading={loading} stage={{ label: loading ? "Creating your account…" : "Get started" }}>
       <form onSubmit={submit} noValidate>
         <h1 className="auth__title">
           Create your <em className="serif-em">account.</em>

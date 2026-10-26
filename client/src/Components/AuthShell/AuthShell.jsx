@@ -1,60 +1,60 @@
 import React from "react";
-import Ambience from "../Ambience/Ambience";
 import ServiceStatus from "../ServiceStatus/ServiceStatus";
-import { LockLine, ShieldCheck, Sparkle } from "../Icons/Icons";
+import AuthScene from "./AuthScene";
 import "../../styles/auth.css";
 
-/** Two-column card used by sign in, sign up and unlock. */
-export default function AuthShell({ stage, children, loading, aside }) {
+const COPY = {
+  signin: { kicker: "Arrivals", title: <>Welcome back to your <em>secure world.</em></>, gate: "Vault" },
+  signup: { kicker: "New arrival", title: <>Your digital world <em>starts here.</em></>, gate: "Registration" },
+  forgot: { kicker: "Assistance desk", title: <>Let's get you back <em>on board.</em></>, gate: "Recovery" }
+};
+
+/**
+ * The "arrival gate": a lounge-window scene (waterfall, river, jungle, runway, skyline) beside a calm form card.
+ * On narrow screens the scene becomes a compact header above the form. Used by sign in, sign up and forgot password.
+ */
+export default function AuthShell({ stage, children, loading, aside, variant = "signin" }) {
+  const copy = COPY[variant] || COPY.signin;
+  const status = loading ? "Boarding" : "Ready";
   return (
-    <div className="auth page">
-      <Ambience petals />
-      <div className="auth__card card anim-fade-up">
-        {loading && (
-          <div className="auth__progress">
-            <span className="auth__progress-fill" />
-          </div>
-        )}
-        <div className="auth__form">
+    <div className={`auth auth--${variant}`}>
+      <section className="auth__scene" aria-hidden="true">
+        <AuthScene />
+        <span className="auth__scene-shade" />
+        <div className="auth__scene-copy">
+          <p className="auth__kicker">{copy.kicker}</p>
+          <p className="auth__headline">{aside?.title || copy.title}</p>
+          <p className="auth__tagline">{aside?.body || "Your Digital World. Protected. Connected. Effortless."}</p>
+        </div>
+        <div className="auth__board">
+          <span><small>Gate</small><b>{copy.gate}</b></span>
+          <span><small>Status</small><b className={loading ? "is-busy" : "is-ready"}>{status}</b></span>
+          <span className="auth__board-extra"><small>Security</small><b>AES-256-GCM</b></span>
+        </div>
+      </section>
+
+      <main className="auth__panel">
+        <div className="auth__card">
+          {loading && (
+            <div className="auth__progress">
+              <span className="auth__progress-fill" />
+            </div>
+          )}
           {stage ? (
-            <span className={`pill auth__stage auth__stage--${stage.tone || "accent"}`}>
-              <span className="dot dot--live" />
+            <p className={`auth__stage auth__stage--${stage.tone || "accent"}`}>
+              <span className="auth__stage-dot" />
               {stage.label}
-            </span>
+            </p>
           ) : null}
           {children}
+          <p className="auth__note">
+            Vault items are encrypted on our server with AES-256-GCM; your sign-in password is stored only as a bcrypt hash.
+          </p>
           <div className="auth__status">
             <ServiceStatus compact />
           </div>
         </div>
-
-        <aside className="auth__aside" aria-hidden="true">
-          <span className="auth__aside-glow" />
-          <span className="auth__aside-ring" />
-          <div className="auth__seal anim-beat">
-            <LockLine size={26} />
-          </div>
-          <h2 className="auth__aside-title">
-            {aside?.title || (
-              <>
-                Encrypted before it is stored,
-                <br />
-                <em>readable only by you.</em>
-              </>
-            )}
-          </h2>
-          <p className="auth__aside-body">
-            {aside?.body ||
-              "Your master password derives the key that seals every item before it leaves this browser. We never see it — and neither does anyone else."}
-          </p>
-          <div className="auth__aside-list">
-            <span className="auth__aside-item"><ShieldCheck size={15} /> Zero-knowledge AES-256-GCM</span>
-            <span className="auth__aside-item"><LockLine size={15} /> Optional two-factor login</span>
-            <span className="auth__aside-item"><Sparkle size={15} /> Same vault on web &amp; Android</span>
-          </div>
-          <p className="auth__aside-sign script">your keys, your vault</p>
-        </aside>
-      </div>
+      </main>
     </div>
   );
 }

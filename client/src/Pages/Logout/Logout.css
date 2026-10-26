@@ -1,52 +1,42 @@
+/* "You have departed safely" — the arrival-gate scene behind a calm departure card. */
 .farewell {
+  position: relative;
+  z-index: 1;
   display: grid;
   place-items: center;
-  min-height: calc(100vh - var(--nav-h) - 2rem);
+  min-height: calc(100vh - var(--nav-h));
+  min-height: calc(100dvh - var(--nav-h));
+  padding: 1.5rem 1rem 5rem;
+  overflow: hidden;
 }
+.farewell__scene { position: absolute; inset: 0; }
+.farewell__scene .scene { position: absolute; inset: 0; }
+.farewell__shade { position: absolute; inset: 0; background: rgba(4, 12, 20, 0.45); }
+:root[data-theme="light"] .farewell__shade { background: rgba(6, 30, 26, 0.25); }
 
 .farewell__card {
   position: relative;
-  overflow: hidden;
-  width: min(430px, 92vw);
-  padding: clamp(2.4rem, 5vw, 3.2rem) clamp(1.6rem, 4vw, 2.4rem);
+  width: min(420px, 100%);
+  padding: clamp(1.8rem, 5vw, 2.6rem) clamp(1.3rem, 4vw, 2.2rem);
   text-align: center;
-  background: var(--surface-grad);
+  border-radius: var(--r-2xl, 24px);
+  background: var(--surface-solid, var(--surface));
+  border: 1px solid var(--line);
+  box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.6);
 }
-
+.farewell__kicker { margin: 0 0 1rem; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-muted); }
 .farewell__seal {
-  width: 66px;
-  height: 66px;
-  margin: 0 auto 1.5rem;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: var(--accent);
-  box-shadow: var(--shadow-sm);
-  transition: background var(--t-slow) var(--ease);
+  width: 58px; height: 58px; margin: 0 auto 1.2rem; border-radius: 50%;
+  display: grid; place-items: center; color: #fff; background: var(--accent-deep);
+  transition: background 0.4s var(--ease, ease);
 }
-
-.farewell__seal.is-done {
-  background: var(--ok);
-  box-shadow: 0 14px 30px rgba(var(--ok-rgb), 0.38);
-  animation: scale-in 0.4s var(--ease);
-}
-
-.farewell__title { font-size: clamp(1.7rem, 4vw, 2.2rem); font-weight: 700; margin-bottom: 0.6rem; }
-
-.farewell__body { font-size: 0.92rem; color: var(--text-muted); line-height: 1.75; max-width: 30ch; margin: 0 auto; }
-
-.farewell__dots { display: flex; justify-content: center; gap: 6px; margin-top: 1.6rem; }
-
-.farewell__dots span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: bounce-dot 1.3s ease-in-out infinite;
-}
-
-.farewell__dots span:nth-child(2) { animation-delay: 0.18s; }
-.farewell__dots span:nth-child(3) { animation-delay: 0.36s; }
-
-.farewell__sign { margin-top: 1.4rem; font-size: 1.2rem; }
+.farewell__seal.is-done { background: var(--forest-700, #1f6b47); }
+.farewell__title { font-family: var(--font-display); font-size: clamp(1.5rem, 4vw, 1.95rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; margin: 0 0 0.6rem; color: var(--heading); }
+.farewell__body { font-size: 0.93rem; color: var(--text-muted); line-height: 1.65; max-width: 32ch; margin: 0 auto; }
+.farewell__board { display: flex; gap: 1px; margin: 1.4rem 0 1rem; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); font-family: var(--font-mono); text-align: left; }
+.farewell__board span { flex: 1; padding: 0.5rem 0.75rem; background: #07111b; display: flex; flex-direction: column; gap: 0.1rem; }
+.farewell__board small { font-size: 0.6rem; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(226, 236, 240, 0.62); }
+.farewell__board b { font-size: 0.82rem; letter-spacing: 0.08em; text-transform: uppercase; color: #f5d27a; }
+.farewell__board b.is-ready { color: #7fe3c4; }
+.farewell__link { min-height: 48px; }
+.farewell__link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

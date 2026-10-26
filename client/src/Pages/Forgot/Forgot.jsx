@@ -56,7 +56,7 @@ export default function Forgot() {
   };
 
   return (
-    <AuthShell loading={loading} stage={{ label: step === "email" ? "Forgot password" : "Enter your code" }}>
+    <AuthShell variant="forgot" loading={loading} stage={{ label: step === "email" ? "Forgot password" : "Enter your code" }}>
       {step === "email" ? (
         <form onSubmit={sendCode} noValidate>
           <h1 className="auth__title">Forgot your <em className="serif-em">password?</em></h1>
