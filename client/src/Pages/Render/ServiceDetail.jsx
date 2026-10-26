@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
   getRenderLogs, getRenderEnvVars, getRenderDeploys, getRenderMetrics, getRenderSnapshots, getRenderEnvGroups,
@@ -40,7 +40,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   // Metrics
   const [metric, setMetric] = useState("cpu");
-  const [range, setRange] = useState("1h");
+  const [range, setRange] = useState("24h");
   const [metricPoints, setMetricPoints] = useState(null);
   const [metricBusy, setMetricBusy] = useState(false);
   const metricGate = useRequestGate();
@@ -495,8 +495,23 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
   };
 
   /* ---------- tab loading ---------- */
+  // Prefetch every tab in the background as soon as the service opens (the Overview health check runs first),
+  // so switching tabs shows data that is already there instead of starting a fetch.
+  const prefetched = useRef(new Set());
+  useEffect(() => {
+    const seen = prefetched.current;
+    const run = (id, fn) => { seen.add(id); void fn(); };
+    run("metrics", loadMetrics);
+    run("logs", loadLogs);
+    run("env", () => Promise.all([loadEnv(), loadEnvGroups()]));
+    run("deploys", loadDeploys);
+    if (kind === "PostgreSQL") run("database", loadDbExports);
+    setError("");
+  }, [ref.accountId, ref.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     setError("");
+    if (prefetched.current.has(tab)) return;
     if (tab === "metrics") void loadMetrics();
     if (tab === "logs" && !logsLoaded) void loadLogs();
     if (tab === "env") { void loadEnv(); void loadEnvGroups(); }
