@@ -25,6 +25,7 @@ const Cron = lazy(() => import("./Pages/Cron/Cron"));
 const Forgot = lazy(() => import("./Pages/Forgot/Forgot"));
 const RenderDashboard = lazy(() => import("./Pages/Render/RenderDashboard"));
 const SecurityCenter = lazy(() => import("./Pages/SecurityCenter/SecurityCenter"));
+const Generator = lazy(() => import("./Pages/Generator/Generator"));
 import Privacy from "./Pages/Privacy/Privacy";
 import Apps from "./Pages/Apps/Apps";
 import Logout from "./Pages/Logout/Logout";
@@ -116,6 +117,7 @@ export default function App() {
           <Route path="/projects/:id" element={<RequireVault><ProjectDetail /></RequireVault>} />
           <Route path="/projects/:id/edit" element={<RequireVault><ProjectForm /></RequireVault>} />
           <Route path="/settings" element={<RequireVault><Settings /></RequireVault>} />
+          <Route path="/generator" element={<RequireVault><Suspense fallback={<Splash />}><Generator /></Suspense></RequireVault>} />
           <Route path="/security-center" element={<RequireVault><Suspense fallback={<Splash />}><SecurityCenter /></Suspense></RequireVault>} />
           <Route path="/servers" element={<RequireVault><RequireAdmin><Servers /></RequireAdmin></RequireVault>} />
           <Route path="/security" element={<RequireVault><RequireAdmin><Security /></RequireAdmin></RequireVault>} />
