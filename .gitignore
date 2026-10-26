@@ -4,3 +4,6 @@
 recovery/
 
 .DS_Store
+
+# Temporary git worktrees used by parallel coding agents
+.claude/worktrees/
