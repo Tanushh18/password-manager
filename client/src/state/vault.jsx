@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { toast } from "react-toastify";
 import * as api from "../api/client";
 import { bootVerdict, bootDelay } from "../lib/errors";
-import { normalizeItem } from "../lib/items";
+import { normalizeItem, withHistory, trashExpired } from "../lib/items";
 import { normalizeProject } from "../lib/projectItems";
 import { computeHealth } from "../lib/health";
 import { pwnedCount } from "../lib/breach";
@@ -42,7 +42,9 @@ const toProject = (entry) => ({ ...normalizeProject(entry), id: entry._id, creat
 export function VaultProvider({ children }) {
   const [status, setStatus] = useState("checking");
   const [profile, setProfile] = useState(null); // /authenticate payload minus entries
-  const [items, setItems] = useState([]);
+  const [allItems, setItems] = useState([]); // live items plus trashed ones (deletedAt set)
+  const items = useMemo(() => allItems.filter((i) => !i.deletedAt), [allItems]);
+  const trash = useMemo(() => allItems.filter((i) => i.deletedAt), [allItems]);
   const [breaches, setBreaches] = useState({});
   const [breachProgress, setBreachProgress] = useState(null);
   const [prefs, setPrefsState] = useState(readPrefs);
@@ -93,6 +95,7 @@ export function VaultProvider({ children }) {
 
   const clearVault = useCallback(() => {
     lastSig.current = { items: null, projects: null };
+    purgedOnce.current = false;
     setItems([]);
     setBreaches({});
     setProjects([]);
@@ -191,9 +194,10 @@ export function VaultProvider({ children }) {
   }, []);
 
   const updateItem = useCallback(async (id, fields) => {
-    const current = items.find((i) => i.id === id);
-    const next = normalizeItem({ ...current, ...fields });
+    const current = allItems.find((i) => i.id === id);
+    let next = normalizeItem({ ...current, ...fields });
     if (current && current.password !== next.password) next.passwordUpdatedAt = new Date().toISOString();
+    next = withHistory(current, next);
     const res = await api.updateItem(id, next);
     setItems((list) => list.map((i) => (i.id === id ? { ...next, id, createdAt: i.createdAt, updatedAt: res.data.item.updatedAt } : i)));
     setBreaches((b) => {
@@ -202,17 +206,34 @@ export function VaultProvider({ children }) {
       delete copy[id];
       return copy;
     });
-  }, [items]);
+  }, [allItems]);
 
   const toggleFavorite = useCallback((id) => {
-    const current = items.find((i) => i.id === id);
+    const current = allItems.find((i) => i.id === id);
     return current ? updateItem(id, { favorite: !current.favorite }) : Promise.resolve();
-  }, [items, updateItem]);
+  }, [allItems, updateItem]);
 
-  const deleteItem = useCallback(async (id) => {
+  /* Delete moves an item to the trash; purgeItem removes it for good. */
+  const purgeItem = useCallback(async (id) => {
     await api.deleteItem(id);
     setItems((list) => list.filter((i) => i.id !== id));
   }, []);
+  const deleteItem = useCallback((id) => updateItem(id, { deletedAt: new Date().toISOString(), favorite: false }), [updateItem]);
+  const restoreItem = useCallback((id) => updateItem(id, { deletedAt: null }), [updateItem]);
+  const emptyTrash = useCallback(async () => {
+    const ids = allItems.filter((i) => i.deletedAt).map((i) => i.id);
+    const results = await Promise.allSettled(ids.map((id) => purgeItem(id)));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed) throw new Error(`${failed} item${failed === 1 ? "" : "s"} could not be removed.`);
+  }, [allItems, purgeItem]);
+
+  /* Items that sat in the trash for more than 30 days are removed the next time the vault loads. */
+  const purgedOnce = useRef(false);
+  useEffect(() => {
+    if (status !== "ready" || purgedOnce.current) return;
+    purgedOnce.current = true;
+    allItems.filter((i) => trashExpired(i)).forEach((i) => { purgeItem(i.id).catch(() => {}); });
+  }, [status, allItems, purgeItem]);
 
   /* ── Projects ── */
   const addProject = useCallback(async (fields) => {
@@ -316,6 +337,10 @@ export function VaultProvider({ children }) {
       updateItem,
       toggleFavorite,
       deleteItem,
+      purgeItem,
+      restoreItem,
+      emptyTrash,
+      trash,
       importItems,
       runBreachCheck,
       changePassword,
@@ -330,7 +355,7 @@ export function VaultProvider({ children }) {
     };
   }, [
     status, waking, profile, items, breaches, breachProgress, prefs, setPrefs, login, register, logout, lock,
-    addItem, updateItem, toggleFavorite, deleteItem, importItems, runBreachCheck, changePassword, refreshProfile,
+    addItem, updateItem, toggleFavorite, deleteItem, purgeItem, restoreItem, emptyTrash, trash, importItems, runBreachCheck, changePassword, refreshProfile,
     projects, addProject, updateProjectEntry, deleteProjectEntry, importProjects,
   ]);
 

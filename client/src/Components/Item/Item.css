@@ -89,3 +89,8 @@
 }
 
 .secret__flash--warn { background: var(--danger); }
+
+.pwhistory { margin: 0.4rem 0 0.8rem; font-size: 0.85rem; }
+.pwhistory ul { list-style: none; margin: 0.4rem 0 0; padding: 0; display: grid; gap: 0.3rem; }
+.pwhistory li { display: flex; align-items: center; gap: 0.6rem; }
+.pwhistory small { margin-right: auto; opacity: 0.65; }

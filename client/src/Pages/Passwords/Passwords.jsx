@@ -19,7 +19,7 @@ import { vaultMood } from "../../lib/pageMoods";
 export default function Passwords() {
   const {
     profile, items, broken, health, breaches, breachProgress, prefs,
-    addItem, updateItem, deleteItem, toggleFavorite, importItems, runBreachCheck, lock,
+    addItem, updateItem, deleteItem, purgeItem, restoreItem, emptyTrash, trash, toggleFavorite, importItems, runBreachCheck, lock,
   } = useVault();
 
   const [params] = useSearchParams();
@@ -56,8 +56,8 @@ export default function Passwords() {
     return runBulk("Moved", (id) => updateItem(id, { folder: name.trim() }));
   };
   const bulkDelete = () => {
-    if (!window.confirm(`Delete ${selected.size} item${selected.size === 1 ? "" : "s"} from your vault? This cannot be undone.`)) return;
-    return runBulk("Deleted", (id) => deleteItem(id));
+    if (!window.confirm(`Move ${selected.size} item${selected.size === 1 ? "" : "s"} to Trash?`)) return;
+    return runBulk("Moved to Trash", (id) => deleteItem(id));
   };
   const renameFolder = async () => {
     const name = window.prompt(`Rename "${folder}" to (an existing folder name merges them):`, folder);
@@ -80,8 +80,8 @@ export default function Passwords() {
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return items
-      .filter((i) => folder === "__all" || (folder === "__fav" ? i.favorite : i.folder === folder))
+    return (folder === "__trash" ? trash : items)
+      .filter((i) => folder === "__trash" || folder === "__all" || (folder === "__fav" ? i.favorite : i.folder === folder))
       .filter((i) => {
         if (!term) return true;
         return [i.name, i.username, i.url, i.folder, i.notes].some((v) => (v || "").toLowerCase().includes(term)) || domainOf(i.url).includes(term);
@@ -103,7 +103,7 @@ export default function Passwords() {
         if (sort === "weakest") return (health.info[a.id]?.score ?? 5) - (health.info[b.id]?.score ?? 5);
         return new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
       });
-  }, [items, search, filter, folder, sort, health]);
+  }, [items, trash, search, filter, folder, sort, health]);
 
   const checkBreaches = async () => {
     try {
@@ -222,6 +222,11 @@ export default function Passwords() {
           <button type="button" className={`folder-chip ${folder === "__fav" ? "is-active" : ""}`} onClick={() => setFolder("__fav")}>
             <Star size={13} /> Favourites <span>{favCount}</span>
           </button>
+          {trash.length ? (
+            <button type="button" className={`folder-chip ${folder === "__trash" ? "is-active" : ""}`} onClick={() => setFolder("__trash")}>
+              Trash <span>{trash.length}</span>
+            </button>
+          ) : null}
           {folders.map((f) => (
             <button key={f} type="button" className={`folder-chip ${folder === f ? "is-active" : ""}`} onClick={() => setFolder(f)}>
               <Folder size={13} /> {f} <span>{items.filter((i) => i.folder === f).length}</span>
@@ -256,6 +261,25 @@ export default function Passwords() {
               Show everything
             </button>
           </Reveal>
+        ) : folder === "__trash" ? (
+          <div className="trashlist">
+            <p className="folders__tools">
+              Deleted items stay here for 30 days.{" "}
+              <button type="button" className="btn btn--quiet btn--sm" disabled={busy} onClick={async () => {
+                if (!window.confirm(`Permanently delete ${trash.length} item${trash.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
+                try { await emptyTrash(); toast.success("Trash emptied."); setFolder("__all"); } catch (e) { toast.error(e.message); }
+              }}>Empty trash</button>
+            </p>
+            {visible.map((item) => (
+              <div className="card trashlist__row" key={item.id}>
+                <div><strong>{item.name || "Untitled"}</strong><small> {item.username} · deleted {new Date(item.deletedAt).toLocaleDateString()}</small></div>
+                <span>
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => restoreItem(item.id).then(() => toast.success("Restored.")).catch(() => toast.error("Couldn't restore that."))}>Restore</button>{" "}
+                  <button type="button" className="btn btn--quiet btn--sm" onClick={() => window.confirm("Delete this item forever?") && purgeItem(item.id).catch(() => toast.error("Couldn't delete that."))}>Delete forever</button>
+                </span>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="vault__grid">
             {visible.map((item, i) => (
@@ -285,7 +309,7 @@ export default function Passwords() {
         onSave={saveItem}
         onDelete={async () => {
           await deleteItem(editing.id);
-          toast.success("Deleted from your vault.");
+          toast.success("Moved to Trash. You can restore it for 30 days.");
         }}
       />
       <ImportModal open={importing} onClose={() => setImporting(false)} onImport={importItems} />

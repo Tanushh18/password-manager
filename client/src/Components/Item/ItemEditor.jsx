@@ -89,6 +89,21 @@ export default function ItemEditor({ open, item, folders, icons, onClose, onSave
 
         <Field id="it-pass" label="Password" secret value={form.password} onChange={set("password")} placeholder="The secret itself" autoComplete="new-password" />
         {form.password ? <StrengthMeter strength={strength} /> : null}
+        {item && (item.history || []).length ? (
+          <details className="pwhistory">
+            <summary>Password history ({item.history.length})</summary>
+            <ul>
+              {item.history.map((h, i) => (
+                <li key={i}>
+                  <code>{"•".repeat(Math.min(h.password.length, 12))}</code>
+                  <small>{h.changedAt ? new Date(h.changedAt).toLocaleDateString() : "earlier"}</small>
+                  <button type="button" className="btn btn--quiet btn--sm" onClick={() => navigator.clipboard?.writeText(h.password).then(() => toast.info("Old password copied")).catch(() => toast.error("Couldn't copy"))}>Copy</button>
+                  <button type="button" className="btn btn--quiet btn--sm" onClick={() => setForm((f) => ({ ...f, password: h.password }))}>Use again</button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
 
         <div className="gen">
           <div className="gen__label">

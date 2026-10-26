@@ -122,3 +122,33 @@ test("every linked Render service maps back to its project", () => {
   assert.equal(index.size, 3);
   assert.equal(serviceIdOfKey("acc1:srv-2"), "srv-2");
 });
+
+import { normalizeItem, withHistory, trashExpired, HISTORY_LIMIT } from "../src/lib/items.js";
+
+test("withHistory records the replaced password, newest first, capped", () => {
+  let cur = normalizeItem({ name: "a", password: "p0" });
+  for (let i = 1; i <= HISTORY_LIMIT + 2; i += 1) {
+    const next = normalizeItem({ ...cur, password: "p" + i });
+    cur = withHistory(cur, next);
+  }
+  assert.equal(cur.history.length, HISTORY_LIMIT);
+  assert.equal(cur.history[0].password, "p" + (HISTORY_LIMIT + 1));
+});
+
+test("withHistory ignores edits that keep the same password", () => {
+  const cur = normalizeItem({ name: "a", password: "x" });
+  assert.deepEqual(withHistory(cur, { ...cur, name: "b" }).history, []);
+});
+
+test("normalizeItem keeps deletedAt and drops malformed history", () => {
+  const it = normalizeItem({ deletedAt: "2026-01-01T00:00:00Z", history: [{ password: "ok" }, { password: 5 }, null] });
+  assert.equal(it.deletedAt, "2026-01-01T00:00:00Z");
+  assert.equal(it.history.length, 1);
+});
+
+test("trashExpired only flags items trashed longer than the window", () => {
+  const now = Date.parse("2026-03-01T00:00:00Z");
+  assert.equal(trashExpired({ deletedAt: "2026-01-01T00:00:00Z" }, 30, now), true);
+  assert.equal(trashExpired({ deletedAt: "2026-02-20T00:00:00Z" }, 30, now), false);
+  assert.equal(trashExpired({ deletedAt: null }, 30, now), false);
+});
