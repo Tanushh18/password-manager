@@ -1,0 +1,71 @@
+/* Jungle scene. Sits above the page background but under the navbar and modals; never takes clicks. */
+.jungle { position: fixed; inset: 0; z-index: 40; pointer-events: none; overflow: hidden; }
+body.has-jungle { padding-bottom: 58px; }
+
+/* palette: day (light theme) and night (dark theme) */
+.jungle.is-day { --g1: #4caf3a; --g2: #2f8f3a; --g3: #7cc94a; --leaf1: #2e8b45; --leaf2: #3fa556; --leaf3: #1f6e37; --vine: #5b7a2e; --vleaf: #4ea53c; --vein: rgba(255,255,255,.25); }
+.jungle.is-night { --g1: #1f5134; --g2: #163c27; --g3: #2b6b42; --leaf1: #1a4a30; --leaf2: #23603c; --leaf3: #123722; --vine: #2f4a26; --vleaf: #275c35; --vein: rgba(180,255,200,.12); }
+
+.jg-sky { position: absolute; top: calc(var(--nav-h, 64px) + 6px); right: 9vw; width: 70px; height: 70px; border-radius: 50%; opacity: 0.85; }
+.jungle.is-night .jg-sky { background: radial-gradient(circle at 40% 40%, #fffbe0, #f3e7a8 45%, rgba(243, 231, 168, 0) 70%); box-shadow: 0 0 60px 20px rgba(243, 231, 168, 0.12); }
+.jungle.is-day .jg-sky { background: radial-gradient(circle, rgba(255, 214, 90, 0.55), rgba(255, 214, 90, 0) 70%); width: 140px; height: 140px; right: 6vw; }
+
+/* grass */
+.jg-grass { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 60px; }
+.jg-blade.t0 { fill: var(--g1); } .jg-blade.t1 { fill: var(--g2); } .jg-blade.t2 { fill: var(--g3); }
+.jg-blade { animation: jg-sway 3.4s ease-in-out infinite alternate; transform-box: view-box; }
+.jg-blade.s1 { animation-duration: 2.7s; } .jg-blade.s2 { animation-duration: 4.1s; animation-delay: -1s; } .jg-blade.s3 { animation-duration: 3s; animation-delay: -2s; }
+@keyframes jg-sway { from { transform: skewX(-6deg); } to { transform: skewX(7deg); } }
+
+/* corner leaves */
+.jg-leaves { position: absolute; bottom: 14px; width: 220px; height: 160px; }
+.jg-leaves--left { left: -30px; } .jg-leaves--right { right: -30px; transform: scaleX(-1); }
+.jg-bigleaf { transform-origin: 20px 160px; animation: jg-leafsway 6s ease-in-out infinite alternate; }
+.jg-bigleaf.l1 { fill: var(--leaf1); } .jg-bigleaf.l2 { fill: var(--leaf2); animation-duration: 7.5s; } .jg-bigleaf.l3 { fill: var(--leaf3); animation-duration: 5s; }
+.jg-leafvein { fill: none; stroke: var(--vein); stroke-width: 2; }
+@keyframes jg-leafsway { from { transform: rotate(-2.5deg); } to { transform: rotate(2.5deg); } }
+
+/* vines */
+.jg-vine { position: absolute; top: var(--nav-h, 64px); width: 120px; height: 260px; transform-origin: 60px 0; animation: jg-vine 5s ease-in-out infinite alternate; }
+.jg-vine--left { left: 4px; } .jg-vine--right { right: 4px; animation-delay: -2.5s; }
+.jg-vine__stem { fill: none; stroke: var(--vine); stroke-width: 5; stroke-linecap: round; }
+.jg-leaf { fill: var(--vleaf); }
+.jg-vine__hanger { position: absolute; left: 44px; top: 210px; font-size: 32px; transform-origin: 16px -10px; animation: jg-swing 2.6s ease-in-out infinite alternate; }
+.jg-vine--right .jg-vine__hanger { animation-duration: 3.4s; }
+@keyframes jg-vine { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
+@keyframes jg-swing { from { transform: rotate(-14deg); } to { transform: rotate(14deg); } }
+
+/* butterflies and fireflies */
+.jg-lights i { position: absolute; font-style: normal; animation: jg-float ease-in-out infinite alternate; }
+.jg-butterfly { font-size: 16px; }
+.jg-firefly { width: 6px; height: 6px; border-radius: 50%; background: #e9ff8a; box-shadow: 0 0 10px 4px rgba(220, 255, 120, 0.55); animation-name: jg-float, jg-glow !important; }
+@keyframes jg-float { from { transform: translate(0, 0); } to { transform: translate(var(--dx), var(--dy)); } }
+@keyframes jg-glow { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
+.jg-firefly { animation-duration: 8s, 2.2s !important; }
+
+/* walking animals and flying birds */
+.jg-actor { position: absolute; left: 0; width: 0; animation-timing-function: linear; animation-fill-mode: forwards; }
+.jg-actor--walker { bottom: 16px; }
+.jg-actor.is-ltr { animation-name: jg-cross-ltr; } .jg-actor.is-rtl { animation-name: jg-cross-rtl; }
+@keyframes jg-cross-ltr { from { transform: translateX(-14vw); } to { transform: translateX(114vw); } }
+@keyframes jg-cross-rtl { from { transform: translateX(114vw); } to { transform: translateX(-14vw); } }
+/* most animal emoji face left: mirror them when they walk to the right */
+.jg-actor.is-ltr .jg-actor__face { transform: scaleX(-1); }
+.jg-actor.is-robot.is-ltr .jg-actor__face { transform: none; }
+.jg-actor__body { display: inline-block; position: relative; line-height: 1; white-space: nowrap; filter: drop-shadow(0 4px 4px rgba(0,0,0,.25)); }
+.jg-actor--walker .jg-actor__body { animation: jg-walk 0.6s ease-in-out infinite alternate; transform-origin: bottom center; }
+.jg-actor__body.is-hop { animation: jg-hop 0.9s ease-in-out infinite; }
+.jg-actor--flyer .jg-actor__body { animation: jg-fly 1.4s ease-in-out infinite alternate; }
+@keyframes jg-walk { from { transform: translateY(0) rotate(-2deg); } to { transform: translateY(-3px) rotate(2deg); } }
+@keyframes jg-hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-22px); } }
+@keyframes jg-fly { from { transform: translateY(-8px) rotate(-6deg); } to { transform: translateY(8px) rotate(6deg); } }
+.jg-rider { position: absolute; left: 30%; top: -0.55em; font-size: 0.55em; animation: jg-walk 0.6s ease-in-out infinite alternate-reverse; }
+.jg-flockbird { display: inline-block; font-style: normal; margin-right: 0.5em; transform: translateY(calc(var(--i) * 6px - (var(--i) * var(--i) * 2px))); animation: jg-flap 0.45s ease-in-out infinite alternate; animation-delay: calc(var(--i) * -0.1s); }
+@keyframes jg-flap { from { scale: 1 1; } to { scale: 1 0.6; } }
+
+@media (max-width: 700px) {
+  .jg-vine { height: 170px; transform: scale(0.7); transform-origin: top; } .jg-vine__hanger { top: 200px; }
+  .jg-leaves { width: 150px; height: 110px; }
+}
+@media (prefers-reduced-motion: reduce) { .jungle * { animation: none !important; } }
+@media print { .jungle { display: none; } }

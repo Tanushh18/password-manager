@@ -33,6 +33,7 @@ import Navbar from "./Components/Navbar/Navbar";
 import InstallPrompt from "./Components/InstallPrompt/InstallPrompt";
 import CommandPalette from "./Components/CommandPalette/CommandPalette";
 import SkyFx from "./Components/SkyFx/SkyFx";
+import JungleScene from "./Components/Jungle/JungleScene";
 import InfraTabs from "./Components/InfraTabs/InfraTabs";
 import NetBar from "./Components/NetBar/NetBar";
 import Splash from "./Components/Splash/Splash";
@@ -93,6 +94,7 @@ export default function App() {
         <ScrollToTop />
         <NetBar />
         <CommandPalette />
+        <JungleScene />
         <SkyFx />
         <Navbar />
         <ToastContainer position="top-right" autoClose={3500} newestOnTop closeOnClick pauseOnHover draggable theme="colored" />

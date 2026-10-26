@@ -650,6 +650,9 @@ export default function Settings() {
           <Row icon={<Globe size={15} />} label="Theme">
             <ThemeToggle />
           </Row>
+          <Row label="Jungle scene" hint="Grass, vines, animals and birds around every page, with the robots mixed in. Day jungle in the light theme, night jungle in the dark theme.">
+            <Toggle checked={prefs.jungle !== false} onChange={(v) => setPrefs({ jungle: v })} label="" />
+          </Row>
           <Row label="Fun effects" hint="Robots fly by, planes land when you save, and things blow up when something is deleted for good or goes down. Off automatically if your device asks for reduced motion.">
             <Toggle checked={prefs.fx !== false} onChange={(v) => setPrefs({ fx: v })} label="" />
           </Row>

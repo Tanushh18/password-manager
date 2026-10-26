@@ -22,7 +22,7 @@ import { pwnedCount } from "../lib/breach";
 
 const VaultContext = createContext(null);
 const PREFS_KEY = "aurelia_prefs";
-const DEFAULT_PREFS = { icons: false, searchValues: true, autoBreach: false, fx: true };
+const DEFAULT_PREFS = { icons: false, searchValues: true, autoBreach: false, fx: true, jungle: true };
 
 const readPrefs = () => {
   try {
