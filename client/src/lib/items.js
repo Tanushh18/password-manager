@@ -1,6 +1,6 @@
 /**
  * Vault item model (same file in client/ and mobile/).
- * Everything here is encrypted as one blob on the device before upload.
+ * Each item is stored as one blob, encrypted on the server (AES-256-GCM, per-account key).
  */
 /* Item kinds. "login" is the original kind; the others reuse name, notes, folder and favorite, and keep their own
    details in `fields` (keys come from FIELD_DEFS, anything else is dropped). */

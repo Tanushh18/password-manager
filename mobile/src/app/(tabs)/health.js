@@ -57,7 +57,7 @@ export default function Health() {
               Vault <GradientText>health</GradientText>
             </Text>
             <Text style={{ color: theme.textMuted, fontFamily: theme.font.body, marginBottom: 18 }}>
-              Scored on this phone — your passwords never leave it.
+              Scored on this phone.
             </Text>
           </FadeIn>
 

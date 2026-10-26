@@ -1,5 +1,5 @@
 /**
- * Project/infra tracker item model. Encrypted as one blob on the device
+ * Project/infra tracker item model. Stored as one blob, encrypted on the server
  * before upload, same as a password entry (see lib/items.js, state/vault.jsx).
  */
 export const emptyDatabase = () => ({ label: "", provider: "", type: "", accountEmail: "", notes: "" });

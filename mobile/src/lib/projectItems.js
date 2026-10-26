@@ -1,6 +1,6 @@
 /**
  * Project/infra tracker item model (same file as client/src/lib/projectItems.js).
- * Encrypted as one blob on the device before upload, same as a password entry.
+ * Stored as one blob, encrypted on the server, same as a password entry.
  */
 export const emptyDatabase = () => ({ label: "", provider: "", type: "", accountEmail: "", notes: "" });
 export const emptyEnvVar = () => ({ name: "", value: "", purpose: "", source: "", renderHash: "" }); // source: "" (manual) | "render" | "render-removed"; renderHash = fingerprint of the value Render last had
