@@ -72,3 +72,6 @@ body.has-jungle { padding-bottom: 58px; }
 }
 @media (prefers-reduced-motion: reduce) { .jungle * { animation: none !important; } }
 @media print { .jungle { display: none; } }
+
+/* With the phone bottom bar the scene ends above it, so the grass and walking animals stay visible. */
+body.has-bottomnav .jungle { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
