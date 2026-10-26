@@ -10,23 +10,40 @@ import VaultHealth from "../../Components/VaultHealth/VaultHealth";
 import ItemCard from "../../Components/Item/ItemCard";
 import ItemEditor from "../../Components/Item/ItemEditor";
 import ImportModal from "../../Components/Item/ImportModal";
-import { KeyLine, Plus, Search, Upload, Arrow, Star, Folder, Grid, LockLine, Gear, Alert } from "../../Components/Icons/Icons";
+import VaultSidebar from "../../Components/Vault/VaultSidebar";
+import VaultBackdrop from "../../Components/Vault/VaultBackdrop";
+import { IcWand, IcUser, IcTrash } from "../../Components/Vault/VaultIcons";
+import { KeyLine, Plus, Search, Upload, Arrow, LockLine, Gear, Alert } from "../../Components/Icons/Icons";
 import { useVault } from "../../state/vault";
-import { domainOf } from "../../lib/items";
+import { SECTIONS, isBuiltinSection, visibleItems, sectionCounts, folderNames, securityStatus } from "../../lib/vaultView";
 import "./Passwords.css";
+import "../../Components/Vault/Vault.css";
 
 import MascotBanner from "../../Components/Robot/MascotBanner";
 import { vaultMood } from "../../lib/pageMoods";
+
+const SECTION_TITLES = {
+  __all: "Overview",
+  __logins: "All Passwords",
+  __fav: "Favorites",
+  __note: "Secure Notes",
+  __card: "Credit Cards",
+  __identity: "Identity",
+  __trash: "Trash",
+};
+
+const HEALTH_LABELS = { strong: "Strong", weak: "Weak", reused: "Reused", breached: "Breached", old: "Older than 6 months" };
+
 export default function Passwords() {
   const {
-    items, broken, health, breaches, breachProgress, prefs,
+    items, broken, health, breaches, breachProgress, prefs, profile,
     addItem, updateItem, deleteItem, purgeItem, restoreItem, emptyTrash, trash, toggleFavorite, importItems, runBreachCheck, lock,
   } = useVault();
 
   const [params] = useSearchParams();
   const [search, setSearch] = useState(() => params.get("q") || "");
   const [filter, setFilter] = useState("all"); // health filter
-  const [folder, setFolder] = useState("__all"); // __all | __fav | <folder>
+  const [folder, setFolder] = useState(SECTIONS.all); // sidebar section: __all | __logins | __fav | __note | __card | __identity | __trash | <folder>
   const [sort, setSort] = useState("recent");
   const [editing, setEditing] = useState(null); // null | "new" | item
   const searchRef = useShortcuts(() => setEditing("new"));
@@ -52,7 +69,7 @@ export default function Passwords() {
   };
   const bulkFavorite = (value) => runBulk(value ? "Favourited" : "Unfavourited", (id) => updateItem(id, { favorite: value }));
   const bulkMove = () => {
-    const name = window.prompt("Move selected items to which folder? (leave empty for no folder)", folder.startsWith("__") ? "" : folder);
+    const name = window.prompt("Move selected items to which folder? (leave empty for no folder)", isBuiltinSection(folder) ? "" : folder);
     if (name === null) return;
     return runBulk("Moved", (id) => updateItem(id, { folder: name.trim() }));
   };
@@ -72,39 +89,28 @@ export default function Passwords() {
     if (failed) toast.error(`${failed} item${failed === 1 ? "" : "s"} could not be moved.`);
     else { toast.success(`Folder is now "${target}".`); setFolder(target); }
   };
+  const trashOne = async (item) => {
+    if (!window.confirm(`Move "${item.name || "this item"}" to Trash?`)) return;
+    try {
+      await deleteItem(item.id);
+      toast.success("Moved to Trash. You can restore it for 30 days.");
+    } catch (e) {
+      toast.error("Couldn't move that to Trash.");
+    }
+  };
 
-  const folders = useMemo(
-    () => [...new Set(items.map((i) => i.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
-    [items]
+  const folders = useMemo(() => folderNames(items), [items]);
+  const counts = useMemo(() => sectionCounts(items, trash), [items, trash]);
+
+  /* A folder that disappeared (renamed elsewhere, last item deleted) falls back to Overview. */
+  useEffect(() => {
+    if (!isBuiltinSection(folder) && !folders.includes(folder)) setFolder(SECTIONS.all);
+  }, [folder, folders]);
+
+  const visible = useMemo(
+    () => visibleItems({ items, trash, section: folder, search, filter, sort, info: health.info }),
+    [items, trash, search, filter, folder, sort, health]
   );
-  const favCount = items.filter((i) => i.favorite).length;
-
-  const visible = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return (folder === "__trash" ? trash : items)
-      .filter((i) => folder === "__trash" || folder === "__all" || (folder === "__fav" ? i.favorite : i.folder === folder))
-      .filter((i) => {
-        if (!term) return true;
-        return [i.name, i.username, i.url, i.folder, i.notes].some((v) => (v || "").toLowerCase().includes(term)) || domainOf(i.url).includes(term);
-      })
-      .filter((i) => {
-        if (filter === "all") return true;
-        const h = health.info[i.id];
-        if (!h) return false;
-        if (filter === "weak") return h.score <= 1;
-        if (filter === "reused") return h.reused;
-        if (filter === "old") return h.old;
-        if (filter === "breached") return h.breached > 0;
-        if (filter === "strong") return h.score >= 3 && !h.reused && !h.breached;
-        return true;
-      })
-      .sort((a, b) => {
-        if (a.favorite !== b.favorite && sort !== "az") return a.favorite ? -1 : 1;
-        if (sort === "az") return (a.name || "").localeCompare(b.name || "");
-        if (sort === "weakest") return (health.info[a.id]?.score ?? 5) - (health.info[b.id]?.score ?? 5);
-        return new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
-      });
-  }, [items, trash, search, filter, folder, sort, health]);
 
   const checkBreaches = async () => {
     try {
@@ -144,29 +150,72 @@ export default function Passwords() {
     }
   };
 
+  const checked = breachChecked || Object.keys(breaches).length > 0;
+  const status = securityStatus(health, checked);
+  const inTrash = folder === SECTIONS.trash;
+  const sectionTitle = SECTION_TITLES[folder] || folder;
+  const firstName = (profile?.name || "").trim().split(/\s+/)[0];
+  const pickSection = (id) => { setFolder(id); if (id === SECTIONS.trash) stopSelecting(); };
 
   return (
-    <div className="vault page">
+    <div className="vault vx page">
       <Ambience petals={false} />
 
-      <div className="shell">
-        <header className="vault__head">
-          <div>
-            <h1 className="vault__title">Vault</h1>
-            <p className="vault__count">
-              {items.length === 0 ? "Nothing saved yet." : `${items.length} item${items.length === 1 ? "" : "s"} · encrypted`}
+      <div className="vx__shell">
+        <header className="vx-head">
+          <VaultBackdrop />
+          <div className="vx-head__intro">
+            <p className="vx-board" aria-label={`Security status: ${status.label}`}>
+              <span className="vx-board__cell vx-hide-sm">Gate</span>
+              <span className="vx-board__cell vx-board__cell--strong">Vault</span>
+              <span className={`vx-board__status is-${status.tone}`}><i aria-hidden="true" />{status.label}</span>
+              {health.total ? <span className="vx-board__cell">Score {health.score}</span> : null}
             </p>
+            <h1 className="vx-head__title">Welcome to Your Secure World{firstName ? <span className="vx-head__name">, {firstName}</span> : null}</h1>
+            <p className="vx-head__sub">Everything you need to access your digital life, securely.</p>
           </div>
-          <div className="vault__status">
-            <ServiceStatus />
-            <button type="button" className="btn btn--quiet btn--sm" onClick={lock} title="Lock now">
-              <LockLine size={14} /> Lock
-            </button>
-            <Link to="/settings" className="btn btn--quiet btn--sm">
-              <Gear size={14} /> Settings
-            </Link>
+          <div className="vx-head__meta">
+            <span className="vx-user" title={profile?.email || ""}>
+              <span className="vx-user__badge" aria-hidden="true"><IcUser size={16} /></span>
+              <span className="vx-user__text">
+                <strong>{profile?.name || "Your vault"}</strong>
+                <small>{items.length === 0 ? "Nothing saved yet" : `${items.length} item${items.length === 1 ? "" : "s"} · encrypted at rest`}</small>
+              </span>
+            </span>
+            <div className="vx-head__actions">
+              <ServiceStatus />
+              <button type="button" className="btn btn--quiet btn--sm" onClick={lock} title="Lock now" aria-label="Lock vault">
+                <LockLine size={14} /> <span className="vx-hide-sm">Lock</span>
+              </button>
+              <Link to="/settings" className="btn btn--quiet btn--sm" aria-label="Settings">
+                <Gear size={14} /> <span className="vx-hide-sm">Settings</span>
+              </Link>
+            </div>
           </div>
         </header>
+
+        <div className="vx-tools">
+          <div className="vx-search">
+            <span className="vx-search__icon"><Search size={17} /></span>
+            <input
+              className="input vx-search__input"
+              type="search"
+              ref={searchRef}
+              placeholder="Search names, usernames, websites, notes…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search your vault"
+              aria-keyshortcuts="/"
+            />
+            <kbd className="kbd vx-search__kbd" aria-hidden="true">/</kbd>
+          </div>
+          <div className="vx-tools__actions">
+            <button className="btn btn--primary vx-add" onClick={() => setEditing("new")} aria-keyshortcuts="n">
+              <Plus size={15} /> Add password <kbd className="kbd">N</kbd>
+            </button>
+            <Link to="/generator" className="btn btn--ghost vx-tools__gen"><IcWand size={16} /> Generator</Link>
+          </div>
+        </div>
 
         {broken ? (
           <div className="notice notice--err vault__notice">
@@ -174,146 +223,138 @@ export default function Passwords() {
           </div>
         ) : null}
 
-        <MascotBanner kind="safe" {...vaultMood(health, items.length)} />
+        <div className="vx-layout">
+          <aside className="vx-side">
+            <VaultSidebar section={folder} onSelect={pickSection} counts={counts} folders={folders} />
+          </aside>
 
-        <div className="anim-fade-up d-1">
-          <VaultHealth
-            insights={health}
-            loading={false}
-            filter={filter}
-            onFilter={setFilter}
-            onBreachCheck={items.length ? checkBreaches : null}
-            breachProgress={breachProgress}
-            breachChecked={breachChecked || Object.keys(breaches).length > 0}
-          />
-        </div>
-
-        <div className="vault__tools anim-fade-up d-2">
-          <div className="vault__search field__wrap">
-            <span className="vault__search-icon"><Search size={17} /></span>
-            <input
-              className="input vault__search-input"
-              type="search"
-              ref={searchRef}
-              placeholder="Search names, usernames, websites, notes…  ( / )"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              aria-label="Search your vault"
-            />
-          </div>
-          <div className="vault__actions">
-            <select className="input vault__sort" value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort">
-              <option value="recent">Recently updated</option>
-              <option value="az">A → Z</option>
-              <option value="weakest">Weakest first</option>
-            </select>
-            <button className="btn btn--primary" onClick={() => setEditing("new")}>
-              <span className="btn__sheen" />
-              <Plus size={15} /> New item <kbd className="kbd">N</kbd>
-            </button>
-            <button className="btn btn--ghost" onClick={() => setImporting(true)}>
-              <Upload size={15} /> Import
-            </button>
-            <button className="btn btn--ghost" onClick={() => (selecting ? stopSelecting() : setSelecting(true))} aria-pressed={selecting}>
-              {selecting ? "Done" : "Select"}
-            </button>
-          </div>
-        </div>
-
-        {selecting ? (
-          <div className="bulkbar" role="toolbar" aria-label="Bulk actions">
-            <strong>{selected.size} selected</strong>
-            <button className="btn btn--quiet btn--sm" onClick={() => setSelected(new Set(visible.map((i) => i.id)))}>Select all {visible.length}</button>
-            <button className="btn btn--quiet btn--sm" disabled={busy || !selected.size} onClick={() => bulkFavorite(true)}>Favourite</button>
-            <button className="btn btn--quiet btn--sm" disabled={busy || !selected.size} onClick={() => bulkFavorite(false)}>Unfavourite</button>
-            <button className="btn btn--quiet btn--sm" disabled={busy || !selected.size} onClick={bulkMove}>Move to folder…</button>
-            <button className="btn btn--quiet btn--sm" disabled={busy || !selected.size} onClick={bulkDelete}>Delete</button>
-          </div>
-        ) : null}
-
-        <nav className="folders anim-fade-up d-3" aria-label="Folders">
-          <button type="button" className={`folder-chip ${folder === "__all" ? "is-active" : ""}`} onClick={() => setFolder("__all")}>
-            <Grid size={13} /> All <span>{items.length}</span>
-          </button>
-          <button type="button" className={`folder-chip ${folder === "__fav" ? "is-active" : ""}`} onClick={() => setFolder("__fav")}>
-            <Star size={13} /> Favourites <span>{favCount}</span>
-          </button>
-          {trash.length ? (
-            <button type="button" className={`folder-chip ${folder === "__trash" ? "is-active" : ""}`} onClick={() => setFolder("__trash")}>
-              Trash <span>{trash.length}</span>
-            </button>
-          ) : null}
-          {folders.map((f) => (
-            <button key={f} type="button" className={`folder-chip ${folder === f ? "is-active" : ""}`} onClick={() => setFolder(f)}>
-              <Folder size={13} /> {f} <span>{items.filter((i) => i.folder === f).length}</span>
-            </button>
-          ))}
-        </nav>
-        {!folder.startsWith("__") ? (
-          <p className="folders__tools"><button type="button" className="btn btn--quiet btn--sm" disabled={busy} onClick={renameFolder}>Rename or merge “{folder}”</button></p>
-        ) : null}
-
-        {items.length === 0 ? (
-          <Reveal className="empty card" variant="reveal--scale">
-            <span className="card__ribbon" />
-            <span className="empty__icon"><KeyLine size={28} /></span>
-            <h2 className="empty__title">Your vault is empty</h2>
-            <p className="empty__body">Add your first login, or import everything from your browser or another password manager.</p>
-            <div className="empty__actions">
-              <button className="btn btn--primary btn--lg" onClick={() => setEditing("new")}>
-                <span className="btn__sheen" /> Add your first item <Arrow size={16} />
-              </button>
-              <button className="btn btn--ghost btn--lg" onClick={() => setImporting(true)}>
-                <Upload size={15} /> Import
-              </button>
-            </div>
-          </Reveal>
-        ) : visible.length === 0 ? (
-          <Reveal className="empty empty--slim card">
-            <span className="empty__icon"><Search size={24} /></span>
-            <h2 className="empty__title">{search ? <>Nothing matches “{search}”</> : "Nothing here"}</h2>
-            <p className="empty__body">{filter !== "all" && !search ? "Good news — nothing needs attention in this view." : "Try another search or clear the filters."}</p>
-            <button className="btn btn--ghost" onClick={() => { setSearch(""); setFilter("all"); setFolder("__all"); }}>
-              Show everything
-            </button>
-          </Reveal>
-        ) : folder === "__trash" ? (
-          <div className="trashlist">
-            <p className="folders__tools">
-              Deleted items stay here for 30 days.{" "}
-              <button type="button" className="btn btn--quiet btn--sm" disabled={busy} onClick={async () => {
-                if (!window.confirm(`Permanently delete ${trash.length} item${trash.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
-                try { await emptyTrash(); toast.success("Trash emptied."); fx.emit("boom", { big: true }); setFolder("__all"); } catch (e) { toast.error(e.message); }
-              }}>Empty trash</button>
-            </p>
-            {visible.map((item) => (
-              <div className="card trashlist__row" key={item.id}>
-                <div><strong>{item.name || "Untitled"}</strong><small> {item.username} · deleted {new Date(item.deletedAt).toLocaleDateString()}</small></div>
-                <span>
-                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => restoreItem(item.id).then(() => { toast.success("Restored."); fx.emit("land"); }).catch(() => toast.error("Couldn't restore that."))}>Restore</button>{" "}
-                  <button type="button" className="btn btn--quiet btn--sm" onClick={() => window.confirm("Delete this item forever?") && purgeItem(item.id).then(() => fx.emit("boom")).catch(() => toast.error("Couldn't delete that."))}>Delete forever</button>
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="vault__grid">
-            {visible.map((item, i) => (
-              <ItemCard
-                key={item.id}
-                item={item}
-                info={health.info[item.id]}
-                icons={prefs.icons}
-                onEdit={() => setEditing(item)}
-                selecting={selecting}
-                selected={selected.has(item.id)}
-                onSelect={() => toggleSelect(item.id)}
-                onFavorite={() => toggleFavorite(item.id).catch(() => toast.error("Couldn't update that."))}
-                style={{ animationDelay: `${Math.min(i, 10) * 0.04}s` }}
+          <main className="vx-main" aria-label={sectionTitle}>
+            {!inTrash ? (
+              <VaultHealth
+                insights={health}
+                loading={false}
+                filter={filter}
+                onFilter={setFilter}
+                onBreachCheck={items.length ? checkBreaches : null}
+                breachProgress={breachProgress}
+                breachChecked={checked}
               />
-            ))}
-          </div>
-        )}
+            ) : null}
+
+            <div className="vx-bot">
+              <MascotBanner kind="safe" {...vaultMood(health, items.length)} stats={[]} />
+            </div>
+
+            <div className="vx-list-head">
+              <div className="vx-list-head__title">
+                <h2>{sectionTitle}</h2>
+                <span className="vx-list-head__count">{visible.length} {visible.length === 1 ? "item" : "items"}</span>
+                {filter !== "all" && !inTrash ? (
+                  <button type="button" className="vx-tag" onClick={() => setFilter("all")} aria-label={`Remove filter ${HEALTH_LABELS[filter]}`}>
+                    {HEALTH_LABELS[filter]} <span aria-hidden="true">×</span>
+                  </button>
+                ) : null}
+                {!isBuiltinSection(folder) ? (
+                  <button type="button" className="btn btn--quiet btn--sm" disabled={busy} onClick={renameFolder}>Rename or merge</button>
+                ) : null}
+              </div>
+              {!inTrash ? (
+                <div className="vx-list-head__tools">
+                  <select className="input vx-sort" value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort">
+                    <option value="recent">Recently updated</option>
+                    <option value="az">A → Z</option>
+                    <option value="weakest">Weakest first</option>
+                  </select>
+                  <button className="btn btn--ghost btn--sm" onClick={() => setImporting(true)}>
+                    <Upload size={14} /> Import
+                  </button>
+                  <button className="btn btn--ghost btn--sm" onClick={() => (selecting ? stopSelecting() : setSelecting(true))} aria-pressed={selecting}>
+                    {selecting ? "Done" : "Select"}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            {selecting && !inTrash ? (
+              <div className="bulkbar vx-bulk" role="toolbar" aria-label="Bulk actions">
+                <strong>{selected.size} selected</strong>
+                <button className="btn btn--quiet btn--sm" onClick={() => setSelected(new Set(visible.map((i) => i.id)))}>Select all {visible.length}</button>
+                <button className="btn btn--quiet btn--sm" disabled={busy || !selected.size} onClick={() => bulkFavorite(true)}>Favourite</button>
+                <button className="btn btn--quiet btn--sm" disabled={busy || !selected.size} onClick={() => bulkFavorite(false)}>Unfavourite</button>
+                <button className="btn btn--quiet btn--sm" disabled={busy || !selected.size} onClick={bulkMove}>Move to folder…</button>
+                <button className="btn btn--quiet btn--sm" disabled={busy || !selected.size} onClick={bulkDelete}>Delete</button>
+              </div>
+            ) : null}
+
+            {inTrash && trash.length ? (
+              <p className="vx-trash-note">
+                <IcTrash size={15} /> Deleted items stay here for 30 days.
+                <button type="button" className="btn btn--quiet btn--sm" disabled={busy} onClick={async () => {
+                  if (!window.confirm(`Permanently delete ${trash.length} item${trash.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
+                  try { await emptyTrash(); toast.success("Trash emptied."); fx.emit("boom", { big: true }); setFolder(SECTIONS.all); } catch (e) { toast.error(e.message); }
+                }}>Empty trash</button>
+              </p>
+            ) : null}
+
+            {items.length === 0 && !inTrash ? (
+              <Reveal className="empty card vx-empty" variant="reveal--scale">
+                <span className="empty__icon"><KeyLine size={28} /></span>
+                <h2 className="empty__title">Your vault is empty</h2>
+                <p className="empty__body">Add your first login, or import everything from your browser or another password manager.</p>
+                <div className="empty__actions">
+                  <button className="btn btn--primary btn--lg" onClick={() => setEditing("new")}>
+                    Add your first item <Arrow size={16} />
+                  </button>
+                  <button className="btn btn--ghost btn--lg" onClick={() => setImporting(true)}>
+                    <Upload size={15} /> Import
+                  </button>
+                </div>
+              </Reveal>
+            ) : visible.length === 0 ? (
+              <Reveal className="empty empty--slim card vx-empty">
+                <span className="empty__icon">{inTrash ? <IcTrash size={24} /> : <Search size={24} />}</span>
+                <h2 className="empty__title">{search ? <>Nothing matches “{search}”</> : inTrash ? "Trash is empty" : "Nothing here"}</h2>
+                <p className="empty__body">{inTrash && !search ? "Items you delete wait here for 30 days." : filter !== "all" && !search ? "Good news — nothing needs attention in this view." : "Try another search or clear the filters."}</p>
+                <button className="btn btn--ghost" onClick={() => { setSearch(""); setFilter("all"); setFolder(SECTIONS.all); }}>
+                  Show everything
+                </button>
+              </Reveal>
+            ) : inTrash ? (
+              <ul className="vx-trash">
+                {visible.map((item) => (
+                  <li className="vx-trash__row" key={item.id}>
+                    <div className="vx-trash__id">
+                      <strong>{item.name || "Untitled"}</strong>
+                      <small>{item.username ? `${item.username} · ` : ""}deleted {new Date(item.deletedAt).toLocaleDateString()}</small>
+                    </div>
+                    <span className="vx-trash__acts">
+                      <button type="button" className="btn btn--ghost btn--sm" onClick={() => restoreItem(item.id).then(() => { toast.success("Restored."); fx.emit("land"); }).catch(() => toast.error("Couldn't restore that."))}>Restore</button>
+                      <button type="button" className="btn btn--quiet btn--sm vx-danger" onClick={() => window.confirm("Delete this item forever?") && purgeItem(item.id).then(() => fx.emit("boom")).catch(() => toast.error("Couldn't delete that."))}>Delete forever</button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="vx-grid">
+                {visible.map((item, i) => (
+                  <ItemCard
+                    key={item.id}
+                    item={item}
+                    info={health.info[item.id]}
+                    icons={prefs.icons}
+                    onEdit={() => setEditing(item)}
+                    onTrash={() => trashOne(item)}
+                    selecting={selecting}
+                    selected={selected.has(item.id)}
+                    onSelect={() => toggleSelect(item.id)}
+                    onFavorite={() => toggleFavorite(item.id).catch(() => toast.error("Couldn't update that."))}
+                    style={{ animationDelay: `${Math.min(i, 10) * 0.03}s` }}
+                  />
+                ))}
+              </div>
+            )}
+          </main>
+        </div>
       </div>
 
       <ItemEditor
