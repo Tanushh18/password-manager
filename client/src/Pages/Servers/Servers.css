@@ -42,3 +42,8 @@
 .servers__envrow { padding: .55rem .7rem; border: 1px solid var(--line-strong); border-radius: 12px; font-size: .85rem; }
 .servers__envrow p { margin: .3rem 0 0; display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
 .servers__envrow code { font-size: .76rem; padding: .05rem .35rem; border-radius: 6px; background: var(--tint); }
+
+/* ── Redesign alignment ── */
+.servers h1, .servers h2, .servers__head h2, .security-page h1, .security-page h2, .security-hero h1, .security-section h2 { font-family: var(--font-display); }
+.servers__row { border-radius: var(--r-lg); }
+@media (max-width: 640px) { .servers .btn, .security-page .btn { min-height: 44px; } }

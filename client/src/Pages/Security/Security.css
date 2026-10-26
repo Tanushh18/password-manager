@@ -49,3 +49,8 @@
 .security-job__status{font-size:.72rem;color:var(--muted);white-space:nowrap}
 .security-run>span:nth-last-child(2){font-family:var(--font-mono,monospace);font-size:.72rem;color:var(--muted)}
 @media(max-width:760px){.security-live-card{grid-template-columns:1fr}.security-live-card__stats{grid-template-columns:repeat(3,minmax(0,1fr))}.security-run{gap:8px;flex-wrap:wrap}.security-run__detail{flex-basis:calc(100% - 120px)}.security-job__status{white-space:normal;text-align:right}}
+
+/* ── Redesign alignment ── */
+.servers h1, .servers h2, .servers__head h2, .security-page h1, .security-page h2, .security-hero h1, .security-section h2 { font-family: var(--font-display); }
+.servers__row { border-radius: var(--r-lg); }
+@media (max-width: 640px) { .servers .btn, .security-page .btn { min-height: 44px; } }

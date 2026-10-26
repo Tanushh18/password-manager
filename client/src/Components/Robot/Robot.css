@@ -1,7 +1,7 @@
 /* Robot mascot. Only transform / opacity animate, so a page full of robots stays cheap to draw. */
 .bot {
-  --bot-main: #39ff9c;
-  --bot-glow: rgba(57, 255, 156, 0.45);
+  --bot-main: #3ccf9a;
+  --bot-glow: rgba(60, 207, 154, 0.45);
   --bot-face: #04140c;
   --bot-metal-hi: #2b3550;
   --bot-metal-lo: #0d1220;
@@ -11,12 +11,12 @@
   filter: drop-shadow(0 0 10px var(--bot-glow));
 }
 /* One colour per emotion */
-.bot--sweaty, .bot--warm { --bot-main: #ffd447; --bot-glow: rgba(255, 212, 71, 0.45); }
-.bot--fire { --bot-main: #ff4d6d; --bot-glow: rgba(255, 77, 109, 0.6); }
+.bot--sweaty, .bot--warm { --bot-main: #f5c86a; --bot-glow: rgba(245, 200, 106, 0.45); }
+.bot--fire { --bot-main: #ef6b6b; --bot-glow: rgba(239, 107, 107, 0.6); }
 .bot--angry { --bot-main: #ff6a3d; --bot-glow: rgba(255, 106, 61, 0.6); }
 .bot--dead { --bot-main: #8a8f98; --bot-glow: rgba(0, 0, 0, 0); --bot-metal-hi: #262a33; }
-.bot--sleeping { --bot-main: #7f8cff; --bot-glow: rgba(127, 140, 255, 0.35); }
-.bot--transforming { --bot-main: #c86bff; --bot-glow: rgba(200, 107, 255, 0.65); }
+.bot--sleeping { --bot-main: #8fe0dc; --bot-glow: rgba(127, 140, 255, 0.35); }
+.bot--transforming { --bot-main: #2bb3b1; --bot-glow: rgba(43, 179, 177, 0.65); }
 .bot--confused { --bot-main: #5ad1ff; --bot-glow: rgba(90, 209, 255, 0.35); }
 .bot--celebrating { --bot-main: #b8ff3d; --bot-glow: rgba(184, 255, 61, 0.55); }
 .bot--starstruck { --bot-main: #7cf8ff; --bot-glow: rgba(124, 248, 255, 0.6); }
@@ -156,7 +156,7 @@
 .bot-belly { transform-box: fill-box; transform-origin: 50% 0%; transform: scaleX(var(--bot-belly, 1)); transition: transform 0.8s ease; }
 .bot-heat { fill: #ff3b3b; opacity: calc(var(--bot-heat, 0) * 0.5); mix-blend-mode: screen; pointer-events: none; transition: opacity 0.8s ease; }
 .bot-jet { transform-box: fill-box; transform-origin: 50% 0%; transform: scaleY(var(--bot-jet, 1)); transition: transform 0.8s ease; }
-.bot-meter__fill--mem { fill: #c86bff; }
+.bot-meter__fill--mem { fill: #2bb3b1; }
 .bot.is-hot { filter: drop-shadow(0 0 14px rgba(255, 80, 60, 0.55)); }
 .bot-fx--steam { top: -6%; left: 26%; font-size: 15px; color: #ffb199; animation: bot-float 1.6s ease-in-out infinite; }
 
