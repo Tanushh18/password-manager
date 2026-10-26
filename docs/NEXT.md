@@ -1,5 +1,10 @@
 # Next up
 
+## Fun effects (added 26 Oct)
+- [ ] Web: robots fly by every 10 to 20 s, a plane lands now and then; save an item -> plane lands, delete forever -> explosion, new incident -> explosion at the bell. Settings -> "Fun effects" turns it off; reduced-motion devices never see it.
+- [ ] Control Center -> Servers -> "Floor": your real servers run between Jobs and Rack (speed from CPU, crates from load, RAM bar, "Memory bhar gayi" warning). With no servers it shows a labelled demo fleet.
+- [ ] Android: same effects (needs a new APK build); Settings -> "Fun effects".
+
 ## Live check 26 Oct (public URLs, from outside)
 | URL | Result |
 |---|---|

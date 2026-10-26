@@ -267,6 +267,15 @@ export default function Settings() {
             />
           </Section>
 
+          <Section title="FUN" delay={165}>
+            <Row
+              icon="sparkle"
+              title="Fun effects"
+              subtitle="Robots fly by, planes land when you save, things blow up when something is deleted for good. Off with reduce motion."
+              right={<Switch value={prefs.fx !== false} onValueChange={(v) => setPrefs({ fx: v })} trackColor={{ false: alpha(theme.accent, 0.2), true: theme.accent }} thumbColor="#fff" />}
+            />
+          </Section>
+
           <Section title="WEEKLY CHECK" delay={170}>
             <Row
               icon="shield"

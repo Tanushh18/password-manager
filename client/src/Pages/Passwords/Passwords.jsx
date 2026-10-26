@@ -1,3 +1,4 @@
+import { fx } from "../../lib/fx";
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -111,6 +112,7 @@ export default function Passwords() {
       setBreachChecked(true);
       if (found) {
         toast.error(`${found} password${found === 1 ? " was" : "s were"} found in data breaches.`);
+        fx.emit("boom", { big: true });
         setFilter("breached");
       } else toast.success("None of your passwords appear in known breaches.");
     } catch (err) {
@@ -134,9 +136,11 @@ export default function Passwords() {
     if (editing === "new") {
       await addItem(form);
       toast.success("Encrypted and saved ✨");
+      fx.emit("land");
     } else {
       await updateItem(editing.id, form);
       toast.success("Updated and re-encrypted.");
+      fx.emit("land");
     }
   };
 
@@ -279,15 +283,15 @@ export default function Passwords() {
               Deleted items stay here for 30 days.{" "}
               <button type="button" className="btn btn--quiet btn--sm" disabled={busy} onClick={async () => {
                 if (!window.confirm(`Permanently delete ${trash.length} item${trash.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
-                try { await emptyTrash(); toast.success("Trash emptied."); setFolder("__all"); } catch (e) { toast.error(e.message); }
+                try { await emptyTrash(); toast.success("Trash emptied."); fx.emit("boom", { big: true }); setFolder("__all"); } catch (e) { toast.error(e.message); }
               }}>Empty trash</button>
             </p>
             {visible.map((item) => (
               <div className="card trashlist__row" key={item.id}>
                 <div><strong>{item.name || "Untitled"}</strong><small> {item.username} · deleted {new Date(item.deletedAt).toLocaleDateString()}</small></div>
                 <span>
-                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => restoreItem(item.id).then(() => toast.success("Restored.")).catch(() => toast.error("Couldn't restore that."))}>Restore</button>{" "}
-                  <button type="button" className="btn btn--quiet btn--sm" onClick={() => window.confirm("Delete this item forever?") && purgeItem(item.id).catch(() => toast.error("Couldn't delete that."))}>Delete forever</button>
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => restoreItem(item.id).then(() => { toast.success("Restored."); fx.emit("land"); }).catch(() => toast.error("Couldn't restore that."))}>Restore</button>{" "}
+                  <button type="button" className="btn btn--quiet btn--sm" onClick={() => window.confirm("Delete this item forever?") && purgeItem(item.id).then(() => fx.emit("boom")).catch(() => toast.error("Couldn't delete that."))}>Delete forever</button>
                 </span>
               </div>
             ))}

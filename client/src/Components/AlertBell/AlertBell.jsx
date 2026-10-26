@@ -1,3 +1,4 @@
+import { fx } from "../../lib/fx";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { getRenderOpsIncidents } from "../../api/client";
@@ -18,6 +19,7 @@ export default function AlertBell({ enabled }) {
     try {
       const { incidents } = await getRenderOpsIncidents(200);
       const now = openIncidents(incidents);
+      if (seen.current && newIncidents(now, seen.current).length) fx.emit("boom", { big: true, x: window.innerWidth - 70, y: 40 });
       if (seen.current && typeof Notification !== "undefined" && Notification.permission === "granted") {
         newIncidents(now, seen.current).slice(0, 3).forEach((e) => new Notification(`${e.serviceName || "Service"}: ${e.type}`, { body: e.message || "New incident", tag: e.id }));
       }

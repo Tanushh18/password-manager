@@ -1,10 +1,13 @@
+import { fx } from "../../lib/fx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { connectRenderAccount, deleteRenderAccount, bulkDeleteRenderServices, deleteRenderService, restartRenderService, triggerRenderDeploy, suspendRenderService, resumeRenderService, getRenderAccounts, getRenderServices, getRenderAudit } from "../../api/client";
 import { Modal, StatePill, Skeleton, Empty, Kpi, Section, FleetBar, useConfirm } from "./RenderUi";
 import ServiceDetail from "./ServiceDetail";
 import ServerBoard from "./ServerBoard";
-import RobotArmy, { RobotSquad } from "./RobotArmy";
+import RobotArmy, { RobotSquad, botFor } from "./RobotArmy";
+import RobotFloor from "./RobotFloor";
+import { lanesFromBots, demoLanes } from "../../lib/robotFloor";
 import { MonitoringView, IncidentsView, AlertPolicyView } from "./OpsViews";
 import { usePolling } from "./renderHooks";
 import { useOps } from "./useOps";
@@ -290,7 +293,8 @@ export default function RenderDashboard() {
       try { await action.run(s); done += 1; } catch (e) { failed.push(s.name + " (" + errorMessage(e, "failed") + ")"); }
     }
     setBusyKey(""); setBulkBusy("");
-    if (done) toast.success(action.label + " requested for " + done + " server" + (done === 1 ? "" : "s") + ".");
+    if (done) { toast.success(action.label + " requested for " + done + " server" + (done === 1 ? "" : "s") + "."); fx.emit(kind === "deploy" || kind === "resume" ? "land" : "robot"); }
+    if (failed.length) fx.emit("boom");
     if (failed.length) toast.error("Not done: " + failed.slice(0, 3).join("; "), { autoClose: 10000 });
     await Promise.all([loadAccounts({ quiet: true }), loadAudit()]);
   };
@@ -416,7 +420,7 @@ export default function RenderDashboard() {
               <button type="button" className={"rd-btn rd-btn--quiet" + (favoriteOnly ? " is-active" : "")} aria-pressed={favoriteOnly} onClick={() => setFavoriteOnly((v) => !v)}>{favoriteOnly ? "★" : "☆"} Favorites</button>
               <label className="rd-check"><input type="checkbox" checked={hideSuspended} onChange={(e) => setHideSuspended(e.target.checked)} /> Hide suspended</label>
               {filtersActive && <button type="button" className="rd-btn rd-btn--link" onClick={clearFilters}>Clear filters</button>}
-              <span className="rd-layout-toggle" role="group" aria-label="Layout">{[["robots", "🤖 Robots"], ["board", "▦ Board"], ["table", "☰ Table"]].map(([id, label]) => <button key={id} type="button" aria-pressed={layout === id} className={layout === id ? "is-active" : ""} onClick={() => setLayout(id)}>{label}</button>)}</span>
+              <span className="rd-layout-toggle" role="group" aria-label="Layout">{[["robots", "🤖 Robots"], ["floor", "🏭 Floor"], ["board", "▦ Board"], ["table", "☰ Table"]].map(([id, label]) => <button key={id} type="button" aria-pressed={layout === id} className={layout === id ? "is-active" : ""} onClick={() => setLayout(id)}>{label}</button>)}</span>
             </div>
             {checked.length > 0 && (
               <div className="rd-selectbar" role="region" aria-label="Selection actions">
@@ -430,6 +434,14 @@ export default function RenderDashboard() {
             )}
             {layout === "robots" && (loading ? <div className="rd-board"><Skeleton lines={4} height={120} /></div> : (
               <RobotArmy groups={groups} series={series} incidentKeys={fleet.incidentKeys} projectCell={projectCell} onOpen={setSelectedKey} busy={busyKey} onAction={(kind, s) => void runAction(kind, [s])} />
+            ))}
+            {layout === "floor" && (loading ? <div className="rd-board"><Skeleton lines={4} height={120} /></div> : (services.length && !groups.length
+              ? <Empty icon="🏭" title="Koi robot match nahi hua">Search ya filters badal ke dekho.</Empty>
+              : <RobotFloor
+                  lanes={groups.length ? lanesFromBots(groups.flatMap((g) => g.members.map((s) => botFor(s, series, fleet.incidentKeys))), fleet.incidentKeys) : demoLanes()}
+                  demo={!services.length}
+                  onOpen={setSelectedKey}
+                />
             ))}
             {layout === "robots" && !loading && !groups.length && <Empty icon="🤖" title={services.length ? "Koi robot match nahi hua" : "Robot army ready hai"}>{services.length ? "Search ya filters badal ke dekho." : "Render API key connect karo, robots aa jayenge."}</Empty>}
             {layout === "board" && (loading ? <div className="rd-board"><Skeleton lines={4} height={120} /></div> : (

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { API_URL } from "../../api/client";
 import { buildReport, probeServers, reportCSV, reportText } from "../../lib/statusReport";
+import { fx } from "../../lib/fx";
 import "./StatusReport.css";
 
 /* Where the Stashr API servers are listed (public, the same list the apps use). Falls back to the server in use. */
@@ -37,7 +38,7 @@ export default function StatusReport({ pings, scan, crons, tick, onRecheck }) {
   const report = useMemo(() => buildReport({ api, pings, scan: scan || [], crons, tick }), [api, pings, scan, crons, tick]);
   const s = report.summary;
 
-  const recheck = async () => { setBusy(true); try { await Promise.all([probe(), onRecheck ? onRecheck() : null]); } finally { setBusy(false); } };
+  const recheck = async () => { setBusy(true); try { await Promise.all([probe(), onRecheck ? onRecheck() : null]); fx.emit(report.failed.length ? "boom" : "land"); } finally { setBusy(false); } };
   const copy = () => navigator.clipboard.writeText(reportText(report)).then(() => toast.success("Report copied."), () => toast.error("Couldn't copy."));
 
   return (

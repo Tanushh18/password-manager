@@ -650,6 +650,9 @@ export default function Settings() {
           <Row icon={<Globe size={15} />} label="Theme">
             <ThemeToggle />
           </Row>
+          <Row label="Fun effects" hint="Robots fly by, planes land when you save, and things blow up when something is deleted for good or goes down. Off automatically if your device asks for reduced motion.">
+            <Toggle checked={prefs.fx !== false} onChange={(v) => setPrefs({ fx: v })} label="" />
+          </Row>
           <Row label="Website icons" hint="Fetched from DuckDuckGo, which can see which sites you have saved.">
             <Toggle checked={prefs.icons} onChange={(v) => setPrefs({ icons: v })} label="" />
           </Row>

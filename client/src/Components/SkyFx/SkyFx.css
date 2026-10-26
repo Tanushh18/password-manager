@@ -1,0 +1,72 @@
+.skyfx { position: fixed; inset: 0; z-index: 45; pointer-events: none; overflow: hidden; }
+
+/* ── robots flying across ── */
+.fxfly { position: absolute; left: 0; width: 0; animation: fxfly-ltr linear forwards; }
+.fxfly.is-rtl { animation-name: fxfly-rtl; }
+.fxfly.is-rtl .fxbot { transform: scaleX(-1); }
+@keyframes fxfly-ltr { from { transform: translateX(-12vw); } to { transform: translateX(112vw); } }
+@keyframes fxfly-rtl { from { transform: translateX(112vw); } to { transform: translateX(-12vw); } }
+.fxfly__bob { animation: fxbob 1.6s ease-in-out infinite; }
+@keyframes fxbob { 0%, 100% { transform: translateY(calc(var(--bob) * -0.5)) rotate(-4deg); } 50% { transform: translateY(calc(var(--bob) * 0.5)) rotate(4deg); } }
+.fxbot { display: block; overflow: visible; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.25)); }
+.fxbot__head { fill: hsl(var(--h) 70% 55%); }
+.fxbot__arm { fill: hsl(var(--h) 55% 40%); }
+.fxbot__visor { fill: #10131c; }
+.fxbot__eye { fill: #7dffe3; animation: fxblink 3.2s infinite; transform-origin: center; transform-box: fill-box; }
+@keyframes fxblink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+.fxbot__prop { fill: #3b4252; transform-origin: 32px 6px; animation: fxspin 0.18s linear infinite; }
+@keyframes fxspin { 0% { transform: scaleX(1); } 50% { transform: scaleX(0.25); } 100% { transform: scaleX(1); } }
+.fxbot__flame { fill: #ffb12b; transform-origin: 32px 40px; animation: fxflame 0.25s ease-in-out infinite alternate; }
+@keyframes fxflame { from { transform: scaleY(0.7); opacity: 0.8; } to { transform: scaleY(1.25); opacity: 1; } }
+
+/* ── plane landing on a runway ── */
+.fxrunway { position: absolute; left: 0; right: 0; bottom: 10px; height: 14px; opacity: 0; animation: fxrunway 8s ease-in-out forwards; background: linear-gradient(#2a2f3a, #1a1d25); border-top: 1px solid rgba(255,255,255,.12); }
+.fxrunway span { position: absolute; inset: 6px 0 auto; height: 2px; background: repeating-linear-gradient(90deg, #fff 0 22px, transparent 22px 46px); opacity: 0.8; }
+.fxrunway.is-quick { animation-duration: 5.2s; }
+@keyframes fxrunway { 0% { opacity: 0; } 12%, 88% { opacity: 0.85; } 100% { opacity: 0; } }
+.fxland { position: absolute; left: 0; top: 0; animation: fxland 8s cubic-bezier(.3,.1,.45,1) forwards; will-change: transform; }
+.fxland.is-quick { animation-duration: 5.2s; }
+.fxplane { display: block; filter: drop-shadow(0 8px 8px rgba(0,0,0,.28)); }
+.fxplane__body { fill: #f3f6fb; stroke: #b5bfd0; stroke-width: 1; }
+.fxplane__tail { fill: #e0463a; }
+.fxplane__wing { fill: #c9d2e0; }
+.fxplane__wing--far { fill: #aab5c8; }
+.fxplane__win { fill: #3d78d8; }
+.fxplane__gear rect { fill: #4b5262; } .fxplane__gear circle { fill: #20242d; }
+.fxplane__gear { transform-origin: 75px 34px; animation: fxgear 8s ease-in-out forwards; }
+.fxland.is-quick .fxplane__gear { animation-duration: 5.2s; }
+@keyframes fxgear { 0%, 38% { transform: scaleY(0); opacity: 0; } 50%, 100% { transform: scaleY(1); opacity: 1; } }
+@keyframes fxland {
+  0%   { transform: translate(-18vw, 14vh) rotate(11deg); }
+  58%  { transform: translate(44vw, calc(100vh - 150px)) rotate(7deg); }
+  70%  { transform: translate(56vw, calc(100vh - 64px)) rotate(0deg); }
+  100% { transform: translate(108vw, calc(100vh - 64px)) rotate(0deg); }
+}
+.fxdust { position: absolute; left: 57vw; bottom: 14px; width: 0; height: 0; }
+.fxdust i { position: absolute; bottom: 0; width: 22px; height: 22px; border-radius: 50%; background: rgba(210, 214, 222, 0.7); opacity: 0; animation: fxdust 1.6s ease-out forwards; animation-delay: 5.5s; }
+.fxdust.is-quick i { animation-delay: 3.6s; }
+.fxdust i:nth-child(2) { left: -26px; animation-delay: 5.65s; } .fxdust i:nth-child(3) { left: -52px; animation-delay: 5.8s; }
+.fxdust.is-quick i:nth-child(2) { animation-delay: 3.75s; } .fxdust.is-quick i:nth-child(3) { animation-delay: 3.9s; }
+@keyframes fxdust { 0% { opacity: 0.8; transform: translate(0, 0) scale(0.4); } 100% { opacity: 0; transform: translate(-30px, -34px) scale(1.8); } }
+
+/* ── explosion ── */
+.fxboom { position: absolute; width: 0; height: 0; }
+.fxboom__flash { position: absolute; left: -90px; top: -90px; width: 180px; height: 180px; border-radius: 50%; background: radial-gradient(circle, #fff 0%, #ffe27a 28%, rgba(255, 120, 20, 0.7) 55%, rgba(255, 60, 20, 0) 72%); transform: scale(0); animation: fxflash 0.7s ease-out forwards; }
+.fxboom--big .fxboom__flash { left: -150px; top: -150px; width: 300px; height: 300px; }
+.fxboom__ring { position: absolute; left: -60px; top: -60px; width: 120px; height: 120px; border-radius: 50%; border: 4px solid rgba(255, 190, 80, 0.9); transform: scale(0.2); opacity: 0; animation: fxring 0.9s ease-out forwards; }
+.fxboom__emoji { position: absolute; left: -26px; top: -34px; font-size: 52px; line-height: 1; transform: scale(0); animation: fxemoji 1.1s cubic-bezier(.2,1.6,.4,1) forwards; }
+.fxboom--big .fxboom__emoji { font-size: 84px; left: -42px; top: -54px; }
+.fxboom__spark { position: absolute; left: 0; top: 0; border-radius: 50%; opacity: 0; transform: rotate(var(--a)) translateX(0); animation: fxspark 0.9s cubic-bezier(.1,.7,.3,1) forwards; box-shadow: 0 0 8px currentColor; }
+.fxboom__smoke { position: absolute; left: -22px; top: -22px; width: 44px; height: 44px; border-radius: 50%; background: rgba(90, 94, 104, 0.55); opacity: 0; animation: fxsmoke 1.6s ease-out 0.25s forwards; }
+.fxboom__smoke--2 { left: 4px; animation-delay: 0.4s; }
+@keyframes fxflash { 0% { transform: scale(0); opacity: 1; } 60% { opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
+@keyframes fxring { 0% { transform: scale(0.2); opacity: 1; } 100% { transform: scale(2.6); opacity: 0; } }
+@keyframes fxemoji { 0% { transform: scale(0) rotate(-20deg); } 35% { transform: scale(1.25) rotate(6deg); } 70% { transform: scale(1) rotate(0); opacity: 1; } 100% { transform: scale(0.8); opacity: 0; } }
+@keyframes fxspark { 0% { opacity: 1; transform: rotate(var(--a)) translateX(0) scale(1); } 100% { opacity: 0; transform: rotate(var(--a)) translateX(var(--d)) scale(0.2); } }
+@keyframes fxsmoke { 0% { opacity: 0.7; transform: translateY(0) scale(0.5); } 100% { opacity: 0; transform: translateY(-70px) scale(2.4); } }
+
+body.fx-shake { animation: fxshake 0.42s linear; }
+@keyframes fxshake { 0%, 100% { transform: translate(0, 0); } 15% { transform: translate(-4px, 2px); } 30% { transform: translate(4px, -3px); } 45% { transform: translate(-3px, -2px); } 60% { transform: translate(3px, 3px); } 75% { transform: translate(-2px, 1px); } }
+
+@media (prefers-reduced-motion: reduce) { .skyfx { display: none; } body.fx-shake { animation: none; } }
+@media (max-width: 600px) { .fxplane { width: 96px; height: 37px; } }

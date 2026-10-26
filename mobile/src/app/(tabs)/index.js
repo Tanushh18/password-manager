@@ -14,6 +14,7 @@ import { useTheme, alpha } from "../../lib/theme";
 import { useVault } from "../../lib/vault";
 import { domainOf } from "../../lib/items";
 import { api } from "../../lib/api";
+import { fx } from "../../lib/fx";
 import { openIncidents } from "../../lib/alerts";
 
 const SORTS = [
@@ -252,7 +253,7 @@ export default function Vault() {
               onPress={() =>
                 Alert.alert(`Delete ${trash.length} item${trash.length === 1 ? "" : "s"} forever?`, "This cannot be undone.", [
                   { text: "Keep", style: "cancel" },
-                  { text: "Delete forever", style: "destructive", onPress: () => emptyTrash().then(() => { toast("Trash emptied."); setFolder("__all"); }).catch((e) => toast(e.message, "error")) },
+                  { text: "Delete forever", style: "destructive", onPress: () => emptyTrash().then(() => { toast("Trash emptied."); fx.emit("boom", { big: true }); setFolder("__all"); }).catch((e) => toast(e.message, "error")) },
                 ])
               }
             />
@@ -284,11 +285,11 @@ export default function Vault() {
                 {item.username || "No username"} · deleted {new Date(item.deletedAt).toLocaleDateString()}
               </Text>
               <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
-                <Chip label="Restore" active onPress={() => restoreItem(item.id).then(() => toast("Restored.")).catch((e) => toast(e.message, "error"))} />
+                <Chip label="Restore" active onPress={() => restoreItem(item.id).then(() => { toast("Restored."); fx.emit("land"); }).catch((e) => toast(e.message, "error"))} />
                 <Chip label="Delete forever" color={theme.danger} onPress={() =>
                   Alert.alert("Delete forever?", "This cannot be undone.", [
                     { text: "Keep", style: "cancel" },
-                    { text: "Delete", style: "destructive", onPress: () => purgeItem(item.id).catch((e) => toast(e.message, "error")) },
+                    { text: "Delete", style: "destructive", onPress: () => purgeItem(item.id).then(() => fx.emit("boom")).catch((e) => toast(e.message, "error")) },
                   ])} />
               </View>
             </Card>

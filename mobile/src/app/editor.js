@@ -13,6 +13,7 @@ import { emptyItem, FIELD_DEFS, ITEM_TYPES, TYPE_LABELS } from "../lib/items";
 import { estimate, generatePassword, generatePassphrase } from "../lib/strength";
 import C from "../lib/crypto";
 import { onScan } from "../lib/scanBus";
+import { fx } from "../lib/fx";
 import { copySecret } from "../components/ItemCard";
 
 const QUICK = ["Google", "Instagram", "WhatsApp", "Netflix", "Amazon", "GitHub", "Bank", "Wi-Fi"];
@@ -59,9 +60,11 @@ export default function Editor() {
       if (existing) {
         await updateItem(existing.id, form);
         toast("Updated and re-encrypted 🔐");
+        fx.emit("land");
       } else {
         await addItem(form);
         toast("Encrypted and saved");
+        fx.emit("land");
       }
       close();
     } catch (e) {

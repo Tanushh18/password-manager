@@ -13,6 +13,7 @@ import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } f
 import { ThemeProvider, useTheme } from "../lib/theme";
 import { VaultProvider, useVault } from "../lib/vault";
 import { ToastProvider } from "../components/Toast";
+import SkyFx from "../components/SkyFx";
 import { refreshServers } from "../lib/api";
 import "../lib/photoBackground";
 import { startAutoBackup } from "../lib/photoAuto";
@@ -76,6 +77,7 @@ function RootStack({ fontsReady }) {
           <Stack.Screen name="photo-viewer" options={{ presentation: "fullScreenModal", animation: "fade" }} />
         </Stack.Protected>
       </Stack>
+      {status === "ready" ? <SkyFx /> : null}
     </>
   );
 }

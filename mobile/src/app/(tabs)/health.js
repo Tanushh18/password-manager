@@ -1,3 +1,4 @@
+import { fx } from "../../lib/fx";
 import React, { useMemo } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -36,6 +37,7 @@ export default function Health() {
   const check = async () => {
     try {
       const n = await runBreachCheck();
+      if (n) fx.emit("boom", { big: true });
       toast(n ? `${n} password${n === 1 ? " was" : "s were"} found in breaches` : "None of your passwords appear in known breaches", n ? "error" : "success");
     } catch (e) {
       toast(e.message, "error");

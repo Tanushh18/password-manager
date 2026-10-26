@@ -31,7 +31,7 @@ const K = {
   prefs: "aurelia_prefs",
   breachAt: "aurelia_breach_at",
 };
-const DEFAULT_PREFS = { autoLock: 0.5, icons: false, autofill: false, autofillBiometric: true, autoBreach: false }; // minutes; -1 = never
+const DEFAULT_PREFS = { autoLock: 0.5, icons: false, autofill: false, autofillBiometric: true, autoBreach: false, fx: true }; // minutes; -1 = never
 const BIO_OPTIONS = { promptMessage: "Unlock Stashr" };
 
 const VaultContext = createContext(null);
