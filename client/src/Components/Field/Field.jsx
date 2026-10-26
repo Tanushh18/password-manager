@@ -23,8 +23,8 @@ export default function Field({ id, label, error, hint, secret, className = "", 
             type="button"
             className={`field__affix ${shown ? "is-on" : ""}`}
             onClick={() => setShown((v) => !v)}
-            aria-label={shown ? "Hide" : "Show"}
-            tabIndex={-1}
+            aria-label={shown ? "Hide password" : "Show password"}
+            aria-pressed={shown}
           >
             {shown ? <EyeOff size={17} /> : <Eye size={17} />}
           </button>
