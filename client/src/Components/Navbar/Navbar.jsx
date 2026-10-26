@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useVault } from "../../state/vault";
 import { ShieldLine, Menu, Close, Arrow } from "../Icons/Icons";
+import AlertBell from "../AlertBell/AlertBell";
 import ThemeToggle from "../ThemeToggle/ThemeToggle";
 import VersionBadge from "../WhatsNew/WhatsNew";
 import "./Navbar.css";
@@ -101,6 +102,7 @@ function Navbar() {
             )}
           </nav>
           <div className="nav__actions">
+            <AlertBell enabled={status === "ready"} />
             <ThemeToggle />
             {isAuthenticated && name && <span className="nav__greeting">Hello, <em>{name.split(" ")[0]}</em></span>}
             <Link to={cta.to} className="btn btn--primary btn--sm nav__cta">
