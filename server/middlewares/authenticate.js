@@ -78,6 +78,8 @@ const excludedFieldsFor = (req) =>
     const needed = historyFieldsFor(req);
     const excluded = HISTORY.filter((field) => !needed.includes(field));
     if (/^\/(render|github|projects)(\/|$)/.test(PATH(req))) excluded.push("passwords");
+    // The profile load right after sign-in only returns the vault and projects, not the photo library or connections.
+    if (req.method === "GET" && PATH(req) === "/authenticate") excluded.push(...User.BULK_FIELDS);
     return excluded;
 };
 const leanProjection = (excluded) => Object.fromEntries(excluded.map((field) => [field, 0]));

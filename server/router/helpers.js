@@ -26,7 +26,9 @@ const str = (value) => (typeof value === "string" ? value.trim() : "");
 const raw = (value) => (typeof value === "string" ? value : "");
 
 // Exact match first; older accounts may have been stored with mixed case.
-const LEAN = Object.fromEntries(User.HISTORY_FIELDS.map((field) => [field, 0])); // sign-in never reads the monitoring histories
+// Sign-in only checks the password / 2FA and issues a token: it never reads the histories, the photo library, the
+// connections or the vault, so none of that is loaded from MongoDB.
+const LEAN = Object.fromEntries([...User.HISTORY_FIELDS, ...User.BULK_FIELDS, "passwords", "projects"].map((field) => [field, 0]));
 const findByEmail = async (email) =>
     (await User.findOne({ email }, LEAN)) ||
     (await User.findOne({ email: new RegExp(`^${escapeRegex(email)}$`, "i") }, LEAN));

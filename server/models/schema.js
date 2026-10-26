@@ -224,6 +224,12 @@ schema.methods.toPublic = function (dataKey)
 // Bounded monitoring histories: by far the largest parts of the account document (written every few minutes by the
 // monitor). Requests that do not read them load the account without them.
 schema.statics.HISTORY_FIELDS = ["renderMetricHistory", "renderIncidents", "renderAudit", "usageHistory"];
+// Everything else that is big and only some pages read (photo library, host/Render/GitHub connections, Telegram, usage
+// settings). Sign-in and the post-login profile load never need these, so they are not pulled from MongoDB there.
+schema.statics.BULK_FIELDS = [
+    "photoConnections", "photoMedia", "photoAlbums", "photoFolders", "photoBackupJobs", "photoSettings", "photoShares",
+    "renderAccounts", "githubAccounts", "hostAccounts", "renderOps", "usageSettings", "telegram"
+];
 schema.statics.publicEntry = publicEntry;
 schema.statics.sealEntry = sealEntry;
 
