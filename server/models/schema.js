@@ -230,6 +230,8 @@ schema.statics.BULK_FIELDS = [
     "photoConnections", "photoMedia", "photoAlbums", "photoFolders", "photoBackupJobs", "photoSettings", "photoShares",
     "renderAccounts", "githubAccounts", "hostAccounts", "renderOps", "usageSettings", "telegram"
 ];
+// The photo library arrays grow without bound; only the photo routes read them.
+schema.statics.PHOTO_FIELDS = ["photoConnections", "photoMedia", "photoAlbums", "photoFolders", "photoBackupJobs", "photoSettings", "photoShares"];
 schema.statics.publicEntry = publicEntry;
 schema.statics.sealEntry = sealEntry;
 
