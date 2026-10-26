@@ -80,7 +80,16 @@ export default function RenderDashboard() {
     if (!quiet) setLoading(true);
     const t0 = Date.now();
     try {
-      const result = await getRenderAccounts();
+      // A sleeping or just-redeployed server answers late or with a 5xx; retry those instead of showing an error.
+      let result;
+      for (let attempt = 0; ; attempt++) {
+        try { result = await getRenderAccounts(); break; }
+        catch (err) {
+          const status = err?.response?.status;
+          if (attempt >= 2 || (status && status < 500)) throw err;
+          await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+        }
+      }
       const list = Array.isArray(result.accounts) ? result.accounts : [];
       console.info("[render] accounts loaded", { count: list.length, ms: Date.now() - t0 });
       const withServices = await Promise.all(list.map(async (a) => {

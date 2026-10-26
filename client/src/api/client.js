@@ -275,7 +275,7 @@ export const checkHealth = () => instance.get("/health", { withCredentials: fals
 export { errorMessage } from "../lib/errors.js";
 
 /* ── Render dashboard (all requests use Stashr's authenticated session) ── */
-export const getRenderAccounts = () => instance.get("/render/accounts").then((r) => r.data);
+export const getRenderAccounts = () => instance.get("/render/accounts", { timeout: 30000 }).then((r) => r.data);
 export const connectRenderAccount = (data) => instance.post("/render/accounts", data).then((r) => r.data);
 export const deleteRenderAccount = (id) => instance.delete("/render/accounts/" + encodeURIComponent(id)).then((r) => r.data);
 export const getRenderServices = (accountId) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/services", { timeout: 20000 }).then((r) => r.data);
