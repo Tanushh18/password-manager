@@ -1,4 +1,15 @@
-# Next up (planned 15 Oct 2026)
+# Next up
+
+## Shipped 26 Oct (upgrade)  see docs/ROADMAP.md
+- [ ] Verify live: Trash (Passwords -> Trash chip), password history in the editor, Select mode, folder rename/merge.
+- [ ] Verify live: change an item on one device and watch it appear on another within seconds (needs `/vault/events`
+      reachable through the host's proxy; if not, the 60 s timer still syncs).
+- [ ] Android: these changes are in the source but `client/public/apps/stashr.apk` is the OLD build. Build a new APK
+      (`npm run build:apk` in mobile/) before expecting them on the phone. The extension zip was rebuilt.
+- [ ] Set `EXTENSION_ORIGINS=chrome-extension://<id>` on the server if the extension calls the API with cookies.
+- [ ] Infrastructure tab bar: check spacing on Servers / Usage / Map / Cron pages (could not be viewed in a browser here).
+
+# Earlier notes (planned 15 Oct 2026)
 
 ## Shipped 15 Oct (v2.1) — verify live
 - [ ] Server scheduler runs every 5 min (Cron page → "Background scheduler: Ran Xm ago"). GitHub's schedule only fired every 2–5 h.

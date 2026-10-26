@@ -141,7 +141,7 @@ async function loadPasswords() {
 
     const data = await response.json();
     // Old server-encrypted entries only carry ciphertext; only show logins we can actually fill.
-    allPasswords = (data.passwords || []).filter((p) => p.password && !p.iv && !p.broken && p.enc !== 'e2e');
+    allPasswords = (data.passwords || []).filter((p) => p.password && !p.iv && !p.broken && !p.deletedAt && p.enc !== 'e2e');
 
     displayPasswords();
   } catch (error) {
