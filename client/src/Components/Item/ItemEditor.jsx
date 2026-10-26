@@ -61,16 +61,16 @@ export default function ItemEditor({ open, item, folders, icons, onClose, onSave
   };
 
   return (
-    <Modal open={open} onClose={onClose} center classNames={{ modal: "sheet sheet--wide" }}>
+    <Modal open={open} onClose={onClose} center classNames={{ modal: "sheet sheet--wide sheet--vault" }}>
       <form className="sheet__body editor" onSubmit={save}>
-        <span className="card__ribbon" />
         <div className="editor__head">
-          <ItemAvatar name={form.name || "?"} url={form.url} icons={icons} size={52} />
-          <div>
+          <ItemAvatar name={form.name || "?"} url={form.url} icons={icons} size={46} />
+          <div className="editor__titles">
+            <span className="editor__kicker">{TYPE_LABELS[form.type || "login"]}</span>
             <h2 className="sheet__title">{item ? "Edit item" : "New item"}</h2>
-            <p className="sheet__sub">Encrypted with AES-256-GCM before it's saved.</p>
+            <p className="sheet__sub">Stored encrypted with AES-256-GCM.</p>
           </div>
-          <button type="button" className={`icon-btn icon-btn--quiet editor__fav ${form.favorite ? "is-fav" : ""}`} onClick={() => setForm((f) => ({ ...f, favorite: !f.favorite }))} aria-label="Favourite">
+          <button type="button" className={`icon-btn icon-btn--quiet editor__fav ${form.favorite ? "is-fav" : ""}`} onClick={() => setForm((f) => ({ ...f, favorite: !f.favorite }))} aria-label="Favourite" aria-pressed={Boolean(form.favorite)}>
             {form.favorite ? <StarFill size={18} /> : <Star size={18} />}
           </button>
         </div>
@@ -78,7 +78,7 @@ export default function ItemEditor({ open, item, folders, icons, onClose, onSave
         {!item ? (
           <div className="editor__types" role="tablist" aria-label="Item type">
             {ITEM_TYPES.map((t) => (
-              <button key={t} type="button" role="tab" aria-selected={form.type === t} className={`folder-chip ${form.type === t ? "is-active" : ""}`} onClick={() => setForm((f) => ({ ...f, type: t, fields: {} }))}>{TYPE_LABELS[t]}</button>
+              <button key={t} type="button" role="tab" aria-selected={form.type === t} className={`editor__type ${form.type === t ? "is-active" : ""}`} onClick={() => setForm((f) => ({ ...f, type: t, fields: {} }))}>{TYPE_LABELS[t]}</button>
             ))}
           </div>
         ) : null}
@@ -119,7 +119,7 @@ export default function ItemEditor({ open, item, folders, icons, onClose, onSave
           </details>
         ) : null}
 
-        <div className="gen">
+        <div className="gen editor__gen">
           <div className="gen__label">
             <span>Generator · length <strong>{gen.length}</strong></span>
             <span className="gen__opts">
