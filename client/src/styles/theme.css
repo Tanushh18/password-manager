@@ -1263,7 +1263,8 @@ a:hover { color: var(--accent-soft); }
 .input:hover:not(:disabled):not(:focus) { border-color: rgba(var(--accent-rgb), 0.45); }
 .input:focus { border-color: var(--accent); background: var(--surface-solid); box-shadow: var(--ring); }
 .input.is-error { animation: none; }
-.field__affix { min-width: 36px; min-height: 36px; justify-content: center; border-radius: var(--r-sm); right: 0.45rem; }
+.field__affix { min-width: 44px; min-height: 44px; justify-content: center; border-radius: var(--r-sm); right: 1px; }
+.field__affix:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .field__affix:hover { color: var(--accent); background: rgba(var(--accent-rgb), 0.1); }
 .notice { border-radius: var(--r-lg); }
 
