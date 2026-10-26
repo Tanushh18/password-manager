@@ -261,6 +261,19 @@ router.delete("/photo-cloud/media/:id", photosAuth, async (req, res) => {
     } catch (error) { return serverError(res, "photo-cloud/media/remove", error); }
 });
 
+router.patch("/photo-cloud/media/:id", photosAuth, async (req, res) => {
+    try {
+        if (typeof req.body.favorite !== "boolean") return res.status(400).json({ error: "favorite must be true or false." });
+        const key = await req.rootUser.getDataKey();
+        const media = decode(req.rootUser.photoMedia, key);
+        const target = media.find((item) => item.id === req.params.id);
+        if (!target) return res.status(404).json({ error: "Media item not found." });
+        target.favorite = req.body.favorite;
+        await User.updateOne({ _id: req.rootUser._id }, { $set: { photoMedia: media.map((item) => encoded(key, item)) } });
+        return res.json({ id: target.id, favorite: target.favorite });
+    } catch (error) { return serverError(res, "photo-cloud/media/favorite", error); }
+});
+
 router.post("/photo-cloud/backup/jobs", photosAuth, async (req, res) => {
     const filename = clean(req.body.filename, 180);
     if (!filename) return res.status(400).json({ error: "A filename is required." });
