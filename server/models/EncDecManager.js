@@ -76,7 +76,18 @@ const generateDataKey = () => crypto.randomBytes(32);
 const wrapDataKey = (rawKey) => seal(rawKey.toString("base64"));
 
 /** Unwraps a stored data key back into raw bytes. */
-const unwrapDataKey = (wrapped) => Buffer.from(unseal(wrapped), "base64");
+// Unwrapped keys are memoised (the wrapped string is the cache key, so a rotated key is never served stale): every
+// request for an account otherwise repeats the decrypt.
+const KEY_CACHE = new Map();
+const unwrapDataKey = (wrapped) =>
+{
+    const hit = KEY_CACHE.get(wrapped);
+    if (hit) return hit;
+    const key = Buffer.from(unseal(wrapped), "base64");
+    if (KEY_CACHE.size >= 500) KEY_CACHE.delete(KEY_CACHE.keys().next().value);
+    KEY_CACHE.set(wrapped, key);
+    return key;
+};
 
 // Same "gcm:iv:tag:ct" scheme as encrypt/decrypt, but keyed by an explicit
 // key (the unwrapped per-user data key) instead of always using serverKey().

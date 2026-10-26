@@ -242,7 +242,12 @@ export const revokePhotoShare = (id) => instance.delete(`/photo-cloud/shares/${e
 export const getPublicPhotoShare = (token) => instance.get(`/public/photo-cloud/shares/${encodeURIComponent(token)}`, { withCredentials: false }).then((r) => r.data);
 
 /* ── Auth ── */
-export const checkAuthenticated = () => instance.get("/authenticate");
+// Several screens ask for the profile at once on load; share one in-flight request instead of loading the vault N times.
+let profileInFlight = null;
+export const checkAuthenticated = () => {
+    if (!profileInFlight) profileInFlight = instance.get("/authenticate").finally(() => { profileInFlight = null; });
+    return profileInFlight;
+};
 export const loginUser = (data) => instance.post("/login", data);
 export const logoutUser = () => instance.get("/logout");
 export const signupUser = (data) => instance.post("/register", data);

@@ -2,6 +2,7 @@ const express = require("express");
 const app = express();
 const cors = require("cors");
 const helmet = require("helmet");
+const compression = require("compression");
 const cookieParser = require("cookie-parser");
 const mongoose = require("mongoose");
 
@@ -55,6 +56,7 @@ app.use(cors({
   credentials: true,
   allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Client"]
 }));
+app.use(compression()); // gzip JSON: the vault and Render lists are large and the free instance has a thin pipe
 app.use(cookieParser());
 
 const STARTED_AT = new Date();
@@ -91,7 +93,7 @@ const buildHealthPayload = () =>
     status: "ok",
     service: "password-manager-api",
     message: "Server is awake and healthy 💗",
-    update: 806727, // changed on every deploy so /health shows which version is live
+    update: 462074, // changed on every deploy so /health shows which version is live
     uptime: Number(process.uptime().toFixed(2)),
     startedAt: STARTED_AT.toISOString(),
     timestamp: new Date().toISOString(),
