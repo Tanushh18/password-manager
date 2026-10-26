@@ -4,7 +4,7 @@ import ItemAvatar from "./ItemAvatar";
 import TotpCode from "./TotpCode";
 import "./Item.css";
 import { STRENGTH_TONES } from "../StrengthMeter/StrengthMeter";
-import { openableUrl, domainOf } from "../../lib/items";
+import { openableUrl, domainOf, typeOf, FIELD_DEFS, TYPE_LABELS } from "../../lib/items";
 import { Eye, EyeOff, Copy, Check, Pencil, Star, StarFill, External, User, Note, Folder, Alert, Repeat, Clock } from "../Icons/Icons";
 
 const AUTO_HIDE_MS = 20000;
@@ -61,6 +61,8 @@ export default function ItemCard({ item, info, icons, onEdit, onFavorite, select
   };
 
   const domain = domainOf(item.url);
+  const kind = typeOf(item);
+  const [revealed, setRevealed] = useState({});
 
   return (
     <article className={`vault-card card card--hover ${selected ? "is-selected" : ""}`} style={style}>
@@ -102,11 +104,32 @@ export default function ItemCard({ item, info, icons, onEdit, onFavorite, select
             {info.old ? <span className="badge badge--cool"><Clock size={11} /> Old</span> : null}
           </>
         ) : null}
-        {item.notes ? <span className="badge badge--muted"><Note size={11} /> Note</span> : null}
+        {kind !== "login" ? <span className="badge badge--cool">{TYPE_LABELS[kind]}</span> : null}
+        {kind === "login" && item.notes ? <span className="badge badge--muted"><Note size={11} /> Note</span> : null}
         <span className="vault-card__time">{timeAgo(item.updatedAt || item.createdAt)}</span>
       </div>
 
       <hr className="rule vault-card__rule" />
+
+      {kind !== "login" ? (
+        <>
+          {(FIELD_DEFS[kind] || []).filter((d) => (item.fields || {})[d.key]).map((d) => {
+            const value = item.fields[d.key];
+            const hide = d.secret && !revealed[d.key];
+            return (
+              <div className="secret secret--plain secret--field" key={d.key}>
+                <span className="secret__icon" title={d.label}>{d.label.slice(0, 1)}</span>
+                <span className="secret__text secret__text--plain" title={d.label}>{hide ? "•••• " + value.slice(-4) : value}</span>
+                {d.secret ? <button type="button" className="icon-btn" onClick={() => setRevealed((r) => ({ ...r, [d.key]: !r[d.key] }))} aria-label={hide ? "Reveal " + d.label : "Hide " + d.label}>{hide ? <Eye size={15} /> : <EyeOff size={15} />}</button> : null}
+                <button type="button" className={`icon-btn ${copied === d.key ? "is-done" : ""}`} onClick={async () => (await copyText(value, d.label, Boolean(d.secret))) && flash(d.key)} aria-label={"Copy " + d.label}>
+                  {copied === d.key ? <Check size={15} /> : <Copy size={15} />}
+                </button>
+              </div>
+            );
+          })}
+          {kind === "note" && item.notes ? <p className="vault-card__note">{item.notes.length > 160 ? item.notes.slice(0, 160) + "…" : item.notes}</p> : null}
+        </>
+      ) : null}
 
       {item.username ? (
         <div className="secret secret--plain">

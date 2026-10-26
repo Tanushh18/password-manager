@@ -461,7 +461,7 @@ export function VaultProvider({ children }) {
   /* ── Autofill: keep the native service's encrypted copy of the vault in step with it ── */
   useEffect(() => {
     if (status !== "ready" && status !== "locked") return;
-    if (prefs.autofill) safe(() => saveCredentials(items));
+    if (prefs.autofill) safe(() => saveCredentials(items.filter((i) => (i.type || "login") === "login")));
     else safe(() => clearCredentials());
   }, [status, items, prefs.autofill]);
 

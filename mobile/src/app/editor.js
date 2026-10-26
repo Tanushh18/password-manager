@@ -9,7 +9,7 @@ import { useToast } from "../components/Toast";
 import { Chip, FadeIn, Field, GhostButton, GradientButton, IconButton, StrengthMeter } from "../components/ui";
 import { useTheme, alpha } from "../lib/theme";
 import { useVault } from "../lib/vault";
-import { emptyItem } from "../lib/items";
+import { emptyItem, FIELD_DEFS, ITEM_TYPES, TYPE_LABELS } from "../lib/items";
 import { estimate, generatePassword, generatePassphrase } from "../lib/strength";
 import C from "../lib/crypto";
 import { onScan } from "../lib/scanBus";
@@ -36,6 +36,8 @@ export default function Editor() {
   const folders = useMemo(() => [...new Set(items.map((i) => i.folder).filter(Boolean))], [items]);
   const totpValid = !form.totp || Boolean(C.parseTotp(form.totp));
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+  const setField = (k) => (v) => setForm((f) => ({ ...f, fields: { ...(f.fields || {}), [k]: v } }));
+  const isLogin = (form.type || "login") === "login";
 
   useEffect(
     () =>
@@ -111,14 +113,24 @@ export default function Editor() {
             </FadeIn>
 
             {!existing ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
+                {ITEM_TYPES.map((t) => <Chip key={t} label={TYPE_LABELS[t]} active={form.type === t} onPress={() => setForm((f) => ({ ...f, type: t, fields: {} }))} />)}
+              </ScrollView>
+            ) : null}
+
+            {!existing && isLogin ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 16 }}>
                 {QUICK.map((q) => <Chip key={q} label={q} active={form.name === q} onPress={() => set("name")(q)} />)}
               </ScrollView>
             ) : null}
 
             <Field label="Name" icon="key" value={form.name} onChangeText={set("name")} placeholder="GitHub, Bank, Wi-Fi…" />
-            <Field label="Website" icon="globe" value={form.url} onChangeText={set("url")} placeholder="github.com" autoCapitalize="none" keyboardType="url" />
-            <Field label="Username or email" icon="user" value={form.username} onChangeText={set("username")} placeholder="you@example.com" autoCapitalize="none" keyboardType="email-address" />
+            {(FIELD_DEFS[form.type] || []).map((d) => (
+              <Field key={d.key} label={d.label} icon={d.secret ? "lock" : "note"} secure={Boolean(d.secret)} value={(form.fields || {})[d.key] || ""} onChangeText={setField(d.key)} autoCapitalize="none" />
+            ))}
+            {isLogin ? <Field label="Website" icon="globe" value={form.url} onChangeText={set("url")} placeholder="github.com" autoCapitalize="none" keyboardType="url" /> : null}
+            {isLogin ? <Field label="Username or email" icon="user" value={form.username} onChangeText={set("username")} placeholder="you@example.com" autoCapitalize="none" keyboardType="email-address" /> : null}
+            {isLogin ? <>
             <Field label="Password" icon="lock" secure value={form.password} onChangeText={set("password")} placeholder="The secret itself" autoCapitalize="none" />
             {form.password ? <StrengthMeter strength={strength} /> : null}
             {existing && (existing.history || []).length ? (
@@ -151,6 +163,7 @@ export default function Editor() {
               right={Platform.OS !== "web" ? <IconButton name="scan" size={34} iconSize={16} onPress={() => router.push("/scan")} /> : null}
             />
             {form.totp && totpValid ? <View style={{ marginTop: -4, marginBottom: 14 }}><TotpCode secret={form.totp} /></View> : null}
+            </> : null}
 
             <Field label="Folder" icon="folder" value={form.folder} onChangeText={set("folder")} placeholder="Work, Personal, Finance…" />
             {folders.length ? (

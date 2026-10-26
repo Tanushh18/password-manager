@@ -152,3 +152,31 @@ test("trashExpired only flags items trashed longer than the window", () => {
   assert.equal(trashExpired({ deletedAt: "2026-02-20T00:00:00Z" }, 30, now), false);
   assert.equal(trashExpired({ deletedAt: null }, 30, now), false);
 });
+
+import { typeOf, sanitizeFields, FIELD_DEFS } from "../src/lib/items.js";
+
+test("old items without a type are logins", () => {
+  assert.equal(typeOf({}), "login");
+  assert.equal(typeOf({ type: "nonsense" }), "login");
+  assert.equal(normalizeItem({ name: "x", password: "p" }).type, "login");
+});
+
+test("card and identity items keep only their own fields", () => {
+  const card = normalizeItem({ type: "card", name: "Visa", fields: { number: "4111", cvv: " 123 ", holder: "A B", junk: "x", fullName: "no" } });
+  assert.equal(card.type, "card");
+  assert.deepEqual(Object.keys(card.fields).sort(), ["cvv", "holder", "number"]);
+  assert.deepEqual(sanitizeFields("note", { number: "1" }), {});
+  assert.ok(FIELD_DEFS.identity.some((f) => f.key === "idNumber" && f.secret));
+});
+
+test("CSV round-trips the type and fields", () => {
+  const items = [normalizeItem({ type: "card", name: "Visa", fields: { number: "4111 1111", expiry: "12/30" } }), normalizeItem({ name: "Site", password: "pw" })];
+  const back = rowsToItems(parseCSV(toCSV(items)));
+  assert.equal(back[0].type, "card");
+  assert.equal(back[0].fields.number, "4111 1111");
+  assert.equal(back[1].type, "login");
+});
+
+test("a Bitwarden secure note row becomes a note", () => {
+  assert.equal(rowsToItems([{ name: "Wi-Fi", type: "securenote", notes: "pw is x" }])[0].type, "note");
+});

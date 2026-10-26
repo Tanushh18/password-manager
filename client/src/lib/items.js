@@ -2,7 +2,47 @@
  * Vault item model (same file in client/ and mobile/).
  * Everything here is encrypted as one blob on the device before upload.
  */
+/* Item kinds. "login" is the original kind; the others reuse name, notes, folder and favorite, and keep their own
+   details in `fields` (keys come from FIELD_DEFS, anything else is dropped). */
+export const ITEM_TYPES = ["login", "note", "card", "identity"];
+export const TYPE_LABELS = { login: "Login", note: "Secure note", card: "Card", identity: "Identity" };
+export const FIELD_DEFS = {
+  card: [
+    { key: "holder", label: "Cardholder" },
+    { key: "number", label: "Card number", secret: true },
+    { key: "expiry", label: "Expiry (MM/YY)" },
+    { key: "cvv", label: "Security code", secret: true },
+    { key: "pin", label: "PIN", secret: true },
+  ],
+  identity: [
+    { key: "fullName", label: "Full name" },
+    { key: "email", label: "Email" },
+    { key: "phone", label: "Phone" },
+    { key: "address", label: "Address" },
+    { key: "city", label: "City" },
+    { key: "postcode", label: "Postcode" },
+    { key: "country", label: "Country" },
+    { key: "idNumber", label: "ID / passport number", secret: true },
+  ],
+};
+
+/** The item's kind; older items have no `type` and are logins. */
+export const typeOf = (item) => (ITEM_TYPES.includes(item && item.type) ? item.type : "login");
+
+/** Keeps only the fields defined for `type`, as short strings. */
+export function sanitizeFields(type, raw) {
+  const defs = FIELD_DEFS[type] || [];
+  const out = {};
+  defs.forEach(({ key }) => {
+    const v = raw && raw[key];
+    if (v != null && String(v).trim()) out[key] = String(v).slice(0, 500);
+  });
+  return out;
+}
+
 export const emptyItem = () => ({
+  type: "login",
+  fields: {},
   name: "",
   username: "",
   password: "",
@@ -22,8 +62,11 @@ export const TRASH_DAYS = 30;
 const clean = (v) => (v == null ? "" : String(v).replace(/\u00a0/g, " ").trim());
 
 export function normalizeItem(raw = {}) {
+  const type = typeOf(raw);
   return {
     ...emptyItem(),
+    type,
+    fields: sanitizeFields(type, raw.fields),
     name: clean(raw.name).slice(0, 200),
     username: clean(raw.username).slice(0, 300),
     password: raw.password == null ? "" : String(raw.password).slice(0, 2000),
@@ -124,9 +167,14 @@ const csvCell = (v) => {
 };
 
 export function toCSV(items) {
-  const cols = ["name", "url", "username", "password", "totp", "notes", "folder", "favorite"];
-  return [cols.join(","), ...items.map((it) => cols.map((c) => csvCell(it[c])).join(","))].join("\n");
+  const cols = ["name", "url", "username", "password", "totp", "notes", "folder", "favorite", "type", "fields"];
+  const cell = (it, c) => (c === "fields" ? (Object.keys(it.fields || {}).length ? JSON.stringify(it.fields) : "") : c === "type" ? typeOf(it) : it[c]);
+  return [cols.join(","), ...items.map((it) => cols.map((c) => csvCell(cell(it, c))).join(","))].join("\n");
 }
+
+const parseFields = (text) => {
+  try { const v = text ? JSON.parse(text) : null; return v && typeof v === "object" ? v : {}; } catch (e) { return {}; }
+};
 
 const pick = (row, keys) => {
   for (const k of keys) {
@@ -152,6 +200,8 @@ export const rowsToItems = (rows) =>
         totp: pick(row, ["totp", "login_totp", "otpauth", "one-time password", "otp"]),
         folder: pick(row, ["folder", "grouping", "group", "category", "vault"]),
         favorite: /^(1|true|yes)$/i.test(pick(row, ["favorite", "fav", "starred"])),
+        type: pick(row, ["type"]).toLowerCase() === "securenote" ? "note" : pick(row, ["type"]).toLowerCase(),
+        fields: parseFields(pick(row, ["fields"])),
       })
     )
     .filter((it) => it.name || it.password);

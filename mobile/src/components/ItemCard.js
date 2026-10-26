@@ -3,7 +3,7 @@ import { Animated, Linking, Pressable, StyleSheet, Text, View } from "react-nati
 import * as Clipboard from "expo-clipboard";
 import { useTheme, alpha } from "../lib/theme";
 import { strengthColor } from "../lib/strength";
-import { domainOf, openableUrl } from "../lib/items";
+import { domainOf, openableUrl, typeOf, FIELD_DEFS, TYPE_LABELS } from "../lib/items";
 import { useToast } from "./Toast";
 import { Badge, Card, IconButton, tap } from "./ui";
 import ItemAvatar from "./ItemAvatar";
@@ -41,6 +41,8 @@ export default function ItemCard({ item, info, icons, onEdit, onFavorite, select
   const { theme } = useTheme();
   const toast = useToast();
   const [shown, setShown] = useState(false);
+  const [revealed, setRevealed] = useState({});
+  const kind = typeOf(item);
   const appear = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -97,11 +99,32 @@ export default function ItemCard({ item, info, icons, onEdit, onFavorite, select
               {info.old ? <Badge text="Old" color={theme.accent3} icon="clock" /> : null}
             </>
           ) : null}
-          {item.notes ? <Badge text="Note" color={theme.textFaint} icon="note" /> : null}
+          {kind !== "login" ? <Badge text={TYPE_LABELS[kind]} color={theme.accent3} icon="shieldCheck" /> : null}
+          {kind === "login" && item.notes ? <Badge text="Note" color={theme.textFaint} icon="note" /> : null}
           <Text style={{ marginLeft: "auto", color: theme.textFaint, fontSize: 11, fontFamily: theme.font.body }}>
             {timeAgo(item.updatedAt || item.createdAt)}
           </Text>
         </View>
+
+        {kind !== "login" ? (
+          <>
+            {(FIELD_DEFS[kind] || []).filter((d) => (item.fields || {})[d.key]).map((d) => {
+              const value = item.fields[d.key];
+              const hide = d.secret && !revealed[d.key];
+              return (
+                <View key={d.key} style={[styles.row, { borderColor: theme.line }]}>
+                  <Text style={{ color: theme.textFaint, fontFamily: theme.font.bodySemi, fontSize: 11, width: 74 }} numberOfLines={1}>{d.label}</Text>
+                  <Text numberOfLines={1} style={{ flex: 1, color: theme.text, fontFamily: theme.font.body, fontSize: 14 }}>{hide ? `•••• ${value.slice(-4)}` : value}</Text>
+                  {d.secret ? <IconButton name={hide ? "eye" : "eyeOff"} size={32} iconSize={14} onPress={() => { tap(); setRevealed((r) => ({ ...r, [d.key]: !r[d.key] })); }} /> : null}
+                  <IconButton name="copy" size={32} iconSize={14} onPress={() => { tap(); copySecret(value, d.label, toast); }} />
+                </View>
+              );
+            })}
+            {kind === "note" && item.notes ? (
+              <Text numberOfLines={4} style={{ color: theme.textMuted, fontFamily: theme.font.body, fontSize: 13, marginTop: 10 }}>{item.notes}</Text>
+            ) : null}
+          </>
+        ) : null}
 
         {item.username ? (
           <View style={[styles.row, { borderColor: theme.line }]}>

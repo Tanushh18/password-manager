@@ -6,7 +6,7 @@ import Field from "../Field/Field";
 import StrengthMeter from "../StrengthMeter/StrengthMeter";
 import TotpCode from "./TotpCode";
 import ItemAvatar from "./ItemAvatar";
-import { emptyItem } from "../../lib/items";
+import { emptyItem, FIELD_DEFS, ITEM_TYPES, TYPE_LABELS } from "../../lib/items";
 import { estimate, generatePassword } from "../../lib/strength";
 import { parseTotp } from "../../lib/crypto";
 import { Sparkle, Trash, Check, Star, StarFill } from "../Icons/Icons";
@@ -25,6 +25,7 @@ export default function ItemEditor({ open, item, folders, icons, onClose, onSave
     }
   }, [open, item]);
 
+  const isLogin = (form.type || "login") === "login";
   const strength = useMemo(() => estimate(form.password), [form.password]);
   const totpValid = !form.totp || Boolean(parseTotp(form.totp));
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -74,10 +75,18 @@ export default function ItemEditor({ open, item, folders, icons, onClose, onSave
           </button>
         </div>
 
+        {!item ? (
+          <div className="editor__types" role="tablist" aria-label="Item type">
+            {ITEM_TYPES.map((t) => (
+              <button key={t} type="button" role="tab" aria-selected={form.type === t} className={`folder-chip ${form.type === t ? "is-active" : ""}`} onClick={() => setForm((f) => ({ ...f, type: t, fields: {} }))}>{TYPE_LABELS[t]}</button>
+            ))}
+          </div>
+        ) : null}
+
         <div className="editor__grid">
           <Field id="it-name" label="Name" value={form.name} onChange={set("name")} placeholder="GitHub, Bank, Wi-Fi…" autoFocus />
-          <Field id="it-url" label="Website" value={form.url} onChange={set("url")} placeholder="github.com" inputMode="url" />
-          <Field id="it-user" label="Username or email" value={form.username} onChange={set("username")} placeholder="you@example.com" autoComplete="off" />
+          {isLogin ? <Field id="it-url" label="Website" value={form.url} onChange={set("url")} placeholder="github.com" inputMode="url" /> : null}
+          {isLogin ? <Field id="it-user" label="Username or email" value={form.username} onChange={set("username")} placeholder="you@example.com" autoComplete="off" /> : null}
           <div className="field">
             <label className="field__label" htmlFor="it-folder">Folder</label>
             <input id="it-folder" className="input" list="folder-list" value={form.folder} onChange={set("folder")} placeholder="Work, Personal, Finance…" />
@@ -87,6 +96,11 @@ export default function ItemEditor({ open, item, folders, icons, onClose, onSave
           </div>
         </div>
 
+        {(FIELD_DEFS[form.type] || []).map((d) => (
+          <Field key={d.key} id={"it-f-" + d.key} label={d.label} secret={Boolean(d.secret)} value={(form.fields || {})[d.key] || ""} onChange={(e) => setForm((f) => ({ ...f, fields: { ...f.fields, [d.key]: e.target.value } }))} autoComplete="off" />
+        ))}
+
+        {isLogin ? <>
         <Field id="it-pass" label="Password" secret value={form.password} onChange={set("password")} placeholder="The secret itself" autoComplete="new-password" />
         {form.password ? <StrengthMeter strength={strength} /> : null}
         {item && (item.history || []).length ? (
@@ -138,10 +152,11 @@ export default function ItemEditor({ open, item, folders, icons, onClose, onSave
         {form.totp && totpValid ? (
           <div className="editor__totp"><TotpCode secret={form.totp} /></div>
         ) : null}
+        </> : null}
 
         <div className="field">
           <label className="field__label" htmlFor="it-notes">Notes</label>
-          <textarea id="it-notes" className="input textarea" rows={3} value={form.notes} onChange={set("notes")} placeholder="Security questions, PINs, recovery info…" />
+          <textarea id="it-notes" className="input textarea" rows={isLogin ? 3 : form.type === "note" ? 10 : 3} value={form.notes} onChange={set("notes")} placeholder="Security questions, PINs, recovery info…" />
         </div>
 
         <div className="editor__actions">
