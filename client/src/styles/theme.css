@@ -31,6 +31,26 @@
   /* ── Layout ── */
   --nav-h: 64px;
   --page-max: 1120px;
+
+  /* ── World palette (redesign 2026-10): jungle, river, waterfall, airport, city ──
+     Theme-independent brand colours. Use them for scenery and accents; keep text on --text / --heading. */
+  --font-display: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --forest-900: #06150f;
+  --forest-800: #0b241a;
+  --forest-700: #113626;
+  --forest-600: #174a34;
+  --emerald: #12a37a;
+  --emerald-soft: #3ccf9a;
+  --midnight: #0a1524;
+  --midnight-2: #0f2036;
+  --charcoal: #14181c;
+  --river: #2bb3b1;
+  --river-soft: #8fe0dc;
+  --mist: rgba(222, 242, 236, 0.6);
+  --sun: #ffd98a;
+  --runway: #f5c86a;
+  --r-2xl: 20px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Dark (default) */
