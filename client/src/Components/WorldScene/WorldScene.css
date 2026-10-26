@@ -1,0 +1,252 @@
+/* ════════════ WORLD SCENE ════════════
+   Dusk / night palette by default (dark theme), day palette for light.
+   Only transform and opacity are animated. */
+
+.ws {
+  --ws-px: 0;
+  --ws-py: 0;
+  /* night */
+  --ws-sky1: #050c18;
+  --ws-sky2: #0c2036;
+  --ws-sky3: #164a4a;
+  --ws-glow: rgba(143, 224, 220, 0.32);
+  --ws-orb: #e9f3ef;
+  --ws-ray: rgba(143, 224, 220, 0.07);
+  --ws-cloud: rgba(143, 224, 220, 0.07);
+  --ws-far: #10283a;
+  --ws-glass1: #15324a;
+  --ws-glass2: #0b1c2c;
+  --ws-edge: rgba(143, 224, 220, 0.28);
+  --ws-win: #ffd98a;
+  --ws-win-c: #8fe0dc;
+  --ws-win-o: 0.85;
+  --ws-garden: #1c6b4a;
+  --ws-transit: #1b3346;
+  --ws-train: #d8efe9;
+  --ws-train-win: #ffd98a;
+  --ws-haze: rgba(22, 74, 74, 0.75);
+  --ws-apron: #0c1f2b;
+  --ws-runway: #16232c;
+  --ws-runway-light: var(--runway, #f5c86a);
+  --ws-plane: #cfe3e0;
+  --ws-ground: #0a2219;
+  --ws-cliff: #0d2e20;
+  --ws-cliff-shade: #082016;
+  --ws-canopy: #114330;
+  --ws-canopy-hi: #17573e;
+  --ws-fall1: rgba(143, 224, 220, 0.55);
+  --ws-fall2: rgba(232, 250, 246, 0.85);
+  --ws-streak: rgba(255, 255, 255, 0.55);
+  --ws-mist: rgba(222, 242, 236, 0.5);
+  --ws-water1: #1d6f72;
+  --ws-water2: #0f4c55;
+  --ws-water3: #07222b;
+  --ws-shimmer: rgba(143, 224, 220, 0.5);
+  --ws-reflect: rgba(255, 217, 138, 0.55);
+  --ws-bank: #061a12;
+  --ws-leaf: #0b3324;
+  --ws-leaf-b: #0f4430;
+  --ws-rib: rgba(143, 224, 220, 0.16);
+  --ws-star: 1;
+  --ws-moon-shade: 1;
+
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--ws-sky2);
+  contain: layout paint;
+}
+
+:root[data-theme="light"] .ws {
+  --ws-sky1: #9fd4e2;
+  --ws-sky2: #d4eef0;
+  --ws-sky3: #eef7ef;
+  --ws-glow: rgba(255, 228, 160, 0.55);
+  --ws-orb: #fff4d6;
+  --ws-ray: rgba(255, 244, 214, 0.42);
+  --ws-cloud: rgba(255, 255, 255, 0.7);
+  --ws-far: #b7d3dc;
+  --ws-glass1: #8fb7c6;
+  --ws-glass2: #5d8798;
+  --ws-edge: rgba(255, 255, 255, 0.65);
+  --ws-win: #e8f6f8;
+  --ws-win-c: #ffffff;
+  --ws-win-o: 0.4;
+  --ws-garden: #2e8a5c;
+  --ws-transit: #6f8f9c;
+  --ws-train: #ffffff;
+  --ws-train-win: #2bb3b1;
+  --ws-haze: rgba(232, 246, 240, 0.85);
+  --ws-apron: #b9cdd0;
+  --ws-runway: #8ea4aa;
+  --ws-runway-light: #fff1c4;
+  --ws-plane: #ffffff;
+  --ws-ground: #3f8a5f;
+  --ws-cliff: #2b7651;
+  --ws-cliff-shade: #1f603f;
+  --ws-canopy: #2f8858;
+  --ws-canopy-hi: #4aa56f;
+  --ws-fall1: rgba(214, 244, 240, 0.85);
+  --ws-fall2: rgba(255, 255, 255, 0.98);
+  --ws-streak: rgba(43, 179, 177, 0.35);
+  --ws-mist: rgba(255, 255, 255, 0.85);
+  --ws-water1: #7fd6d0;
+  --ws-water2: #2bb3b1;
+  --ws-water3: #127a76;
+  --ws-shimmer: rgba(255, 255, 255, 0.75);
+  --ws-reflect: rgba(255, 255, 255, 0.7);
+  --ws-bank: #1d5a3c;
+  --ws-leaf: #1f6b45;
+  --ws-leaf-b: #2a8356;
+  --ws-rib: rgba(255, 255, 255, 0.28);
+  --ws-star: 0;
+  --ws-moon-shade: 0;
+}
+
+.ws__svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* Portrait / narrow: keep the waterfall and river centred instead of the city. */
+@media (max-width: 720px) {
+  .ws--hero .ws__svg {
+    inset: auto;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: auto;
+    height: 100%;
+    aspect-ratio: 16 / 9;
+    min-width: 100%;
+    transform: translateX(-67%);
+  }
+}
+
+.ws--panel { min-height: 200px; border-radius: var(--r-2xl, 20px); }
+.ws--strip { height: 140px; border-radius: var(--r-2xl, 20px); }
+
+/* ── gradient stops ── */
+.ws-s-sky1 { stop-color: var(--ws-sky1); }
+.ws-s-sky2 { stop-color: var(--ws-sky2); }
+.ws-s-sky3 { stop-color: var(--ws-sky3); }
+.ws-s-glow { stop-color: var(--ws-glow); }
+.ws-s-ray { stop-color: var(--ws-ray); }
+.ws-s-glass1 { stop-color: var(--ws-glass1); }
+.ws-s-glass2 { stop-color: var(--ws-glass2); }
+.ws-s-water1 { stop-color: var(--ws-water1); }
+.ws-s-water2 { stop-color: var(--ws-water2); }
+.ws-s-water3 { stop-color: var(--ws-water3); }
+.ws-s-fall1 { stop-color: var(--ws-fall1); }
+.ws-s-fall2 { stop-color: var(--ws-fall2); }
+.ws-s-haze { stop-color: var(--ws-haze); }
+
+/* ── parallax layers ── */
+.ws-layer { will-change: transform; }
+.ws-layer--sky { transform: translate(calc(var(--ws-px) * -6px), calc(var(--ws-py) * -3px)); }
+.ws-layer--far { transform: translate(calc(var(--ws-px) * -10px), calc(var(--ws-py) * -4px)); }
+.ws-layer--city { transform: translate(calc(var(--ws-px) * -14px), calc(var(--ws-py) * -5px)); }
+.ws-layer--mid { transform: translate(calc(var(--ws-px) * -22px), calc(var(--ws-py) * -7px)); }
+.ws-layer--river { transform: translate(calc(var(--ws-px) * -30px), calc(var(--ws-py) * -8px)); }
+.ws-layer--fore { transform: translate(calc(var(--ws-px) * -52px), calc(var(--ws-py) * -14px)); }
+
+/* ── sky ── */
+.ws-clouds ellipse { fill: var(--ws-cloud); }
+.ws-clouds { animation: ws-drift 90s linear infinite alternate; }
+
+/* ── city ── */
+.ws-far-city rect { fill: var(--ws-far); }
+.ws-tower-edge { fill: var(--ws-edge); }
+.ws-crown { fill: var(--ws-glass1); }
+.ws-garden rect { fill: var(--ws-transit); }
+.ws-garden ellipse { fill: var(--ws-garden); }
+.ws-win { fill: var(--ws-win); opacity: var(--ws-win-o); }
+.ws-win--c { fill: var(--ws-win-c); }
+.ws-pillar { fill: var(--ws-transit); }
+.ws-guideway { fill: none; stroke: var(--ws-transit); stroke-width: 6; }
+.ws-train rect { fill: var(--ws-train); }
+.ws-train .ws-train__win { fill: var(--ws-train-win); }
+.ws-train { animation: ws-train 28s linear infinite; }
+
+/* ── airport ── */
+.ws-apron { fill: var(--ws-apron); }
+.ws-terminal { opacity: 0.95; }
+.ws-terminal-mullions line, .ws-terminal-mullions path { stroke: var(--ws-edge); stroke-width: 1.2; }
+.ws-terminal-lights rect { fill: var(--ws-win); opacity: var(--ws-win-o); }
+.ws-tower rect, .ws-tower path { fill: var(--ws-glass2); }
+.ws-tower line { stroke: var(--ws-glass2); stroke-width: 2; }
+.ws-tower .ws-tower__cab { fill: var(--ws-win-c); opacity: 0.7; }
+.ws-beacon { fill: #ff6b5a; animation: ws-blink 2.4s ease-in-out infinite; }
+.ws-beacon--slow { animation-duration: 3.6s; }
+.ws-runway { fill: var(--ws-runway); }
+.ws-runway-lights circle { fill: var(--ws-runway-light); opacity: 0.25; animation: ws-runway 2.6s ease-in-out infinite; }
+.ws-plane path { fill: var(--ws-plane); }
+.ws-plane__nav { fill: #ff6b5a; }
+.ws-plane-path { animation: ws-takeoff 36s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+
+/* ── rays & haze ── */
+.ws-rays { mix-blend-mode: screen; animation: ws-breathe 14s ease-in-out infinite; }
+:root[data-theme="light"] .ws-rays { mix-blend-mode: normal; }
+
+/* ── jungle + waterfall ── */
+.ws-ground { fill: var(--ws-ground); }
+.ws-cliff { fill: var(--ws-cliff); }
+.ws-cliff-shade { fill: var(--ws-cliff-shade); }
+.ws-canopy-shape { fill: var(--ws-canopy); }
+.ws-canopy-shape--hi { fill: var(--ws-canopy-hi); opacity: 0.8; }
+.ws-rock path { fill: var(--ws-cliff-shade); }
+.ws-strand { fill: var(--ws-fall2); opacity: 0.55; }
+.ws-lip { fill: var(--ws-fall2); opacity: 0.8; }
+.ws-fall-streak { fill: var(--ws-streak); }
+.ws-fall-flow { animation: ws-fall 1.6s linear infinite; }
+.ws-mist ellipse { opacity: 0.9; }
+.ws-mist__a { animation: ws-mist 9s ease-in-out infinite; }
+.ws-mist__b { animation: ws-mist 11s ease-in-out -3s infinite reverse; }
+.ws-mist__c { animation: ws-mist 13s ease-in-out -6s infinite; }
+
+/* ── river ── */
+.ws-shimmer path { fill: none; stroke: var(--ws-shimmer); stroke-width: 2; stroke-linecap: round; opacity: 0.55; }
+.ws-shimmer { animation: ws-flow 12s ease-in-out infinite; }
+.ws-shimmer--b { animation-duration: 16s; animation-delay: -6s; }
+.ws-shimmer--b path { stroke-width: 1.3; }
+.ws-reflections rect { fill: var(--ws-reflect); animation: ws-twinkle 5s ease-in-out infinite; }
+.ws-bank { fill: var(--ws-bank); }
+.ws-mistband { fill: var(--ws-mist); opacity: 0.35; animation: ws-drift 40s ease-in-out infinite alternate; }
+
+/* ── leaves ── */
+.ws-leaf__blade { fill: var(--ws-leaf); }
+.ws-leaf--b .ws-leaf__blade { fill: var(--ws-leaf-b); }
+.ws-leaf__rib, .ws-leaf__vein { fill: none; stroke: var(--ws-rib); stroke-width: 2; }
+.ws-leaf__vein { stroke-width: 1.2; }
+.ws-sway { transform-origin: 0 0; animation: ws-sway 11s ease-in-out infinite; }
+.ws-sway--b { animation-duration: 14s; animation-delay: -5s; }
+
+/* Strip: no foreground fronds crowding a short banner */
+.ws--strip .ws-layer--fore { opacity: 0.85; }
+
+/* ── keyframes ── */
+@keyframes ws-twinkle { 0%, 100% { opacity: calc(var(--ws-star, 1) * 0.25); } 50% { opacity: 0.8; } }
+.ws-reflections rect { --ws-star: 1; }
+@keyframes ws-drift { from { transform: translateX(-30px); } to { transform: translateX(30px); } }
+@keyframes ws-train { from { transform: translateX(-260px); } to { transform: translateX(1100px); } }
+@keyframes ws-blink { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+@keyframes ws-runway { 0%, 100% { opacity: 0.25; } 12% { opacity: 1; } 30% { opacity: 0.25; } }
+@keyframes ws-takeoff {
+  0% { transform: translate(1560px, 583px) rotate(0deg) scale(0.6); opacity: 0; }
+  6% { opacity: 1; }
+  30% { transform: translate(1260px, 582px) rotate(0deg) scale(0.6) ; }
+  70% { transform: translate(760px, 340px) rotate(14deg) scale(0.42); opacity: 1; }
+  80%, 100% { transform: translate(600px, 270px) rotate(14deg) scale(0.36); opacity: 0; }
+}
+.ws-plane { transform: scaleX(-1); }
+@keyframes ws-breathe { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+@keyframes ws-fall { from { transform: translateY(0); } to { transform: translateY(120px); } }
+@keyframes ws-mist { 0%, 100% { transform: translateX(-8px) scale(1); opacity: 0.7; } 50% { transform: translateX(10px) scale(1.08); opacity: 1; } }
+@keyframes ws-flow { 0%, 100% { transform: translateX(0); opacity: 0.6; } 50% { transform: translateX(-40px); opacity: 1; } }
+@keyframes ws-sway { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(1.6deg); } }
+
+.ws--paused * { animation-play-state: paused !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ws *, .ws *::before, .ws *::after { animation: none !important; }
+  .ws-layer { transform: none !important; }
+  .ws-plane-path { transform: translate(1000px, 450px) rotate(-10deg) scale(0.45); }
+  .ws-runway-lights circle { opacity: 0.8; }
+}
