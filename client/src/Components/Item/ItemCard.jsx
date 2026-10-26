@@ -31,7 +31,7 @@ async function copyText(text, label) {
   }
 }
 
-export default function ItemCard({ item, info, icons, onEdit, onFavorite, style }) {
+export default function ItemCard({ item, info, icons, onEdit, onFavorite, selecting, selected, onSelect, style }) {
   const [shown, setShown] = useState(false);
   const [copied, setCopied] = useState("");
 
@@ -49,8 +49,9 @@ export default function ItemCard({ item, info, icons, onEdit, onFavorite, style 
   const domain = domainOf(item.url);
 
   return (
-    <article className="vault-card card card--hover" style={style}>
+    <article className={`vault-card card card--hover ${selected ? "is-selected" : ""}`} style={style}>
       <span className="card__ribbon" />
+      {selecting ? <label className="vault-card__select"><input type="checkbox" checked={Boolean(selected)} onChange={onSelect} aria-label={`Select ${item.name || "item"}`} /></label> : null}
       <div className="vault-card__head">
         <ItemAvatar name={item.name} url={item.url} icons={icons} />
         <div className="vault-card__id">

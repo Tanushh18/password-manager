@@ -30,6 +30,46 @@ export default function Passwords() {
   const searchRef = useShortcuts(() => setEditing("new"));
   const [importing, setImporting] = useState(false);
   const [breachChecked, setBreachChecked] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
+  const [busy, setBusy] = useState(false);
+
+  const toggleSelect = (id) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const stopSelecting = () => { setSelecting(false); setSelected(new Set()); };
+  /* Runs one action over every selected id; reports how many worked so a partial failure is never silent. */
+  const runBulk = async (label, fn) => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    setBusy(true);
+    const results = await Promise.allSettled(ids.map(fn));
+    const ok = results.filter((r) => r.status === "fulfilled").length;
+    setBusy(false);
+    if (ok === ids.length) toast.success(`${label}: ${ok} item${ok === 1 ? "" : "s"}.`);
+    else toast.error(`${label}: ${ok} of ${ids.length} worked, ${ids.length - ok} failed.`);
+    setSelected(new Set(results.flatMap((r, i) => (r.status === "rejected" ? [ids[i]] : []))));
+  };
+  const bulkFavorite = (value) => runBulk(value ? "Favourited" : "Unfavourited", (id) => updateItem(id, { favorite: value }));
+  const bulkMove = () => {
+    const name = window.prompt("Move selected items to which folder? (leave empty for no folder)", folder.startsWith("__") ? "" : folder);
+    if (name === null) return;
+    return runBulk("Moved", (id) => updateItem(id, { folder: name.trim() }));
+  };
+  const bulkDelete = () => {
+    if (!window.confirm(`Delete ${selected.size} item${selected.size === 1 ? "" : "s"} from your vault? This cannot be undone.`)) return;
+    return runBulk("Deleted", (id) => deleteItem(id));
+  };
+  const renameFolder = async () => {
+    const name = window.prompt(`Rename "${folder}" to (an existing folder name merges them):`, folder);
+    if (name === null || !name.trim() || name.trim() === folder) return;
+    const target = name.trim();
+    const ids = items.filter((i) => i.folder === folder).map((i) => i.id);
+    setBusy(true);
+    const results = await Promise.allSettled(ids.map((id) => updateItem(id, { folder: target })));
+    setBusy(false);
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed) toast.error(`${failed} item${failed === 1 ? "" : "s"} could not be moved.`);
+    else { toast.success(`Folder is now "${target}".`); setFolder(target); }
+  };
 
   const folders = useMemo(
     () => [...new Set(items.map((i) => i.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
@@ -157,8 +197,22 @@ export default function Passwords() {
             <button className="btn btn--ghost" onClick={() => setImporting(true)}>
               <Upload size={15} /> Import
             </button>
+            <button className="btn btn--ghost" onClick={() => (selecting ? stopSelecting() : setSelecting(true))} aria-pressed={selecting}>
+              {selecting ? "Done" : "Select"}
+            </button>
           </div>
         </div>
+
+        {selecting ? (
+          <div className="bulkbar" role="toolbar" aria-label="Bulk actions">
+            <strong>{selected.size} selected</strong>
+            <button className="btn btn--quiet btn--sm" onClick={() => setSelected(new Set(visible.map((i) => i.id)))}>Select all {visible.length}</button>
+            <button className="btn btn--quiet btn--sm" disabled={busy || !selected.size} onClick={() => bulkFavorite(true)}>Favourite</button>
+            <button className="btn btn--quiet btn--sm" disabled={busy || !selected.size} onClick={() => bulkFavorite(false)}>Unfavourite</button>
+            <button className="btn btn--quiet btn--sm" disabled={busy || !selected.size} onClick={bulkMove}>Move to folder…</button>
+            <button className="btn btn--quiet btn--sm" disabled={busy || !selected.size} onClick={bulkDelete}>Delete</button>
+          </div>
+        ) : null}
 
         <nav className="folders anim-fade-up d-3" aria-label="Folders">
           <button type="button" className={`folder-chip ${folder === "__all" ? "is-active" : ""}`} onClick={() => setFolder("__all")}>
@@ -173,6 +227,9 @@ export default function Passwords() {
             </button>
           ))}
         </nav>
+        {!folder.startsWith("__") ? (
+          <p className="folders__tools"><button type="button" className="btn btn--quiet btn--sm" disabled={busy} onClick={renameFolder}>Rename or merge “{folder}”</button></p>
+        ) : null}
 
         {items.length === 0 ? (
           <Reveal className="empty card" variant="reveal--scale">
@@ -207,6 +264,9 @@ export default function Passwords() {
                 info={health.info[item.id]}
                 icons={prefs.icons}
                 onEdit={() => setEditing(item)}
+                selecting={selecting}
+                selected={selected.has(item.id)}
+                onSelect={() => toggleSelect(item.id)}
                 onFavorite={() => toggleFavorite(item.id).catch(() => toast.error("Couldn't update that."))}
                 style={{ animationDelay: `${Math.min(i, 10) * 0.04}s` }}
               />
