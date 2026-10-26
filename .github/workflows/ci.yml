@@ -3,7 +3,8 @@
 name: CI
 
 on:
-  workflow_dispatch: # manual only; no longer runs on every push
+  pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -39,6 +40,7 @@ jobs:
           cache: npm
           cache-dependency-path: client/package-lock.json
       - run: npm ci
+      - run: npm run lint
       - run: npm test
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high

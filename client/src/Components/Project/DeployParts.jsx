@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
-import { getDeployHistory, getDeployLogs, getGithubAccounts, getGithubBranches, getHostAccounts, getRenderAccounts, setDeployBranch } from "../../api/client";
+import { getDeployHistory, getDeployLogs, getGithubAccounts, getGithubBranches, getHostAccounts, getRenderAccounts, moveDeployAccount, setDeployBranch } from "../../api/client";
 import { timeAgo, safeUrl, errorMessage } from "../../Pages/Render/renderUtils";
 
 export const hostOf = (url) => String(url || "").replace(/^https?:\/\//, "").replace(/\/$/, "");

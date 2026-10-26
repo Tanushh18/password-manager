@@ -14,7 +14,7 @@ export const emptyItem = () => ({
   passwordUpdatedAt: null,
 });
 
-const clean = (v) => (v == null ? "" : String(v).replace(/ /g, " ").trim());
+const clean = (v) => (v == null ? "" : String(v).replace(/\u00a0/g, " ").trim());
 
 export function normalizeItem(raw = {}) {
   return {

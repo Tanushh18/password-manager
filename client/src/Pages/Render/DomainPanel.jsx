@@ -86,7 +86,7 @@ export default function DomainPanel({ service, askConfirm, onAudit }) {
     catch (err) { toast.error(errorMessage(err, "Could not remove the domain.")); }
     finally { setBusy(""); }
   };
-  const useInApp = async (app, url) => {
+  const applyInApp = async (app, url) => {
     const suffix = pathOf(app.match);
     const next = url.replace(/\/+$/, "") + suffix;
     const urls = [next, ...app.urls.filter((u) => u !== next)].slice(0, 10);
@@ -154,7 +154,7 @@ export default function DomainPanel({ service, askConfirm, onAudit }) {
               {[renderUrl, ...(domains || []).filter((d) => d.verificationStatus === "verified").map((d) => "https://" + d.name)].filter(Boolean).map((u) => {
                 const target = u.replace(/\/+$/, "") + pathOf(app.match);
                 const current = app.urls[0] === target;
-                return <button key={u} type="button" className={"rd-btn " + (current ? "rd-btn--quiet" : "rd-btn--primary")} disabled={current || Boolean(busy)} onClick={() => void useInApp(app, u)}>{current ? "✓ Using " + hostOf(u) : "Use " + hostOf(u) + " in web + app"}</button>;
+                return <button key={u} type="button" className={"rd-btn " + (current ? "rd-btn--quiet" : "rd-btn--primary")} disabled={current || Boolean(busy)} onClick={() => void applyInApp(app, u)}>{current ? "✓ Using " + hostOf(u) : "Use " + hostOf(u) + " in web + app"}</button>;
               })}
             </div>
           </div>

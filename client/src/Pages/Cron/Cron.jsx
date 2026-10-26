@@ -148,7 +148,7 @@ export default function Cron() {
   useEffect(() => { if (!loading && scan === null && !scanning) void runScan(); }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
   const missing = (scan || []).filter((r) => r.missingRoute && r.repo);
   const noRepo = (scan || []).filter((r) => r.missingRoute && !r.repo);
-  const useAlt = async (row) => {
+  const applyAlt = async (row) => {
     const svc = services.find((s) => serviceKey(s) === row.serviceKey);
     if (!svc) return;
     await save(upsert(pings, svc, { path: row.alt }), "Ping path for " + row.name + " is now " + row.alt + ".");
@@ -293,7 +293,7 @@ export default function Cron() {
                     <td><strong>{r.name}</strong><Urls base={r.url} path="/health" target={r.target} /></td>
                     <td><Result r={r} /><Details r={r} />{r.missingRoute && r.alt ? <small className="cr-dim">Answers on {r.alt}</small> : null}</td>
                     <td>{r.repo ? <a href={safeUrl(r.repo)} target="_blank" rel="noreferrer noopener">{r.repo.replace(/^https:\/\/github\.com\//, "")}</a> : <span className="cr-dim">no repo</span>}{r.rootDir ? <small className="cr-dim">root: {r.rootDir}</small> : null}</td>
-                    <td className="cr-right">{r.missingRoute && r.alt && !r.usedAlt ? <button type="button" className="rd-btn rd-btn--quiet" disabled={saving} onClick={() => void useAlt(r)}>Use {r.alt} for pings</button> : null}{r.usedAlt ? <span className="cr-res is-ok">Pinging {r.alt}</span> : null}{r.missingRoute && r.repo ? <button type="button" className="rd-btn rd-btn--primary" disabled={fixing.includes(r.serviceKey)} onClick={() => void fix([r])}>{fixing.includes(r.serviceKey) ? "Adding…" : "Add /health + merge"}</button> : r.ok ? <span className="cr-res is-ok">Has /health</span> : null}</td>
+                    <td className="cr-right">{r.missingRoute && r.alt && !r.usedAlt ? <button type="button" className="rd-btn rd-btn--quiet" disabled={saving} onClick={() => void applyAlt(r)}>Use {r.alt} for pings</button> : null}{r.usedAlt ? <span className="cr-res is-ok">Pinging {r.alt}</span> : null}{r.missingRoute && r.repo ? <button type="button" className="rd-btn rd-btn--primary" disabled={fixing.includes(r.serviceKey)} onClick={() => void fix([r])}>{fixing.includes(r.serviceKey) ? "Adding…" : "Add /health + merge"}</button> : r.ok ? <span className="cr-res is-ok">Has /health</span> : null}</td>
                   </tr>
                 ))}</tbody>
               </table>
