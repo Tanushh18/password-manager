@@ -277,6 +277,10 @@ export const updateProject = (id, data) => instance.put(`/projects/items/${id}`,
 export const deleteProject = (id) => instance.delete(`/projects/items/${id}`);
 
 /* ── Account ── */
+export const getSessions = () => instance.get("/account/sessions").then((r) => r.data);
+export const revokeSession = (id) => instance.delete("/account/sessions/" + encodeURIComponent(id)).then((r) => r.data);
+export const logoutOtherDevices = () => instance.post("/account/logout-all").then((r) => r.data);
+export const getAuditLog = (limit = 50) => instance.get("/account/audit", { params: { limit } }).then((r) => r.data);
 export const updateProfile = (name) => instance.post("/account/profile", { name });
 export const changePassword = (data) => instance.post("/account/password", data);
 export const logoutEverywhere = () => instance.post("/account/logout-all");

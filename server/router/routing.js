@@ -16,6 +16,7 @@ const { resolveFeatures } = require("../utils/features");
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, skipSuccessful: true, persistent: "auth", message: "Too many attempts. Please wait a few minutes and try again." });
 const hitStore = require("../utils/hitStore");
+const audit = require("../utils/audit");
 const LOCK_MAX = 10, LOCK_WINDOW_MS = 15 * 60 * 1000; // failed sign-ins per account before a short lockout
 
 /* ════════════════ AUTH ════════════════ */
@@ -108,6 +109,8 @@ router.post("/login", authLimiter, async (req, res) =>
         // Only issue a session once every factor is proven.
         const client = wantsToken(req) ? "mobile" : "web";
         const token = await user.generateAuthToken(client);
+        void User.updateOne({ _id: user._id, "tokens.token": token }, { $set: { "tokens.$.device": audit.deviceLabel(req.headers["user-agent"]), "tokens.$.ip": audit.clientIp(req) } }).catch(() => {});
+        audit.record(req, user._id, "sign_in", client);
 
         res.cookie("jwtoken", token, { ...COOKIE_OPTIONS, expires: new Date(Date.now() + COOKIE_MAX_AGE) });
         res.clearCookie("jwtoken", LEGACY_COOKIE_OPTIONS); // an older non-partitioned cookie would otherwise sit next to the new one

@@ -53,7 +53,10 @@ const schema = new mongoose.Schema({
         {
             token: { type: String },
             createdAt: { type: Date, default: Date.now },
-            client: { type: String }
+            client: { type: String },
+            device: { type: String },   // short label such as "Chrome on Windows"
+            ip: { type: String },
+            lastUsedAt: { type: Date }
         }
     ],
 

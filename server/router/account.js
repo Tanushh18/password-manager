@@ -4,6 +4,8 @@ const User = require("../models/schema");
 const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
 const totp = require("../utils/totp");
+const audit = require("../utils/audit");
+const AuditEvent = require("../models/AuditEvent");
 const { seal, unseal } = require("../models/EncDecManager");
 const {
     COOKIE_OPTIONS, LEGACY_COOKIE_OPTIONS, COOKIE_MAX_AGE, str, raw, wantsToken,
@@ -65,6 +67,7 @@ router.post("/account/password", authenticate, sensitiveLimiter, async (req, res
         user.tokens = []; // sign out every other device
 
         await user.save();
+        audit.record(req, user._id, "password_changed", "other devices signed out");
         const client = wantsToken(req) ? "mobile" : "web";
         const token = await user.generateAuthToken(client);
         res.cookie("jwtoken", token, { ...COOKIE_OPTIONS, expires: new Date(Date.now() + COOKIE_MAX_AGE) });
@@ -87,11 +90,59 @@ router.post("/account/logout-all", authenticate, async (req, res) =>
     {
         // Keep only the current session.
         await User.updateOne({ _id: req.rootUser._id }, { $pull: { tokens: { token: { $ne: req.token } } } });
+        audit.record(req, req.rootUser._id, "sessions_revoked_all");
         return res.status(200).json({ message: "Signed out of every other device." });
     }
     catch (error)
     {
         return serverError(res, "account/logout-all", error);
+    }
+});
+
+/* Signed-in devices. The token itself never leaves the server: each session is shown by a short hash of it. */
+router.get("/account/sessions", authenticate, (req, res) =>
+{
+    res.set("Cache-Control", "no-store");
+    const sessions = (req.rootUser.tokens || []).map((t) => ({
+        id: audit.sessionId(t.token),
+        device: t.device || (t.client === "mobile" ? "Stashr app" : "Browser"),
+        client: t.client || "web",
+        ip: t.ip || "",
+        createdAt: t.createdAt,
+        current: t.token === req.token
+    })).reverse();
+    return res.json({ sessions });
+});
+
+router.delete("/account/sessions/:id", authenticate, async (req, res) =>
+{
+    try
+    {
+        const target = (req.rootUser.tokens || []).find((t) => audit.sessionId(t.token) === req.params.id);
+        if (!target) return res.status(404).json({ error: "That session is already gone." });
+        if (target.token === req.token) return res.status(400).json({ error: "Use Sign out to end this device's session." });
+        await User.updateOne({ _id: req.rootUser._id }, { $pull: { tokens: { token: target.token } } });
+        audit.record(req, req.rootUser._id, "session_revoked", target.device || "");
+        return res.json({ message: "Device signed out." });
+    }
+    catch (error)
+    {
+        return serverError(res, "account/sessions/revoke", error);
+    }
+});
+
+router.get("/account/audit", authenticate, async (req, res) =>
+{
+    try
+    {
+        const limit = Math.max(1, Math.min(200, Number.parseInt(req.query.limit, 10) || 50));
+        const events = await AuditEvent.find({ userId: req.rootUser._id }).sort({ at: -1 }).limit(limit).lean();
+        res.set("Cache-Control", "no-store");
+        return res.json({ events: events.map((e) => ({ at: e.at, action: e.action, ip: e.ip || "", device: e.device || "", detail: e.detail || "" })) });
+    }
+    catch (error)
+    {
+        return serverError(res, "account/audit", error);
     }
 });
 
@@ -156,6 +207,7 @@ router.post("/2fa/enable", authenticate, sensitiveLimiter, async (req, res) =>
             recoveryCodes: codes.map(totp.hashRecoveryCode)
         };
         await user.save();
+        audit.record(req, req.rootUser._id, "two_factor_enabled");
         return res.status(200).json({ message: "Two-factor login is on.", recoveryCodes: codes });
     }
     catch (error)
@@ -173,6 +225,7 @@ router.post("/2fa/disable", authenticate, sensitiveLimiter, async (req, res) =>
         if (!(await reauth(req, res, user))) return undefined;
         user.twoFactor = { enabled: false, lastStep: -1, recoveryCodes: [] };
         await user.save();
+        audit.record(req, req.rootUser._id, "two_factor_disabled");
         return res.status(200).json({ message: "Two-factor login is off." });
     }
     catch (error)

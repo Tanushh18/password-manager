@@ -1,3 +1,4 @@
+import SessionsPanel from "../../Components/Sessions/SessionsPanel";
 import React, { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -633,6 +634,9 @@ export default function Settings() {
         <Group title="Security">
           <Row icon={<LockLine size={15} />} label="Lock now" hint="Sign out of this device now. You stay signed in otherwise, until you lock or sign out yourself.">
             <button type="button" className="btn btn--ghost btn--sm" onClick={lock}>Lock</button>
+          </Row>
+          <Row label="Devices and activity" hint="Where you are signed in, and your recent security events." block>
+            <SessionsPanel />
           </Row>
           <Row label="Weekly breach check" hint="Checks your passwords against Have I Been Pwned about once a week while you use the vault. Only the first 5 characters of each password's hash are sent.">
             <Toggle checked={Boolean(prefs.autoBreach)} onChange={(v) => setPrefs({ autoBreach: v })} label="" />
