@@ -100,6 +100,7 @@ instance.interceptors.request.use((config) =>
 {
     const bearer = getBearer();
     if (bearer && !/\/(login|register)$/.test(String(config.url || "").split("?")[0])) config.headers.Authorization = "Bearer " + bearer;
+    config.headers["X-Client-Id"] = CLIENT_ID;
     if (config._server === undefined) config._server = active;
     config.baseURL = SERVERS[config._server];
     return config;
@@ -254,6 +255,17 @@ export const logoutUser = () => instance.get("/logout");
 export const signupUser = (data) => instance.post("/register", data);
 
 /* ── Vault (server-side encrypted) ── */
+/* Delta sync + live events. `clientId` marks this tab's own writes so its event stream can ignore them. */
+export const CLIENT_ID = Math.random().toString(36).slice(2, 10);
+export const getVaultChanges = (since) => instance.get("/vault/changes", { params: since ? { since } : {}, timeout: 30000 }).then((r) => r.data);
+/* EventSource cannot send the Authorization header the app fallback uses, so the stream is read with fetch. */
+export const openVaultEvents = (signal) => {
+    const headers = { Accept: "text/event-stream" };
+    const bearer = getBearer();
+    if (bearer) headers.Authorization = "Bearer " + bearer;
+    return fetch(SERVERS[active] + "/vault/events", { headers, credentials: "include", signal, cache: "no-store" });
+};
+
 export const createItem = (data) => instance.post("/vault/items", { data });
 export const createItems = (items) => instance.post("/vault/items/bulk", { items });
 export const updateItem = (id, data) => instance.put(`/vault/items/${id}`, { data });

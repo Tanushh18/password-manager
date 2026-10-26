@@ -60,7 +60,7 @@ app.use(cors({
     }
   },
   credentials: true,
-  allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Client"]
+  allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Client", "X-Client-Id"]
 }));
 app.use(compression()); // gzip JSON: the vault and Render lists are large and the free instance has a thin pipe
 app.use(cookieParser());

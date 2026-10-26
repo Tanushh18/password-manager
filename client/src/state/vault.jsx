@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import * as api from "../api/client";
 import { bootVerdict, bootDelay } from "../lib/errors";
 import { normalizeItem, withHistory, trashExpired } from "../lib/items";
+import { mergeDelta, createSseParser, reconnectDelay } from "../lib/sync";
 import { normalizeProject } from "../lib/projectItems";
 import { computeHealth } from "../lib/health";
 import { pwnedCount } from "../lib/breach";
@@ -168,19 +169,82 @@ export function VaultProvider({ children }) {
     await logout();
   }, [logout]);
 
-  /* ── Auto-sync: changes made in the extension, the app or another tab show up here on their own ── */
+  /* ── Auto-sync: changes made in the extension, the app or another tab show up here on their own.
+        Delta sync asks only for what changed; a live event stream triggers it instantly, and a timer plus
+        focus/visibility is the fallback. Anything unexpected falls back to a full reload. ── */
+  const syncedAt = useRef(null); // server time of the last successful sync
+  const deltaOk = useRef(true);  // false once the server turned out not to support /vault/changes
   useEffect(() => {
     if (status !== "ready") return undefined;
-    let timer = null;
-    const sync = () => {
-      if (document.hidden) return;
-      loadProfile().catch((e) => { if (e?.response?.status === 401) { clearVault(); setProfile(null); setStatus("signedOut"); } });
+    let timer = null, stopped = false, running = false, queued = false, fullAt = Date.now();
+    const signedOut = (e) => { if (e?.response?.status === 401) { clearVault(); setProfile(null); setStatus("signedOut"); } };
+    const sync = async () => {
+      if (document.hidden || stopped) return;
+      if (running) { queued = true; return; }
+      running = true;
+      try {
+        const needFull = !deltaOk.current || !syncedAt.current || Date.now() - fullAt > 10 * 60 * 1000;
+        if (needFull) {
+          const startedAt = new Date().toISOString();
+          await loadProfile();
+          fullAt = Date.now();
+          if (deltaOk.current) {
+            // Seed the delta clock from just before the full load (cheap: nothing newer exists). A server without
+            // the endpoint answers 404 and we stay on full loads.
+            try { const c = await api.getVaultChanges(startedAt); syncedAt.current = c.serverTime; setItems((l) => mergeDelta(l, c.items, c.itemIds, toItem)); setProjects((l) => mergeDelta(l, c.projects, c.projectIds, toProject)); }
+            catch (e) { if (e?.response?.status === 404) deltaOk.current = false; }
+          }
+        } else {
+          const c = await api.getVaultChanges(syncedAt.current);
+          syncedAt.current = c.serverTime;
+          setItems((list) => mergeDelta(list, c.items, c.itemIds, toItem));
+          setProjects((list) => mergeDelta(list, c.projects, c.projectIds, toProject));
+        }
+      } catch (e) {
+        if (e?.response?.status === 404) deltaOk.current = false;
+        signedOut(e);
+        syncedAt.current = null; // next round does a full reload
+      } finally {
+        running = false;
+        if (queued) { queued = false; void sync(); }
+      }
     };
-    const onVisible = () => { if (!document.hidden) sync(); };
-    timer = window.setInterval(sync, SYNC_MS);
+
+    // Live stream: a "change" event from another device/tab triggers a delta sync right away.
+    const controller = new AbortController();
+    const stream = async () => {
+      let attempt = 0;
+      while (!stopped) {
+        try {
+          const res = await api.openVaultEvents(controller.signal);
+          if (!res.ok || !res.body) throw new Error("stream " + res.status);
+          attempt = 0;
+          const parse = createSseParser((ev) => {
+            if (ev.event !== "change") return;
+            try { if (JSON.parse(ev.data).source === api.CLIENT_ID) return; } catch (e) { /* treat as foreign */ }
+            void sync();
+          });
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          for (;;) { const { done, value } = await reader.read(); if (done) break; parse(decoder.decode(value, { stream: true })); }
+        } catch (e) {
+          if (stopped || e?.name === "AbortError") return;
+        }
+        if (stopped) return;
+        await new Promise((r) => window.setTimeout(r, reconnectDelay(attempt)));
+        attempt += 1;
+      }
+    };
+    void sync();
+    void stream();
+    const onVisible = () => { if (!document.hidden) void sync(); };
+    timer = window.setInterval(() => void sync(), SYNC_MS);
     document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", sync);
-    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("focus", sync); };
+    window.addEventListener("focus", onVisible);
+    return () => {
+      stopped = true; controller.abort(); window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("focus", onVisible);
+    };
   }, [status, loadProfile, clearVault]);
 
 

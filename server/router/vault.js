@@ -4,6 +4,8 @@ const mongoose = require("mongoose");
 const User = require("../models/schema");
 const authenticate = require("../middlewares/authenticate");
 const { serverError } = require("./helpers");
+const { parseSince, buildChanges } = require("../utils/vaultSync");
+const hub = require("../utils/syncHub");
 
 /*
  * Password vault. Every item is stored as one JSON document, encrypted with
@@ -18,6 +20,33 @@ const MAX_BATCH = 1000;
 
 const isFields = (value) => value && typeof value === "object" && !Array.isArray(value);
 
+/* Delta sync: only what changed since `since` (full load when it is missing or invalid), plus the ids that exist now. */
+router.get("/vault/changes", authenticate, async (req, res) =>
+{
+    try
+    {
+        const dataKey = await req.rootUser.getDataKey();
+        const changes = buildChanges(req.rootUser, parseSince(req.query.since), (e) => User.publicEntry(e, dataKey));
+        res.set("Cache-Control", "no-store");
+        return res.json(changes);
+    }
+    catch (error)
+    {
+        return serverError(res, "vault/changes", error);
+    }
+});
+
+/* Live sync: a Server-Sent Events stream that says "something changed"; the client then asks /vault/changes. */
+router.get("/vault/events", authenticate, (req, res) =>
+{
+    res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
+    res.flushHeaders();
+    res.write("retry: 5000\n\nevent: ready\ndata: {}\n\n");
+    const unsubscribe = hub.subscribe(req.rootUser._id, res);
+    const beat = setInterval(() => { try { res.write(": ping\n\n"); } catch (e) { /* closed */ } }, 25000);
+    req.on("close", () => { clearInterval(beat); unsubscribe(); });
+});
+
 router.post("/vault/items", authenticate, async (req, res) =>
 {
     const fields = req.body.data;
@@ -30,6 +59,7 @@ router.post("/vault/items", authenticate, async (req, res) =>
         const now = new Date();
         const item = { _id: new mongoose.Types.ObjectId(), enc: "udk", data: User.sealEntry(dataKey, fields), createdAt: now, updatedAt: now };
         await User.updateOne({ _id: req.rootUser._id }, { $push: { passwords: item } });
+        hub.notify(req.rootUser._id, "vault", String(req.get("X-Client-Id") || ""));
         return res.status(201).json({ item: User.publicEntry(item, dataKey) });
     }
     catch (error)
@@ -56,6 +86,7 @@ router.post("/vault/items/bulk", authenticate, async (req, res) =>
         const now = new Date();
         const docs = items.map((i) => ({ _id: new mongoose.Types.ObjectId(), enc: "udk", data: User.sealEntry(dataKey, i.data), createdAt: now, updatedAt: now }));
         await User.updateOne({ _id: req.rootUser._id }, { $push: { passwords: { $each: docs } } });
+        hub.notify(req.rootUser._id, "vault", String(req.get("X-Client-Id") || ""));
         return res.status(201).json({ items: docs.map((d) => User.publicEntry(d, dataKey)) });
     }
     catch (error)
@@ -84,6 +115,7 @@ router.put("/vault/items/:id", authenticate, async (req, res) =>
             }
         );
         if (result.matchedCount === 0) return res.status(404).json({ error: "Could not find that item." });
+        hub.notify(req.rootUser._id, "vault", String(req.get("X-Client-Id") || ""));
         return res.status(200).json({ item: { ...fields, _id: req.params.id, updatedAt: now } });
     }
     catch (error)
@@ -102,6 +134,7 @@ router.delete("/vault/items/:id", authenticate, async (req, res) =>
             { $pull: { passwords: { _id: req.params.id } } }
         );
         if (result.matchedCount === 0) return res.status(404).json({ error: "Could not find that item." });
+        hub.notify(req.rootUser._id, "vault", String(req.get("X-Client-Id") || ""));
         return res.status(200).json({ message: "Deleted." });
     }
     catch (error)

@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require("mongoose");
 const User = require("../models/schema");
 const authenticate = require("../middlewares/authenticate");
+const hub = require("../utils/syncHub");
 const { serverError } = require("./helpers");
 const { pickPrimary, mergeProjects } = require("../utils/projectMerge");
 
@@ -97,6 +98,7 @@ router.delete("/projects/items/:id", authenticate, async (req, res) =>
             { $pull: { projects: { _id: req.params.id } } }
         );
         if (result.matchedCount === 0) return res.status(404).json({ error: "Could not find that project." });
+        hub.notify(req.rootUser._id, "projects");
         return res.status(200).json({ message: "Deleted." });
     }
     catch (error)
