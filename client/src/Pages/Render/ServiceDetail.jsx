@@ -40,7 +40,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   // Metrics
   const [metric, setMetric] = useState("cpu");
-  const [range, setRange] = useState("24h");
+  const [range, setRange] = useState("1h");
   const [metricPoints, setMetricPoints] = useState(null);
   const [metricBusy, setMetricBusy] = useState(false);
   const metricGate = useRequestGate();
