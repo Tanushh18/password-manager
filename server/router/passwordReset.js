@@ -12,7 +12,7 @@ const reset = require("../utils/resetCode");
  * two-factor login is on, the authenticator (or a recovery code) is still required. Responses never reveal
  * whether an email has an account.
  */
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: "Too many attempts. Please wait a few minutes." });
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, persistent: "reset", message: "Too many attempts. Please wait a few minutes." });
 const GENERIC = "If that email has a Stashr account, a 6-digit code is on its way. It is valid for 10 minutes.";
 
 router.post("/forgot-password", limiter, async (req, res) => {

@@ -14,7 +14,9 @@ const {
 const registry = require("./registry");
 const { resolveFeatures } = require("../utils/features");
 
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, skipSuccessful: true, message: "Too many attempts. Please wait a few minutes and try again." });
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, skipSuccessful: true, persistent: "auth", message: "Too many attempts. Please wait a few minutes and try again." });
+const hitStore = require("../utils/hitStore");
+const LOCK_MAX = 10, LOCK_WINDOW_MS = 15 * 60 * 1000; // failed sign-ins per account before a short lockout
 
 /* ════════════════ AUTH ════════════════ */
 
@@ -72,11 +74,17 @@ router.post("/login", authLimiter, async (req, res) =>
 
     try
     {
+        const lockKey = `lock:${email}`;
+        if (await hitStore.peek(lockKey) >= LOCK_MAX)
+        {
+            return res.status(429).json({ error: "Too many failed sign-ins for this account. Try again in a few minutes, or reset your password." });
+        }
         const user = await findByEmail(email);
         const isMatch = user ? await checkPassword(user, password) : false;
 
         if (!isMatch)
         {
+            await hitStore.hit(lockKey, LOCK_WINDOW_MS);
             console.warn(`[auth] login rejected: ${user ? "wrong password" : "no such email"}`);
             return res.status(400).json({ error: "Invalid Credentials." });
         }
@@ -96,6 +104,7 @@ router.post("/login", authLimiter, async (req, res) =>
             await User.updateOne({ _id: user._id }, { $set: { "twoFactor.lastStep": user.twoFactor.lastStep, "twoFactor.recoveryCodes": user.twoFactor.recoveryCodes } });
         }
 
+        await hitStore.reset(lockKey);
         // Only issue a session once every factor is proven.
         const client = wantsToken(req) ? "mobile" : "web";
         const token = await user.generateAuthToken(client);

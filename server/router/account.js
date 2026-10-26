@@ -10,7 +10,7 @@ const {
     checkPassword, checkSecondFactor, serverError
 } = require("./helpers");
 
-const sensitiveLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 15, message: "Too many attempts. Please wait a few minutes." });
+const sensitiveLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 15, persistent: "sensitive", message: "Too many attempts. Please wait a few minutes." });
 
 /* Verifies the current password (and 2FA when on) for sensitive actions. */
 const reauth = async (req, res, user) =>
