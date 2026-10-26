@@ -7,7 +7,7 @@ export default function Splash({ title = "Opening your vault…", body = "One mo
     <div className="page splash">
       <Ambience petals={false} />
       <div className="splash__inner anim-fade-up">
-        <span className="splash__seal anim-beat">
+        <span className="splash__seal">
           <ShieldLine size={28} strokeWidth={1.6} />
         </span>
         <p className="splash__title">{title}</p>

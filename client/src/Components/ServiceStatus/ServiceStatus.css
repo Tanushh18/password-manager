@@ -43,3 +43,9 @@
 @media (max-width: 480px) {
   .status__detail { display: none; }
 }
+
+/* ── World look: departure-board status ── */
+.status { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.04em; background: var(--surface-raised); }
+.status__label { text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.12em; }
+.status--compact .status__label { font-size: 0.66rem; }
+.status__detail { font-family: var(--font-mono); letter-spacing: 0; }
