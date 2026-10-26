@@ -37,6 +37,7 @@ import JungleScene from "./Components/Jungle/JungleScene";
 import InfraTabs from "./Components/InfraTabs/InfraTabs";
 import NetBar from "./Components/NetBar/NetBar";
 import Splash from "./Components/Splash/Splash";
+import BottomNav from "./Components/BottomNav/BottomNav";
 import { useVault } from "./state/vault";
 
 const WAKING = { title: "Waking the server…", body: "Your sign-in is saved. Free servers sleep when idle and can take up to a minute to start." };
@@ -129,6 +130,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <InstallPrompt />
+        <BottomNav />
       </BrowserRouter>
     </div>
   );
