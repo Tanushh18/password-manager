@@ -30,13 +30,38 @@ const download = (name, text, type) => {
 const stamp = () => new Date().toISOString().slice(0, 10);
 const ADMIN_EMAIL = "tanushchawla16@gmail.com";
 
-/* Grouped list: a small heading, then a card of rows split by dividers. */
+const SECTIONS = [
+  ["account", "A1", "Account"],
+  ["security", "S2", "Security"],
+  ["devices", "D3", "Devices & activity"],
+  ["appearance", "V4", "Appearance"],
+  ["integrations", "I5", "Integrations"],
+  ["data", "B6", "Your data"],
+  ["danger", "X7", "Danger zone"],
+];
+const SECTION_IDS = SECTIONS.map(([id]) => id);
+
+/* Control-center section: an airport-signage label (gate code + title), then its panels. */
+function Section({ id, code, title, lede, danger, children }) {
+  return (
+    <section id={id} tabIndex={-1} className={`csec ${danger ? "csec--danger" : ""}`} aria-labelledby={`${id}-title`}>
+      <header className="csec__sign">
+        <span className="csec__code" aria-hidden="true">{code}</span>
+        <h2 id={`${id}-title`} className="csec__title">{title}</h2>
+        {lede ? <p className="csec__lede">{lede}</p> : null}
+      </header>
+      <div className="csec__body">{children}</div>
+    </section>
+  );
+}
+
+/* A panel of rows split by dividers, with an optional small heading. */
 function Group({ title, children, danger }) {
   return (
-    <section className="sgroup">
-      <h2 className={`sgroup__title ${danger ? "is-danger" : ""}`}>{title}</h2>
-      <div className={`sgroup__card card ${danger ? "sgroup__card--danger" : ""}`}>{children}</div>
-    </section>
+    <div className={`sgroup ${danger ? "sgroup--danger" : ""}`}>
+      {title ? <h3 className={`sgroup__title ${danger ? "is-danger" : ""}`}>{title}</h3> : null}
+      <div className={`sgroup__card ${danger ? "sgroup__card--danger" : ""}`}>{children}</div>
+    </div>
   );
 }
 
@@ -45,11 +70,51 @@ function Row({ icon, label, hint, children, block }) {
   return (
     <div className={`srow ${block ? "srow--block" : ""}`}>
       <div className="srow__text">
-        <span className="srow__label">{icon}{label}</span>
+        <span className="srow__label">{icon ? <span className="srow__icon" aria-hidden="true">{icon}</span> : null}{label}</span>
         {hint ? <span className="srow__hint">{hint}</span> : null}
       </div>
       {children ? <div className="srow__control">{children}</div> : null}
     </div>
+  );
+}
+
+/* Tracks which section is in view so the menu can highlight it. */
+function useScrollSpy(ids) {
+  const [active, setActive] = useState(ids[0]);
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return undefined;
+    const seen = new Set();
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach((e) => (e.isIntersecting ? seen.add(e.target.id) : seen.delete(e.target.id)));
+      const first = ids.find((id) => seen.has(id));
+      if (first) setActive(first);
+    }, { rootMargin: "-25% 0px -65% 0px" });
+    ids.forEach((id) => { const el = document.getElementById(id); if (el) obs.observe(el); });
+    return () => obs.disconnect();
+  }, [ids]);
+  return [active, setActive];
+}
+
+function SectionNav({ active, onPick }) {
+  return (
+    <nav className="cnav" aria-label="Settings sections">
+      <p className="cnav__head" aria-hidden="true">Control center</p>
+      <ul className="cnav__list">
+        {SECTIONS.map(([id, code, title]) => (
+          <li key={id}>
+            <a
+              href={`#${id}`}
+              className={`cnav__link${id === "danger" ? " cnav__link--danger" : ""}${active === id ? " is-active" : ""}`}
+              aria-current={active === id ? "location" : undefined}
+              onClick={(e) => { e.preventDefault(); onPick(id); }}
+            >
+              <span className="cnav__code" aria-hidden="true">{code}</span>
+              <span className="cnav__text">{title}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 
@@ -200,7 +265,7 @@ function Toggle({ checked, onChange, label }) {
     <label className="switch">
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       <span className="switch__track"><span className="switch__thumb" /></span>
-      <span className="switch__label">{label}</span>
+      {label ? <span className="settings-sr">{label}</span> : null}
     </label>
   );
 }
@@ -538,7 +603,7 @@ function DeleteAccount() {
 
   if (!open) {
     return (
-      <button type="button" className="btn btn--quiet btn--sm settings__danger-btn" onClick={() => setOpen(true)}>
+      <button type="button" className="btn btn--ghost btn--sm settings__danger-btn" onClick={() => setOpen(true)}>
         <Trash size={14} /> Delete my account
       </button>
     );
@@ -589,95 +654,154 @@ export default function Settings() {
     }
   };
 
+
+  const [active, setActive] = useScrollSpy(SECTION_IDS);
+  const pick = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    setActive(id);
+    window.history.replaceState(null, "", `#${id}`);
+    el.focus({ preventScroll: true });
+  };
+  const twoFa = Boolean(profile?.twoFactorEnabled);
+  const sessionCount = Math.max(1, profile?.sessions || 1);
+  const initial = (profile?.name || profile?.email || "?").trim().charAt(0).toUpperCase();
+
   return (
     <div className="settings page">
-      <div className="shell-narrow">
-        <header className="settings__top">
+      <div className="cc">
+        <header className="cc__head">
           <Link to="/passwords" className="proj-back">
             <Arrow size={14} style={{ transform: "rotate(180deg)" }} /> Vault
           </Link>
-          <h1 className="vault__title">Settings</h1>
-          <p className="vault__count">{profile?.email}</p>
+          <div className="cc__bar">
+            <div className="cc__id">
+              <span className="cc__avatar" aria-hidden="true">{initial}</span>
+              <div className="cc__who">
+                <p className="cc__kicker">Settings · Control center</p>
+                <h1 className="cc__name">{profile?.name || "Settings"}</h1>
+                <p className="cc__email">{profile?.email}</p>
+              </div>
+            </div>
+            <ul className="cc__chips" aria-label="Account status">
+              <li className={`cc__chip ${twoFa ? "is-ok" : "is-warn"}`}>
+                <span className="cc__dot" aria-hidden="true" />
+                Two-factor {twoFa ? "on" : "off"}
+              </li>
+              <li className="cc__chip">
+                <span className="cc__dot" aria-hidden="true" />
+                {sessionCount} signed-in session{sessionCount === 1 ? "" : "s"}
+              </li>
+              {twoFa ? (
+                <li className="cc__chip">
+                  <span className="cc__dot" aria-hidden="true" />
+                  {profile.recoveryCodesLeft} recovery code{profile.recoveryCodesLeft === 1 ? "" : "s"} left
+                </li>
+              ) : null}
+            </ul>
+          </div>
         </header>
 
-        <MascotBanner kind="gear" {...accountMood(profile)} />
-        <Group title="Account">
-          <Row icon={<User size={15} />} label="Name" hint="How Stashr greets you.">
-            <form className="settings__inline" onSubmit={saveName}>
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" maxLength={80} />
-              <button type="submit" className="btn btn--ghost btn--sm" disabled={!name.trim() || name.trim() === profile?.name}>Save</button>
-            </form>
-          </Row>
-          <Row icon={<LockLine size={15} />} label="Master password" hint="Changing it signs out your other devices." block>
-            <ChangeMasterPassword />
-          </Row>
-          <Row icon={<Logout size={15} />} label="Other devices" hint={`${Math.max(0, (profile?.sessions || 1) - 1)} other signed-in session(s).`}>
-            <button type="button" className="btn btn--ghost btn--sm" onClick={signOutOthers}>Sign out others</button>
-          </Row>
-        </Group>
+        <div className="cc__layout">
+          <SectionNav active={active} onPick={pick} />
 
-        <Group title="Two-factor login">
-          <Row icon={<ShieldCheck size={15} />} label="Authenticator app" hint="Protects your account even if your password leaks." block>
-            <TwoFactor />
-          </Row>
-        </Group>
+          <div className="cc__main">
+            <MascotBanner kind="gear" {...accountMood(profile)} />
 
-        
+            <Section id="account" code="A1" title="Account" lede="Who you are and how you sign in.">
+              <Group>
+                <Row icon={<User size={15} />} label="Name" hint="How Stashr greets you.">
+                  <form className="settings__inline" onSubmit={saveName}>
+                    <input className="input" value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" maxLength={80} />
+                    <button type="submit" className="btn btn--ghost btn--sm" disabled={!name.trim() || name.trim() === profile?.name}>Save</button>
+                  </form>
+                </Row>
+                <Row icon={<LockLine size={15} />} label="Master password" hint="Changing it signs out your other devices." block>
+                  <ChangeMasterPassword />
+                </Row>
+              </Group>
+            </Section>
 
-        <Group title="Telegram">
-          <TelegramBot />
-        </Group>
+            <Section id="security" code="S2" title="Security" lede="Second sign-in step, locking and breach checks.">
+              <Group title="Two-factor login">
+                <Row icon={<ShieldCheck size={15} />} label="Authenticator app" hint="Protects your account even if your password leaks." block>
+                  <TwoFactor />
+                </Row>
+              </Group>
+              <Group title="Protection">
+                <Row icon={<LockLine size={15} />} label="Lock now" hint="Sign out of this device now. You stay signed in otherwise, until you lock or sign out yourself.">
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={lock}>Lock</button>
+                </Row>
+                <Row label="Weekly breach check" hint="Checks your passwords against Have I Been Pwned about once a week while you use the vault. Only the first 5 characters of each password's hash are sent.">
+                  <Toggle checked={Boolean(prefs.autoBreach)} onChange={(v) => setPrefs({ autoBreach: v })} label="Weekly breach check" />
+                </Row>
+                <Row label="Show values in project search" hint="When off, matching secret values stay hidden (••••) until you tap the eye.">
+                  <Toggle checked={prefs.searchValues} onChange={(v) => setPrefs({ searchValues: v })} label="Show values in project search" />
+                </Row>
+              </Group>
+            </Section>
 
-        <ServiceMapCard />
-        {(profile?.isAdmin || String(profile?.email || "").trim().toLowerCase() === ADMIN_EMAIL) && <AdminNeedsPanel />}
+            <Section id="devices" code="D3" title="Devices & activity" lede="Where you are signed in, and your recent security events.">
+              <Group>
+                <Row icon={<Logout size={15} />} label="Other devices" hint={`${Math.max(0, (profile?.sessions || 1) - 1)} other signed-in session(s).`}>
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={signOutOthers}>Sign out others</button>
+                </Row>
+                <Row label="Devices and activity" hint="Where you are signed in, and your recent security events." block>
+                  <SessionsPanel />
+                </Row>
+              </Group>
+            </Section>
 
-        <Group title="Security">
-          <Row icon={<LockLine size={15} />} label="Lock now" hint="Sign out of this device now. You stay signed in otherwise, until you lock or sign out yourself.">
-            <button type="button" className="btn btn--ghost btn--sm" onClick={lock}>Lock</button>
-          </Row>
-          <Row label="Devices and activity" hint="Where you are signed in, and your recent security events." block>
-            <SessionsPanel />
-          </Row>
-          <Row label="Weekly breach check" hint="Checks your passwords against Have I Been Pwned about once a week while you use the vault. Only the first 5 characters of each password's hash are sent.">
-            <Toggle checked={Boolean(prefs.autoBreach)} onChange={(v) => setPrefs({ autoBreach: v })} label="" />
-          </Row>
-          <Row label="Show values in project search" hint="When off, matching secret values stay hidden (••••) until you tap the eye.">
-            <Toggle checked={prefs.searchValues} onChange={(v) => setPrefs({ searchValues: v })} label="" />
-          </Row>
-        </Group>
+            <Section id="appearance" code="V4" title="Appearance" lede="Theme and the scenery around every page.">
+              <Group>
+                <Row icon={<Globe size={15} />} label="Theme">
+                  <ThemeToggle />
+                </Row>
+                <Row label="Jungle scene" hint="Grass, vines, animals and birds around every page, with the robots mixed in. Day jungle in the light theme, night jungle in the dark theme.">
+                  <Toggle checked={prefs.jungle !== false} onChange={(v) => setPrefs({ jungle: v })} label="Jungle scene" />
+                </Row>
+                <Row label="Fun effects" hint="Robots fly by, planes land when you save, and things blow up when something is deleted for good or goes down. Off automatically if your device asks for reduced motion.">
+                  <Toggle checked={prefs.fx !== false} onChange={(v) => setPrefs({ fx: v })} label="Fun effects" />
+                </Row>
+                <Row label="Website icons" hint="Fetched from DuckDuckGo, which can see which sites you have saved.">
+                  <Toggle checked={prefs.icons} onChange={(v) => setPrefs({ icons: v })} label="Website icons" />
+                </Row>
+              </Group>
+            </Section>
 
-        <Group title="Appearance">
-          <Row icon={<Globe size={15} />} label="Theme">
-            <ThemeToggle />
-          </Row>
-          <Row label="Jungle scene" hint="Grass, vines, animals and birds around every page, with the robots mixed in. Day jungle in the light theme, night jungle in the dark theme.">
-            <Toggle checked={prefs.jungle !== false} onChange={(v) => setPrefs({ jungle: v })} label="" />
-          </Row>
-          <Row label="Fun effects" hint="Robots fly by, planes land when you save, and things blow up when something is deleted for good or goes down. Off automatically if your device asks for reduced motion.">
-            <Toggle checked={prefs.fx !== false} onChange={(v) => setPrefs({ fx: v })} label="" />
-          </Row>
-          <Row label="Website icons" hint="Fetched from DuckDuckGo, which can see which sites you have saved.">
-            <Toggle checked={prefs.icons} onChange={(v) => setPrefs({ icons: v })} label="" />
-          </Row>
-        </Group>
+            <Section id="integrations" code="I5" title="Integrations" lede="Telegram alerts and how your services are recognised.">
+              <Group title="Telegram">
+                <TelegramBot />
+              </Group>
+              <ServiceMapCard />
+              {(profile?.isAdmin || String(profile?.email || "").trim().toLowerCase() === ADMIN_EMAIL) && <AdminNeedsPanel />}
+            </Section>
 
-        <Group title="Your data">
-          <Row icon={<Download size={15} />} label="Export" hint="Take it anywhere." block>
-            <ExportData />
-          </Row>
-          <Row icon={<Upload size={15} />} label="Import" hint="From a backup, CSV or another password manager.">
-            <button type="button" className="btn btn--ghost btn--sm" onClick={() => setImporting(true)}>Import</button>
-          </Row>
-          <Row label="Privacy policy">
-            <Link to="/privacy" className="btn btn--quiet btn--sm">Open</Link>
-          </Row>
-        </Group>
+            <Section id="data" code="B6" title="Your data" lede="Export, import and privacy.">
+              <Group>
+                <Row icon={<Download size={15} />} label="Export" hint="Take it anywhere." block>
+                  <ExportData />
+                </Row>
+                <Row icon={<Upload size={15} />} label="Import" hint="From a backup, CSV or another password manager.">
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => setImporting(true)}>Import</button>
+                </Row>
+                <Row label="Privacy policy">
+                  <Link to="/privacy" className="btn btn--ghost btn--sm">Open</Link>
+                </Row>
+              </Group>
+            </Section>
 
-        <Group title="Danger zone" danger>
-          <Row icon={<Trash size={15} />} label="Delete account" hint="Permanently deletes your account and vault." block>
-            <DeleteAccount />
-          </Row>
-        </Group>
+            <Section id="danger" code="X7" title="Danger zone" lede="Permanent actions. Read each step carefully." danger>
+              <Group danger>
+                <Row icon={<Trash size={15} />} label="Delete account" hint="Permanently deletes your account and vault." block>
+                  <DeleteAccount />
+                </Row>
+              </Group>
+            </Section>
+          </div>
+        </div>
       </div>
       <ImportModal open={importing} onClose={() => setImporting(false)} onImport={importItems} />
     </div>

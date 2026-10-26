@@ -46,27 +46,30 @@ export default function SessionsPanel() {
   const others = sessions.filter((s) => !s.current).length;
   return (
     <div className="sess">
-      <ul className="sess__list">
+      <ul className="sess__list" aria-label="Signed-in devices">
         {sessions.map((s) => (
-          <li key={s.id}>
-            <div>
-              <strong>{s.device}{s.current ? " · this device" : ""}</strong>
+          <li key={s.id} className={s.current ? "is-current" : ""}>
+            <span className="sess__device" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4.5" width="18" height="12" rx="2" /><path d="M8.5 20h7M12 16.5V20" /></svg>
+            </span>
+            <div className="sess__info">
+              <strong>{s.device}{s.current ? <span className="sess__badge">This device</span> : null}</strong>
               <small>{s.ip ? s.ip + " · " : ""}signed in {when(s.createdAt)}</small>
             </div>
-            {!s.current && <button type="button" className="btn btn--ghost btn--sm" disabled={busy === s.id} onClick={() => revoke(s)}>Sign out</button>}
+            {!s.current && <button type="button" className="btn btn--ghost btn--sm sess__out" disabled={busy === s.id} onClick={() => revoke(s)}>Sign out</button>}
           </li>
         ))}
         {!sessions.length && <li className="sess__muted">No sessions found.</li>}
       </ul>
-      {others > 0 && <button type="button" className="btn btn--quiet btn--sm" disabled={busy === "all"} onClick={revokeAll}>Sign out all other devices</button>}
+      {others > 0 && <button type="button" className="btn btn--ghost btn--sm sess__all" disabled={busy === "all"} onClick={revokeAll}>Sign out all other devices</button>}
       <details className="sess__log">
-        <summary>Recent security activity ({(events || []).length})</summary>
-        <ul>
+        <summary>Recent security activity <span className="sess__count">{(events || []).length}</span></summary>
+        <ol>
           {(events || []).map((e, i) => (
             <li key={i}><span>{ACTIONS[e.action] || e.action}</span><small>{e.device}{e.ip ? " · " + e.ip : ""} · {when(e.at)}</small></li>
           ))}
           {!(events || []).length && <li className="sess__muted">Nothing recorded yet.</li>}
-        </ul>
+        </ol>
       </details>
     </div>
   );
