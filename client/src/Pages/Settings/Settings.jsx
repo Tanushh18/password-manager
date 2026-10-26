@@ -634,6 +634,9 @@ export default function Settings() {
           <Row icon={<LockLine size={15} />} label="Lock now" hint="Sign out of this device now. You stay signed in otherwise, until you lock or sign out yourself.">
             <button type="button" className="btn btn--ghost btn--sm" onClick={lock}>Lock</button>
           </Row>
+          <Row label="Weekly breach check" hint="Checks your passwords against Have I Been Pwned about once a week while you use the vault. Only the first 5 characters of each password's hash are sent.">
+            <Toggle checked={Boolean(prefs.autoBreach)} onChange={(v) => setPrefs({ autoBreach: v })} label="" />
+          </Row>
           <Row label="Show values in project search" hint="When off, matching secret values stay hidden (••••) until you tap the eye.">
             <Toggle checked={prefs.searchValues} onChange={(v) => setPrefs({ searchValues: v })} label="" />
           </Row>

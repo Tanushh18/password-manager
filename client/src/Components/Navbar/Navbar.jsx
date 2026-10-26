@@ -44,13 +44,10 @@ function Navbar() {
   /* Main places stay in the bar; the rest live under "More" so the bar never overflows. */
   const links = isAuthenticated
     ? [
-        { to: "/", label: "Home" },
         { to: "/passwords", label: "Passwords" },
         ...(profile?.features?.photos !== false ? [{ to: "/photos", label: "Photos" }] : []),
         ...(profile?.features?.projects !== false ? [{ to: "/projects", label: "Projects" }] : []),
-        ...(profile?.features?.servers !== false ? [{ to: "/render", label: "Servers" }] : []),
-        ...(profile?.features?.services !== false ? [{ to: "/services", label: "Services" }] : []),
-        ...(profile?.features?.cron !== false ? [{ to: "/cron", label: "Cron" }] : []),
+        ...(["servers", "services", "cron"].some((k) => profile?.features?.[k] !== false) ? [{ to: "/render", label: "Infrastructure", also: ["/services", "/cron"] }] : []),
       ]
     : [
         { to: "/", label: "Home" },
@@ -82,7 +79,7 @@ function Navbar() {
           </div>
           <nav className="nav__links" aria-label="Primary">
             {links.map((link) => (
-              <NavLink key={link.to} to={link.to} className={({ isActive }) => `nav__link ${isActive ? "is-active" : ""}`} end>
+              <NavLink key={link.to} to={link.to} className={({ isActive }) => `nav__link ${isActive || (link.also || []).some((p) => location.pathname.startsWith(p)) ? "is-active" : ""}`} end>
                 {link.label}
               </NavLink>
             ))}

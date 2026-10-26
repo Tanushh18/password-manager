@@ -1,5 +1,4 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "react-toastify";
 import * as api from "../api/client";
 import { bootVerdict, bootDelay } from "../lib/errors";
 import { normalizeItem, withHistory, trashExpired } from "../lib/items";
@@ -23,7 +22,7 @@ import { pwnedCount } from "../lib/breach";
 
 const VaultContext = createContext(null);
 const PREFS_KEY = "aurelia_prefs";
-const DEFAULT_PREFS = { icons: false, searchValues: true };
+const DEFAULT_PREFS = { icons: false, searchValues: true, autoBreach: false };
 
 const readPrefs = () => {
   try {

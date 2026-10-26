@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import useShortcuts from "../../hooks/useShortcuts";
@@ -18,7 +18,7 @@ import MascotBanner from "../../Components/Robot/MascotBanner";
 import { vaultMood } from "../../lib/pageMoods";
 export default function Passwords() {
   const {
-    profile, items, broken, health, breaches, breachProgress, prefs,
+    items, broken, health, breaches, breachProgress, prefs,
     addItem, updateItem, deleteItem, purgeItem, restoreItem, emptyTrash, trash, toggleFavorite, importItems, runBreachCheck, lock,
   } = useVault();
 
@@ -117,6 +117,18 @@ export default function Passwords() {
       toast.error(err.message);
     }
   };
+
+  /* Opt-in weekly check (Settings): runs quietly and only speaks up when something was found. */
+  useEffect(() => {
+    if (!prefs.autoBreach || !items.length || breachProgress) return;
+    let last = 0;
+    try { last = Number(localStorage.getItem("stashr_breach_at") || 0); } catch (e) { /* private mode */ }
+    if (Date.now() - last < 7 * 86400000) return;
+    try { localStorage.setItem("stashr_breach_at", String(Date.now())); } catch (e) { /* private mode */ }
+    runBreachCheck()
+      .then((found) => { if (found) toast.error(`Weekly check: ${found} password${found === 1 ? " was" : "s were"} found in data breaches.`); })
+      .catch(() => { try { localStorage.removeItem("stashr_breach_at"); } catch (e) { /* private mode */ } });
+  }, [prefs.autoBreach, items.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveItem = async (form) => {
     if (editing === "new") {

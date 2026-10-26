@@ -32,6 +32,7 @@ import PhotoShare from "./Pages/PhotoCloud/PhotoShare";
 import Navbar from "./Components/Navbar/Navbar";
 import InstallPrompt from "./Components/InstallPrompt/InstallPrompt";
 import CommandPalette from "./Components/CommandPalette/CommandPalette";
+import InfraTabs from "./Components/InfraTabs/InfraTabs";
 import NetBar from "./Components/NetBar/NetBar";
 import Splash from "./Components/Splash/Splash";
 import { useVault } from "./state/vault";
@@ -112,10 +113,12 @@ export default function App() {
           <Route path="/settings" element={<RequireVault><Settings /></RequireVault>} />
           <Route path="/servers" element={<RequireVault><RequireAdmin><Servers /></RequireAdmin></RequireVault>} />
           <Route path="/security" element={<RequireVault><RequireAdmin><Security /></RequireAdmin></RequireVault>} />
-          <Route path="/services/map" element={<RequireVault><Suspense fallback={<Splash />}><ServiceMap /></Suspense></RequireVault>} />
-          <Route path="/services" element={<RequireVault><Suspense fallback={<Splash />}><Services /></Suspense></RequireVault>} />
-          <Route path="/cron" element={<RequireVault><Suspense fallback={<Splash />}><Cron /></Suspense></RequireVault>} />
-          <Route path="/render" element={<RequireVault><Suspense fallback={<Splash />}><RenderDashboard /></Suspense></RequireVault>} />
+          <Route element={<RequireVault><InfraTabs /></RequireVault>}>
+            <Route path="/services/map" element={<Suspense fallback={<Splash />}><ServiceMap /></Suspense>} />
+            <Route path="/services" element={<Suspense fallback={<Splash />}><Services /></Suspense>} />
+            <Route path="/cron" element={<Suspense fallback={<Splash />}><Cron /></Suspense>} />
+            <Route path="/render" element={<Suspense fallback={<Splash />}><RenderDashboard /></Suspense>} />
+          </Route>
           <Route path="/apps" element={<Apps />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/logout" element={<Logout />} />

@@ -52,7 +52,6 @@ const readActive = () =>
 const SESSION_SERVER_KEY = "pm_session_server";
 const readSessionServer = () => { try { return localStorage.getItem(SESSION_SERVER_KEY) || ""; } catch (e) { return ""; } };
 const writeSessionServer = (url) => { try { if (url) localStorage.setItem(SESSION_SERVER_KEY, url); else localStorage.removeItem(SESSION_SERVER_KEY); } catch (e) { /* private mode */ } };
-const isAuthUrl = (url) => /\/(login|register|authenticate|logout)$/.test(String(url || "").split("?")[0]);
 
 // Sticky: keep using the server that last worked (its login cookie lives there).
 let active = readActive();

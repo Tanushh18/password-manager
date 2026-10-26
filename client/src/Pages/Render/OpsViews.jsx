@@ -9,7 +9,7 @@ import { Kpi, Section, Skeleton, Empty, LineChart, Sparkline } from "./RenderUi"
 import { usePolling } from "./renderHooks";
 import { RobotSquad } from "./RobotArmy";
 import {
-  serviceKind, serviceKey, normalizeList, sumMetricPoints, peakOf, rangeStart, timeAgo, formatNumber, formatDateTime,
+  serviceKind, serviceKey, normalizeList, sumMetricPoints, peakOf, rangeStart, timeAgo, formatDateTime,
   formatTime, isErrorLog, errorMessage, remediationFor, incidentTypeLabel, formatDuration, formatMetric, groupServices, METRIC_OPTIONS, RANGE_OPTIONS
 } from "./renderUtils";
 
@@ -106,13 +106,6 @@ export function MonitoringView({ services, series, ops, selectedGroupId, onSelec
     return () => { live = false; };
   }, [group?.id, range, members.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const savedPeak = useMemo(() => {
-    if (!group) return null;
-    return history.filter((h) => h.groupId === group.id)
-      .map((h) => ({ at: h.sampledAt, value: h.combined?.[metric]?.currentSum }))
-      .filter((h) => Number.isFinite(h.value))
-      .reduce((best, h) => (!best || h.value > best.value ? h : best), null);
-  }, [history, group, metric]);
 
   const latestSample = useMemo(() => group ? history.filter((h) => h.groupId === group.id).reduce((best, h) => (!best || Date.parse(h.sampledAt || 0) > Date.parse(best.sampledAt || 0) ? h : best), null) : null, [history, group]);
   const databases = (latestSample?.services || []).filter((s) => String(s.type || "").toLowerCase().includes("postgres") || String(s.serviceId || "").startsWith("dpg-"));
@@ -255,9 +248,6 @@ export function MonitoringView({ services, series, ops, selectedGroupId, onSelec
     }
     return rows;
   }, [groupLogs, simpleGroupLogs]);
-  const combined = snapshot?.combined || [];
-  const latest = combined[combined.length - 1];
-  const peak = peakOf(combined);
 
   return (
     <div className="rd-stack">
