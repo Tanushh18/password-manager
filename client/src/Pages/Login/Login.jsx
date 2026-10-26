@@ -64,7 +64,7 @@ export default function Login() {
   };
 
   return (
-    <AuthShell loading={loading} stage={{ label: stepTwo ? "Two-factor check" : "Secure sign in" }}>
+    <AuthShell variant="signin" loading={loading} stage={{ label: stepTwo ? "Two-factor check" : "Secure sign in" }}>
       <form onSubmit={submit} noValidate>
         <h1 className="auth__title">
           {stepTwo ? (

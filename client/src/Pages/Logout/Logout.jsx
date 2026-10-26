@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useVault } from "../../state/vault";
-import Ambience from "../../Components/Ambience/Ambience";
-import { HeartLine, LockLine } from "../../Components/Icons/Icons";
+import AuthScene from "../../Components/AuthShell/AuthScene";
+import { LockLine, ShieldCheck } from "../../Components/Icons/Icons";
+import "../../styles/auth.css";
 import "./Logout.css";
 
 function Logout() {
@@ -29,40 +30,32 @@ function Logout() {
   }, []);
 
   return (
-    <div className="farewell page">
-      <Ambience botanical={false} />
+    <div className="farewell">
+      <div className="farewell__scene" aria-hidden="true">
+        <AuthScene />
+        <span className="farewell__shade" />
+      </div>
 
-      <div className="farewell__card card anim-scale-in">
-        <span className="card__ribbon" />
-        <span className={`farewell__seal ${done ? "is-done" : "anim-beat"}`}>
-          {done ? <LockLine size={26} /> : <HeartLine size={26} />}
+      <div className="farewell__card" role="status" aria-live="polite">
+        <p className="farewell__kicker">Departures</p>
+        <span className={`farewell__seal ${done ? "is-done" : ""}`} aria-hidden="true">
+          {done ? <ShieldCheck size={24} /> : <LockLine size={24} />}
         </span>
 
-        <h1 className="farewell__title">
-          {done ? (
-            <>
-              Locked up <em className="serif-em">safely.</em>
-            </>
-          ) : (
-            <>
-              Closing the <em className="serif-em">vault…</em>
-            </>
-          )}
-        </h1>
+        <h1 className="farewell__title">{done ? "You have departed safely." : "Closing the gate…"}</h1>
 
         <p className="farewell__body">
           {done
-            ? "Everything is sealed again. Come back whenever you like."
-            : "Tidying up and signing you out."}
+            ? "You are signed out and your session has ended. Taking you back to sign in."
+            : "Signing you out and ending this session."}
         </p>
 
-        <div className="farewell__dots" aria-hidden="true">
-          <span />
-          <span />
-          <span />
+        <div className="farewell__board" aria-hidden="true">
+          <span><small>Gate</small><b>Vault</b></span>
+          <span><small>Status</small><b className={done ? "is-ready" : "is-busy"}>{done ? "Departed" : "Closing"}</b></span>
         </div>
 
-        <p className="farewell__sign script">until next time</p>
+        <Link className="btn btn--ghost btn--block farewell__link" to="/signin" replace>Back to sign in</Link>
       </div>
     </div>
   );
