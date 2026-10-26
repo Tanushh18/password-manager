@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import useShortcuts from "../../hooks/useShortcuts";
 import Ambience from "../../Components/Ambience/Ambience";
@@ -22,7 +22,8 @@ export default function Passwords() {
     addItem, updateItem, deleteItem, toggleFavorite, importItems, runBreachCheck, lock,
   } = useVault();
 
-  const [search, setSearch] = useState("");
+  const [params] = useSearchParams();
+  const [search, setSearch] = useState(() => params.get("q") || "");
   const [filter, setFilter] = useState("all"); // health filter
   const [folder, setFolder] = useState("__all"); // __all | __fav | <folder>
   const [sort, setSort] = useState("recent");

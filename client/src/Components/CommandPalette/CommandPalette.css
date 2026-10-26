@@ -1,0 +1,9 @@
+.cmdk__scrim { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.45); display: flex; justify-content: center; align-items: flex-start; padding: 12vh 1rem 1rem; }
+.cmdk { width: min(560px, 100%); padding: 0.6rem; }
+.cmdk__input { width: 100%; }
+.cmdk__list { list-style: none; margin: 0.5rem 0 0; padding: 0; max-height: 50vh; overflow: auto; }
+.cmdk__list li { display: flex; align-items: baseline; gap: 0.6rem; padding: 0.55rem 0.7rem; border-radius: 10px; cursor: pointer; }
+.cmdk__list li.is-active { background: rgba(var(--accent-rgb), 0.16); }
+.cmdk__list small { margin-left: auto; opacity: 0.65; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
+.cmdk__kind { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.6; min-width: 3.8rem; }
+.cmdk__empty { cursor: default; opacity: 0.7; }

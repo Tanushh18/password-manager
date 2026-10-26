@@ -20,10 +20,24 @@ const timeAgo = (date) => {
   return `${Math.floor(s / 31536000)}y ago`;
 };
 
-async function copyText(text, label) {
+const CLIPBOARD_CLEAR_MS = 30000;
+let clearTimer = null;
+
+/* Secrets are wiped from the clipboard after 30s, but only if the clipboard still holds what we put there. */
+function scheduleClipboardClear(text) {
+  clearTimeout(clearTimer);
+  clearTimer = setTimeout(async () => {
+    try {
+      if ((await navigator.clipboard.readText()) === text) await navigator.clipboard.writeText("");
+    } catch (e) { /* reading needs permission; skip quietly */ }
+  }, CLIPBOARD_CLEAR_MS);
+}
+
+async function copyText(text, label, secret = false) {
   try {
     await navigator.clipboard.writeText(text);
-    toast.info(`${label} copied`, { autoClose: 1600 });
+    if (secret) scheduleClipboardClear(text);
+    toast.info(`${label} copied${secret ? " · clears in 30s" : ""}`, { autoClose: 1600 });
     return true;
   } catch (e) {
     toast.error("Couldn't copy — your browser blocked clipboard access.");
@@ -113,7 +127,7 @@ export default function ItemCard({ item, info, icons, onEdit, onFavorite, select
             <button type="button" className={`icon-btn ${shown ? "is-on" : ""}`} onClick={() => setShown((v) => !v)} aria-label={shown ? "Hide password" : "Reveal password"}>
               {shown ? <EyeOff size={15} /> : <Eye size={15} />}
             </button>
-            <button type="button" className={`icon-btn ${copied === "p" ? "is-done" : ""}`} onClick={async () => (await copyText(item.password, "Password")) && flash("p")} aria-label="Copy password">
+            <button type="button" className={`icon-btn ${copied === "p" ? "is-done" : ""}`} onClick={async () => (await copyText(item.password, "Password", true)) && flash("p")} aria-label="Copy password">
               {copied === "p" ? <Check size={15} /> : <Copy size={15} />}
             </button>
           </div>

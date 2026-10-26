@@ -31,6 +31,7 @@ import PhotoCloud from "./Pages/PhotoCloud/PhotoCloud";
 import PhotoShare from "./Pages/PhotoCloud/PhotoShare";
 import Navbar from "./Components/Navbar/Navbar";
 import InstallPrompt from "./Components/InstallPrompt/InstallPrompt";
+import CommandPalette from "./Components/CommandPalette/CommandPalette";
 import NetBar from "./Components/NetBar/NetBar";
 import Splash from "./Components/Splash/Splash";
 import { useVault } from "./state/vault";
@@ -89,6 +90,7 @@ export default function App() {
       <BrowserRouter>
         <ScrollToTop />
         <NetBar />
+        <CommandPalette />
         <Navbar />
         <ToastContainer position="top-right" autoClose={3500} newestOnTop closeOnClick pauseOnHover draggable theme="colored" />
         <Routes>
