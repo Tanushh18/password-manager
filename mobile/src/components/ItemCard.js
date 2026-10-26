@@ -37,7 +37,7 @@ export async function copySecret(value, label, toast) {
   }, CLIPBOARD_CLEAR_MS);
 }
 
-export default function ItemCard({ item, info, icons, onEdit, onFavorite, index = 0 }) {
+export default function ItemCard({ item, info, icons, onEdit, onFavorite, selecting = false, selected = false, onSelect, index = 0 }) {
   const { theme } = useTheme();
   const toast = useToast();
   const [shown, setShown] = useState(false);
@@ -58,8 +58,19 @@ export default function ItemCard({ item, info, icons, onEdit, onFavorite, index 
 
   return (
     <Animated.View style={{ opacity: appear, transform: [{ translateY }], marginBottom: 14 }}>
-      <Card style={{ padding: 16 }}>
+      <Card style={{ padding: 16, ...(selected ? { borderColor: theme.accent, borderWidth: 2 } : null) }}>
         <View style={styles.head}>
+          {selecting ? (
+            <Pressable
+              onPress={() => { tap(); onSelect && onSelect(); }}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: selected }}
+              accessibilityLabel={`Select ${item.name || "item"}`}
+              style={[styles.check, { borderColor: selected ? theme.accent : theme.line, backgroundColor: selected ? theme.accent : "transparent" }]}
+            >
+              {selected ? <Icon name="check" size={14} color="#fff" /> : null}
+            </Pressable>
+          ) : null}
           <ItemAvatar name={item.name} url={item.url} icons={icons} />
           <Pressable style={{ flex: 1 }} onPress={onEdit}>
             <Text numberOfLines={1} style={{ color: theme.heading, fontFamily: theme.font.display, fontSize: 17 }}>
@@ -128,6 +139,7 @@ export default function ItemCard({ item, info, icons, onEdit, onFavorite, index 
 
 const styles = StyleSheet.create({
   head: { flexDirection: "row", alignItems: "center", gap: 10 },
+  check: { width: 24, height: 24, borderRadius: 8, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   badges: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 12, marginBottom: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 14, paddingLeft: 12, paddingRight: 6, paddingVertical: 5, minHeight: 46, marginTop: 8 },
 });

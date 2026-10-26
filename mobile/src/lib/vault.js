@@ -2,8 +2,9 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { AppState, Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import * as LocalAuthentication from "expo-local-authentication";
-import { api, ApiError, setToken, activeServer, setActiveServer } from "./api";
-import { normalizeItem } from "./items";
+import { api, ApiError, setToken, activeServer, setActiveServer, openVaultEvents } from "./api";
+import { normalizeItem, withHistory, trashExpired } from "./items";
+import { mergeDelta, createSseParser, reconnectDelay } from "./sync";
 import { normalizeProject } from "./projectItems";
 import { computeHealth } from "./health";
 import { pwnedCount } from "./breach";
@@ -48,7 +49,9 @@ const toProject = (entry) => ({ ...normalizeProject(entry), id: entry._id, creat
 export function VaultProvider({ children }) {
   const [status, setStatus] = useState("booting");
   const [profile, setProfile] = useState(null);
-  const [items, setItems] = useState([]);
+  const [allItems, setItems] = useState([]); // live items plus trashed ones (deletedAt set)
+  const items = useMemo(() => allItems.filter((i) => !i.deletedAt), [allItems]);
+  const trash = useMemo(() => allItems.filter((i) => i.deletedAt), [allItems]);
   const [projects, setProjects] = useState([]);
   const [offline, setOffline] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -60,6 +63,8 @@ export function VaultProvider({ children }) {
   const [prefs, setPrefsState] = useState(DEFAULT_PREFS);
 
   const backgroundAt = useRef(null);
+  const syncedAt = useRef(null); // server time of the last successful delta sync
+  const purgedOnce = useRef(false);
   const pauseLock = useRef(0);
 
   /* ── Server profile (+ offline cache of the last known items/projects) ── */
@@ -75,6 +80,7 @@ export function VaultProvider({ children }) {
       setOffline(false);
       SecureStore.setItemAsync(K.server, activeServer()).catch(() => {});
       writeCache({ profile: rest, items: decoded, projects: decodedProjects });
+      syncedAt.current = null;
       return { profile: rest };
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 400)) throw e;
@@ -93,6 +99,7 @@ export function VaultProvider({ children }) {
     setToken(null);
     setItems([]);
     setProjects([]);
+    purgedOnce.current = false;
     setProfile(null);
     setBreaches({});
     setBreachChecked(false);
@@ -229,9 +236,10 @@ export function VaultProvider({ children }) {
 
   const updateItem = useCallback(async (id, fields) => {
     requireOnline();
-    const current = items.find((i) => i.id === id);
-    const next = normalizeItem({ ...current, ...fields });
+    const current = allItems.find((i) => i.id === id);
+    let next = normalizeItem({ ...current, ...fields });
     if (current && current.password !== next.password) next.passwordUpdatedAt = new Date().toISOString();
+    next = withHistory(current, next);
     const res = await api.updateItem(id, next);
     setItems((list) => list.map((i) => (i.id === id ? { ...next, id, createdAt: i.createdAt, updatedAt: res.item.updatedAt } : i)));
     if (current && current.password !== next.password) {
@@ -242,21 +250,37 @@ export function VaultProvider({ children }) {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, offline]);
+  }, [allItems, offline]);
 
   const toggleFavorite = useCallback(
     (id) => {
-      const current = items.find((i) => i.id === id);
+      const current = allItems.find((i) => i.id === id);
       return current ? updateItem(id, { favorite: !current.favorite }) : Promise.resolve();
     },
-    [items, updateItem]
+    [allItems, updateItem]
   );
 
-  const deleteItem = useCallback(async (id) => {
+  /* Delete moves an item to the trash (30 days); purgeItem removes it for good. */
+  const purgeItem = useCallback(async (id) => {
     if (offline) throw new Error("You're offline.");
     await api.deleteItem(id);
     setItems((list) => list.filter((i) => i.id !== id));
   }, [offline]);
+  const deleteItem = useCallback((id) => updateItem(id, { deletedAt: new Date().toISOString(), favorite: false }), [updateItem]);
+  const restoreItem = useCallback((id) => updateItem(id, { deletedAt: null }), [updateItem]);
+  const emptyTrash = useCallback(async () => {
+    const ids = allItems.filter((i) => i.deletedAt).map((i) => i.id);
+    const results = await Promise.allSettled(ids.map((id) => purgeItem(id)));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed) throw new Error(`${failed} item${failed === 1 ? "" : "s"} could not be removed.`);
+  }, [allItems, purgeItem]);
+
+  /* Items that sat in the trash for more than 30 days are removed the next time the vault is ready and online. */
+  useEffect(() => {
+    if (status !== "ready" || offline || purgedOnce.current) return;
+    purgedOnce.current = true;
+    allItems.filter((i) => trashExpired(i)).forEach((i) => { purgeItem(i.id).catch(() => {}); });
+  }, [status, offline, allItems, purgeItem]);
 
   const importItems = useCallback(async (list) => {
     requireOnline();
@@ -359,6 +383,81 @@ export function VaultProvider({ children }) {
     });
   }, []);
 
+  /* ── Live sync: while the app is open, a change stream asks for a delta right away; a timer and coming back to the
+        foreground are the fallback. Anything unexpected falls back to a full reload (pull-to-refresh does the same). ── */
+  const deltaOk = useRef(true);
+  useEffect(() => {
+    if (status !== "ready" || offline) return undefined;
+    let stopped = false, running = false, queued = false, active = AppState.currentState === "active", fullAt = Date.now();
+    const controller = new AbortController();
+
+    const sync = async () => {
+      if (stopped || !active) return;
+      if (running) { queued = true; return; }
+      running = true;
+      try {
+        if (!deltaOk.current || !syncedAt.current || Date.now() - fullAt > 10 * 60 * 1000) {
+          const startedAt = new Date().toISOString();
+          await loadProfile();
+          fullAt = Date.now();
+          if (deltaOk.current) {
+            try {
+              const c = await api.vaultChanges(startedAt);
+              syncedAt.current = c.serverTime;
+              setItems((l) => mergeDelta(l, c.items, c.itemIds, toItem));
+              setProjects((l) => mergeDelta(l, c.projects, c.projectIds, toProject));
+            } catch (e) {
+              if (e instanceof ApiError && e.status === 404) deltaOk.current = false;
+            }
+          }
+        } else {
+          const c = await api.vaultChanges(syncedAt.current);
+          syncedAt.current = c.serverTime;
+          setItems((l) => mergeDelta(l, c.items, c.itemIds, toItem));
+          setProjects((l) => mergeDelta(l, c.projects, c.projectIds, toProject));
+        }
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) deltaOk.current = false;
+        syncedAt.current = null;
+      } finally {
+        running = false;
+        if (queued) { queued = false; void sync(); }
+      }
+    };
+
+    const stream = async () => {
+      let attempt = 0;
+      while (!stopped) {
+        if (!active) { await new Promise((r) => setTimeout(r, 3000)); continue; }
+        try {
+          const res = await openVaultEvents(controller.signal);
+          if (!res.ok || !res.body) throw new Error(`stream ${res.status}`);
+          attempt = 0;
+          const parse = createSseParser((ev) => { if (ev.event === "change") void sync(); });
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done || stopped) break;
+            parse(decoder.decode(value, { stream: true }));
+          }
+        } catch (e) {
+          if (stopped) return;
+        }
+        if (stopped) return;
+        await new Promise((r) => setTimeout(r, reconnectDelay(attempt)));
+        attempt += 1;
+      }
+    };
+
+    const sub = AppState.addEventListener("change", (s) => { active = s === "active"; if (active) void sync(); });
+    const timer = setInterval(() => void sync(), 60 * 1000);
+    void sync();
+    void stream();
+    return () => { stopped = true; controller.abort(); clearInterval(timer); sub.remove(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, offline]);
+
   /* ── Autofill: keep the native service's encrypted copy of the vault in step with it ── */
   useEffect(() => {
     if (status !== "ready" && status !== "locked") return;
@@ -459,6 +558,10 @@ export function VaultProvider({ children }) {
       updateItem,
       toggleFavorite,
       deleteItem,
+      purgeItem,
+      restoreItem,
+      emptyTrash,
+      trash,
       importItems,
       runBreachCheck,
       changeMasterPassword,
@@ -472,7 +575,7 @@ export function VaultProvider({ children }) {
       deleteProject,
       importProjects,
     };
-  }, [status, profile, items, offline, syncing, breaches, breachChecked, breachProgress, biometric, biometricAvailable, prefs, setPrefs, login, register, unlockWithBiometrics, lock, logout, wipeLocal, refresh, loadProfile, addItem, updateItem, toggleFavorite, deleteItem, importItems, runBreachCheck, changeMasterPassword, setBiometric, withoutAutoLock, projects, addProject, updateProject, deleteProject, importProjects]);
+  }, [status, profile, items, offline, syncing, breaches, breachChecked, breachProgress, biometric, biometricAvailable, prefs, setPrefs, login, register, unlockWithBiometrics, lock, logout, wipeLocal, refresh, loadProfile, addItem, updateItem, toggleFavorite, deleteItem, purgeItem, restoreItem, emptyTrash, trash, importItems, runBreachCheck, changeMasterPassword, setBiometric, withoutAutoLock, projects, addProject, updateProject, deleteProject, importProjects]);
 
   return <VaultContext.Provider value={value}>{children}</VaultContext.Provider>;
 }

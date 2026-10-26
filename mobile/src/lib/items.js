@@ -12,9 +12,14 @@ export const emptyItem = () => ({
   folder: "",
   favorite: false,
   passwordUpdatedAt: null,
+  deletedAt: null, // set while the item is in the trash
+  history: [], // previous passwords, newest first: [{ password, changedAt }]
 });
 
-const clean = (v) => (v == null ? "" : String(v).replace(/ /g, " ").trim());
+export const HISTORY_LIMIT = 5;
+export const TRASH_DAYS = 30;
+
+const clean = (v) => (v == null ? "" : String(v).replace(/\u00a0/g, " ").trim());
 
 export function normalizeItem(raw = {}) {
   return {
@@ -28,8 +33,24 @@ export function normalizeItem(raw = {}) {
     folder: clean(raw.folder).slice(0, 60),
     favorite: Boolean(raw.favorite),
     passwordUpdatedAt: raw.passwordUpdatedAt || null,
+    deletedAt: raw.deletedAt || null,
+    history: Array.isArray(raw.history)
+      ? raw.history.filter((h) => h && typeof h.password === "string" && h.password).slice(0, HISTORY_LIMIT).map((h) => ({ password: h.password.slice(0, 2000), changedAt: h.changedAt || null }))
+      : [],
   };
 }
+
+/** Returns `next` with the replaced password pushed onto its history when the password changed. */
+export function withHistory(current, next) {
+  if (!current || !current.password || current.password === next.password) return next;
+  const entry = { password: current.password, changedAt: current.passwordUpdatedAt || current.updatedAt || null };
+  const history = [entry, ...(next.history || []).filter((h) => h.password !== entry.password)].slice(0, HISTORY_LIMIT);
+  return { ...next, history };
+}
+
+/** True for a trashed item that has been in the trash longer than `days`. */
+export const trashExpired = (item, days = TRASH_DAYS, now = Date.now()) =>
+  Boolean(item.deletedAt) && now - new Date(item.deletedAt).getTime() > days * 86400000;
 
 /** Legacy server entry → item fields (after the server decrypted the password). */
 export const fromLegacy = (entry, password) =>
@@ -116,7 +137,7 @@ const pick = (row, keys) => {
 };
 
 /**
- * Maps spreadsheet / CSV rows from Aurelia, Chrome, Bitwarden, 1Password and
+ * Maps spreadsheet / CSV rows from Stashr, Chrome, Bitwarden, 1Password and
  * LastPass exports (plus the old platform/email/password sheet) to items.
  */
 export const rowsToItems = (rows) =>

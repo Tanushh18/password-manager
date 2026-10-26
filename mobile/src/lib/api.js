@@ -68,6 +68,14 @@ export async function refreshServers() {
   return null;
 }
 
+/** Opens the live change stream. expo/fetch (unlike React Native's fetch) can read a response body as it arrives. */
+export async function openVaultEvents(signal) {
+  const { fetch: streamFetch } = require("expo/fetch");
+  const headers = { Accept: "text/event-stream", "X-Client": "mobile" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return streamFetch(`${SERVERS[active]}/vault/events`, { headers, signal });
+}
+
 export class ApiError extends Error {
   constructor(message, status, data) {
     super(message);
@@ -138,6 +146,7 @@ export const api = {
   login: (body) => request("/login", { method: "POST", body: { ...body, client: "mobile" }, auth: false }),
   register: (data) => request("/register", { method: "POST", body: data, auth: false }),
   me: () => request("/authenticate"),
+  vaultChanges: (since) => request(`/vault/changes${since ? `?since=${encodeURIComponent(since)}` : ""}`, { timeout: 30000 }),
   logout: () => request("/logout"),
 
   // Photos (Google Drive storage)

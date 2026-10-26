@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { FlatList, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
@@ -27,19 +27,57 @@ const greeting = () => {
 
 export default function Vault() {
   const { theme } = useTheme();
-  const { profile, items, broken, health, offline, syncing, refresh, lock, toggleFavorite, prefs } = useVault();
+  const { profile, items, trash, broken, health, offline, syncing, refresh, lock, toggleFavorite, updateItem, deleteItem, purgeItem, restoreItem, emptyTrash, prefs } = useVault();
   const toast = useToast();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [folder, setFolder] = useState("__all");
   const [sort, setSort] = useState("recent");
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
+  const [moving, setMoving] = useState(false); // showing the folder picker for "Move"
+  const [renaming, setRenaming] = useState(null); // null | string (new name being typed)
+  const [busy, setBusy] = useState(false);
+
+  const toggleSelect = (id) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const stopSelecting = () => { setSelecting(false); setSelected(new Set()); setMoving(false); };
+  /* Runs one action over every selected id and says how many worked, so a partial failure is never silent. */
+  const runBulk = async (label, fn) => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    setBusy(true);
+    const results = await Promise.allSettled(ids.map(fn));
+    setBusy(false);
+    const ok = results.filter((r) => r.status === "fulfilled").length;
+    if (ok === ids.length) toast(`${label}: ${ok} item${ok === 1 ? "" : "s"}.`);
+    else toast(`${label}: ${ok} of ${ids.length} worked, ${ids.length - ok} failed.`, "error");
+    setSelected(new Set(results.flatMap((r, i) => (r.status === "rejected" ? [ids[i]] : []))));
+    setMoving(false);
+  };
+  const bulkDelete = () =>
+    Alert.alert(`Move ${selected.size} item${selected.size === 1 ? "" : "s"} to Trash?`, "You can restore them for 30 days.", [
+      { text: "Keep", style: "cancel" },
+      { text: "Move to Trash", style: "destructive", onPress: () => runBulk("Moved to Trash", (id) => deleteItem(id)) },
+    ]);
+  const renameFolder = async () => {
+    const target = (renaming || "").trim();
+    if (!target || target === folder) return setRenaming(null);
+    const ids = items.filter((i) => i.folder === folder).map((i) => i.id);
+    setBusy(true);
+    const results = await Promise.allSettled(ids.map((id) => updateItem(id, { folder: target })));
+    setBusy(false);
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed) toast(`${failed} item${failed === 1 ? "" : "s"} could not be moved.`, "error");
+    else { toast(`Folder is now "${target}".`); setFolder(target); }
+    setRenaming(null);
+  };
 
   const folders = useMemo(() => [...new Set(items.map((i) => i.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [items]);
 
   const list = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return items
-      .filter((i) => folder === "__all" || (folder === "__fav" ? i.favorite : i.folder === folder))
+    return (folder === "__trash" ? trash : items)
+      .filter((i) => folder === "__trash" || folder === "__all" || (folder === "__fav" ? i.favorite : i.folder === folder))
       .filter((i) => !q || [i.name, i.username, i.url, i.folder, i.notes].some((v) => (v || "").toLowerCase().includes(q)) || domainOf(i.url).includes(q))
       .filter((i) => {
         if (filter === "all") return true;
@@ -57,7 +95,7 @@ export default function Vault() {
         if (sort === "weakest") return (health.info[a.id]?.score ?? 5) - (health.info[b.id]?.score ?? 5);
         return new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
       });
-  }, [items, query, filter, folder, sort, health]);
+  }, [items, trash, query, filter, folder, sort, health]);
 
   const firstName = (profile?.name || "").split(" ")[0] || "there";
   const nextSort = () => setSort((s) => SORTS[(SORTS.findIndex((x) => x.key === s) + 1) % SORTS.length].key);
@@ -71,6 +109,8 @@ export default function Vault() {
             {greeting()}, {firstName}
           </Text>
         </View>
+        <IconButton name={selecting ? "close" : "check"} active={selecting} onPress={() => (selecting ? stopSelecting() : setSelecting(true))} />
+        <View style={{ width: 10 }} />
         <IconButton name="folder" onPress={() => router.push("/projects")} />
         <View style={{ width: 10 }} />
         <IconButton name="lock" onPress={lock} />
@@ -138,10 +178,66 @@ export default function Vault() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           <Chip label="All" active={folder === "__all"} onPress={() => setFolder("__all")} count={items.length} />
           <Chip label="★ Favourites" active={folder === "__fav"} onPress={() => setFolder("__fav")} count={items.filter((i) => i.favorite).length} color={theme.warn} />
+          {trash.length ? <Chip label="Trash" active={folder === "__trash"} onPress={() => setFolder("__trash")} count={trash.length} color={theme.danger} /> : null}
           {folders.map((f) => (
             <Chip key={f} label={f} active={folder === f} onPress={() => setFolder(f)} count={items.filter((i) => i.folder === f).length} color={theme.accent3} />
           ))}
         </ScrollView>
+        {selecting ? (
+          <View style={[styles.banner, { backgroundColor: alpha(theme.accent, 0.1), borderColor: alpha(theme.accent, 0.4), flexDirection: "column", alignItems: "stretch" }]}>
+            <Text style={{ color: theme.heading, fontFamily: theme.font.bodySemi, fontSize: 14 }}>{selected.size} selected</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 8 }}>
+              <Chip label={`Select all ${list.length}`} onPress={() => setSelected(new Set(list.map((i) => i.id)))} />
+              <Chip label="★ Favourite" onPress={() => !busy && selected.size && runBulk("Favourited", (id) => updateItem(id, { favorite: true }))} />
+              <Chip label="Unfavourite" onPress={() => !busy && selected.size && runBulk("Unfavourited", (id) => updateItem(id, { favorite: false }))} />
+              <Chip label="Move to folder…" active={moving} onPress={() => selected.size && setMoving((m) => !m)} />
+              <Chip label="Trash" color={theme.danger} onPress={() => !busy && selected.size && bulkDelete()} />
+            </ScrollView>
+            {moving ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 8 }}>
+                <Chip label="No folder" onPress={() => !busy && runBulk("Moved", (id) => updateItem(id, { folder: "" }))} />
+                {folders.map((f) => <Chip key={f} label={f} color={theme.accent3} onPress={() => !busy && runBulk("Moved", (id) => updateItem(id, { folder: f }))} />)}
+              </ScrollView>
+            ) : null}
+          </View>
+        ) : null}
+        {folder !== "__all" && folder !== "__fav" && folder !== "__trash" ? (
+          renaming === null ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+              <Chip label={`Rename or merge “${folder}”`} onPress={() => setRenaming(folder)} />
+            </ScrollView>
+          ) : (
+            <View style={[styles.search, { backgroundColor: theme.surface, borderColor: theme.line, height: 46 }]}>
+              <TextInput
+                value={renaming}
+                onChangeText={setRenaming}
+                autoFocus
+                placeholder="New name (an existing folder merges)"
+                placeholderTextColor={theme.textFaint}
+                style={{ flex: 1, color: theme.text, fontFamily: theme.font.body, fontSize: 15 }}
+                selectionColor={theme.accent}
+                onSubmitEditing={renameFolder}
+              />
+              <IconButton name="check" size={32} iconSize={15} onPress={renameFolder} />
+              <IconButton name="close" size={32} iconSize={14} onPress={() => setRenaming(null)} />
+            </View>
+          )
+        ) : null}
+        {folder === "__trash" ? (
+          <View style={[styles.banner, { backgroundColor: alpha(theme.danger, 0.08), borderColor: alpha(theme.danger, 0.35) }]}>
+            <Text style={{ flex: 1, color: theme.textMuted, fontFamily: theme.font.body, fontSize: 13 }}>Deleted items stay here for 30 days.</Text>
+            <Chip
+              label="Empty trash"
+              color={theme.danger}
+              onPress={() =>
+                Alert.alert(`Delete ${trash.length} item${trash.length === 1 ? "" : "s"} forever?`, "This cannot be undone.", [
+                  { text: "Keep", style: "cancel" },
+                  { text: "Delete forever", style: "destructive", onPress: () => emptyTrash().then(() => { toast("Trash emptied."); setFolder("__all"); }).catch((e) => toast(e.message, "error")) },
+                ])
+              }
+            />
+          </View>
+        ) : null}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           <Chip label="Any health" active={filter === "all"} onPress={() => setFilter("all")} />
           <Chip label="Weak" active={filter === "weak"} onPress={() => setFilter("weak")} count={health.weak} color={theme.danger} />
@@ -161,8 +257,26 @@ export default function Vault() {
         <FlatList
           data={list}
           keyExtractor={(item) => item.id}
-          renderItem={({ item, index }) => (
+          renderItem={({ item, index }) => folder === "__trash" ? (
+            <Card style={{ padding: 14, marginBottom: 12 }}>
+              <Text numberOfLines={1} style={{ color: theme.heading, fontFamily: theme.font.display, fontSize: 16 }}>{item.name || "Untitled"}</Text>
+              <Text numberOfLines={1} style={{ color: theme.textFaint, fontFamily: theme.font.body, fontSize: 12, marginTop: 2 }}>
+                {item.username || "No username"} · deleted {new Date(item.deletedAt).toLocaleDateString()}
+              </Text>
+              <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                <Chip label="Restore" active onPress={() => restoreItem(item.id).then(() => toast("Restored.")).catch((e) => toast(e.message, "error"))} />
+                <Chip label="Delete forever" color={theme.danger} onPress={() =>
+                  Alert.alert("Delete forever?", "This cannot be undone.", [
+                    { text: "Keep", style: "cancel" },
+                    { text: "Delete", style: "destructive", onPress: () => purgeItem(item.id).catch((e) => toast(e.message, "error")) },
+                  ])} />
+              </View>
+            </Card>
+          ) : (
             <ItemCard
+              selecting={selecting}
+              selected={selected.has(item.id)}
+              onSelect={() => toggleSelect(item.id)}
               item={item}
               info={health.info[item.id]}
               icons={prefs.icons}

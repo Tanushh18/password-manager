@@ -13,6 +13,7 @@ import { emptyItem } from "../lib/items";
 import { estimate, generatePassword, generatePassphrase } from "../lib/strength";
 import C from "../lib/crypto";
 import { onScan } from "../lib/scanBus";
+import { copySecret } from "../components/ItemCard";
 
 const QUICK = ["Google", "Instagram", "WhatsApp", "Netflix", "Amazon", "GitHub", "Bank", "Wi-Fi"];
 
@@ -21,6 +22,7 @@ export default function Editor() {
   const { theme } = useTheme();
   const params = useLocalSearchParams();
   const { items, addItem, updateItem, deleteItem, prefs } = useVault();
+  const [showHistory, setShowHistory] = useState(false);
   const toast = useToast();
   const existing = useMemo(() => items.find((i) => i.id === params.id), [items, params.id]);
 
@@ -68,15 +70,15 @@ export default function Editor() {
   };
 
   const del = () =>
-    Alert.alert(`Delete ${existing.name}?`, "It's removed from every device.", [
+    Alert.alert(`Move ${existing.name} to Trash?`, "You can restore it from the Trash folder for 30 days.", [
       { text: "Keep", style: "cancel" },
       {
-        text: "Delete",
+        text: "Move to Trash",
         style: "destructive",
         onPress: async () => {
           try {
             await deleteItem(existing.id);
-            toast("Deleted from your vault.");
+            toast("Moved to Trash.");
             close();
           } catch (e) {
             toast(e.message, "error");
@@ -119,6 +121,20 @@ export default function Editor() {
             <Field label="Username or email" icon="user" value={form.username} onChangeText={set("username")} placeholder="you@example.com" autoCapitalize="none" keyboardType="email-address" />
             <Field label="Password" icon="lock" secure value={form.password} onChangeText={set("password")} placeholder="The secret itself" autoCapitalize="none" />
             {form.password ? <StrengthMeter strength={strength} /> : null}
+            {existing && (existing.history || []).length ? (
+              <View style={{ marginBottom: 14 }}>
+                <Chip label={`Password history (${existing.history.length})`} active={showHistory} onPress={() => setShowHistory((v) => !v)} />
+                {showHistory ? existing.history.map((h, i) => (
+                  <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 }}>
+                    <Text style={{ flex: 1, color: theme.textMuted, fontFamily: theme.font.mono, fontSize: 14 }}>
+                      {"•".repeat(Math.min(h.password.length, 12))}  <Text style={{ fontFamily: theme.font.body, fontSize: 12, color: theme.textFaint }}>{h.changedAt ? new Date(h.changedAt).toLocaleDateString() : "earlier"}</Text>
+                    </Text>
+                    <Chip label="Copy" onPress={() => copySecret(h.password, "Old password", toast)} />
+                    <Chip label="Use again" onPress={() => set("password")(h.password)} />
+                  </View>
+                )) : null}
+              </View>
+            ) : null}
             <View style={styles.row}>
               <Chip label="Strong random" onPress={() => set("password")(generatePassword({ length: 20 }))} />
               <Chip label="Passphrase" onPress={() => set("password")(generatePassphrase({ words: 4 }))} />
