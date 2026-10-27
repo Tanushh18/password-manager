@@ -14,7 +14,7 @@ const Registry = require("../models/registry");
 const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
 
-const { ADMINS, DEFAULTS, APP_LABELS, SLUG } = require("../utils/registryDefaults");
+const { ADMINS, DEFAULTS, OFFABLE, APP_LABELS, SLUG, urlsFor } = require("../utils/registryDefaults");
 const MAX_URLS = 10;
 
 const isAdminUser = (user) => Boolean(user && user.email && ADMINS.includes(String(user.email).toLowerCase()));
@@ -43,6 +43,7 @@ const listFor = async (app) =>
 {
     const doc = await Registry.findOne({ app }).lean();
     if (doc && doc.urls && doc.urls.length) return doc.urls;
+    if (doc && doc.off && OFFABLE.has(app)) return [];
     // A per-project list switched off completely stays an (empty) list instead of falling back to a default or a 404.
     if (doc && doc.owner && !DEFAULTS[app]) return [];
     return DEFAULTS[app] || null;
@@ -71,7 +72,7 @@ router.get("/registry", authenticate, requireAdmin, async (req, res) =>
             return {
                 app,
                 label: APP_LABELS[app],
-                urls: doc && doc.urls && doc.urls.length ? doc.urls : DEFAULTS[app],
+                urls: urlsFor(doc, app),
                 saved: Boolean(doc && doc.urls && doc.urls.length),
                 updatedAt: doc ? doc.updatedAt : null
             };
@@ -100,15 +101,15 @@ router.put("/registry/:app", authenticate, writeLimiter, async (req, res) =>
         if (!url) return res.status(400).json({ error: `"${String(raw).slice(0, 120)}" is not a valid https URL.` });
         if (!urls.includes(url)) urls.push(url);
     }
-    // Built-in apps always keep a server; a per-project list may be switched off entirely (to test that the apps stop using it).
-    if (urls.length === 0 && DEFAULTS[app]) return res.status(400).json({ error: "Keep at least one server URL." });
+    // Most built-in apps always keep a server; a per-project list (or an OFFABLE app) may be switched off entirely (to test that the apps stop using it).
+    if (urls.length === 0 && DEFAULTS[app] && !OFFABLE.has(app)) return res.status(400).json({ error: "Keep at least one server URL." });
     if (urls.length > MAX_URLS) return res.status(400).json({ error: `At most ${MAX_URLS} URLs per app.` });
 
     try
     {
         const doc = await Registry.findOneAndUpdate(
             { app },
-            { urls, updatedAt: new Date(), updatedBy: req.rootUser.email, ...(!DEFAULTS[app] && !(existing && existing.owner) ? { owner: req.rootUser._id } : {}) },
+            { urls, updatedAt: new Date(), updatedBy: req.rootUser.email, ...(OFFABLE.has(app) ? { off: urls.length === 0 } : {}), ...(!DEFAULTS[app] && !(existing && existing.owner) ? { owner: req.rootUser._id } : {}) },
             { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
         ).lean();
         return res.json({ app, urls: doc.urls, updatedAt: doc.updatedAt });
