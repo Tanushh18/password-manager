@@ -73,7 +73,6 @@ const vercel = {
     if (input.framework) body.framework = input.framework;
     if (input.buildCommand) body.buildCommand = input.buildCommand;
     if (input.outputDir) body.outputDirectory = input.outputDir;
-    if (input.branch && input.branch === input.defaultBranch) body.productionBranch = input.branch;
     const created = await http("https://api.vercel.com/v11/projects" + q, { method: "POST", headers: bearer(token), json: body });
     if (!created.ok) {
       const code = created.body?.error?.code;
