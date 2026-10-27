@@ -168,6 +168,27 @@ const saveLinks = (req, ctx, hostLinks) => User.updateOne({ _id: req.rootUser._i
 const linksOf = (fields) => (Array.isArray(fields.hostLinks) ? fields.hostLinks : []).filter((l) => l && l.id && l.provider && l.remoteId);
 const publicLink = (l) => ({ id: l.id, provider: l.provider, label: PROVIDERS[l.provider]?.label || l.provider, hostAccountId: l.hostAccountId, name: l.name, url: l.url || "", dashboardUrl: l.dashboardUrl || "", repo: l.repo || "", branch: l.branch || "", branchDeploy: Boolean(PROVIDERS[l.provider]?.branchDeploy) });
 
+/* Every site/project on every connected host, for the Control Center. One failing account never hides the rest. */
+router.get("/hosts/overview", async (req, res) => {
+  try {
+    const dataKey = await req.rootUser.getDataKey();
+    const accounts = (req.rootUser.hostAccounts || []).filter((e) => e.enc === "udk").map((e) => ({ id: String(e._id), ...User.publicEntry(e, dataKey) })).filter((a) => PROVIDERS[a.provider]);
+    const rows = await mapWithConcurrency(accounts, 3, async (a) => {
+      const provider = PROVIDERS[a.provider];
+      try {
+        const out = await provider.list(a.token, a);
+        if (!out.ok) return { sites: [], error: { accountName: a.name, label: provider.label, error: out.error } };
+        return { sites: out.sites.slice(0, 200).map((x) => ({ provider: a.provider, label: provider.label, kind: provider.kind, accountId: a.id, accountName: a.name, id: x.id, name: x.name, url: x.url, dashboardUrl: x.dashboardUrl || "", repo: x.repo || "", branch: x.branch || "" })) };
+      } catch { return { sites: [], error: { accountName: a.name, label: provider.label, error: "Could not list the sites." } }; }
+    });
+    res.set("Cache-Control", "no-store");
+    return res.json({ sites: rows.flatMap((r) => r.sites), errors: rows.map((r) => r.error).filter(Boolean) });
+  } catch (error) {
+    console.error("hosts/overview failed:", error?.message || error);
+    return res.status(500).json({ error: "Could not read your hosting accounts." });
+  }
+});
+
 /* Sites/projects that already exist on a connected host, for the "link existing" picker. */
 router.get("/hosts/accounts/:id/sites", async (req, res) => {
   try {

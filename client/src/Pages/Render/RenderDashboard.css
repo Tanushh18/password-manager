@@ -698,3 +698,16 @@
 @media (prefers-reduced-motion: reduce) {
   .rd-page *, .rd-page *::before, .rd-page *::after { transition-duration: 0.01ms !important; }
 }
+
+/* Hosting platform tags: tell Render, Vercel, Netlify, Railway and Cloudflare apart at a glance. */
+.rd-host { display: inline-block; padding: .12rem .5rem; border-radius: var(--r-pill); font-size: .66rem; font-weight: 700; vertical-align: middle; margin-left: .4rem; background: var(--tint); color: var(--text-muted); }
+.rd-host--render { background: rgba(70, 227, 183, .16); color: #1f9d7a; }
+.rd-host--vercel { background: rgba(120, 120, 120, .2); color: var(--text); }
+.rd-host--netlify { background: rgba(0, 199, 183, .16); color: #0a9c8f; }
+.rd-host--railway { background: rgba(160, 100, 255, .16); color: #8b5cf6; }
+.rd-host--cloudflare { background: rgba(246, 130, 31, .16); color: #d96a0c; }
+.rd-hostlist { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.rd-hostlist li { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .75rem; padding: .6rem .8rem; border-radius: var(--r-md, 10px); background: var(--tint); }
+.rd-hostlist .rd-host { margin-left: 0; }
+.rd-hostlist small { color: var(--text-muted); }
+.rd-hostlist a { margin-left: auto; }

@@ -1,10 +1,11 @@
 import { fx } from "../../lib/fx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { connectRenderAccount, deleteRenderAccount, bulkDeleteRenderServices, deleteRenderService, restartRenderService, triggerRenderDeploy, suspendRenderService, resumeRenderService, getRenderAccounts, getRenderServices, getRenderAudit } from "../../api/client";
+import { connectRenderAccount, deleteRenderAccount, bulkDeleteRenderServices, deleteRenderService, restartRenderService, triggerRenderDeploy, suspendRenderService, resumeRenderService, getRenderAccounts, getRenderServices, getRenderAudit, getHostOverview } from "../../api/client";
 import { Modal, StatePill, Skeleton, Empty, Kpi, Section, FleetBar, useConfirm } from "./RenderUi";
 import ServiceDetail from "./ServiceDetail";
 import ServerBoard from "./ServerBoard";
+import HostSites from "./HostSites";
 import RobotArmy, { RobotSquad, botFor } from "./RobotArmy";
 import RobotFloor from "./RobotFloor";
 import { lanesFromBots, demoLanes } from "../../lib/robotFloor";
@@ -32,6 +33,7 @@ export default function RenderDashboard() {
   const [view, setView] = useState(viewFromHash);
   const [accounts, setAccounts] = useState([]);
   const [services, setServices] = useState([]);
+  const [hostSites, setHostSites] = useState({ sites: [], errors: [] }); // Vercel / Netlify / Railway / Cloudflare Pages
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
@@ -109,11 +111,15 @@ export default function RenderDashboard() {
     } finally { if (!quiet) setLoading(false); }
   }, []);
 
+  const loadHostSites = useCallback(async () => {
+    try { const r = await getHostOverview(); setHostSites({ sites: Array.isArray(r.sites) ? r.sites : [], errors: Array.isArray(r.errors) ? r.errors : [] }); } catch { /* supplemental */ }
+  }, []);
+
   const loadAudit = useCallback(async () => {
     try { const r = await getRenderAudit(50); setAudit(Array.isArray(r.events) ? r.events : []); } catch { /* supplemental */ }
   }, []);
 
-  useEffect(() => { void loadAccounts(); void loadAudit(); void refreshOps(); }, [loadAccounts, loadAudit, refreshOps]);
+  useEffect(() => { void loadAccounts(); void loadAudit(); void loadHostSites(); void refreshOps(); }, [loadAccounts, loadAudit, loadHostSites, refreshOps]);
   usePolling(() => loadAccounts({ quiet: true }), REFRESH_MS, auto);
   // Keep inventory, monitoring history, incidents and scheduler status in sync while visible.
   usePolling(() => ops.refreshLive(), 60000, auto);
@@ -131,7 +137,7 @@ export default function RenderDashboard() {
 
   const refreshAll = async () => {
     setRefreshing(true);
-    try { await Promise.all([loadAccounts({ quiet: true }), loadAudit(), refreshOps()]); toast.success("Refreshed."); }
+    try { await Promise.all([loadAccounts({ quiet: true }), loadAudit(), loadHostSites(), refreshOps()]); toast.success("Refreshed."); }
     finally { setRefreshing(false); }
   };
 
@@ -410,7 +416,7 @@ export default function RenderDashboard() {
         )}
 
         {view === "services" && (
-          <Section title="Apps & servers" subtitle={groups.length + " app" + (groups.length === 1 ? "" : "s") + " · " + filtered.length + " of " + services.length + " services · servers from the same repo are grouped"} className="rd-card--flush"
+          <Section title={<>Apps & servers <span className="rd-host rd-host--render">Render</span></>} subtitle={groups.length + " app" + (groups.length === 1 ? "" : "s") + " · " + filtered.length + " of " + services.length + " services · servers from the same repo are grouped"} className="rd-card--flush"
             actions={<a className="rd-btn rd-btn--quiet" href="https://dashboard.render.com" target="_blank" rel="noreferrer noopener">Open Render ↗</a>}>
             <div className="rd-toolbar">
               <label className="rd-search"><span aria-hidden="true">⌕</span><input ref={searchRef} type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, region, branch, repo…  ( / or Ctrl+K )" aria-label="Search servers" /></label>
@@ -534,6 +540,8 @@ export default function RenderDashboard() {
             </>}
           </Section>
         )}
+
+        {view === "services" && <HostSites data={hostSites} />}
 
         {view === "monitoring" && (
           <MonitoringView services={services} series={series} ops={ops} selectedGroupId={selectedGroupId} onSelectGroup={setSelectedGroupId} askConfirm={ask}

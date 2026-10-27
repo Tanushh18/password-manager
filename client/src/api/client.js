@@ -426,6 +426,7 @@ export const getHostAccounts = () => instance.get("/hosts/accounts").then((r) =>
 export const connectHostAccount = (body) => instance.post("/hosts/accounts", body, { timeout: 45000 }).then((r) => r.data);
 export const deleteHostAccount = (id) => instance.delete("/hosts/accounts/" + encodeURIComponent(id)).then((r) => r.data);
 export const deployToHost = (body) => instance.post("/hosts/deploy", body, { timeout: 180000 }).then((r) => r.data);
+export const getHostOverview = () => instance.get("/hosts/overview", { timeout: 60000 }).then((r) => r.data);
 export const getHostSites = (accountId) => instance.get("/hosts/accounts/" + encodeURIComponent(accountId) + "/sites", { timeout: 45000 }).then((r) => r.data);
 export const getProjectHostLinks = (projectId) => instance.get("/hosts/projects/" + encodeURIComponent(projectId) + "/links", { timeout: 60000 }).then((r) => r.data);
 export const linkHostSite = (projectId, body) => instance.post("/hosts/projects/" + encodeURIComponent(projectId) + "/links", body, { timeout: 45000 }).then((r) => r.data);
