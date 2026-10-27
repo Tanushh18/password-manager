@@ -8,6 +8,7 @@ const { serverError } = require("./helpers");
 const { pickPrimary, mergeProjects } = require("../utils/projectMerge");
 const { syncProjectServers, pickSlug } = require("../utils/projectServers");
 const { loadRenderServices } = require("../utils/projectStatus");
+const { usageForProject } = require("../utils/serverUsage");
 
 /*
  * Project/infra tracker. Same scheme as the password vault (see
@@ -165,6 +166,29 @@ router.post("/projects/items/:id/servers/sync", authenticate, async (req, res) =
     catch (error)
     {
         return serverError(res, "projects/items/:id/servers/sync", error);
+    }
+});
+
+/* Which deployed things of a project find their server through the Stashr registry and which carry an address of their own. */
+router.post("/projects/items/:id/server-usage", authenticate, async (req, res) =>
+{
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: "Could not find that project." });
+    try
+    {
+        const dataKey = await req.rootUser.getDataKey();
+        const entry = (req.rootUser.projects || []).find((e) => String(e._id) === req.params.id);
+        if (!entry) return res.status(404).json({ error: "Could not find that project." });
+        const fields = User.publicEntry(entry, dataKey);
+        if (fields.broken || fields.enc === "e2e") return res.status(422).json({ error: "This project could not be decrypted." });
+        let services = [];
+        if ((req.rootUser.renderAccounts || []).length) services = (await loadRenderServices(req.rootUser, dataKey)).services;
+        const report = await usageForProject(req.rootUser, dataKey, fields, services, { force: Boolean(req.body && req.body.force) });
+        res.set("Cache-Control", "no-store");
+        return res.json(report);
+    }
+    catch (error)
+    {
+        return serverError(res, "projects/items/:id/server-usage", error);
     }
 });
 

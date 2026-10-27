@@ -5,6 +5,7 @@ import { STATUS_LABEL } from "../../lib/projectItems";
 import { flattenProject } from "../../lib/projectTree";
 import ProjectTree from "./ProjectTree";
 import { HealthBadge } from "./ProjectStatus";
+import ServerUsage from "./ServerUsage";
 
 export const STATUS_BADGE = {
   planning: "badge--muted",
@@ -20,6 +21,7 @@ const SOURCE = { github: ["GitHub", "synced from your GitHub token"], render: ["
 export default function ProjectCard({ project, style, status }) {
   const [open, setOpen] = useState(false);
   const [showServers, setShowServers] = useState(false);
+  const [showUsage, setShowUsage] = useState(false);
   const servers = Array.isArray(project.renderServices) ? project.renderServices : [];
   const [sourceLabel, sourceHint] = SOURCE[project.autoSource] || ["Manual", "added by you"];
   const fields = flattenProject(project).length;
@@ -45,6 +47,7 @@ export default function ProjectCard({ project, style, status }) {
         <span className={`badge ${STATUS_BADGE[project.status] || "badge--muted"}`}>{STATUS_LABEL[project.status] || project.status}</span>
         <span className={"badge pv2-src pv2-src--" + (project.autoSource || "manual")} title={"Source: " + sourceHint}>{sourceLabel}</span>
         {servers.length > 1 ? <button type="button" className="badge badge--ok pv2-servers" aria-expanded={showServers} onClick={() => setShowServers((v) => !v)} title="Render servers deployed from this repo">{servers.length} servers {showServers ? "▴" : "▾"}</button> : null}
+        {/^https?:\/\//i.test(project.repoUrl || "") ? <button type="button" className="badge badge--muted pv2-servers" aria-expanded={showUsage} onClick={() => setShowUsage((v) => !v)} title="Does each deployed part find its server through Stashr, or carry its own address?">Server URL source {showUsage ? "▴" : "▾"}</button> : null}
         <HealthBadge status={status} />
         {status?.drift?.behindBy > 0 ? <span className="badge badge--warn" title="Commits on the branch that are not deployed yet">{status.drift.behindBy} undeployed</span> : null}
         {dbCount ? <span className="badge badge--muted">{dbCount} database{dbCount === 1 ? "" : "s"}</span> : null}
@@ -65,6 +68,8 @@ export default function ProjectCard({ project, style, status }) {
           ))}
         </ul>
       ) : null}
+
+      {showUsage ? <ServerUsage projectId={project.id} /> : null}
 
       <div className="proj-card__foot">
         <button type="button" className="proj-card__toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>

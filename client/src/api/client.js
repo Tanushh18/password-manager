@@ -350,6 +350,7 @@ export const getProjectStatuses = ({ id, refresh } = {}) => instance.get("/rende
 export const getAllRenderServers = ({ refresh } = {}) => instance.get("/render/all-servers", { params: refresh ? { refresh: 1 } : {}, timeout: 30000 }).then((r) => r.data);
 export const syncProjectServers = (id, body = {}) => instance.post(`/projects/items/${id}/servers/sync`, body, { timeout: 60000 }).then((r) => r.data);
 export const deleteAdminUser = (id, confirmEmail) => instance.delete(`/admin/users/${encodeURIComponent(id)}`, { data: { confirmEmail } }).then((r) => r.data);
+export const getServerUsage = (id, force = false) => instance.post(`/projects/items/${id}/server-usage`, { force }, { timeout: 60000 }).then((r) => r.data);
 export const getRegistrySync = ({ refresh } = {}) => instance.get("/render/registry-sync", { params: refresh ? { refresh: 1 } : {}, timeout: 30000 }).then((r) => r.data);
 export const syncRegistryEnv = (app, options = {}) => instance.post("/render/registry-env-sync/" + encodeURIComponent(app), options, { timeout: 90000 }).then((r) => r.data);
 export const setRegistryAutoSync = (app, autoSync) => instance.put("/render/registry-sync/" + encodeURIComponent(app), { autoSync }).then((r) => r.data);
