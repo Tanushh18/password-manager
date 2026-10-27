@@ -14,7 +14,7 @@ const Registry = require("../models/registry");
 const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
 
-const { ADMINS, DEFAULTS, OFFABLE, APP_LABELS, SLUG, urlsFor, onlyBuiltInUrls } = require("../utils/registryDefaults");
+const { ADMINS, DEFAULTS, OFFABLE, APP_LABELS, SLUG, urlsFor } = require("../utils/registryDefaults");
 const MAX_URLS = 10;
 
 const isAdminUser = (user) => Boolean(user && user.email && ADMINS.includes(String(user.email).toLowerCase()));
@@ -103,7 +103,6 @@ router.put("/registry/:app", authenticate, writeLimiter, async (req, res) =>
     }
     // Most built-in apps always keep a server; a per-project list (or an OFFABLE app) may be switched off entirely (to test that the apps stop using it).
     if (urls.length === 0 && DEFAULTS[app] && !OFFABLE.has(app)) return res.status(400).json({ error: "Keep at least one server URL." });
-    if (!onlyBuiltInUrls(app, urls)) return res.status(400).json({ error: "This app's server URLs are fixed. You can only switch them on or off." });
     if (urls.length > MAX_URLS) return res.status(400).json({ error: `At most ${MAX_URLS} URLs per app.` });
 
     try

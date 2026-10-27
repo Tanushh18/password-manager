@@ -433,16 +433,16 @@ describe("server registry", () =>
         const token = await signIn(ADMIN);
         expect((await request(app).get("/authenticate").set(auth(token))).body.isAdmin).toBe(true);
 
-        const bad = await request(app).put("/registry/stashr").set(auth(token)).send({ urls: ["javascript:alert(1)"] });
+        const bad = await request(app).put("/registry/dealradar").set(auth(token)).send({ urls: ["javascript:alert(1)"] });
         expect(bad.status).toBe(400);
-        expect((await request(app).put("/registry/stashr").set(auth(token)).send({ urls: [] })).status).toBe(400);
+        expect((await request(app).put("/registry/dealradar").set(auth(token)).send({ urls: [] })).status).toBe(400);
 
-        const ok = await request(app).put("/registry/stashr").set(auth(token))
+        const ok = await request(app).put("/registry/dealradar").set(auth(token))
             .send({ urls: [" https://one.example.com/ ", "https://one.example.com", "https://two.example.com/api/"] });
         expect(ok.status).toBe(200);
         expect(ok.body.urls.join(",")).toBe("https://one.example.com,https://two.example.com/api");
 
-        expect((await request(app).get("/registry/stashr")).body.urls.join(",")).toBe("https://one.example.com,https://two.example.com/api");
+        expect((await request(app).get("/registry/dealradar")).body.urls.join(",")).toBe("https://one.example.com,https://two.example.com/api");
         const all = await request(app).get("/registry").set(auth(token));
         expect(all.body.apps.length).toBe(3);
     });

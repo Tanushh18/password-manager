@@ -101,24 +101,8 @@ describe("switching a built-in app off", () =>
         expect((await request(app).put("/registry/wethree").set(auth(ana)).send({ urls: [] })).status).toBe(403);
         expect((await request(app).put("/registry/stashr").set(auth(admin)).send({ urls: [] })).status).toBe(400);
 
-        expect((await request(app).put("/registry/wethree").set(auth(admin)).send({ urls: ["https://we-three-api-r310.onrender.com/api"] })).status).toBe(200);
-        expect((await request(app).get("/registry/wethree")).body.urls).toEqual(["https://we-three-api-r310.onrender.com/api"]);
-    });
-});
-
-describe("fixed server addresses", () =>
-{
-    test("wethree and dealradar accept only their built-in URLs; other apps are unchanged", async () =>
-    {
-        const admin = await signIn(ADMIN);
-        const put = (name, urls) => request(app).put(`/registry/${name}`).set(auth(admin)).send({ urls });
-        expect((await put("wethree", ["https://other.onrender.com/api"])).status).toBe(400);
-        expect((await put("wethree", ["https://we-three-api-r310.onrender.com/api", "https://other.onrender.com/api"])).status).toBe(400);
-        expect((await put("wethree", ["https://we-three-api-r310.onrender.com/api/"])).status).toBe(200);
-        expect((await put("wethree", [])).status).toBe(200);
-        expect((await put("dealradar", ["https://elsewhere.example.com"])).status).toBe(400);
-        expect((await put("dealradar", ["https://dealradar.ggnhome.com"])).status).toBe(200);
-        expect((await put("my-shop", ["https://anything.onrender.com"])).status).toBe(200);
+        expect((await request(app).put("/registry/wethree").set(auth(admin)).send({ urls: ["https://a.onrender.com/api"] })).status).toBe(200);
+        expect((await request(app).get("/registry/wethree")).body.urls).toEqual(["https://a.onrender.com/api"]);
     });
 });
 
@@ -210,9 +194,9 @@ describe("choosing the list name when publishing", () =>
     {
         const admin = await signIn("tanushchawla16@gmail.com");
         const item = await make(admin, "Tasks");
-        const res = await request(app).post(`/projects/items/${item._id || item.id}/servers/sync`).set(auth(admin)).send({ registryApp: "stashr" });
+        const res = await request(app).post(`/projects/items/${item._id || item.id}/servers/sync`).set(auth(admin)).send({ registryApp: "wethree" });
         expect(res.body.published).toBe(true);
-        expect((await request(app).get("/registry/stashr")).body.urls).toEqual(["https://api.mysite.com"]);
+        expect((await request(app).get("/registry/wethree")).body.urls).toEqual(["https://api.mysite.com"]);
     });
 });
 

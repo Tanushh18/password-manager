@@ -6,7 +6,7 @@ const { mapWithConcurrency } = require("./renderGuards");
 const { planRegistrySync, applyRemovals } = require("./registrySync");
 const { loadRenderServices } = require("./projectStatus");
 const { loadHostSites } = require("./hostSites");
-const { ADMINS, DEFAULTS, OFFABLE, APP_LABELS, urlsFor } = require("./registryDefaults");
+const { ADMINS, DEFAULTS, APP_LABELS, urlsFor } = require("./registryDefaults");
 
 /*
  * Servers tab <-> Render. Matching and status are read-only. The only automatic change to the registry is
@@ -74,7 +74,6 @@ async function runAllRegistrySync() {
     try {
       const doc = await Registry.findOne({ app }).lean();
       if (doc && doc.autoSync === false) continue;
-      if (OFFABLE.has(app)) continue; // fixed addresses: never changed automatically
       const urls = savedUrls(doc, app);
       summary.appsChecked += 1;
       const plan = planRegistrySync(urls, services);

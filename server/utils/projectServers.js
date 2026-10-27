@@ -1,5 +1,5 @@
 const User = require("../models/schema");
-const { DEFAULTS, OFFABLE, SLUG, isAdminEmail, onlyBuiltInUrls } = require("./registryDefaults");
+const { DEFAULTS, OFFABLE, SLUG, isAdminEmail } = require("./registryDefaults");
 const { linkedServices } = require("./projectMerge");
 const { domainsForServices } = require("./renderDomains");
 
@@ -69,7 +69,7 @@ async function publishToRegistry(app, rows, user) {
     const name = String(app || "").toLowerCase();
     const urls = (rows || []).filter((r) => r.enabled !== false).map((r) => trimUrl(r.url)).filter(Boolean);
     // A per-project list may be published empty (everything switched off); the built-in apps always keep a server.
-    if (!onlyBuiltInUrls(name, urls) || (urls.length === 0 && DEFAULTS[name] && !OFFABLE.has(name)) || (!DEFAULTS[name] && !SLUG.test(name))) return false;
+    if ((urls.length === 0 && DEFAULTS[name] && !OFFABLE.has(name)) || (!DEFAULTS[name] && !SLUG.test(name))) return false;
     try {
         const Registry = require("../models/registry");
         const doc = await Registry.findOne({ app: name }).lean();
@@ -132,8 +132,7 @@ async function syncProjectServers(user, dataKey, staleEntry, services, { registr
         const linked = new Set(linkedServices([fields]).map((l) => String(l.serviceId)));
         const domains = accounts ? await domainsForServices((services || []).filter((x) => linked.has(String(x.id))), accounts) : new Map();
         const found = discoverServers(fields, services, domains);
-        // A locked project keeps exactly the URLs it has: nothing is added or dropped automatically.
-        const merged = fields.serverUrlsLocked ? { rows: Array.isArray(fields.serverUrls) ? fields.serverUrls : [], changed: false } : mergeServerUrls(fields.serverUrls, found, fields.serverUrlsIgnored);
+        const merged = mergeServerUrls(fields.serverUrls, found, fields.serverUrlsIgnored);
         const appChanged = app !== fields.registryApp;
         if ((merged.changed || appChanged) && !(await saveFields(user, dataKey, entry, { ...fields, serverUrls: merged.rows, registryApp: app }))) continue; // changed meanwhile: read again
         const published = (merged.rows.length || !DEFAULTS[app] || OFFABLE.has(app)) ? await publishToRegistry(app, merged.rows, user) : false;
