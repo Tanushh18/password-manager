@@ -4,7 +4,7 @@ const User = require("../models/schema");
 const { renderRequest } = require("./renderOps");
 const { fetchAllPages } = require("./renderPaging");
 const { linkedServices } = require("./projectMerge");
-const { findUrlReferences, replaceUrlReferences } = require("./urlRefs");
+const { findUrlReferences, replaceUrlReferences, replaceHost } = require("./urlRefs");
 const { checkServiceDeletion } = require("./renderGuards");
 
 /*
@@ -585,6 +585,13 @@ async function relink(user, projectId, { oldServiceId, newAccountId, newServiceI
     next.renderAccountOriginId = String(migration.originAccountId || sourceLink.accountId);
     next.renderAccountOriginName = accountOf(user, dataKey, next.renderAccountOriginId)?.name || sourceAccount?.name || "";
   }
+  // The project's own saved details follow the move too, so the control center shows the new address and account.
+  if (added.url && migration.sourceUrl && /^https?:\/\//i.test(String(fields.liveUrl || ""))) {
+    const moved = replaceHost(fields.liveUrl, migration.sourceUrl, added.url);
+    if (moved !== fields.liveUrl) next.liveUrl = moved;
+  }
+  if (fields.hostingAccountLabel && fields.hostingAccountLabel === (sourceAccount?.name || migration.sourceAccountName)) next.hostingAccountLabel = destination.name;
+  if (fields.hostingServiceName && fields.hostingServiceName === (migration.sourceName || "")) next.hostingServiceName = added.name;
   next.renderMigration = { ...migration, stage: "relinked", relinkedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   await saveProjectFields(user, entry, dataKey, next);
   return { renderServiceId: newServiceId, renderAccountId: String(newAccountId), originAccountId: String(next.renderAccountOriginId) };
