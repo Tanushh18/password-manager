@@ -91,6 +91,11 @@ export function normalizeProject(raw = {}) {
   }
   // Existing Vercel / Netlify / Railway / Cloudflare servers linked to this project (kept in step by the server).
   if (Array.isArray(raw.hostLinks) && raw.hostLinks.length) next.hostLinks = raw.hostLinks.filter((l) => l && l.id && l.remoteId);
+  // Backend URLs this project's apps use, each switchable; `registryApp` names the app that reads them from Stashr.
+  if (Array.isArray(raw.serverUrls) && raw.serverUrls.length) {
+    next.serverUrls = raw.serverUrls.filter((s) => s && /^https?:\/\//i.test(String(s.url || ""))).map((s) => ({ url: String(s.url).trim().replace(/\/+$/, ""), enabled: s.enabled !== false }));
+  }
+  if (clean(raw.registryApp)) next.registryApp = clean(raw.registryApp).toLowerCase();
   return next;
 }
 

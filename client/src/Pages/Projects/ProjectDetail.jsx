@@ -6,6 +6,7 @@ import ProjectStatus from "../../Components/Project/ProjectStatus";
 import RenderEnvSync from "../../Components/Project/RenderEnvSync";
 import ProjectDeployments from "../../Components/Project/ProjectDeployments";
 import BranchTree from "../../Components/Project/BranchTree";
+import ServerUrls from "../../Components/Project/ServerUrls";
 import HostLinks from "../../Components/Project/HostLinks";
 import GithubConnectModal from "../../Components/Project/GithubConnectModal";
 import { STATUS_BADGE } from "../../Components/Project/ProjectCard";
@@ -56,6 +57,8 @@ export default function ProjectDetail() {
         {project.repoUrl ? <BranchTree key={"b" + project.id} project={project} /> : null}
 
         {project.renderServiceId || (project.renderServices || []).length || (project.hostLinks || []).length || project.repoUrl ? <ProjectDeployments project={project} /> : null}
+
+        <ServerUrls project={project} />
 
         <HostLinks project={project} />
 

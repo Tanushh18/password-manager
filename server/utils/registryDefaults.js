@@ -8,10 +8,7 @@ const DEFAULTS = {
         "https://password-manager-server-xxdr.onrender.com"
     ],
     dealradar: ["https://dealradar.ggnhome.com"],
-    wethree: [
-        "https://tasks-g9h1.onrender.com/api",
-        "https://we-three-api.onrender.com/api"
-    ]
+    wethree: ["https://we-three-api-r310.onrender.com/api"]
 };
 const APP_LABELS = { stashr: "Stashr", dealradar: "Deal Radar", wethree: "We Three" };
 
