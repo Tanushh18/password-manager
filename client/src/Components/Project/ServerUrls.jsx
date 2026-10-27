@@ -51,6 +51,7 @@ export default function ServerUrls({ project }) {
   const [usageOpen, setUsageOpen] = useState(false);
 
   const slug = project.registryApp || "";
+  const locked = project.registryLocked === true && Boolean(slug);
 
   useEffect(() => {
     setRows((project.serverUrls || []).map((r) => ({ ...r })));
@@ -112,6 +113,15 @@ export default function ServerUrls({ project }) {
   const setOne = (i, enabled) => { const next = rows.map((r, n) => (n === i ? { ...r, enabled } : r)); setRows(next); void persist(next, { instant: true }); };
   const setAll = (enabled) => { const next = rows.map((r) => ({ ...r, enabled })); setRows(next); void persist(next, { instant: true }); };
 
+  const toggleLock = async () => {
+    setBusy("lock");
+    try {
+      await updateProject(project.id, { registryLocked: !locked });
+      toast.success(locked ? "Address unlocked." : "Address locked. The public list link cannot be renamed or unpublished.");
+    } catch (err) { toast.error(errorMessage(err, "Could not change the lock.")); }
+    finally { setBusy(""); }
+  };
+
   const syncNow = async () => {
     setBusy("sync");
     try {
@@ -139,12 +149,12 @@ export default function ServerUrls({ project }) {
         <div>
           <label htmlFor="su-name">Public list</label>
           <div className="su__name">
-            <button type="button" role="switch" aria-checked={published} aria-label="Publish this list" className="su__switch" onClick={() => setPublished((v) => !v)} title={published ? "Published: your client reads these URLs from Stashr. Click to stop." : "Not published. Click to publish."} />
-            <input id="su-name" className="input" value={listName} disabled={!published} placeholder="list-name" maxLength={40} onChange={(e) => setListName(e.target.value)} aria-label="List name" />
+            <button type="button" role="switch" aria-checked={published} aria-label="Publish this list" className="su__switch" disabled={locked} onClick={() => setPublished((v) => !v)} title={published ? "Published: your client reads these URLs from Stashr. Click to stop." : "Not published. Click to publish."} />
+            <input id="su-name" className="input" value={listName} disabled={!published || locked} placeholder="list-name" maxLength={40} onChange={(e) => setListName(e.target.value)} aria-label="List name" />
           </div>
         </div>
         {publicUrl ? (
-          <div className="su__address"><code title={publicUrl}>{publicUrl}</code><button type="button" className="btn btn--sm" onClick={copy}>Copy</button></div>
+          <div className="su__address"><code title={publicUrl}>{publicUrl}</code><button type="button" className="btn btn--sm" onClick={copy}>Copy</button>{slug ? <button type="button" className="btn btn--sm" disabled={busy === "lock"} onClick={toggleLock} title={locked ? "Locked: this address cannot be renamed or unpublished. Click to unlock." : "Lock this address so it cannot be renamed or unpublished."}>{locked ? "Locked 🔒" : "Lock"}</button> : null}</div>
         ) : <div className="su__address su__address--empty">{published ? "Use 3-40 letters, numbers or dashes for the name." : "Publish it to get an address your client can use."}</div>}
       </div>
 

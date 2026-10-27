@@ -160,7 +160,10 @@ router.post("/projects/items/:id/servers/sync", authenticate, async (req, res) =
         // The person may choose the list name (the apps read /registry/<name>); otherwise keep the saved one or pick one.
         const wanted = req.body && typeof req.body.registryApp === "string" ? req.body.registryApp.trim().toLowerCase() : "";
         if (wanted && !DEFAULTS[wanted] && !SLUG.test(wanted)) return res.status(400).json({ error: "Use 3-40 letters, numbers or dashes for the list name." });
-        const registryApp = wanted || fields.registryApp || (req.body && req.body.publish === false ? "" : await pickSlug(req.rootUser, fields.name));
+        // A locked public list keeps its address: it cannot be renamed or unpublished from here.
+        const locked = fields.registryLocked === true && Boolean(fields.registryApp);
+        if (locked && wanted && wanted !== fields.registryApp) return res.status(400).json({ error: "This public list address is locked. Unlock it first." });
+        const registryApp = locked ? fields.registryApp : wanted || fields.registryApp || (req.body && req.body.publish === false ? "" : await pickSlug(req.rootUser, fields.name));
         let services = [];
         let accounts = null;
         if ((req.rootUser.renderAccounts || []).length) ({ services, accounts } = await loadRenderServices(req.rootUser, dataKey, { refresh: true }));

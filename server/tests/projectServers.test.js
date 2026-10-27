@@ -106,6 +106,22 @@ describe("switching a built-in app off", () =>
     });
 });
 
+describe("locked public list address", () =>
+{
+    test("a locked project cannot be renamed or unpublished through the sync; unlocking allows it", async () =>
+    {
+        const ana = await signIn("ana@example.com");
+        const made = await request(app).post("/projects/items").set(auth(ana)).send({ data: { name: "Site", registryApp: "my-site", registryLocked: true, serverUrls: [{ url: "https://api.mysite.com", enabled: true }] } });
+        const id = made.body.item._id || made.body.item.id;
+        const rename = await request(app).post(`/projects/items/${id}/servers/sync`).set(auth(ana)).send({ registryApp: "other-name" });
+        expect(rename.status).toBe(400);
+        const unpublish = await request(app).post(`/projects/items/${id}/servers/sync`).set(auth(ana)).send({ publish: false });
+        expect(unpublish.body.registryApp).toBe("my-site");
+        const same = await request(app).post(`/projects/items/${id}/servers/sync`).set(auth(ana)).send({ registryApp: "my-site" });
+        expect(same.status).toBe(200);
+    });
+});
+
 describe("sync never undoes a change made while it was running", () =>
 {
     test("a domain saved after the background pass read the project is kept and published", async () =>

@@ -97,6 +97,8 @@ export function normalizeProject(raw = {}) {
   }
   // Servers removed by hand: the automatic sync never adds these back.
   if (Array.isArray(raw.serverUrlsIgnored) && raw.serverUrlsIgnored.length) next.serverUrlsIgnored = raw.serverUrlsIgnored.filter((u) => typeof u === "string" && /^https?:\/\//i.test(u)).map((u) => u.trim().replace(/\/+$/, "").toLowerCase());
+  // Locked public list: its address (the /registry/<name> link) cannot be renamed or unpublished until it is unlocked.
+  if (raw.registryLocked === true && clean(raw.registryApp)) next.registryLocked = true;
   if (clean(raw.registryApp)) next.registryApp = clean(raw.registryApp).toLowerCase();
   return next;
 }

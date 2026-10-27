@@ -435,7 +435,7 @@ describe("server registry", () =>
 
         const bad = await request(app).put("/registry/dealradar").set(auth(token)).send({ urls: ["javascript:alert(1)"] });
         expect(bad.status).toBe(400);
-        expect((await request(app).put("/registry/dealradar").set(auth(token)).send({ urls: [] })).status).toBe(400);
+        expect((await request(app).put("/registry/stashr").set(auth(token)).send({ urls: [] })).status).toBe(400);
 
         const ok = await request(app).put("/registry/dealradar").set(auth(token))
             .send({ urls: [" https://one.example.com/ ", "https://one.example.com", "https://two.example.com/api/"] });
