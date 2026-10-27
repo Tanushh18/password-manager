@@ -67,3 +67,6 @@
   /* keep the project name readable: the Refresh / Edit buttons wrap onto their own line */
   .proj-detail__id { flex-basis: calc(100% - 64px); }
 }
+
+.su__name { display: flex; align-items: center; gap: 0.6rem; }
+.su__name .input { flex: 1; min-width: 0; }

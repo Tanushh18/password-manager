@@ -1,14 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { API_URL, checkServer, errorMessage, getAllRenderServers, saveRegistry, syncProjectServers } from "../../api/client";
+import { API_URL, checkServer, errorMessage, getAllRenderServers, syncProjectServers } from "../../api/client";
 import { useVault } from "../../state/vault";
 import { Plus, Trash } from "../Icons/Icons";
 import HostLinks from "./HostLinks";
 import ServerUsage from "./ServerUsage";
 import "./ServerUrls.css";
 
-const OWN = "__own__";
-const LEGACY = [{ id: "wethree", label: "We Three" }, { id: "dealradar", label: "Deal Radar" }, { id: "stashr", label: "Stashr" }];
+const LIST_NAME = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
+const suggestName = (name) => String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 38).replace(/-+$/g, "");
 const looksValid = (u) => /^https?:\/\/\S+$/i.test(u.trim());
 const originOf = (u) => { try { return new URL(u).origin.toLowerCase(); } catch { return ""; } };
 const pathOf = (u) => { try { return new URL(u).pathname.replace(/\/+$/, ""); } catch { return ""; } };
@@ -42,7 +42,8 @@ export default function ServerUrls({ project }) {
   const { updateProject } = useVault();
   const [rows, setRows] = useState([]);
   const [ignored, setIgnored] = useState([]);
-  const [mode, setMode] = useState("");
+  const [published, setPublished] = useState(false);
+  const [listName, setListName] = useState("");
   const [status, setStatus] = useState({});
   const [busy, setBusy] = useState("");
   const [found, setFound] = useState(null);
@@ -50,15 +51,16 @@ export default function ServerUrls({ project }) {
   const [usageOpen, setUsageOpen] = useState(false);
 
   const slug = project.registryApp || "";
-  const isLegacy = LEGACY.some((a) => a.id === slug);
 
   useEffect(() => {
     setRows((project.serverUrls || []).map((r) => ({ ...r })));
     setIgnored(project.serverUrlsIgnored || []);
-    setMode(!slug ? "" : isLegacy ? slug : OWN);
-  }, [project.id, project.serverUrls, project.serverUrlsIgnored, slug, isLegacy]);
+    setPublished(Boolean(slug));
+    setListName(slug || suggestName(project.name));
+  }, [project.id, project.name, project.serverUrls, project.serverUrlsIgnored, slug]);
 
-  const publicUrl = slug ? `${API_URL()}/registry/${slug}` : "";
+  const name = listName.trim().toLowerCase();
+  const publicUrl = published && LIST_NAME.test(name) ? `${API_URL()}/registry/${name}` : "";
   const edit = (i, patch) => setRows((list) => list.map((r, n) => (n === i ? { ...r, ...patch } : r)));
   const move = (i) => setRows((list) => (i > 0 ? list.map((_, n) => (n === i - 1 ? list[i] : n === i ? list[i - 1] : list[n])) : list));
   const remove = (i) => {
@@ -88,24 +90,20 @@ export default function ServerUrls({ project }) {
 
   const cleanRows = (list) => list.filter((r) => r.url.trim()).map((r) => ({ url: r.url.trim().replace(/\/+$/, ""), enabled: r.enabled !== false, ...(r.auto ? { auto: true } : {}) }));
 
-  // Saves the project and, when a public list is chosen, publishes the switched-on URLs. `instant` = from a switch.
+  // Saves the project and, when it is published, updates the public list under the chosen name. `instant` = from a switch.
   const persist = async (list, { instant = false } = {}) => {
     const cleaned = cleanRows(list);
     if (cleaned.some((r) => !looksValid(r.url))) return toast.error("Every URL must start with https://");
-    // A per-project list may be switched off completely (to test that the apps stop using it); the built-in apps keep one.
-    if (mode && mode !== OWN && cleaned.filter((r) => r.enabled).length === 0) return toast.error("Switch on at least one URL, or choose “Not published”.");
+    if (published && !LIST_NAME.test(name)) return toast.error("List name: 3-40 letters, numbers or dashes.");
     setBusy(instant ? "toggle" : "save");
     try {
-      const app = mode === OWN ? (isLegacy ? "" : slug) : mode;
-      await updateProject(project.id, { serverUrls: cleaned, serverUrlsIgnored: ignored, registryApp: app });
+      await updateProject(project.id, { serverUrls: cleaned, serverUrlsIgnored: ignored, registryApp: published ? name : "" });
       const on = cleaned.filter((r) => r.enabled).length;
-      if (mode === OWN) {
-        const res = await syncProjectServers(project.id);
+      if (published) {
+        const res = await syncProjectServers(project.id, { registryApp: name });
         await updateProject(project.id, { serverUrls: res.serverUrls, registryApp: res.registryApp });
-        toast.success(on ? (instant ? "Updated. The apps use " + on + " server" + (on === 1 ? "" : "s") + "." : "Saved. Public list updated.") : "All servers are off. The public list is empty now.");
-      } else if (mode) {
-        try { await saveRegistry(mode, cleaned.filter((r) => r.enabled).map((r) => r.url)); toast.success(instant ? "Updated and published." : "Saved and published."); }
-        catch (err) { toast.warn("Saved in this project, but not published: " + errorMessage(err, "only an admin can publish this app.")); }
+        if (!res.published) toast.warn(`Saved here, but "${name}" was not published: the name is taken, or it is a built-in app name only an admin can use, or it needs at least one server on.`);
+        else toast.success(on ? (instant ? "Updated. The apps use " + on + " server" + (on === 1 ? "" : "s") + "." : "Saved. Public list updated.") : "All servers are off. The public list is empty now.");
       } else toast.success("Saved.");
     } catch (err) { toast.error(errorMessage(err, "Could not save.")); }
     finally { setBusy(""); }
@@ -117,7 +115,7 @@ export default function ServerUrls({ project }) {
   const syncNow = async () => {
     setBusy("sync");
     try {
-      const res = await syncProjectServers(project.id, mode === "" ? {} : undefined);
+      const res = await syncProjectServers(project.id, published && LIST_NAME.test(name) ? { registryApp: name } : { publish: false });
       await updateProject(project.id, { serverUrls: res.serverUrls, registryApp: res.registryApp });
       toast.success(res.changed ? "Servers updated from your Render accounts." : "Already up to date.");
     } catch (err) { toast.error(errorMessage(err, "Could not sync.")); }
@@ -139,16 +137,15 @@ export default function ServerUrls({ project }) {
 
       <div className="su__public">
         <div>
-          <label htmlFor="su-app">Public list</label>
-          <select id="su-app" className="input" value={mode} onChange={(e) => setMode(e.target.value)}>
-            <option value="">Not published</option>
-            <option value={OWN}>Publish for this project{slug && !isLegacy ? ` (${slug})` : ""}</option>
-            {LEGACY.map((a) => <option key={a.id} value={a.id}>{a.label} (admin)</option>)}
-          </select>
+          <label htmlFor="su-name">Public list</label>
+          <div className="su__name">
+            <button type="button" role="switch" aria-checked={published} aria-label="Publish this list" className="su__switch" onClick={() => setPublished((v) => !v)} title={published ? "Published: your client reads these URLs from Stashr. Click to stop." : "Not published. Click to publish."} />
+            <input id="su-name" className="input" value={listName} disabled={!published} placeholder="list-name" maxLength={40} onChange={(e) => setListName(e.target.value)} aria-label="List name" />
+          </div>
         </div>
-        {publicUrl && mode ? (
+        {publicUrl ? (
           <div className="su__address"><code title={publicUrl}>{publicUrl}</code><button type="button" className="btn btn--sm" onClick={copy}>Copy</button></div>
-        ) : <div className="su__address su__address--empty">{mode === OWN ? "The address appears after you save." : "Publish it to get an address your client can use."}</div>}
+        ) : <div className="su__address su__address--empty">{published ? "Use 3-40 letters, numbers or dashes for the name." : "Publish it to get an address your client can use."}</div>}
       </div>
 
       <div className="su__list">

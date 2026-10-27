@@ -148,6 +148,38 @@ describe("custom domains", () =>
     });
 });
 
+describe("choosing the list name when publishing", () =>
+{
+    const make = async (token, name = "Site") => (await request(app).post("/projects/items").set(auth(token)).send({ data: { name, serverUrls: [{ url: "https://api.mysite.com", enabled: true }] } })).body.item;
+
+    test("the person's own name is used; a reserved built-in name needs an admin", async () =>
+    {
+        const ana = await signIn("ana@example.com");
+        const item = await make(ana);
+        const id = item._id || item.id;
+        const own = await request(app).post(`/projects/items/${id}/servers/sync`).set(auth(ana)).send({ registryApp: "My-Site" });
+        expect(own.status).toBe(200);
+        expect(own.body.registryApp).toBe("my-site");
+        expect(own.body.published).toBe(true);
+        expect((await request(app).get("/registry/my-site")).body.urls).toEqual(["https://api.mysite.com"]);
+
+        const reserved = await request(app).post(`/projects/items/${id}/servers/sync`).set(auth(ana)).send({ registryApp: "wethree" });
+        expect(reserved.status).toBe(200);
+        expect(reserved.body.published).toBe(false);
+
+        expect((await request(app).post(`/projects/items/${id}/servers/sync`).set(auth(ana)).send({ registryApp: "A!" })).status).toBe(400);
+    });
+
+    test("an admin can publish under a built-in app name", async () =>
+    {
+        const admin = await signIn("tanushchawla16@gmail.com");
+        const item = await make(admin, "Tasks");
+        const res = await request(app).post(`/projects/items/${item._id || item.id}/servers/sync`).set(auth(admin)).send({ registryApp: "wethree" });
+        expect(res.body.published).toBe(true);
+        expect((await request(app).get("/registry/wethree")).body.urls).toEqual(["https://api.mysite.com"]);
+    });
+});
+
 describe("switching a project list off", () =>
 {
     test("an owner can switch every URL off; the public list then reads empty and flagged off", async () =>

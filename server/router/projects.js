@@ -9,6 +9,7 @@ const { pickPrimary, mergeProjects } = require("../utils/projectMerge");
 const { syncProjectServers, pickSlug } = require("../utils/projectServers");
 const { loadRenderServices } = require("../utils/projectStatus");
 const { usageForProject } = require("../utils/serverUsage");
+const { DEFAULTS, SLUG } = require("../utils/registryDefaults");
 
 /*
  * Project/infra tracker. Same scheme as the password vault (see
@@ -156,7 +157,10 @@ router.post("/projects/items/:id/servers/sync", authenticate, async (req, res) =
         if (!entry) return res.status(404).json({ error: "Could not find that project." });
         const fields = User.publicEntry(entry, dataKey);
         if (fields.broken || fields.enc === "e2e") return res.status(422).json({ error: "This project could not be decrypted." });
-        const registryApp = fields.registryApp || (req.body && req.body.publish === false ? "" : await pickSlug(req.rootUser, fields.name));
+        // The person may choose the list name (the apps read /registry/<name>); otherwise keep the saved one or pick one.
+        const wanted = req.body && typeof req.body.registryApp === "string" ? req.body.registryApp.trim().toLowerCase() : "";
+        if (wanted && !DEFAULTS[wanted] && !SLUG.test(wanted)) return res.status(400).json({ error: "Use 3-40 letters, numbers or dashes for the list name." });
+        const registryApp = wanted || fields.registryApp || (req.body && req.body.publish === false ? "" : await pickSlug(req.rootUser, fields.name));
         let services = [];
         let accounts = null;
         if ((req.rootUser.renderAccounts || []).length) ({ services, accounts } = await loadRenderServices(req.rootUser, dataKey, { refresh: true }));
