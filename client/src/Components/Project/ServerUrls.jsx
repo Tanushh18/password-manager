@@ -61,27 +61,34 @@ export default function ServerUrls({ project }) {
     setRows((list) => (list.some((r) => originOf(r.url) === originOf(url)) ? list : [...list, { url, enabled: !s.suspended }]));
   };
 
-  const cleanRows = () => rows.filter((r) => r.url.trim()).map((r) => ({ url: r.url.trim().replace(/\/+$/, ""), enabled: r.enabled !== false, ...(r.auto ? { auto: true } : {}) }));
+  const cleanRows = (list) => list.filter((r) => r.url.trim()).map((r) => ({ url: r.url.trim().replace(/\/+$/, ""), enabled: r.enabled !== false, ...(r.auto ? { auto: true } : {}) }));
 
-  const save = async () => {
-    const cleaned = cleanRows();
+  // Saves the project and, when a public list is chosen, publishes the switched-on URLs. `instant` = from a Turn off/on button.
+  const persist = async (list, { instant = false } = {}) => {
+    const cleaned = cleanRows(list);
     if (cleaned.some((r) => !looksValid(r.url))) return toast.error("Every URL must start with https://");
-    if (mode && cleaned.filter((r) => r.enabled).length === 0) return toast.error("Switch on at least one URL, or choose “Not published”.");
-    setBusy("save");
+    // A per-project list may be switched off completely (to test that the apps stop using it); the built-in apps keep one.
+    if (mode && mode !== OWN && cleaned.filter((r) => r.enabled).length === 0) return toast.error("Switch on at least one URL, or choose “Not published”.");
+    setBusy(instant ? "toggle" : "save");
     try {
       const app = mode === OWN ? (isLegacy ? "" : slug) : mode;
       await updateProject(project.id, { serverUrls: cleaned, serverUrlsIgnored: ignored, registryApp: app });
+      const on = cleaned.filter((r) => r.enabled).length;
       if (mode === OWN) {
         const res = await syncProjectServers(project.id);
         await updateProject(project.id, { serverUrls: res.serverUrls, registryApp: res.registryApp });
-        toast.success(res.published ? "Saved. Public list updated." : "Saved.");
+        toast.success(on ? (instant ? "Updated. The apps use " + on + " server" + (on === 1 ? "" : "s") + "." : "Saved. Public list updated.") : "All servers are off. The public list is empty now.");
       } else if (mode) {
-        try { await saveRegistry(mode, cleaned.filter((r) => r.enabled).map((r) => r.url)); toast.success("Saved and published."); }
+        try { await saveRegistry(mode, cleaned.filter((r) => r.enabled).map((r) => r.url)); toast.success(instant ? "Updated and published." : "Saved and published."); }
         catch (err) { toast.warn("Saved in this project, but not published: " + errorMessage(err, "only an admin can publish this app.")); }
       } else toast.success("Saved.");
     } catch (err) { toast.error(errorMessage(err, "Could not save.")); }
     finally { setBusy(""); }
   };
+  const save = () => persist(rows);
+  // The Turn off / Turn on buttons act at once: they save and publish without a separate Save.
+  const setOne = (i, enabled) => { const next = rows.map((r, n) => (n === i ? { ...r, enabled } : r)); setRows(next); void persist(next, { instant: true }); };
+  const setAll = (enabled) => { const next = rows.map((r) => ({ ...r, enabled })); setRows(next); void persist(next, { instant: true }); };
 
   const syncNow = async () => {
     setBusy("sync");
@@ -104,7 +111,8 @@ export default function ServerUrls({ project }) {
         <div key={i} className="proj-repeat-row">
           <input className="input" value={r.url} placeholder="https://your-server.onrender.com/api" onChange={(e) => edit(i, { url: e.target.value })} />
           <small>{status[r.url] || (r.auto ? "auto" : "")}</small>
-          <label><input type="checkbox" checked={r.enabled !== false} onChange={(e) => edit(i, { enabled: e.target.checked })} /> Use</label>
+          <button type="button" className={"btn btn--sm" + (r.enabled !== false ? "" : " btn--primary")} disabled={busy === "toggle" || !looksValid(r.url)} onClick={() => setOne(i, r.enabled === false)} title={r.enabled !== false ? "The apps use this server. Click to stop them using it, right now." : "Switched off. Click to let the apps use it again."}>{r.enabled !== false ? "Turn off" : "Turn on"}</button>
+          <small>{r.enabled !== false ? "ON" : "OFF"}</small>
           <button type="button" className="icon-btn icon-btn--quiet" onClick={() => move(i)} aria-label="Move up" disabled={i === 0}>↑</button>
           <button type="button" className="icon-btn icon-btn--quiet" onClick={() => remove(i)} aria-label="Remove"><Trash size={15} /></button>
         </div>
@@ -126,6 +134,8 @@ export default function ServerUrls({ project }) {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button type="button" className="btn btn--sm" onClick={() => setRows((l) => [...l, { url: "", enabled: true }])}><Plus size={14} /> Add URL</button>
         <button type="button" className="btn btn--sm" onClick={discover}>Add from my servers</button>
+        <button type="button" className="btn btn--sm" onClick={() => setAll(false)} disabled={!rows.length || busy === "toggle"}>Turn off all</button>
+        <button type="button" className="btn btn--sm" onClick={() => setAll(true)} disabled={!rows.length || busy === "toggle"}>Turn on all</button>
         <button type="button" className="btn btn--sm" onClick={syncNow} disabled={busy === "sync"}>{busy === "sync" ? "Syncing…" : "Sync now"}</button>
         <button type="button" className="btn btn--sm" onClick={check} disabled={!rows.length}>Check all</button>
         <button type="button" className="btn btn--primary btn--sm" onClick={save} disabled={busy === "save"}>{busy === "save" ? "Saving…" : "Save"}</button>

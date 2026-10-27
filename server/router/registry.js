@@ -42,7 +42,10 @@ const cleanUrl = (value) =>
 const listFor = async (app) =>
 {
     const doc = await Registry.findOne({ app }).lean();
-    return doc && doc.urls && doc.urls.length ? doc.urls : DEFAULTS[app] || null;
+    if (doc && doc.urls && doc.urls.length) return doc.urls;
+    // A per-project list switched off completely stays an (empty) list instead of falling back to a default or a 404.
+    if (doc && doc.owner && !DEFAULTS[app]) return [];
+    return DEFAULTS[app] || null;
 };
 
 /** Built-in apps are for administrators; any other slug is a per-project list owned by the account that made it. */
@@ -97,7 +100,8 @@ router.put("/registry/:app", authenticate, writeLimiter, async (req, res) =>
         if (!url) return res.status(400).json({ error: `"${String(raw).slice(0, 120)}" is not a valid https URL.` });
         if (!urls.includes(url)) urls.push(url);
     }
-    if (urls.length === 0) return res.status(400).json({ error: "Keep at least one server URL." });
+    // Built-in apps always keep a server; a per-project list may be switched off entirely (to test that the apps stop using it).
+    if (urls.length === 0 && DEFAULTS[app]) return res.status(400).json({ error: "Keep at least one server URL." });
     if (urls.length > MAX_URLS) return res.status(400).json({ error: `At most ${MAX_URLS} URLs per app.` });
 
     try
@@ -148,7 +152,7 @@ router.get("/registry/:app", async (req, res) =>
         // Any website or app may read this list; it holds URLs only.
         if (!res.getHeader("Access-Control-Allow-Origin")) res.set("Access-Control-Allow-Origin", "*");
         res.set("Cache-Control", "public, max-age=30");
-        return res.json({ app, urls });
+        return res.json({ app, urls, ...(urls.length === 0 ? { off: true } : {}) });
     }
     catch (error)
     {

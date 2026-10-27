@@ -85,6 +85,30 @@ describe("per-project public registry", () =>
     });
 });
 
+describe("switching a project list off", () =>
+{
+    test("an owner can switch every URL off; the public list then reads empty and flagged off", async () =>
+    {
+        const ana = await signIn("ana@example.com");
+        await request(app).put("/registry/my-shop").set(auth(ana)).send({ urls: ["https://shop.onrender.com/api"] });
+        const off = await request(app).put("/registry/my-shop").set(auth(ana)).send({ urls: [] });
+        expect(off.status).toBe(200);
+        const read = await request(app).get("/registry/my-shop");
+        expect(read.status).toBe(200);
+        expect(read.body.urls).toEqual([]);
+        expect(read.body.off).toBe(true);
+        const back = await request(app).put("/registry/my-shop").set(auth(ana)).send({ urls: ["https://shop.onrender.com/api"] });
+        expect(back.status).toBe(200);
+        expect((await request(app).get("/registry/my-shop")).body.off).toBe(undefined);
+    });
+
+    test("the built-in apps always keep a server", async () =>
+    {
+        const admin = await signIn("tanushchawla16@gmail.com");
+        expect((await request(app).put("/registry/wethree").set(auth(admin)).send({ urls: [] })).status).toBe(400);
+    });
+});
+
 describe("admin deletes a user", () =>
 {
     test("removes the account and everything stored apart from it, after the email is typed", async () =>
