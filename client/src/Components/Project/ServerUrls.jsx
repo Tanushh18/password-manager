@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "react-toastify";
-import { checkServer, errorMessage, saveRegistry } from "../../api/client";
+import { checkServer, errorMessage, getAllRenderServers, saveRegistry } from "../../api/client";
 import { useVault } from "../../state/vault";
 import { Plus, Trash } from "../Icons/Icons";
 
@@ -17,6 +17,7 @@ export default function ServerUrls({ project }) {
   const [app, setApp] = useState("");
   const [status, setStatus] = useState({});
   const [busy, setBusy] = useState(false);
+  const [found, setFound] = useState(null);
 
   useEffect(() => {
     setRows((project.serverUrls || []).map((r) => ({ ...r })));
@@ -32,6 +33,17 @@ export default function ServerUrls({ project }) {
       try { const res = await checkServer(r.url.trim()); next[r.url] = res.data.ok ? "up" : "down"; } catch { next[r.url] = "unknown"; }
     }));
     setStatus(next);
+  };
+
+  // Every server in the connected Render accounts, so a new one is one click away instead of typed by hand.
+  const discover = async () => {
+    try { setFound((await getAllRenderServers({ refresh: true })).servers); }
+    catch (err) { toast.error(errorMessage(err, "Could not load your Render servers.")); }
+  };
+  const addFound = (s) => {
+    const suffix = (() => { try { return new URL(rows.find((r) => looksValid(r.url))?.url || "").pathname.replace(/\/+$/, ""); } catch { return ""; } })();
+    const url = new URL(s.url).origin + suffix;
+    setRows((list) => (list.some((r) => r.url.replace(/\/+$/, "") === url) ? list : [...list, { url, enabled: !s.suspended }]));
   };
 
   const save = async () => {
@@ -70,9 +82,23 @@ export default function ServerUrls({ project }) {
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button type="button" className="btn btn--sm" onClick={() => setRows((l) => [...l, { url: "", enabled: true }])}><Plus size={14} /> Add URL</button>
+        <button type="button" className="btn btn--sm" onClick={discover}>Add from my Render servers</button>
         <button type="button" className="btn btn--sm" onClick={check} disabled={!rows.length}>Check all</button>
         <button type="button" className="btn btn--primary btn--sm" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
       </div>
+      {found && (
+        <div style={{ marginTop: 12 }}>
+          {found.length === 0 ? <p className="field__note">No Render servers found in your connected accounts.</p> : found.map((s) => {
+            const added = rows.some((r) => { try { return new URL(r.url).origin === new URL(s.url).origin; } catch { return false; } });
+            return (
+              <div key={s.id} className="proj-repeat-row">
+                <span style={{ flex: 1 }}><strong>{s.name}</strong> <small>{s.url} · {s.accountName} · {s.suspended ? "suspended" : "active"}</small></span>
+                <button type="button" className="btn btn--sm" disabled={added} onClick={() => addFound(s)}>{added ? "Added" : "Add"}</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }

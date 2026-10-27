@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const renderOps = require("../utils/renderOps");
 const { fetchAllPages } = require("../utils/renderPaging");
 const { syncProjectEnv, runAllEnvSync } = require("../utils/renderEnvSync");
-const { getProjectStatuses, runAllAutoLink, clearServicesCache } = require("../utils/projectStatus");
+const { getProjectStatuses, runAllAutoLink, clearServicesCache, loadRenderServices } = require("../utils/projectStatus");
 const { runUsage, runAllUsage, readSettings, saveSettings, getUsageCapabilityCatalog, hasReader } = require("../utils/usageIO");
 const { listNeedsReader } = require("../utils/unsupportedServices");
 const { pushProjectEnv } = require("../utils/renderEnvPush");
@@ -903,6 +903,20 @@ router.get("/render/usage-settings", async (req, res) => {
 router.put("/render/usage-settings", async (req, res) => {
   try { return res.json(await saveSettings(req.rootUser, await req.rootUser.getDataKey(), req.body || {})); }
   catch { return res.status(500).json({ error: "Could not save settings." }); }
+});
+
+/* Every server with a public address in the Render accounts connected to this login, for the project's Server URLs picker. */
+router.get("/render/all-servers", async (req, res) => {
+  try {
+    const dataKey = await req.rootUser.getDataKey();
+    const { services } = await loadRenderServices(req.rootUser, dataKey, { refresh: req.query.refresh === "1" });
+    const servers = services
+      .filter((s) => /^https:\/\//i.test(s.url))
+      .map((s) => ({ id: s.id, name: s.name, url: s.url, type: s.type, suspended: s.suspended, accountName: s.accountName, plan: s.plan, region: s.region }))
+      .sort((a, b) => Number(a.suspended) - Number(b.suspended) || a.name.localeCompare(b.name));
+    res.set("Cache-Control", "no-store");
+    return res.json({ servers });
+  } catch { return res.status(500).json({ error: "Could not load your Render servers." }); }
 });
 
 /* Servers tab sync (admin only): each registry URL matched to its Render service, plus suggestions. */
