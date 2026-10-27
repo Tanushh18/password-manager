@@ -61,15 +61,19 @@ async function checkRepo({ github, owner, repo, branch: wanted = "", withBranche
   if (info.body.private) return failure(PRIVATE_ERROR, { status: 422, private: true });
   const defaultBranch = info.body.default_branch || "main";
   const branch = wanted || defaultBranch;
-  const commits = await github.send("GET", "/repos/" + enc(owner) + "/" + enc(repo) + "/commits?per_page=1&sha=" + enc(branch));
+  const base = "/repos/" + enc(owner) + "/" + enc(repo);
+  // Independent GitHub calls run together: sequentially they can outlast the browser's request timeout.
+  const [commits, list, top] = await Promise.all([
+    github.send("GET", base + "/commits?per_page=1&sha=" + enc(branch)),
+    withBranches ? github.send("GET", base + "/branches?per_page=100") : null,
+    withBranches ? github.send("GET", base + "/contents?ref=" + enc(branch)) : null
+  ]);
   if (wanted && !commits.ok && (commits.status === 404 || commits.status === 422)) return failure("The branch \"" + wanted + "\" does not exist in " + owner + "/" + repo + ".", { status: 404 });
   const hasCode = commits.ok && Array.isArray(commits.body) && commits.body.length > 0;
   const result = { ok: true, hasCode, branch, default: defaultBranch, private: false, pushedAt: info.body.pushed_at || "" };
   if (withBranches) {
-    const list = await github.send("GET", "/repos/" + enc(owner) + "/" + enc(repo) + "/branches?per_page=100");
     result.branches = list.ok && Array.isArray(list.body) ? list.body.map((b) => String(b.name)) : [];
     // A monorepo has its app in a subfolder; without a Root Directory the build finds no package.json and fails.
-    const top = await github.send("GET", "/repos/" + enc(owner) + "/" + enc(repo) + "/contents?ref=" + enc(branch));
     if (top.ok && Array.isArray(top.body)) {
       const names = top.body.map((f) => String(f.name));
       const MANIFEST = ["package.json", "requirements.txt", "pyproject.toml", "go.mod", "Dockerfile", "index.html", "Gemfile", "pom.xml", "composer.json"];

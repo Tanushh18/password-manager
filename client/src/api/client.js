@@ -337,7 +337,7 @@ export const syncProjectRenderEnv = (projectId, options = {}) => instance.post("
 export const getRenderOwners = (accountId) => instance.get("/render/accounts/" + encodeURIComponent(accountId) + "/owners").then((r) => r.data);
 export const provisionProject = (body) => instance.post("/render/provision", body, { timeout: 180000 }).then((r) => r.data);
 export const createRepo = (body) => instance.post("/render/repo/create", body, { timeout: 120000 }).then((r) => r.data);
-export const checkRepoCode = (body) => instance.post("/render/repo/check", body).then((r) => r.data);
+export const checkRepoCode = (body) => instance.post("/render/repo/check", body, { timeout: 45000 }).then((r) => r.data);
 export const deployProject = (body) => instance.post("/render/deploy", body, { timeout: 180000 }).then((r) => r.data);
 export const getProjectDeployments = (projectId) => instance.get("/render/projects/" + encodeURIComponent(projectId) + "/deployments", { timeout: 30000 }).then((r) => r.data);
 export const autoSyncProjects = (force = false) => instance.post("/render/projects/auto-sync", { force }, { timeout: 120000 }).then((r) => r.data);

@@ -221,7 +221,7 @@ export default function ProjectDeploy() {
   }
 
   const deploy = async () => {
-    if (!repo || busy || codeState.status !== "ready") return;
+    if (!repo || busy || !["ready", "error"].includes(codeState.status)) return;
     setBusy(true); setError(""); setResult(null);
     const parts = [];
     try {
@@ -533,7 +533,7 @@ export default function ProjectDeploy() {
               ) : null}
               <div className="gh-panel__row">
                 <button type="button" className="btn btn--ghost btn--sm" disabled={codeState.status === "checking"} onClick={() => { setWait(true); void checkCode(repo.url); }}>Check again</button>
-                <button type="button" className="btn btn--primary btn--lg" disabled={busy || codeState.status !== "ready" || !ready} onClick={() => void deploy()}>{busy ? <><span className="spinner" /> Deploying… this can take up to a minute</> : deployLabel}</button>
+                <button type="button" className="btn btn--primary btn--lg" disabled={busy || !["ready", "error"].includes(codeState.status) || !ready} onClick={() => void deploy()}>{busy ? <><span className="spinner" /> Deploying… this can take up to a minute</> : deployLabel}</button>
               </div>
             </section>
           ) : (
