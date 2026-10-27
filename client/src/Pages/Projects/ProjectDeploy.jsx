@@ -66,7 +66,15 @@ const SCOPE_NOTE = {
   both: "The server goes to Render. The client goes to the host you pick under Hosting (Render serves it as a static site by default)."
 };
 const slug = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[-._]+|[-._]+$/g, "").replace(/-{2,}/g, "-").slice(0, 60);
-const errorOf = (e, fallback) => e?.response?.data?.error || fallback;
+const errorOf = (e, fallback) => {
+  const data = e?.response?.data?.error;
+  if (data) return data;
+  const status = e?.response?.status;
+  if (!e?.response) return fallback + " The server could not be reached; check your connection and try again.";
+  if (status === 429) return fallback + " Too many requests; wait a moment and try again.";
+  if (status >= 500) return fallback + " The server had a problem (" + status + "); try again shortly.";
+  return fallback;
+};
 
 function Copyable({ text, label }) {
   const copy = async () => { try { await navigator.clipboard.writeText(text); toast.success("Copied."); } catch { toast.error("Clipboard is not available."); } };

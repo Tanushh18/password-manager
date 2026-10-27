@@ -1049,6 +1049,7 @@ router.post("/render/repo/check", async (req, res) => {
     res.set("Cache-Control", "no-store");
     return res.status(result.ok ? 200 : (result.status === 404 ? 404 : 422)).json(result);
   } catch (error) {
+    console.error("render/repo/check failed:", error?.message || error);
     return res.status(500).json({ ok: false, error: "Could not check the repository." });
   }
 });
