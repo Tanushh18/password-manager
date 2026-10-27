@@ -1,894 +1,322 @@
-# Stashr — Passwords & Projects, Encrypted
+# Stashr — Password Vault & Project Secrets
 
-[![CI](https://github.com/Tanushh18/password-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Tanushh18/password-manager/actions/workflows/ci.yml)
+Stashr is a web and Android application for managing saved logins and project configuration from a shared API. The repository includes a React/Vite web client, an Express API, and an Expo/React Native mobile client.
 
-## Description
+> **Security scope:** This README describes repository setup and the visible design. It is not a security audit or a guarantee that the deployed service is secure. Do not place real vault data, production tokens, API keys, private keys, database dumps, or password exports in Git.
 
-**Stashr** is an encrypted password vault and project manager with a comprehensive web interface and native Android app that share a unified API and database. All stored data—passwords, project hosting details, databases, environment variables, and custom fields—is **encrypted at rest** with AES-256-GCM before it is written to the database.
+## Contents
 
-> **Current encryption model (read this):** vault items and projects are encrypted **on the server** with a per-account data key that is itself wrapped by the server key (`CRYPTO_SECRET_KEY`), see `server/router/vault.js`. There is no user-typed vault password, so signing in is enough to unlock the vault. This protects a leaked database on its own, but **it is not zero-knowledge**: whoever has both the database and the server key (or runs the server) can read the data. The device-side PBKDF2 design described in the older sections below is the previous/planned model. Treat those sections as design notes until they are brought back in line with the code.
-
-### Key Highlights
-
-- **Encryption at rest**: Items are sealed with AES-256-GCM using a per-account key; the server can decrypt them (not end-to-end, not zero-knowledge).
-- **Protect the server key**: `CRYPTO_SECRET_KEY` and the database together unlock every vault; keep them in separate places.
-- **Cross-Platform Sync**: Same account works seamlessly on web and Android with identical data format.
-- **Project Tracker**: Store not just passwords, but entire project configurations (hosting, databases, Firebase/GCP, Play Store, environment variables).
-- **Bulk Import**: Import projects from Excel templates directly into your encrypted vault.
-- **Security Features**: Built-in breach detection, password strength analysis, two-factor authentication (TOTP), recovery codes, and more.
-
----
-
-## Tech Stack
-
-### Backend (Server)
-
-| Technology | Version | Purpose |
-|---|---|---|
-| **Node.js** | ≥20 | JavaScript runtime |
-| **Express** | ^5.2.1 | Web framework & REST API |
-| **Mongoose** | ^9.10.2 | MongoDB ODM & schema management |
-| **MongoDB** | – | NoSQL database (local or cloud) |
-| **Helmet** | ^8.3.0 | HTTP security headers |
-| **bcrypt** | ^6.0.0 | Password hashing (cost 12) |
-| **jsonwebtoken** | ^9.0.3 | JWT session management |
-| **cookie-parser** | ^1.4.7 | HTTP cookie parsing |
-| **CORS** | ^2.8.6 | Cross-origin request handling |
-| **dotenv** | ^18.0.3 | Environment variable management |
-
-### Frontend (Web Client)
-
-| Technology | Version | Purpose |
-|---|---|---|
-| **Node.js** | ≥20.19 | JavaScript runtime |
-| **React** | ^19.3.0 | UI library |
-| **React DOM** | ^19.3.0 | DOM rendering |
-| **Vite** | ^8.3.1 | Build tool & dev server (PWA support) |
-| **React Router** | ^7.18.4 | Client-side routing |
-| **Axios** | ^1.20.0 | HTTP client |
-| **QRCode** | ^1.5.4 | QR code generation (2FA setup) |
-| **react-responsive-modal** | ^7.2.0 | Modal dialogs |
-| **react-toastify** | ^11.1.0 | Toast notifications |
-| **XLSX** | ^0.20.3 | Excel file import/export |
-
-### Mobile (Android App)
-
-| Technology | Version | Purpose |
-|---|---|---|
-| **Expo SDK** | ~57.0 | React Native framework |
-| **Expo Router** | ~57.0.23 | File-based routing (Expo Router v3) |
-| **React Native** | 0.86.3 | Native app framework |
-| **React** | 19.2.3 | UI library |
-| **react-native-quick-crypto** | ^1.1.7 | Native cryptography (OpenSSL) |
-| **expo-secure-store** | ~57.0.4 | Secure key storage (Android Keystore) |
-| **expo-camera** | ~57.0.5 | Camera access for QR scanning |
-| **expo-local-authentication** | ~57.0.3 | Biometric authentication |
-| **expo-clipboard** | ~57.0.2 | Clipboard operations |
-| **expo-screen-capture** | ~57.0.3 | Screenshot blocking |
-| **react-native-svg** | 15.15.4 | SVG rendering |
-
-### Development & Testing
-
-- **Node.js Test Runner** (`--test` flag): Native testing for server and client
-- **MongoDB Memory Server**: In-memory MongoDB for API tests
-- **supertest**: HTTP request library for API testing
-- **Vite**: Bundling and hot module replacement (HMR)
-- **EAS CLI**: Expo Application Services for building Android APK/AAB
-
----
+- [Features](#features)
+- [Architecture](#architecture)
+- [Technology](#technology)
+- [Requirements](#requirements)
+- [Local setup](#local-setup)
+- [Environment variables](#environment-variables)
+- [Run tests and builds](#run-tests-and-builds)
+- [Deployment](#deployment)
+- [Security and privacy notes](#security-and-privacy-notes)
+- [Repository hygiene](#repository-hygiene)
+- [Troubleshooting](#troubleshooting)
 
 ## Features
 
-### Core Vault Features
+- Password and login entry management, folders, favorites, password generation, and vault-health checks.
+- Project records for hosting, databases, cloud integrations, environment variables, and custom fields.
+- Web client and Android client using the same API.
+- Optional TOTP-based second factor and one-time recovery codes for account sign-in.
+- Import/export and encrypted backup flows.
+- Optional breach checks using Have I Been Pwned's k-anonymity range API.
+- Optional integrations including Google Photo Cloud/Drive, GitHub, Telegram alerts, Brevo email, and Groq-powered diagnostics.
+- API health/readiness endpoints and optional scheduler/keep-alive jobs.
 
-| Feature | Web | Android |
-| --- | :---: | :---: |
-| **End-to-end encryption** (PBKDF2-SHA256 600k → AES-256-GCM) | ✓ | ✓ (native) |
-| **Logins** (website, username, password, notes, folders, favourites) | ✓ | ✓ |
-| **Stored 2FA secrets** with live TOTP codes | ✓ | ✓ + camera QR scan |
-| **Vault health** (weak, reused, old, breached passwords) | ✓ | ✓ |
-| **Have I Been Pwned** integration (k-anonymity) | ✓ | ✓ |
-| **Password & passphrase generator** with strength meter | ✓ | ✓ |
-| **Two-factor login** (TOTP) with 10 recovery codes | ✓ | ✓ |
-| **Change master password** (full re-key, atomic operation) | ✓ | ✓ |
-| **Sign out other devices** | ✓ | ✓ |
-| **Delete account** (full data removal) | ✓ | ✓ |
-| **Encrypted backup & CSV export** | ✓ (+ Excel) | ✓ |
-| **Import from competitors** (Chrome, Bitwarden, 1Password, LastPass) | ✓ | ✓ |
-| **Auto-lock after inactivity** | ✓ | ✓ |
-| **Biometric unlock** (fingerprint / face) | – | ✓ (Android Keystore) |
-| **Offline read-only vault** | PWA shell | ✓ |
-| **Screenshot blocking** | – | ✓ |
-| **Dark / light theme** | ✓ | ✓ |
-| **Website icons** (opt-in, DuckDuckGo) | ✓ | ✓ |
+Optional integrations require explicit configuration and their own provider credentials. A feature may be unavailable when the corresponding credentials are not configured.
 
-### Project Tracker Features
+## Architecture
 
-- Store project-specific configuration per hosting provider & account
-- Encrypt databases, Firebase/GCP settings, Play Store credentials
-- Store API keys, secrets, environment variables (names & values)
-- Custom fields for any project metadata
-- Bulk import from Excel template
-- All data encrypted exactly like password entries
-
-### Additional Capabilities
-
-- **Session Management**: JWT-based with random `jti`, max 10 concurrent sessions per account
-- **Rate Limiting**: Protects login, register, and sensitive account routes per IP
-- **Upgrade Path**: Automatic migration for legacy pre-E2E accounts on first sign-in
-- **Server Keep-Alive**: Self-pinging via `SELF_URL` or Render's `RENDER_EXTERNAL_URL` (every 14 minutes)
-
----
-
-## Project Structure
-
-```
-password-manager/
-├── .github/
-│   └── workflows/
-│       └── ci.yml              # CI pipeline: tests, builds, audits
-├── server/                      # Express API backend
-│   ├── app.js                   # Express app configuration
-│   ├── server.js                # Entry point
-│   ├── package.json             # Dependencies
-│   ├── config.env.example       # Environment variable template
-│   ├── db/
-│   │   └── connection.js        # MongoDB connection
-│   ├── models/
-│   │   ├── EncDecManager.js     # Encryption/decryption logic
-│   │   └── schema.js            # Mongoose schemas (User, Item, etc.)
-│   ├── router/
-│   │   ├── routing.js           # Route registration
-│   │   ├── account.js           # Account routes (/account/*)
-│   │   ├── vault.js             # Vault routes (/vault/*)
-│   │   ├── projects.js          # Project routes (/projects/*)
-│   │   └── helpers.js           # Route helper utilities
-│   ├── middlewares/
-│   │   ├── authenticate.js      # JWT authentication
-│   │   └── rateLimit.js         # Rate limiting
-│   ├── utils/
-│   │   ├── keepAlive.js         # Self-pinging
-│   │   ├── strength.js          # Password strength evaluation
-│   │   └── totp.js              # TOTP generation & verification
-│   ├── scripts/
-│   │   └── import-projects.js   # Bulk import from Excel
-│   └── tests/
-│       ├── api.test.js          # API endpoint tests
-│       └── expect.js            # Test assertions
-├── client/                      # Vite + React web app (PWA)
-│   ├── index.html               # Entry HTML
-│   ├── vite.config.js           # Vite configuration
-│   ├── package.json             # Dependencies
-│   ├── src/
-│   │   ├── main.jsx             # React entry point
-│   │   ├── App.jsx              # Root component
-│   │   ├── api/
-│   │   │   └── client.js        # Axios API client
-│   │   ├── lib/
-│   │   │   ├── crypto.js        # WebCrypto implementation
-│   │   │   ├── strength.js      # Password strength
-│   │   │   ├── health.js        # Vault health checks
-│   │   │   ├── breach.js        # HIBP integration
-│   │   │   └── projectItems.js  # Project data utilities
-│   │   ├── hooks/
-│   │   │   ├── useTheme.js      # Dark/light theme hook
-│   │   │   └── useReveal.js     # Password reveal state
-│   │   ├── components/          # React components
-│   │   └── pages/               # Page components
-│   ├── tests/
-│   │   └── crypto.test.mjs      # Crypto interop & import tests
-│   └── build/                   # Build output (generated)
-├── mobile/                      # Expo + React Native Android app
-│   ├── app.json                 # Expo app config
-│   ├── package.json             # Dependencies
-│   ├── eas.json                 # EAS build config
-│   ├── src/
-│   │   ├── app/                 # Expo Router routes
-│   │   │   ├── _layout.js       # Root layout, auth guards, FLAG_SECURE
-│   │   │   ├── auth/            # Sign in/up screens
-│   │   │   ├── (tabs)/          # Main tabs (vault, health, generator, settings)
-│   │   │   ├── editor.js        # Add/edit item
-│   │   │   ├── scan.js          # QR scanner for 2FA
-│   │   │   ├── lock.js          # Biometric/password unlock
-│   │   │   └── account/         # Account routes
-│   │   ├── components/          # React Native UI kit
-│   │   ├── lib/
-│   │   │   ├── cryptoCore.js    # react-native-quick-crypto wrapper
-│   │   │   ├── api.js           # API client for mobile
-│   │   │   ├── vault.js         # Vault state management
-│   │   │   ├── health.js        # Health check logic
-│   │   │   └── breach.js        # Breach checking
-│   │   └── utils/               # Utility functions
-│   └── android/                 # Generated Android project (Gradle)
-├── docs/
-│   └── SECURITY.md              # Security design & threat model
-├── render.yaml                  # Render Blueprint (deployment)
-├── .gitignore                   # Git exclusions
-└── README.md                    # This file
-
-**Key directories by concern:**
-- **Encryption**: `server/models/EncDecManager.js`, `client/src/lib/crypto.js`, `mobile/src/lib/cryptoCore.js`
-- **API**: `server/router/*`, `client/src/api/`, `mobile/src/lib/api.js`
-- **UI**: `client/src/components/`, `mobile/src/components/`
-- **Tests**: `server/tests/`, `client/tests/`
+```text
+.
+├── server/       Express API, database models, authentication, integrations
+├── client/       React + Vite web application
+├── mobile/       Expo + React Native Android application
+├── docs/         Security design and project documentation
+├── .github/      CI workflows
+├── render.yaml   Render Blueprint for web and API services
+└── README.md
 ```
 
----
+### API server
 
-## Installation
+- Entry point: `server/server.js`
+- Express app and middleware: `server/app.js`
+- MongoDB connection: `server/db/connection.js`
+- API route registration: `server/router/routing.js`
+- Server-side encryption helpers / legacy item handling: `server/models/EncDecManager.js`
+- Security notes: [docs/SECURITY.md](docs/SECURITY.md)
 
-### Prerequisites
+The server reads `server/config.env` first, then the normal environment (including the hosting provider's environment variables). The checked-in template is `server/config.env.example`.
 
-- **Node.js** ≥20 (and ≥20.19 for client)
-- **MongoDB** (local or Atlas cloud connection string)
-- **Android SDK + JDK 17** (for mobile builds)
-- **Git** for version control
+### Web client
 
-### Backend (Server)
+- Source: `client/src/`
+- API client: `client/src/api/client.js`
+- Local development server: Vite
+- Build output: `client/build/`
 
-1. **Clone and enter the server directory:**
-   ```bash
-   git clone https://github.com/Tanushh18/password-manager.git
-   cd password-manager/server
-   ```
+The API base URL can be configured at build time using `VITE_API_URLS` (comma-separated). The client also contains a default API endpoint, so do not assume an unset variable means it makes no network requests.
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+### Android client
 
-3. **Create `config.env` from the template:**
-   ```bash
-   cp config.env.example config.env
-   ```
+- Source: `mobile/src/`
+- API client: `mobile/src/lib/api.js`
+- App configuration: `mobile/app.json`
+- Expo configuration can provide fallback API server URLs. The client supports `EXPO_PUBLIC_API_URLS` (comma-separated).
 
-4. **Edit `config.env` with your settings:**
-   ```sh
-   MONGO_URL=mongodb://localhost:27017/password-manager
-   # Or use MongoDB Atlas:
-   # MONGO_URL=mongodb+srv://user:pass@cluster.mongodb.net/password-manager
+Only use public client variables for non-secret configuration. Anything with an `EXPO_PUBLIC_` prefix may be embedded into the app bundle and must not contain credentials.
 
-   SECRET_KEY=<generate-a-long-random-string-for-jwt-signing>
-   CRYPTO_SECRET_KEY=<another-long-random-string-for-2fa-sealing>
-   
-   # Optional:
-   # CLIENT_ORIGINS=https://my-frontend.com,https://backup.example.com
-   # SELF_URL=https://api.example.com  # Enables keep-alive
-   ```
+## Technology
 
-   To generate random strings:
-   ```bash
-   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-   ```
+| Area | Main tools |
+| --- | --- |
+| API | Node.js 20+, Express 5, Mongoose, MongoDB, dotenv, Helmet, bcrypt, JWT |
+| Web | React, React DOM, Vite, React Router, Axios |
+| Android | Expo SDK, Expo Router, React Native, SecureStore, native crypto |
+| Tests | Node test runner, Supertest, MongoDB Memory Server |
+| Hosting | Render Blueprint in `render.yaml` |
 
-5. **Start the server:**
-   ```bash
-   npm run dev:start    # Development with auto-reload
-   # or
-   npm start            # Production mode
-   ```
+Refer to each package manifest for the precise dependency versions and scripts.
 
-   Server runs at `http://localhost:8000`
+## Requirements
 
-### Frontend (Web Client)
+- Git
+- Node.js 20 or newer for the API; Node.js 20.19 or newer for the web client's current Vite toolchain
+- npm
+- A MongoDB deployment for persistent local use (local MongoDB or MongoDB Atlas)
+- Android Studio / Android SDK and JDK compatible with the installed Expo/React Native toolchain for native Android builds
+- Expo/EAS access only if you intend to build through EAS
 
-1. **In a separate terminal, clone and enter the client directory:**
-   ```bash
-   cd password-manager/client
-   npm install
-   ```
+Use a supported Node.js LTS release and install the Android tooling according to current Expo documentation.
 
-2. **Start the development server:**
-   ```bash
-   VITE_API_URLS=http://localhost:8000 npm run dev
-   ```
+## Local setup
 
-   Website runs at `http://localhost:3000`
-
-3. **Build for production:**
-   ```bash
-   npm run build
-   # Output: client/build/
-   ```
-
-### Mobile (Android App)
-
-1. **In a separate terminal, clone and enter the mobile directory:**
-   ```bash
-   cd password-manager/mobile
-   npm install
-   ```
-
-2. **For development (requires native modules):**
-   ```bash
-   # Point to your local API server:
-   EXPO_PUBLIC_API_URLS=http://<your-computer-ip>:8000 npx expo run:android
-   ```
-
-   This builds a development build and installs it on a connected device/emulator.
-
-3. **For production builds:**
-   ```bash
-   # Installable APK (preview profile):
-   npm run build:apk
-   
-   # Play Store bundle (AAB):
-   npm run build:aab
-   ```
-   Requires EAS CLI and an `EXPO_TOKEN` from https://expo.dev/settings/access-tokens.
-
----
-
-## Usage
-
-### Web Interface
-
-1. **Sign up** at the vault welcome screen
-   - Enter your master password (minimum 12 characters recommended)
-   - The app derives a vault key locally and sends only encrypted data to the server
-
-2. **Add passwords/projects**
-   - Navigate to `/vault` to add login entries (website, username, password, notes, folders)
-   - Navigate to `/projects` to store project-specific configuration
-   - All data is encrypted before being sent
-
-3. **View vault health** at `/health`
-   - Check for weak passwords (entropy < 50 bits)
-   - Detect reused passwords
-   - Identify old passwords (>90 days)
-   - Check against Have I Been Pwned (first 5 SHA-1 chars sent, k-anonymity enabled)
-
-4. **Generate passwords** with the built-in generator
-   - 8–48 character random passwords
-   - Passphrases for memorable alternatives
-   - Real-time strength meter
-
-5. **Set up two-factor login**
-   - Scan TOTP QR code or paste setup key
-   - Review 10 recovery codes (store safely)
-   - Enable/disable at any time
-
-6. **Import data**
-   - Export CSV from Chrome, Bitwarden, 1Password, or LastPass
-   - Click "Import" and select the file
-   - Existing entries are merged
-
-7. **Change master password**
-   - Access `/account` → "Change Master Password"
-   - The vault is **atomically re-encrypted** on your device with the new key
-   - All other devices are signed out
-
-8. **Backup & export**
-   - Encrypted backup (`.enc` format) can be imported back anytime
-   - CSV export contains plaintext (store securely)
-
-### Android App
-
-1. **Install** from Play Store or use EAS/local build
-2. **Sign in** with your Stashr account
-3. **Unlock with biometrics** (fingerprint/face) if set up in Android Keystore
-4. **Manage vault** — add, edit, delete entries
-5. **Scan QR codes** for 2FA setup
-6. **View live TOTP codes** that update every 30 seconds
-7. **Auto-lock** when backgrounded (30 seconds by default)
-8. **Screenshot blocking** prevents sensitive data from being captured
-9. **Clipboard auto-clear** (30 seconds) when copying secrets
-
-### Server API
-
-All API responses are JSON. Authentication uses:
-- **Web**: `jwtoken` httpOnly cookie
-- **Mobile**: `Authorization: Bearer <token>` header
-
-See the **API Reference** section in the original README for detailed endpoint documentation.
-
-### Excel Import
+### 1. Clone the repository
 
 ```bash
-cd server
-npm install xlsx --no-save
-node scripts/import-projects.js /path/to/projects.xlsx
-```
-
-The script:
-1. Prompts for your master password
-2. Derives the vault key locally (never sends plaintext to the server)
-3. Encrypts each project row and sends only ciphertext to the API
-
----
-
-## Security Details
-
-### Encryption & Key Derivation
-
-- **KDF**: PBKDF2-HMAC-SHA256 with **600,000 iterations**
-- **Salt**: 16-byte random value, unique per account, stored server-side
-- **Vault Key**: 256-bit output (never leaves the device)
-- **Encryption**: AES-256-GCM with fresh 12-byte IV per write, 16-byte authentication tag
-- **Blob Format**: `v1:<base64 iv>:<base64 ciphertext‖tag>`
-- **Key Check**: Encryption of a fixed string, stored server-side to verify the master password locally
-
-### Authentication & Sessions
-
-- **Master Password**: Sent over TLS at sign-in, verified against bcrypt hash (cost 12) server-side
-- **Sessions**: JWT tokens (30-day expiry, random `jti` claim), stored server-side for revocation
-- **Max Sessions**: 10 concurrent sessions per account
-- **Two-Factor**: Optional TOTP (RFC 6238, ±1 step, replay protection) with 10 one-time recovery codes (SHA-256 hashed)
-- **Rate Limiting**: Applied to login, register, and sensitive account routes per IP
-
-### Data Privacy
-
-- **Server Visibility**: Only item IDs and created/updated timestamps; all contents are encrypted
-- **In Transit**: TLS 1.2+ (enforced by Helmet headers)
-- **At Rest**: AES-256-GCM ciphertext only; server never has plaintext
-
-### Client Security (Web)
-
-- **Key Storage**: In-memory only; cleared on reload
-- **Auto-lock**: After 15 minutes of inactivity (configurable)
-- **Password Reveal**: Hidden after 20 seconds
-- **PWA Offline**: Read-only encrypted vault available offline
-
-### Client Security (Android)
-
-- **Key Storage**: Android Keystore via `expo-secure-store` with `requireAuthentication`
-- **Biometrics**: Key released only after fingerprint/face check, invalidated if biometrics change
-- **Auto-lock**: 30 seconds after app backgrounded (configurable)
-- **Clipboard**: Secrets wiped after 30 seconds
-- **Screenshots**: Blocked via `FLAG_SECURE`
-- **Recents**: App hidden from recent apps list
-
-### Third-Party Data
-
-- **Have I Been Pwned**: First 5 hex characters of SHA-1 sent (k-anonymity), response padded
-- **DuckDuckGo Icons**: Optional; domain only sent if enabled
-
-### No Master Password Recovery
-
-By design, there is no recovery mechanism. This is inherent to zero-knowledge encryption. Users are warned at sign-up and encouraged to store encrypted backups.
-
-For full details, see [`docs/SECURITY.md`](docs/SECURITY.md).
-
----
-
-## Configuration
-
-### Server Environment Variables (`server/config.env`)
-
-| Variable | Required | Description |
-|---|---|---|
-| `MONGO_URL` | Yes | MongoDB connection string (URI or `mongodb://host/db`) |
-| `DATABASE` / `MONGODB_URI` | Alternative | Alternative names for `MONGO_URL` |
-| `SECRET_KEY` | Yes | Long random string for JWT signing (min 32 characters) |
-| `CRYPTO_SECRET_KEY` | Yes | Long random string for sealing 2FA secrets (min 32 characters) |
-| `CLIENT_ORIGINS` | No | Comma-separated CORS origins (e.g., `https://my-app.com,https://backup.com`) |
-| `SELF_URL` | No | Public API URL for keep-alive pings (e.g., `https://api.example.com`) |
-| `NODE_ENV` | No | `production` or `development` (default: `development`) |
-| `KEEP_ALIVE` | No | Enable keep-alive self-pinging (`true` by default if `SELF_URL` or `RENDER_EXTERNAL_URL` is set) |
-| `KEEP_ALIVE_MINUTES` | No | Interval for keep-alive pings (default: 14 minutes) |
-| `PORT` | No | Server port (default: 8000) |
-
-### Web Client Environment Variables
-
-| Variable | Required | Description |
-|---|---|---|
-| `VITE_API_URLS` | No | API base URL (default: current domain + `/api`) |
-| `REACT_APP_ANDROID_URL` | No | URL to Android app download link |
-
-### Mobile App Configuration
-
-Edit `mobile/app.json` → `expo.extra.apiServers` to add default API servers.
-
-Alternatively, set `EXPO_PUBLIC_API_URLS` at build/run time:
-```bash
-EXPO_PUBLIC_API_URLS=https://api.example.com npx expo run:android
-```
-
-### Render Deployment
-
-The `render.yaml` blueprint automatically prompts for:
-- `MONGO_URL`
-- `SECRET_KEY`
-- `CRYPTO_SECRET_KEY`
-- `CLIENT_ORIGINS` (optional)
-
-**Important**: Use the **same** `SECRET_KEY` and `CRYPTO_SECRET_KEY` on every server that shares a database, otherwise logins and decryption will fail.
-
----
-
-## Dependencies
-
-### Server Dependencies
-
-```json
-{
-  "bcrypt": "^6.0.0",
-  "cookie-parser": "^1.4.7",
-  "cors": "^2.8.6",
-  "dotenv": "^18.0.3",
-  "express": "^5.2.1",
-  "helmet": "^8.3.0",
-  "jsonwebtoken": "^9.0.3",
-  "mongoose": "^9.10.2"
-}
-```
-
-**Dev Dependencies**:
-- `mongodb-memory-server@^11.3.0` — In-memory MongoDB for tests
-- `supertest@^7.3.0` — HTTP testing library
-
-### Client Dependencies
-
-```json
-{
-  "axios": "^1.20.0",
-  "qrcode": "^1.5.4",
-  "react": "^19.3.0",
-  "react-dom": "^19.3.0",
-  "react-responsive-modal": "^7.2.0",
-  "react-router-dom": "^7.18.4",
-  "react-toastify": "^11.1.0",
-  "xlsx": "^0.20.3"
-}
-```
-
-**Dev Dependencies**:
-- `vite@^8.3.1` — Build tool
-- `@vitejs/plugin-react@^6.1.1` — React plugin for Vite
-
-### Mobile Dependencies
-
-Key packages (see `mobile/package.json` for full list):
-- `expo@~57.0.25` — React Native framework
-- `expo-router@~57.0.23` — File-based routing
-- `react-native@0.86.3` — Native module
-- `react-native-quick-crypto@^1.1.7` — Native cryptography
-- `expo-secure-store@~57.0.4` — Secure key storage
-- `expo-camera@~57.0.5`, `expo-local-authentication@~57.0.3`, etc.
-
----
-
-## Contribution Guide
-
-Thank you for your interest in contributing! Stashr is completely open-source, and all contributions are welcome.
-
-### Reporting Issues
-
-1. **Search existing issues** at https://github.com/Tanushh18/password-manager/issues to avoid duplicates
-2. **Open a new issue** describing:
-   - What you were doing (steps to reproduce)
-   - What happened (actual behavior)
-   - What you expected to happen
-   - Environment (OS, browser/app version, Node version)
-   - Screenshots or logs if applicable
-
-### Contributing Code
-
-#### 1. Fork the Repository
-
-Click the **Fork** button in the top-right corner of the GitHub page. A copy will appear under your account.
-
-#### 2. Clone Your Fork
-
-```bash
-git clone https://github.com/<your-username>/password-manager.git
+git clone https://github.com/Tanushh18/password-manager.git
 cd password-manager
 ```
 
-#### 3. Create a Feature Branch
+### 2. Configure the API server
 
 ```bash
-git checkout -b feature/my-feature
-# or for bug fixes:
-git checkout -b fix/my-bugfix
+cd server
+npm install
+cp config.env.example config.env
 ```
 
-#### 4. Set Up the Project Locally
+On Windows PowerShell, use:
 
-Follow the **Installation** section above for server, client, and/or mobile.
-
-#### 5. Make Your Changes
-
-- Write clean, readable code
-- Follow the existing code style (spaces, naming conventions)
-- Add tests for new features or bug fixes
-- Update documentation if needed (e.g., README, inline comments)
-
-#### 6. Run Tests
-
-```bash
-# Server
-cd server && npm test
-
-# Client (crypto & importers)
-cd client && npm test
-
-# Mobile (config check)
-cd mobile && npm run doctor
+```powershell
+Copy-Item config.env.example config.env
 ```
 
-Ensure all tests pass before pushing.
-
-#### 7. Commit Your Changes
+Edit `server/config.env` with a local MongoDB connection string and unique secrets. Generate strong independent random values:
 
 ```bash
-git add .
-git commit -m "Fix: describe what was fixed" -m "Additional details if needed"
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
+
+Run the command twice; use one output for `SECRET_KEY` and the other for `CRYPTO_SECRET_KEY`. Never use the sample strings from the template in a deployed environment.
+
+Start the API:
+
+```bash
+npm run dev:start
 # or
-git commit -m "Feat: add new feature" -m "Explain the feature and why it matters"
+npm start
 ```
 
-Follow conventional commit style:
-- `fix:` for bug fixes
-- `feat:` for new features
-- `docs:` for documentation
-- `refactor:` for code improvements
-- `test:` for test additions
-- `chore:` for build, dependencies, etc.
+The API listens on `http://localhost:8000` by default. Health endpoints include `/health`, `/livez`, and `/readyz`. Readiness requires a connected database.
 
-#### 8. Push to Your Fork
+### 3. Start the web client
+
+Open another terminal from the repository root:
 
 ```bash
-git push origin feature/my-feature
+cd client
+npm install
 ```
 
-#### 9. Open a Pull Request
+Create `client/.env.local` if you want to override the default API address:
 
-1. Go to https://github.com/Tanushh18/password-manager
-2. Click **Compare and pull request** (GitHub shows this automatically)
-3. Fill in the PR title and description:
-   - **Title**: Short summary (e.g., "Fix: correct password validation edge case")
-   - **Description**: Why this change? What does it do? (link related issues with #123)
-4. Click **Create pull request**
+```dotenv
+VITE_API_URLS=http://localhost:8000
+```
 
-#### 10. Code Review & Merge
+Then run:
 
-- Your PR will be reviewed for correctness, security, and style
-- Address any feedback by pushing additional commits to your branch
-- Once approved, your PR will be merged into `main`
+```bash
+npm run dev
+```
 
-### Development Workflow
+Vite prints the local URL. If the server URL is changed, restart Vite so the updated build-time environment is read.
 
-- **Server tests** run on every push (CI pipeline via GitHub Actions)
-- **Web build** is tested for compilation errors
-- **Mobile** is checked for config errors
-- **Security**: npm audit is run to check for known vulnerabilities
+### 4. Start the Android app
 
-### Guidelines
+```bash
+cd mobile
+npm install
+```
 
-- **Security first**: If your change touches encryption, authentication, or secrets handling, include security justification in the PR
-- **Tests matter**: Add tests for any new functionality
-- **Documentation**: Update inline comments and README if adding features
-- **Performance**: Consider the impact on load times and battery usage (especially for mobile)
-- **Compatibility**: Test across browsers (Chrome, Firefox, Safari) and devices (Android devices/emulators)
+For an emulator/device using a locally running API, set the API URL to an address reachable from that device:
 
-### Getting Help
+```bash
+EXPO_PUBLIC_API_URLS=http://YOUR_LAN_IP:8000 npx expo run:android
+```
 
-- Join discussions in GitHub Issues
-- Ask questions in PRs; reviewers are happy to help
-- Check existing code and tests for patterns and examples
+For Android Emulator, the host machine is commonly reachable at `10.0.2.2`; for a physical device, use your computer's LAN IP and ensure the firewall permits the connection. Do not use `localhost` from a physical device to refer to your development computer.
 
----
+The native build uses native modules; Expo Go alone may not support the complete app.
+
+### 5. Configure optional providers
+
+Enable only the integrations you plan to use. Typical secrets/configuration include:
+
+- Google OAuth client ID/secret and the exact registered callback URI for Photo Cloud.
+- Brevo API key plus a verified sender email for password-reset email.
+- A random scheduler secret for a trusted monitor that calls the protected operations endpoint.
+- Optional Groq key for diagnostics when enabled and consented to.
+- Optional photo worker URLs and a shared worker secret for trusted worker instances.
+- A GitHub token or Telegram bot token may be entered by an authenticated user in the app. These are user-provided integration credentials, not values that belong in the repository.
+
+Store production credentials in the hosting platform's secret/environment settings, not in source control or in the web/mobile build environment.
+
+## Environment variables
+
+The canonical API template is `server/config.env.example`. The core values are:
+
+| Variable | Required? | Purpose |
+| --- | --- | --- |
+| `MONGO_URL` | Yes for persistent API data | MongoDB connection string. `DATABASE` and `MONGODB_URI` are also accepted aliases by the connection helper. |
+| `SECRET_KEY` | Required by authentication/session features | JWT/authentication signing secret. |
+| `CRYPTO_SECRET_KEY` | Required by server-side encrypted features | Protects server-held encryption keys and legacy/server-readable secrets. Keep it stable and separate from `SECRET_KEY`. |
+| `PORT` | No | API port; defaults to `8000`. |
+| `NODE_ENV` | No | Runtime mode. Set to `production` in deployment. |
+| `CLIENT_ORIGINS` | No | Comma-separated allowed web origins. |
+| `EXTENSION_ORIGINS` | No | Comma-separated exact Chrome extension origins. |
+| `SELF_URL` | No | Public API URL used by keep-alive and callbacks. Render can provide `RENDER_EXTERNAL_URL`. |
+| `KEEP_ALIVE`, `KEEP_ALIVE_MINUTES` | No | Configure optional periodic self-ping. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional | Google OAuth configuration for Photo Cloud. |
+| `GOOGLE_PHOTO_REDIRECT_URI` | Optional | Exact Google OAuth callback URL. |
+| `PHOTO_CLOUD_CLIENT_URL` | Optional | Web client URL used by Photo Cloud redirect flows. |
+| `RENDER_MONITOR_CRON_SECRET` | Optional | Shared secret for a trusted monitoring scheduler. |
+| `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME` | Optional | Transactional mail configuration. Configure a verified sender in Brevo. |
+| `GROQ_API_KEY`, `GROQ_MODEL` | Optional | Optional AI-assisted diagnostics. |
+| `PHOTO_WORKER_URLS`, `PHOTO_WORKER_SECRET` | Optional | Trusted photo worker fleet. |
+| `PHOTO_IMPORT_WORKER`, `PHOTO_IMPORT_PARALLEL` | Optional | Photo import worker behavior. |
+
+Check code and provider settings before adding more variables: integrations evolve. Never copy real production values into this table or into `.env.example`.
+
+## Run tests and builds
+
+### API tests
+
+```bash
+cd server
+npm test
+```
+
+### Web tests, lint, and production build
+
+```bash
+cd client
+npm test
+npm run lint
+npm run build
+```
+
+### Android tooling
+
+```bash
+cd mobile
+npm run doctor
+```
+
+Build an APK or Play Store bundle using EAS:
+
+```bash
+npm run build:apk
+npm run build:aab
+```
+
+EAS account access and any required build secrets must be configured outside the repository. Test commands/builds were not run as part of this documentation change.
 
 ## Deployment
 
-### API Server (Render)
+The root `render.yaml` describes a static web service rooted at `client/` and a Node web service rooted at `server/`.
 
-1. **Push to your repository**
-2. **In Render Dashboard**: New → Blueprint
-3. **Select this repository** and `render.yaml`
-4. **Fill in secrets**:
-   - `MONGO_URL`: MongoDB connection string (Atlas or self-hosted)
-   - `SECRET_KEY`: Long random string (use online generator or `node -e "console.log(...)`)
-   - `CRYPTO_SECRET_KEY`: Another long random string
-   - `CLIENT_ORIGINS` (optional): Comma-separated list of allowed frontend origins
+1. Create/select the Render Blueprint for this repository.
+2. Configure all required server environment variables in Render's Environment settings.
+3. Configure `VITE_API_URLS` as a build-time setting for the static client.
+4. Set `CLIENT_ORIGINS` to the exact deployed site origin(s); avoid broad CORS allowlists.
+5. Use the same database and matching auth/encryption secrets across API instances that share a database.
+6. Set the trusted monitoring secret only if an external scheduler is configured to use it.
+7. Deploy and verify `/health` and `/readyz`.
 
-5. **Deploy**: Render builds and runs the server
-6. **Keep-alive**: Server pings itself every 14 minutes (free tier stays warm)
+Do not put secret values into `render.yaml`. The Blueprint should contain variable names and non-sensitive defaults only.
 
-See `render.yaml` for full configuration.
+## Security and privacy notes
 
-### Web Client (Static Hosting)
+### Encryption claims
 
-1. **Build locally**:
-   ```bash
-   cd client && npm run build
-   ```
+The repository contains multiple generations of encryption behavior. Newer client code and `docs/SECURITY.md` describe device-side PBKDF2 and AES-GCM for vault entries, while server code also contains server-side encryption helpers for legacy entries and features such as TOTP. The root README has historically described a different current model. Review code paths before making any claim that every data type is end-to-end encrypted or zero-knowledge.
 
-2. **Deploy `client/build/` to**:
-   - **Netlify**: Drag and drop `build/` or connect GitHub
-   - **Vercel**: Import repo, set build command `npm install && npm run build`
-   - **Render**: Create a Static Site, build command: `npm install && npm run build`, publish dir: `client/build`
-   - **GitHub Pages**: Push to `gh-pages` branch (requires configuration)
+At minimum:
 
-3. **Set environment**:
-   ```bash
-   VITE_API_URLS=https://api.example.com npm run build
-   ```
+- Treat `CRYPTO_SECRET_KEY` and the database as high-value secrets.
+- Do not log passwords, tokens, cookies, request bodies, recovery codes, or decrypted vault contents.
+- Keep HTTPS enabled in production.
+- Use unique high-entropy secrets and a least-privilege database user.
+- Use two-factor authentication on source-control and deployment accounts.
+- Exported CSVs and decrypted backups are plaintext and must be stored securely and deleted when no longer required.
+- Third-party integrations may send metadata to their providers. Review each integration before enabling it.
+- No master-password recovery may be possible for vault data encrypted solely by a locally-derived key; maintain encrypted backups securely.
 
-4. **Important**: Configure a URL rewrite to serve `index.html` for all routes (SPA routing):
-   - **Netlify**: `_redirects` file with `/* /index.html 200`
-   - **Vercel**: `vercel.json` with rewrites
-   - **Render**: Configure under "Rewrites & Redirects"
+### If a credential has ever been committed
 
-### Android App (Play Store)
+Deleting it from the current file is not sufficient. Assume it may remain accessible through Git history, forks, caches, or artifacts. Revoke/rotate the credential with its provider first, then remove the exposed value and consider history cleanup. Never paste a credential into an issue or chat when asking for help.
 
-1. **Set up EAS**:
-   ```bash
-   cd mobile
-   npx eas-cli@latest init
-   export EXPO_TOKEN=<token-from-expo.dev>
-   ```
+## Repository hygiene
 
-2. **Build AAB** (Play Store format):
-   ```bash
-   npm run build:aab
-   ```
-
-3. **Or use GitHub Actions**:
-   - Add `EXPO_TOKEN` secret to your repo
-   - Push to trigger **"Android build (EAS)"** workflow
-   - Download APK/AAB from Artifacts
-
-4. **Submit to Play Store**:
-   ```bash
-   eas submit -p android --latest
-   ```
-
-5. **Checklist**:
-   - Privacy policy at `https://your-domain/privacy`
-   - Data safety: account email/name, E2E encrypted vault, camera for QR codes
-   - No ads, analytics, or tracking
-
----
+- Keep local `config.env`, `.env`, provider credentials, private keys, database dumps, recovery scripts and plaintext exports out of Git.
+- Use `server/config.env.example` as a template only; its values must be placeholders, never valid credentials.
+- Only expose `VITE_*` and `EXPO_PUBLIC_*` variables when they are safe for every user of the built client.
+- Do not commit production account data, logs, screenshots containing secrets, cloud service-account JSON, or copied database records.
+- Before sharing the repo, inspect recent commits and Git history with secret scanning. GitHub secret scanning may not detect every private or custom credential pattern.
 
 ## Troubleshooting
 
-### "Cannot find module 'mongodb'" or other missing dependencies
+**API says no database URL is configured**
+- Set `MONGO_URL` in `server/config.env` or the server environment and check that the DB accepts connections.
 
-```bash
-# Server
-cd server && npm install
+**Login/session failures across server instances**
+- Ensure all instances sharing a database use the same auth/encryption environment values, and check cookie/CORS settings for the deployed site.
 
-# Client
-cd client && npm install
+**Web app calls the wrong API**
+- Set `VITE_API_URLS` and rebuild/restart Vite. Check the configured API fallback in `client/src/api/client.js`.
 
-# Mobile
-cd mobile && npm install
-```
+**Android app cannot reach a local server**
+- Use a reachable LAN IP or emulator host alias, not the phone's own `localhost`.
 
-### Server won't start: "MONGO_URL not set" or "Cannot connect to MongoDB"
+**Password-reset email is not sent**
+- Configure a valid Brevo API key and sender verified with Brevo in the server environment.
 
-- Verify `config.env` exists and has `MONGO_URL`
-- Check MongoDB connection string format:
-  - Local: `mongodb://localhost:27017/password-manager`
-  - Atlas: `mongodb+srv://user:pass@cluster.mongodb.net/password-manager`
-- Ensure MongoDB is running: `mongod` (local) or check Atlas connection
+## Contributing
 
-### Web client can't reach API
-
-- Verify API is running at the port you set (default: 8000)
-- Check `VITE_API_URLS` environment variable:
-  ```bash
-  VITE_API_URLS=http://localhost:8000 npm run dev
-  ```
-- Ensure CORS is configured correctly:
-  - If API and client are on different hosts, set `CLIENT_ORIGINS` on the server
-- Check browser console (F12) for network errors
-
-### Android app crashes on startup
-
-- Ensure `EXPO_PUBLIC_API_URLS` is set to your server's IP/hostname:
-  ```bash
-  EXPO_PUBLIC_API_URLS=http://192.168.1.20:8000 npx expo run:android
-  ```
-- Check that your device can reach the API server (same network)
-- Review Android logcat: `adb logcat | grep "reactnative"`
-
-### Tests failing
-
-**Server tests**:
-```bash
-cd server && npm test
-```
-- Uses in-memory MongoDB; no external database needed
-- Check for open ports conflicts
-
-**Client tests**:
-```bash
-cd client && npm test
-```
-- Tests crypto interop, importers, health checks
-- Requires `crypto.js` and related modules
-
-### "Private IP" or "Localhost" issues on mobile
-
-- Use your computer's **local IP** (e.g., `192.168.1.20`), not `localhost`
-  ```bash
-  EXPO_PUBLIC_API_URLS=http://192.168.1.20:8000 npx expo run:android
-  ```
-- Ensure device is on the same network as your computer
-- On macOS/Linux: `ifconfig | grep 192.168`
-
----
+1. Keep changes focused and avoid committing secrets or real account data.
+2. Run the relevant test, lint, and build commands.
+3. Describe behavior changes and any new environment variables in the pull request.
+4. Update this README and `docs/SECURITY.md` when security behavior or encryption claims change.
 
 ## License
 
-ISC License — See the repository for details.
-
----
-
-## Acknowledgments
-
-- **Original Author**: Rohit Saini
-- **Contributors**: All the amazing people helping improve Stashr
-- **Security**: Design reviewed against OWASP Top 10 and zero-knowledge architecture principles
-- **Open Source**: Built on the shoulders of Express, Mongoose, React, Vite, Expo, and the Node.js ecosystem
-
----
-
-## Questions or Feedback?
-
-- **Report a bug**: https://github.com/Tanushh18/password-manager/issues/new
-- **Start a discussion**: https://github.com/Tanushh18/password-manager/discussions
-- **Security issues**: Please email privately instead of opening a public issue
-
-Happy vaulting! 🔐
-
-## Server registry (one place for every app's backend URLs)
-
-Stashr keeps the backend URL list for Stashr, Deal Radar and We Three. Sign in as the admin account
-(`REGISTRY_ADMINS`, default `tanushchawla16@gmail.com`), open **Servers**, and edit the lists.
-Apps read `GET /registry/<stashr|dealradar|wethree>` on start, cache the answer on the device, and fall
-back to their built-in URLs if Stashr can't be reached. The registry holds URLs only, never secrets.
-`https://password-manager-server-xxdr.onrender.com` is the fixed address the other apps ask, so keep it alive.
-
-## Render Control Center
-
-The authenticated web app includes a Render service dashboard at **`/render`**. It supports multiple Render accounts, service inventory and filtering, recent logs, environment-variable viewing/editing, deployment history, deploys, cache-cleared deploys, and supported-service restarts.
-
-Render API requests go through the existing authenticated Stashr API (`server/router/render.js`), not directly from the browser to `api.render.com`, so the browser does not need cross-origin access to the Render API. Every request requires a valid Stashr session and is rate-limited.
-
-### Render API-key handling
-
-- Add a connection from the **Render** navigation item in the signed-in web app.
-- The backend validates the key against Render before saving it.
-- Keys are stored as encrypted Render connection records in the existing MongoDB user document, using Stashr's account data-key encryption helper. The key is never returned in the connection-list API response.
-- The backend decrypts a saved key only to make the requested upstream Render API call. Do not log request authorization headers or secret values.
-- Removing a connection deletes its saved record. Rotate a key in Render and reconnect if it may have been exposed.
-- This is encrypted-at-rest storage, not a zero-knowledge design for Render keys: the backend must access the key to proxy requests to Render. Protect the Stashr server, `CRYPTO_SECRET_KEY`, `SECRET_KEY`, database credentials, and administrator account.
-
-The Render dashboard uses the existing Stashr MongoDB connection; **no database file or separate database attachment is needed**. Ensure the deployed web client origin is allowed by `CLIENT_ORIGINS` in the backend configuration if it is not already listed.
-
-
-### Render Operations Center additions
-
-The Render page also includes:
-- **Encrypted Render connections and audit trail:** Render API keys, operations settings, metric samples and incidents are encrypted with the user's account data key. Secret values are not included in audit events or reports.
-- **Service health and resource metrics:** probes only Render-provided HTTPS `*.onrender.com` URLs and fetches CPU, memory, HTTP latency/request, bandwidth and instance-count series where supported by Render and the service plan.
-- **Deployment and recovery controls:** deploy, restart, cancel an in-progress deployment, roll back to a selected deployment, and suspend/resume supported services. Destructive operations require confirmation; rollback does not disable autodeploy.
-- **Encrypted environment snapshots and database exports:** snapshots are bounded per service/account; Postgres exports can be started and listed. Persistent samples also record the latest manual export job returned by Render for Postgres services; this does not represent Render's automatic backup status. Review restore/export confirmations carefully. Stashr does not restore a database export.
-- **Multi-server groups:** groups can span connected Render accounts, are persisted in the Stashr account, and can include a manually defined dependency map. The dependency map is documentation/visualization; it does not change service networking.
-- **Persistent monitoring:** the API scheduler endpoint samples health, CPU, memory and latency for enabled groups even when the dashboard is closed, when an external scheduler is configured. Sampling is bounded to 10 groups and 15 unique services per user tick; latest deployment status is checked for failed releases. Unavailable metrics are represented as unavailable, not zero. History and incident arrays are encrypted and bounded.
-- **Incident timeline and alerts:** health, deploy and load transitions are recorded as encrypted incident events. One shared probe decides whether a service is up (Render's own health path first; any answer below 5xx means the server is alive, so a 404 on `/` or a 429 is never "down"; one patient retry covers free-tier cold starts). A health incident opens only after two failed checks in a row (a manual "Check all servers now" counts at once), and only a definite "up" resolves it: Render API errors, suspended services, deploys in progress and unavailable metrics freeze an incident instead of closing it. Every incident carries a cause and labels (for example *Not responding*, *Out of memory*, *Failed after a deploy*, *Deploy failed*, or *Cause unclear* when the evidence does not point at one thing), a timeline (last healthy, first failure, load peak), the load at the time, the latest deploy, a trend and a suggested next step. A server that answers but has no `/health` route is not an incident: Stashr adds the route to its GitHub repository (pull request, merged, so Render redeploys) for Express, FastAPI, Flask and Next.js, or explains on the server card what is needed. Telegram alerts carry **Check**, **Restart** (asks to confirm) and **Resolve** buttons that only the linked chat can press; use the test action before relying on alerts.
-- **Services & Usage:** reads each live Render service's environment variables, detects the databases and APIs it uses, and asks the provider for current usage with the keys the app already holds (read-only, public hosts only, hostnames are resolved and internal addresses refused). Databases: MongoDB, PostgreSQL (Neon, Supabase, Render, RDS, ...), MySQL / MariaDB, Redis (native and Upstash REST), Turso, Pinecone, Elasticsearch. Storage and APIs: Cloudinary, Amazon S3 / Cloudflare R2 (the first 5,000 objects), Brevo, SendGrid, Twilio, Vonage, Deepgram, ElevenLabs. Services without a usage API (Firebase, Clerk, Algolia, OpenAI, ...) are still listed with where to look. Most providers do not report your plan's limit, so you set it per provider in the page settings; without one Stashr shows the amount used but never invents a percentage.
-- **Unified logs and configuration drift:** query recent application logs across up to 10 services in a group and compare environment-variable names without comparing or revealing their values.
-- **Safe group actions:** sequential deploy and restart actions show a confirmation and report partial failures instead of pretending an entire batch succeeded.
-- **Reports and heuristics:** export bounded monitoring history, incidents, and manual cost estimates as CSV or JSON. **Budget guardrails** compare user-entered monthly USD estimates against a group budget and open an incident only when estimates exist for every service; these are not live provider charges. Built-in log diagnostics use deterministic heuristics. An optional Groq diagnosis can be enabled with server-side GROQ_API_KEY; the user must explicitly consent for each request, common secrets/emails are redacted first, and redaction is not guaranteed to catch every sensitive value.
-- **Inventory filters:** search, account/type filters, favorites and the “Hide suspended” toggle help reduce clutter. Actual provider billing totals are not inferred from service plan labels because Render billing data is not exposed by this feature.
-
-#### Enable monitoring while the browser is closed
-
-1. In the Render dashboard for the Stashr API, add `RENDER_MONITOR_CRON_SECRET` with a long, random secret. Keep it out of source control and do not paste it into chat.
-2. Configure a trusted external scheduler (for example, cron-job.org) to send a **POST every 5 minutes** to `https://YOUR_STASHR_API_HOST/render/ops/tick` with header `Authorization: Bearer YOUR_SECRET`. Use your actual API host; the request body can be empty. The endpoint returns 503 if the secret is not configured and 401 for a wrong secret.
-3. In Stashr, connect the relevant Render accounts, create a group with at least two services, enable persistent monitoring, and save the settings. The worker honours each user's 5-, 10- or 15-minute interval even if the external scheduler ticks every 5 minutes.
-4. Optional: create a Telegram bot, enter its bot token and chat ID in the Operations Center, save, then use **Test Telegram**. Tokens are encrypted server-side and never returned by the configuration API.
-5. Use **Run sample now** to verify API credentials and metric availability, and export a CSV report to inspect stored samples and incidents.
-
-The scheduler secret only authorizes a monitoring tick; it does not expose user credentials. Protect the scheduler configuration and monitor its delivery history. A successful API response means the tick completed, not that every metric was available or every service was healthy. Render's API permissions, rate limits, service types and plan determine available data. The dashboard does not provide provider billing totals, automated production database restores, or a guarantee of continuous uptime from Render itself. AI diagnosis is optional and requires explicit consent plus server-side Groq configuration.
-
-## Platform operations and security
-
-Stashr's platform upgrade and verification plan is documented in [docs/UPGRADE_PLAN.md](docs/UPGRADE_PLAN.md). See the [target architecture](docs/ARCHITECTURE.md), [provider compatibility matrix](docs/INTEGRATION_MATRIX.md), [security scanning runbook](docs/SECURITY_SCANNING.md), [operations runbook](docs/OPERATIONS_RUNBOOK.md), and [quality/release gates](docs/QUALITY_GATES.md).
-
-Repository vulnerability scans run from [GitHub Actions → Security Scan](.github/workflows/security-scan.yml) on pushes, pull requests and weekly, with manual dispatch available. The admin-only Security Scans page links to the workflow and GitHub Security findings; it deliberately does not fabricate a clean result when a scan has not completed.
+Check the applicable license and project ownership before redistributing or deploying this application. The API package currently declares ISC, but that package-level declaration may not by itself define the license of the entire repository.
