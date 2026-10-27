@@ -83,7 +83,7 @@ const vercel = {
     const projectId = created.body?.id;
     const deployBody = { name: input.name, project: projectId || input.name, gitSource: { type: "github", org: input.owner, repo: input.repo, ref: input.branch || input.defaultBranch || "main" } };
     if (input.branch && input.branch === input.defaultBranch) deployBody.target = "production";
-    const dep = await http("https://api.vercel.com/v13/deployments" + q + (q ? "&" : "?") + "forceNew=1", { method: "POST", headers: bearer(token), json: deployBody });
+    const dep = await http("https://api.vercel.com/v13/deployments" + q + (q ? "&" : "?") + "forceNew=1&skipAutoDetectionConfirmation=1", { method: "POST", headers: bearer(token), json: deployBody });
     const base = { id: projectId || input.name, url: "https://" + input.name + ".vercel.app", dashboardUrl: "https://vercel.com/dashboard" };
     if (!dep.ok) return { ok: true, service: base, note: "The project was created, but the first deploy did not start: " + reason(dep, "Vercel refused it") + ". Push a commit or press Redeploy in Vercel." };
     return { ok: true, service: { ...base, deployId: dep.body?.id || "", url: dep.body?.url && input.branch !== input.defaultBranch ? httpsUrl(dep.body.url) : base.url } };
