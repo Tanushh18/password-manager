@@ -12,7 +12,7 @@ const app = require("../app");
 const User = require("../models/schema");
 const Registry = require("../models/registry");
 const AuditEvent = require("../models/AuditEvent");
-const { slugify, discoverServers, mergeServerUrls, publishedServers } = require("../utils/projectServers");
+const { slugify, discoverServers, mergeServerUrls, publishedServers, syncProjectServers } = require("../utils/projectServers");
 
 let mongo;
 beforeAll(async () => { mongo = await MongoMemoryServer.create(); await mongoose.connect(mongo.getUri()); });
@@ -82,6 +82,32 @@ describe("per-project public registry", () =>
         expect((await request(app).put("/registry/my-shop").set(auth(bob)).send({ urls: ["https://evil.example.com"] })).status).toBe(403);
         expect((await request(app).put("/registry/wethree").set(auth(ana)).send({ urls: ["https://a.example.com"] })).status).toBe(403);
         expect((await request(app).put("/registry/A").set(auth(ana)).send({ urls: ["https://a.example.com"] })).status).toBe(400);
+    });
+});
+
+describe("sync never undoes a change made while it was running", () =>
+{
+    test("a domain saved after the background pass read the project is kept and published", async () =>
+    {
+        const ana = await signIn("ana@example.com");
+        const made = await request(app).post("/projects/items").set(auth(ana)).send({ data: { name: "Site", registryApp: "my-site", serverUrls: [], renderServiceId: "s1", renderAccountId: "a", renderServices: [{ accountId: "a", serviceId: "s1", name: "api", url: "https://site-server.onrender.com" }] } });
+        expect(made.status).toBe(201);
+        // the background pass reads the account now ...
+        const stale = await User.findOne({ email: "ana@example.com" });
+        const dataKey = await stale.getDataKey();
+        const staleEntry = stale.projects[0];
+        // ... and meanwhile the person adds their own domain
+        const id = made.body.item._id || made.body.item.id;
+        const saved = await request(app).put(`/projects/items/${id}`).set(auth(ana)).send({ data: { name: "Site", registryApp: "my-site", serverUrls: [{ url: "https://api.mysite.com", enabled: true }], renderServiceId: "s1", renderAccountId: "a", renderServices: [{ accountId: "a", serviceId: "s1", name: "api", url: "https://site-server.onrender.com" }] } });
+        expect(saved.status).toBe(200);
+
+        const result = await syncProjectServers(stale, dataKey, staleEntry, [{ id: "s1", type: "web_service", url: "https://site-server.onrender.com" }]);
+        expect(result.serverUrls.map((r) => r.url).sort()).toEqual(["https://api.mysite.com", "https://site-server.onrender.com"]);
+
+        const after = await User.findOne({ email: "ana@example.com" });
+        const fields = User.publicEntry(after.projects[0], dataKey);
+        expect(fields.serverUrls.map((r) => r.url).sort()).toEqual(["https://api.mysite.com", "https://site-server.onrender.com"]);
+        expect((await request(app).get("/registry/my-site")).body.urls.sort()).toEqual(["https://api.mysite.com", "https://site-server.onrender.com"]);
     });
 });
 

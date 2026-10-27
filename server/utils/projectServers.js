@@ -93,30 +93,46 @@ async function pickSlug(user, name) {
     return base + "-" + Date.now().toString(36).slice(-4);
 }
 
+/** The project as it is in the database right now (the copy a background pass holds may be seconds old). */
+async function latestEntry(user, entry) {
+    const doc = await User.findOne({ _id: user._id }, { projects: { $elemMatch: { _id: entry._id } } }).lean();
+    return doc && Array.isArray(doc.projects) && doc.projects[0] ? doc.projects[0] : null;
+}
+
+/** Writes the project only if nobody changed it since `entry` was read. Returns false when it lost that race. */
 async function saveFields(user, dataKey, entry, fields) {
     const next = { ...fields };
     STRIP.forEach((k) => delete next[k]);
     const sealed = User.sealEntry(dataKey, next);
-    await User.updateOne({ _id: user._id, "projects._id": entry._id }, { $set: { "projects.$.enc": "udk", "projects.$.data": sealed, "projects.$.updatedAt": new Date() } });
-    entry.enc = "udk";
-    entry.data = sealed;
+    const result = await User.updateOne(
+        { _id: user._id, projects: { $elemMatch: { _id: entry._id, updatedAt: entry.updatedAt } } },
+        { $set: { "projects.$.enc": "udk", "projects.$.data": sealed, "projects.$.updatedAt": new Date() } }
+    );
+    return result.modifiedCount === 1;
 }
 
 /**
  * Brings one project's Server URLs in step with its Render servers and publishes them. Does nothing for a project that
  * has no registryApp (not published). `registryApp` here overrides the saved one (used when publishing is switched on).
  */
-async function syncProjectServers(user, dataKey, entry, services, { registryApp } = {}) {
-    const fields = User.publicEntry(entry, dataKey);
-    if (fields.broken || fields.enc === "e2e") return { changed: false, published: false };
-    const app = registryApp || fields.registryApp;
-    if (!app) return { changed: false, published: false };
-    const found = discoverServers(fields, services);
-    const merged = mergeServerUrls(fields.serverUrls, found, fields.serverUrlsIgnored);
-    const appChanged = app !== fields.registryApp;
-    if (merged.changed || appChanged) await saveFields(user, dataKey, entry, { ...fields, serverUrls: merged.rows, registryApp: app });
-    const published = (merged.rows.length || !DEFAULTS[app]) ? await publishToRegistry(app, merged.rows, user) : false;
-    return { changed: merged.changed || appChanged, published, serverUrls: merged.rows, registryApp: app };
+async function syncProjectServers(user, dataKey, staleEntry, services, { registryApp } = {}) {
+    // Always work from the newest copy: a person may have saved a change while a background pass was running, and
+    // writing back an older copy would undo it (and publish the older list).
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const entry = await latestEntry(user, staleEntry);
+        if (!entry) return { changed: false, published: false };
+        const fields = User.publicEntry(entry, dataKey);
+        if (fields.broken || fields.enc === "e2e") return { changed: false, published: false };
+        const app = registryApp || fields.registryApp;
+        if (!app) return { changed: false, published: false };
+        const found = discoverServers(fields, services);
+        const merged = mergeServerUrls(fields.serverUrls, found, fields.serverUrlsIgnored);
+        const appChanged = app !== fields.registryApp;
+        if ((merged.changed || appChanged) && !(await saveFields(user, dataKey, entry, { ...fields, serverUrls: merged.rows, registryApp: app }))) continue; // changed meanwhile: read again
+        const published = (merged.rows.length || !DEFAULTS[app]) ? await publishToRegistry(app, merged.rows, user) : false;
+        return { changed: merged.changed || appChanged, published, serverUrls: merged.rows, registryApp: app };
+    }
+    return { changed: false, published: false };
 }
 
 module.exports = { publishedServers, slugify, discoverServers, mergeServerUrls, publishToRegistry, pickSlug, syncProjectServers };
