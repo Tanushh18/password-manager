@@ -1,9 +1,57 @@
-# One-off local recovery scripts/output — never push this. It contains
-# logic and file paths for decrypting a real account's legacy vault items,
-# and can produce plaintext password exports on disk.
-recovery/
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+config.env
+config.env.*
+!config.env.example
+!.config.env.example
+server/config.env
+server/.env
+server/.env.*
+!server/.env.example
+!server/config.env.example
+client/.env
+client/.env.*
+mobile/.env
+mobile/.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+service-account*.json
+credentials*.json
 
+# Local databases, exports, backups, and diagnostics
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.bak
+*.backup
+*.log
+coverage/
 .DS_Store
+Thumbs.db
+
+# Password-vault recovery scripts and plaintext exports must never be committed.
+recovery/
+*plaintext*
+*decrypted*
+*password-export*
+*passwords.csv
+*vault-export*
+*.enc
+*.csv
+
+# Dependency/build artifacts
+node_modules/
+client/build/
+client/dist/
+mobile/.expo/
+mobile/android/.gradle/
+mobile/android/app/build/
+mobile/ios/Pods/
 
 # Temporary git worktrees used by parallel coding agents
 .claude/worktrees/
