@@ -18,6 +18,11 @@ const APP_LABELS = { stashr: "Stashr", dealradar: "Deal Radar", wethree: "We Thr
 const isAdminEmail = (email) => Boolean(email && ADMINS.includes(String(email).toLowerCase()));
 const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
 
+const bare = (u) => String(u || "").trim().replace(/\/+$/, "").toLowerCase();
+
+/** OFFABLE apps (We Three, Deal Radar) have fixed addresses: a list may only hold their built-in URLs (switched on or off), never another. */
+const onlyBuiltInUrls = (app, urls) => !OFFABLE.has(app) || (urls || []).every((u) => (DEFAULTS[app] || []).map(bare).includes(bare(u)));
+
 /** The URLs an app uses: its saved list, an empty list when it was switched off, otherwise the built-in default. */
 const urlsFor = (doc, app) =>
 {
@@ -26,4 +31,4 @@ const urlsFor = (doc, app) =>
     return DEFAULTS[app];
 };
 
-module.exports = { ADMINS, DEFAULTS, OFFABLE, APP_LABELS, isAdminEmail, SLUG, urlsFor };
+module.exports = { ADMINS, DEFAULTS, OFFABLE, APP_LABELS, isAdminEmail, SLUG, urlsFor, onlyBuiltInUrls };

@@ -97,6 +97,8 @@ export function normalizeProject(raw = {}) {
   }
   // Servers removed by hand: the automatic sync never adds these back.
   if (Array.isArray(raw.serverUrlsIgnored) && raw.serverUrlsIgnored.length) next.serverUrlsIgnored = raw.serverUrlsIgnored.filter((u) => typeof u === "string" && /^https?:\/\//i.test(u)).map((u) => u.trim().replace(/\/+$/, "").toLowerCase());
+  // Locked: the URLs cannot be edited, removed, reordered or added, and the server never changes them by itself (switches still work).
+  if (raw.serverUrlsLocked === true) next.serverUrlsLocked = true;
   if (clean(raw.registryApp)) next.registryApp = clean(raw.registryApp).toLowerCase();
   return next;
 }
