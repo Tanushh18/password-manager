@@ -12,7 +12,7 @@ const DEFAULTS = {
 };
 // Built-in apps that may be switched off completely (empty list) to test that the app stops using its server.
 // The others always keep a server.
-const OFFABLE = new Set(["wethree"]);
+const OFFABLE = new Set(["wethree", "dealradar"]);
 const APP_LABELS = { stashr: "Stashr", dealradar: "Deal Radar", wethree: "We Three" };
 
 const isAdminEmail = (email) => Boolean(email && ADMINS.includes(String(email).toLowerCase()));
