@@ -20,7 +20,7 @@ const SORTERS = {
 };
 
 /** Every server of the project, on every hosting provider: account, URLs, status, branch, env comparison, logs and actions. */
-export default function ProjectDeployments({ project }) {
+export default function ProjectDeployments({ project, refreshKey, hideRefresh }) {
   const [targets, setTargets] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -42,6 +42,7 @@ export default function ProjectDeployments({ project }) {
     finally { if (!quiet) setLoading(false); }
   }, [project.id]);
   useEffect(() => { void load(); }, [load, (project.renderServices || []).length, (project.hostLinks || []).length]);
+  useEffect(() => { if (refreshKey) void load(); }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
   usePolling(() => load({ quiet: true }), 120000, true);
 
   const list = targets || [];
@@ -107,7 +108,7 @@ export default function ProjectDeployments({ project }) {
         </div>
         <div className="pdep__actions">
           {main ? <button type="button" className="btn btn--primary btn--sm" disabled={list.length < 2} title={list.length < 2 ? "Link a second server to sync variables between servers" : "Copy variables from the main server to the others"} onClick={() => setSyncFrom(main.ref)}>Sync env across servers</button> : null}
-          <button type="button" className="btn btn--ghost btn--sm" disabled={loading} onClick={() => void load()}>{loading ? "Reading…" : "↻ Refresh"}</button>
+          {hideRefresh ? null : <button type="button" className="btn btn--ghost btn--sm" disabled={loading} onClick={() => void load()}>{loading ? "Reading…" : "↻ Refresh"}</button>}
         </div>
       </header>
       {error ? <div className="notice notice--err" role="alert">{error}</div> : null}

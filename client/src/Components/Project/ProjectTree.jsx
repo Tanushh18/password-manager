@@ -65,7 +65,7 @@ export function TreeLeaf({ node, showPath, reveal = false }) {
 function TreeBranch({ node, depth, openSet, toggle }) {
   const open = openSet.has(node.id);
   return (
-    <div className="ptree__branch" role="treeitem" aria-expanded={open} aria-selected="false">
+    <div className="ptree__branch" data-branch={node.id} role="treeitem" aria-expanded={open} aria-selected="false">
       <button type="button" className="ptree__head" style={{ paddingLeft: `${depth * 16 + 4}px` }} onClick={() => toggle(node.id)}>
         <Chevron open={open} />
         <span className="ptree__label">{node.label}</span>

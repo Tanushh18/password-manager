@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { API_URL, checkServer, errorMessage, getAllRenderServers, saveRegistry, syncProjectServers } from "../../api/client";
 import { useVault } from "../../state/vault";
 import { Plus, Trash } from "../Icons/Icons";
+import HostLinks from "./HostLinks";
+import ServerUsage from "./ServerUsage";
+import "./ServerUrls.css";
 
 const OWN = "__own__";
 const LEGACY = [{ id: "wethree", label: "We Three" }, { id: "dealradar", label: "Deal Radar" }, { id: "stashr", label: "Stashr" }];
@@ -10,10 +13,30 @@ const looksValid = (u) => /^https?:\/\/\S+$/i.test(u.trim());
 const originOf = (u) => { try { return new URL(u).origin.toLowerCase(); } catch { return ""; } };
 const pathOf = (u) => { try { return new URL(u).pathname.replace(/\/+$/, ""); } catch { return ""; } };
 
+/** A small popup menu that closes when you pick something or click elsewhere. */
+function Menu({ label, align, children }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", esc); };
+  }, [open]);
+  return (
+    <div className="su__menu" ref={box}>
+      <button type="button" className="btn btn--sm" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>{label} ▾</button>
+      {open ? <div className={"su__pop" + (align === "right" ? " su__pop--right" : "")} role="menu" onClick={() => setOpen(false)}>{children}</div> : null}
+    </div>
+  );
+}
+
 /**
  * This project's backend URLs. They live inside the project (encrypted with the rest of it) and feed a public list at
  * <Stashr>/registry/<name> that a client app or website reads to find the server. Servers of the repo are added by
- * themselves as they appear; switch one off with "Use", or remove it and it stays out.
+ * themselves as they appear; switch one off with its switch, or remove it and it stays out.
  */
 export default function ServerUrls({ project }) {
   const { updateProject } = useVault();
@@ -23,6 +46,8 @@ export default function ServerUrls({ project }) {
   const [status, setStatus] = useState({});
   const [busy, setBusy] = useState("");
   const [found, setFound] = useState(null);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [usageOpen, setUsageOpen] = useState(false);
 
   const slug = project.registryApp || "";
   const isLegacy = LEGACY.some((a) => a.id === slug);
@@ -63,7 +88,7 @@ export default function ServerUrls({ project }) {
 
   const cleanRows = (list) => list.filter((r) => r.url.trim()).map((r) => ({ url: r.url.trim().replace(/\/+$/, ""), enabled: r.enabled !== false, ...(r.auto ? { auto: true } : {}) }));
 
-  // Saves the project and, when a public list is chosen, publishes the switched-on URLs. `instant` = from a Turn off/on button.
+  // Saves the project and, when a public list is chosen, publishes the switched-on URLs. `instant` = from a switch.
   const persist = async (list, { instant = false } = {}) => {
     const cleaned = cleanRows(list);
     if (cleaned.some((r) => !looksValid(r.url))) return toast.error("Every URL must start with https://");
@@ -86,7 +111,6 @@ export default function ServerUrls({ project }) {
     finally { setBusy(""); }
   };
   const save = () => persist(rows);
-  // The Turn off / Turn on buttons act at once: they save and publish without a separate Save.
   const setOne = (i, enabled) => { const next = rows.map((r, n) => (n === i ? { ...r, enabled } : r)); setRows(next); void persist(next, { instant: true }); };
   const setAll = (enabled) => { const next = rows.map((r) => ({ ...r, enabled })); setRows(next); void persist(next, { instant: true }); };
 
@@ -101,63 +125,92 @@ export default function ServerUrls({ project }) {
   };
 
   const copy = async () => { try { await navigator.clipboard.writeText(publicUrl); toast.success("Copied."); } catch { toast.error("Clipboard is not available."); } };
-
   const groups = (found || []).reduce((acc, s) => { (acc[s.providerLabel] = acc[s.providerLabel] || []).push(s); return acc; }, {});
+  const onCount = rows.filter((r) => r.enabled !== false).length;
 
   return (
-    <section className="card proj-optional" style={{ padding: 16 }}>
-      <h2 className="proj-section__title">Server URLs <small>(the app uses the switched-on ones, in this order)</small></h2>
-      {rows.length === 0 ? <p className="field__note">No server URLs yet. Deploy a server, or add one below.</p> : rows.map((r, i) => (
-        <div key={i} className="proj-repeat-row">
-          <input className="input" value={r.url} placeholder="https://your-server.onrender.com/api" onChange={(e) => edit(i, { url: e.target.value })} />
-          <small>{status[r.url] || (r.auto ? "auto" : "")}</small>
-          <button type="button" className={"btn btn--sm" + (r.enabled !== false ? "" : " btn--primary")} disabled={busy === "toggle" || !looksValid(r.url)} onClick={() => setOne(i, r.enabled === false)} title={r.enabled !== false ? "The apps use this server. Click to stop them using it, right now." : "Switched off. Click to let the apps use it again."}>{r.enabled !== false ? "Turn off" : "Turn on"}</button>
-          <small>{r.enabled !== false ? "ON" : "OFF"}</small>
-          <button type="button" className="icon-btn icon-btn--quiet" onClick={() => move(i)} aria-label="Move up" disabled={i === 0}>↑</button>
-          <button type="button" className="icon-btn icon-btn--quiet" onClick={() => remove(i)} aria-label="Remove"><Trash size={15} /></button>
+    <section className="card su" aria-label="Server URLs">
+      <div className="su__head">
+        <div>
+          <h2 className="su__title">Server URLs</h2>
+          <p className="su__hint">{rows.length ? `${onCount} of ${rows.length} on. The app uses the switched-on ones, top first.` : "No servers yet. Deploy one, or add it below."}</p>
         </div>
-      ))}
-      <div className="field">
-        <label className="field__label" htmlFor="su-app">Public list</label>
-        <select id="su-app" className="input" value={mode} onChange={(e) => setMode(e.target.value)}>
-          <option value="">Not published</option>
-          <option value={OWN}>Publish for this project{slug && !isLegacy ? ` (${slug})` : ""}</option>
-          {LEGACY.map((a) => <option key={a.id} value={a.id}>{a.label} (admin)</option>)}
-        </select>
-        {publicUrl && mode ? (
-          <p className="field__note">
-            Put this address in your client: <code>{publicUrl}</code>{" "}
-            <button type="button" className="btn btn--sm" onClick={copy}>Copy</button>
-          </p>
-        ) : mode === OWN ? <p className="field__note">The address appears after you save.</p> : null}
       </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button type="button" className="btn btn--sm" onClick={() => setRows((l) => [...l, { url: "", enabled: true }])}><Plus size={14} /> Add URL</button>
-        <button type="button" className="btn btn--sm" onClick={discover}>Add from my servers</button>
-        <button type="button" className="btn btn--sm" onClick={() => setAll(false)} disabled={!rows.length || busy === "toggle"}>Turn off all</button>
-        <button type="button" className="btn btn--sm" onClick={() => setAll(true)} disabled={!rows.length || busy === "toggle"}>Turn on all</button>
-        <button type="button" className="btn btn--sm" onClick={syncNow} disabled={busy === "sync"}>{busy === "sync" ? "Syncing…" : "Sync now"}</button>
-        <button type="button" className="btn btn--sm" onClick={check} disabled={!rows.length}>Check all</button>
+
+      <div className="su__public">
+        <div>
+          <label htmlFor="su-app">Public list</label>
+          <select id="su-app" className="input" value={mode} onChange={(e) => setMode(e.target.value)}>
+            <option value="">Not published</option>
+            <option value={OWN}>Publish for this project{slug && !isLegacy ? ` (${slug})` : ""}</option>
+            {LEGACY.map((a) => <option key={a.id} value={a.id}>{a.label} (admin)</option>)}
+          </select>
+        </div>
+        {publicUrl && mode ? (
+          <div className="su__address"><code title={publicUrl}>{publicUrl}</code><button type="button" className="btn btn--sm" onClick={copy}>Copy</button></div>
+        ) : <div className="su__address su__address--empty">{mode === OWN ? "The address appears after you save." : "Publish it to get an address your client can use."}</div>}
+      </div>
+
+      <div className="su__list">
+        {rows.map((r, i) => {
+          const on = r.enabled !== false;
+          return (
+            <div key={i} className={"su__row" + (on ? "" : " is-off")}>
+              <span className={"su__dot" + (status[r.url] === "up" ? " is-up" : status[r.url] === "down" ? " is-down" : "")} title={status[r.url] ? status[r.url] : "Not checked yet"} aria-hidden="true" />
+              <input className="input" value={r.url} placeholder="https://your-server.onrender.com" aria-label={"Server URL " + (i + 1)} onChange={(e) => edit(i, { url: e.target.value })} />
+              {r.auto ? <span className="su__tag" title="Added automatically from your Render server">auto</span> : <span />}
+              <button type="button" role="switch" aria-checked={on} aria-label={(on ? "Turn off " : "Turn on ") + (r.url || "server")} className="su__switch" disabled={busy === "toggle" || !looksValid(r.url)} title={on ? "On: the apps use it. Click to turn it off, right now." : "Off. Click to let the apps use it again."} onClick={() => setOne(i, !on)} />
+              <button type="button" className="icon-btn icon-btn--quiet su__up" onClick={() => move(i)} aria-label="Move up" disabled={i === 0}>↑</button>
+              <button type="button" className="icon-btn icon-btn--quiet" onClick={() => remove(i)} aria-label="Remove"><Trash size={15} /></button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="su__actions">
+        <Menu label="Add">
+          <button type="button" role="menuitem" onClick={() => setRows((l) => [...l, { url: "", enabled: true }])}>Type a URL</button>
+          <button type="button" role="menuitem" onClick={discover}>From my servers…</button>
+          <button type="button" role="menuitem" onClick={() => setLinkOpen(true)}>Link a Vercel / Netlify / Railway site…</button>
+        </Menu>
+        <Menu label="More">
+          <button type="button" role="menuitem" onClick={syncNow} disabled={busy === "sync"}>Sync from Render now</button>
+          <button type="button" role="menuitem" onClick={check} disabled={!rows.length}>Check which are up</button>
+          <hr />
+          <button type="button" role="menuitem" onClick={() => setAll(false)} disabled={!rows.length || busy === "toggle"}>Turn all off</button>
+          <button type="button" role="menuitem" onClick={() => setAll(true)} disabled={!rows.length || busy === "toggle"}>Turn all on</button>
+        </Menu>
+        <span className="su__spacer" />
         <button type="button" className="btn btn--primary btn--sm" onClick={save} disabled={busy === "save"}>{busy === "save" ? "Saving…" : "Save"}</button>
       </div>
-      {found && (
-        <div style={{ marginTop: 12 }}>
-          {found.length === 0 ? <p className="field__note">No servers found in your connected Render or hosting accounts.</p> : Object.entries(groups).map(([provider, list]) => (
+
+      <HostLinks project={project} open={linkOpen} onOpenChange={setLinkOpen} />
+
+      {found ? (
+        <div className="su__found">
+          {found.length === 0 ? <p className="su__empty">No servers found in your connected Render or hosting accounts.</p> : Object.entries(groups).map(([provider, list]) => (
             <div key={provider}>
-              <h3 className="proj-section__title" style={{ fontSize: 14, marginTop: 10 }}>{provider} <small>({list.length})</small></h3>
+              <div className="su__group">{provider} · {list.length}</div>
               {list.map((s) => {
                 const added = rows.some((r) => originOf(r.url) === originOf(s.url));
                 return (
-                  <div key={provider + s.id} className="proj-repeat-row">
-                    <span style={{ flex: 1 }}><strong>{s.name}</strong> <small>{s.url} · {s.domain ? "custom domain" : s.kind === "site" ? "site" : "server"} · {s.accountName}{s.suspended ? " · suspended" : ""}</small></span>
-                    <button type="button" className="btn btn--sm" disabled={added} onClick={() => addFound(s)}>{added ? "Added" : "Add"}</button>
+                  <div key={provider + s.id} className="su__found-row">
+                    <span><strong>{s.name}</strong><small>{s.url} · {s.domain ? "custom domain" : s.kind === "site" ? "site" : "server"} · {s.accountName}{s.suspended ? " · suspended" : ""}</small></span>
+                    <button type="button" className="btn btn--sm" disabled={added} onClick={() => addFound(s)}>{added ? "Added" : <><Plus size={13} /> Add</>}</button>
                   </div>
                 );
               })}
             </div>
           ))}
         </div>
-      )}
+      ) : null}
+
+      {/^https?:\/\//i.test(project.repoUrl || "") ? (
+        <details className="su__usage" onToggle={(e) => setUsageOpen(e.currentTarget.open)}>
+          <summary>Where the code gets its server address</summary>
+          {usageOpen ? <ServerUsage projectId={project.id} /> : null}
+        </details>
+      ) : null}
     </section>
   );
 }

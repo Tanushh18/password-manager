@@ -7,7 +7,9 @@
 
 const has = (v) => v != null && String(v).trim() !== "";
 
-const leaf = (label, value, extra = {}) => (has(value) ? { label, value: String(value), ...extra } : null);
+// Free text (notes, database notes) often carries a connection string with a password or a token: hide those by default.
+export const looksSecret = (value) => /:\/\/[^\s/:@]+:[^\s@]+@/.test(String(value)) || /(password|passwd|secret|token|api[_ -]?key|private[_ -]?key)\s*[:=-]/i.test(String(value));
+const leaf = (label, value, extra = {}) => (has(value) ? { label, value: String(value), ...(looksSecret(value) ? { secret: true } : {}), ...extra } : null);
 
 const isUrl = (v) => /^(https?:\/\/|www\.)|^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(String(v).trim());
 

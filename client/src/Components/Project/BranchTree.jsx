@@ -23,7 +23,7 @@ const liveOf = (t) => !t.suspended && !(t.error && !t.url) && !/fail|error|cance
 const stateOf = (t) => (t.suspended ? "Suspended" : t.error && !t.url ? "Unreadable" : DEPLOY_LABEL[String(t.latestDeploy?.status || "").toLowerCase()] || "Running");
 
 /** The repository's branches as a tree, with multi-select delete. Each branch opens to show what runs it. Closed by default. */
-export default function BranchTree({ project }) {
+export default function BranchTree({ project, refreshKey, hideRefresh }) {
   const repo = useMemo(() => parseRepo(project.repoUrl), [project.repoUrl]);
   const [account, setAccount] = useState(null);
   const [noAccount, setNoAccount] = useState(false);
@@ -31,6 +31,7 @@ export default function BranchTree({ project }) {
   const [targets, setTargets] = useState([]);
   const [picked, setPicked] = useState(new Set());
   const [sort, setSort] = useState("deployed");
+  const [showAll, setShowAll] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -53,6 +54,7 @@ export default function BranchTree({ project }) {
   }, [repo, loadBranches]);
 
   useEffect(() => { void loadAll(); }, [loadAll]);
+  useEffect(() => { if (refreshKey) void loadAll(); }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     let live = true;
     getDeployTargets(project.id).then((r) => { if (live) setTargets(r.targets || []); }).catch(() => { if (live) setTargets([]); });
@@ -97,6 +99,8 @@ export default function BranchTree({ project }) {
   if (!repo) return null;
   const branchUrl = (name) => `https://github.com/${repo.owner}/${repo.repo}/tree/${name.split("/").map(encodeURIComponent).join("/")}`;
   const deployedCount = rows.filter((r) => r.deployed.length).length;
+  const LIMIT = 6; // the default branch and the deployed ones sort first; the rest wait behind "Show all"
+  const shownRows = showAll ? rows : rows.slice(0, LIMIT);
 
   return (
     <section className="card btree" aria-label="Branches and where they run">
@@ -109,7 +113,7 @@ export default function BranchTree({ project }) {
           <label className="btree__sort">Sort
             <select className="input" value={sort} onChange={(e) => setSort(e.target.value)}>{SORTS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select>
           </label>
-          <button type="button" className="btn btn--ghost btn--sm" onClick={() => void loadAll()}>↻ Refresh</button>
+          {hideRefresh ? null : <button type="button" className="btn btn--ghost btn--sm" onClick={() => void loadAll()}>↻ Refresh</button>}
         </div>
       </header>
 
@@ -126,7 +130,7 @@ export default function BranchTree({ project }) {
 
       {rows.length ? (
         <ul className="btree__list">
-          {rows.map((r) => {
+          {shownRows.map((r) => {
             const live = r.deployed.filter(liveOf).length;
             return (
               <li key={r.name} className={"btree__branch" + (r.isDefault ? " is-default" : "") + (r.gone ? " is-gone" : "")}>
@@ -166,6 +170,7 @@ export default function BranchTree({ project }) {
           })}
         </ul>
       ) : null}
+      {rows.length > LIMIT ? <button type="button" className="btn btn--ghost btn--sm btree__more" onClick={() => setShowAll((v) => !v)}>{showAll ? "Show fewer" : `Show all ${rows.length} branches`}</button> : null}
     </section>
   );
 }

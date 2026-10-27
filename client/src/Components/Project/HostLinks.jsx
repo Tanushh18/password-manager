@@ -78,11 +78,16 @@ function LinkModal({ open, onClose, projectId, onLinked, onConnect }) {
 
 /** One linked server: status, last deploy, and a branch picker plus Redeploy where the host supports it. */
 /** Link existing Vercel / Netlify / Railway / Cloudflare sites to a project. Their status and actions are in the Deployments table. */
-export default function HostLinks({ project }) {
+// `open` / `onOpenChange` let another control (the Add menu of the Servers card) open the link dialog; with them the
+// component renders only the dialogs, not its own card.
+export default function HostLinks({ project, open, onOpenChange }) {
   const { refreshProfile } = useVault();
   const [rows, setRows] = useState(null);
   const [error, setError] = useState("");
-  const [pick, setPick] = useState(false);
+  const [pickState, setPickState] = useState(false);
+  const embedded = open !== undefined;
+  const pick = embedded ? open : pickState;
+  const setPick = embedded ? onOpenChange : setPickState;
   const [connect, setConnect] = useState(false);
 
   const load = useCallback(async () => {
@@ -95,6 +100,14 @@ export default function HostLinks({ project }) {
   // Link changes are saved in the project on the server; reload the vault copy so a later edit does not overwrite them.
   const changed = async () => { await load(); void refreshProfile?.(); };
 
+  if (embedded) {
+    return (
+      <>
+        <LinkModal open={pick} onClose={() => setPick(false)} projectId={project.id} onLinked={changed} onConnect={() => setConnect(true)} />
+        <HostConnectModal open={connect} onClose={() => setConnect(false)} />
+      </>
+    );
+  }
   return (
     <section className="card pdep" aria-label="Other hosting">
       <header className="pdep__head">

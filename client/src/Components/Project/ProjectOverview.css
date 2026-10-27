@@ -1,0 +1,18 @@
+/* Project overview: one card for health, deploy, CI, repository, commits and pull requests. */
+.ov { padding: 1rem 1.15rem; display: flex; flex-direction: column; gap: 0.7rem; }
+.ov__head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.ov__title { margin: 0; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+.ov__meta { color: var(--text-muted); font-size: 0.78rem; }
+.ov__badges { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.ov__line { margin: 0; color: var(--text-muted); font-size: 0.84rem; overflow-wrap: anywhere; }
+.ov__line a { color: var(--accent); }
+.ov__desc { margin: 0; color: var(--text-muted); font-size: 0.82rem; }
+.ov__note { margin: 0; color: var(--text-muted); font-size: 0.82rem; }
+.ov__fold { border-top: 1px solid var(--line); padding-top: 0.55rem; }
+.ov__fold > summary { cursor: pointer; list-style: none; font-size: 0.86rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
+.ov__fold > summary::-webkit-details-marker { display: none; }
+.ov__fold > summary::before { content: "▸"; color: var(--text-faint); }
+.ov__fold[open] > summary::before { content: "▾"; }
+.ov__fold > summary:hover { color: var(--accent); }
+.ov__fold .gh-list { margin-top: 0.55rem; }
+.ov__line a { white-space: nowrap; display: inline-flex; align-items: center; gap: 0.2rem; }

@@ -86,3 +86,7 @@
   .ptree__leaf { grid-template-columns: 1fr auto; }
   .ptree__key { grid-column: 1 / -1; }
 }
+
+/* Long lists of short fields (environment variables) sit in columns instead of one tall column. */
+.ptree__branch[data-branch="env"] > .ptree__children { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); column-gap: 0.75rem; }
+.ptree__branch[data-branch="env"] .ptree__leaf { grid-template-columns: minmax(90px, 45%) 1fr auto; }
