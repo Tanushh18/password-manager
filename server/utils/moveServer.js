@@ -225,7 +225,6 @@ async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "",
 
   const old = await readService(from.apiKey, serviceId);
   if (!supportsDomains(old.type)) throw fail(422, "Only Render web services and static sites can be migrated by this wizard today. This service type will not be silently converted.");
-  if (old.environmentId || old.serviceDetails?.environmentId) throw fail(422, "This service belongs to a Render Environment. Recreate the destination environment isolation before migrating.");
   if (old.disk || old.serviceDetails?.disk) throw fail(422, "This service has a persistent disk. Migrate and verify its data separately before moving the service.");
   let replacementUrl = "";
   if (targetServiceId) {
@@ -254,6 +253,7 @@ async function plan(user, projectId, { serviceId, targetAccountId, ownerId = "",
   const frontends = (old.serviceDetails?.url ? await findUrlReferences(user, old.serviceDetails.url, { strict: true, projectId }) : [])
     .filter((r) => r.serviceId !== serviceId || r.accountId !== String(src.accountId));
   const warnings = [];
+  if (old.environmentId || old.serviceDetails?.environmentId) warnings.push("This service belongs to a Render Environment. The new server is created outside any environment in the destination, so recreate any environment isolation (such as protected or private-network rules) there if you rely on it.");
   if (old.suspended === "suspended") warnings.push("The old server is suspended. Resume it first if the new one should replace a running service.");
   if (old.serviceDetails?.plan && old.serviceDetails.plan !== "free") warnings.push("The old server is on the “" + old.serviceDetails.plan + "” plan. The new server uses the same plan, so it may bill in the target account.");
   if (!old.serviceDetails?.url) warnings.push("The old server has no public address yet, so there is no frontend address to replace.");
