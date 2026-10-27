@@ -6,6 +6,7 @@ const { fetchAllPages } = require("./renderPaging");
 const { linkedServices } = require("./projectMerge");
 const { findUrlReferences, replaceUrlReferences } = require("./urlRefs");
 const { checkServiceDeletion } = require("./renderGuards");
+const { swapServerUrl, publishToRegistry } = require("./serverUrlsSync");
 
 /*
  * Moving a Render server to another connected account, as steps the user runs one at a time:
@@ -586,8 +587,12 @@ async function relink(user, projectId, { oldServiceId, newAccountId, newServiceI
     next.renderAccountOriginName = accountOf(user, dataKey, next.renderAccountOriginId)?.name || sourceAccount?.name || "";
   }
   next.renderMigration = { ...migration, stage: "relinked", relinkedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  // The project's Server URLs follow the server to its new address, and so does the app registry it feeds.
+  const swapped = swapServerUrl(next.serverUrls, migration.sourceUrl, added.url);
+  if (swapped.changed) next.serverUrls = swapped.list;
   await saveProjectFields(user, entry, dataKey, next);
-  return { renderServiceId: newServiceId, renderAccountId: String(newAccountId), originAccountId: String(next.renderAccountOriginId) };
+  const published = swapped.changed && next.registryApp ? await publishToRegistry(next.registryApp, swapped.list, user.email) : false;
+  return { renderServiceId: newServiceId, renderAccountId: String(newAccountId), originAccountId: String(next.renderAccountOriginId), serverUrlsUpdated: swapped.changed, registryPublished: published };
 }
 
 /** Deletes the old service. Refused while the project still points at it, and needs the exact name typed. */
