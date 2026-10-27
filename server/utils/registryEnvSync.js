@@ -5,7 +5,7 @@ const { mapWithConcurrency } = require("./renderGuards");
 const { planRegistrySync } = require("./registrySync");
 const { loadRenderServices } = require("./projectStatus");
 const { planEnvAlign } = require("./registryEnvDiff");
-const { DEFAULTS } = require("./registryDefaults");
+const { DEFAULTS, urlsFor } = require("./registryDefaults");
 
 /*
  * Servers tab: align the environment variables of every Render server of one app. Adds missing names only
@@ -20,7 +20,7 @@ async function alignRegistryEnv(user, app, { apply = false, deploy = false } = {
   const dataKey = await user.getDataKey();
   const { services, accounts } = await loadRenderServices(user, dataKey, {});
   const doc = await Registry.findOne({ app }).lean();
-  const urls = doc && doc.urls && doc.urls.length ? doc.urls : DEFAULTS[app];
+  const urls = urlsFor(doc, app);
   const seen = new Set();
   const servers = planRegistrySync(urls, services).items.map((i) => i.service).filter((s) => s && accounts.has(s.accountId) && !seen.has(s.id) && seen.add(s.id));
   if (servers.length < 2) throw fail(400, "This app needs at least two servers found on Render to compare.");

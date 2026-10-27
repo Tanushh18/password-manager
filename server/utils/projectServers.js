@@ -1,5 +1,5 @@
 const User = require("../models/schema");
-const { DEFAULTS, SLUG, isAdminEmail } = require("./registryDefaults");
+const { DEFAULTS, OFFABLE, SLUG, isAdminEmail } = require("./registryDefaults");
 const { linkedServices } = require("./projectMerge");
 const { domainsForServices } = require("./renderDomains");
 
@@ -69,7 +69,7 @@ async function publishToRegistry(app, rows, user) {
     const name = String(app || "").toLowerCase();
     const urls = (rows || []).filter((r) => r.enabled !== false).map((r) => trimUrl(r.url)).filter(Boolean);
     // A per-project list may be published empty (everything switched off); the built-in apps always keep a server.
-    if ((urls.length === 0 && DEFAULTS[name]) || (!DEFAULTS[name] && !SLUG.test(name))) return false;
+    if ((urls.length === 0 && DEFAULTS[name] && !OFFABLE.has(name)) || (!DEFAULTS[name] && !SLUG.test(name))) return false;
     try {
         const Registry = require("../models/registry");
         const doc = await Registry.findOne({ app: name }).lean();
@@ -77,6 +77,7 @@ async function publishToRegistry(app, rows, user) {
         if (DEFAULTS[name] && !admin) return false;
         if (doc && doc.owner && String(doc.owner) !== String(user._id) && !admin) return false;
         const set = { urls, updatedAt: new Date(), updatedBy: user.email || "project-sync" };
+        if (OFFABLE.has(name)) set.off = urls.length === 0;
         if (!DEFAULTS[name] && !(doc && doc.owner)) set.owner = user._id;
         await Registry.findOneAndUpdate({ app: name }, { $set: set }, { upsert: true, setDefaultsOnInsert: true });
         return true;
@@ -134,7 +135,7 @@ async function syncProjectServers(user, dataKey, staleEntry, services, { registr
         const merged = mergeServerUrls(fields.serverUrls, found, fields.serverUrlsIgnored);
         const appChanged = app !== fields.registryApp;
         if ((merged.changed || appChanged) && !(await saveFields(user, dataKey, entry, { ...fields, serverUrls: merged.rows, registryApp: app }))) continue; // changed meanwhile: read again
-        const published = (merged.rows.length || !DEFAULTS[app]) ? await publishToRegistry(app, merged.rows, user) : false;
+        const published = (merged.rows.length || !DEFAULTS[app] || OFFABLE.has(app)) ? await publishToRegistry(app, merged.rows, user) : false;
         return { changed: merged.changed || appChanged, published, serverUrls: merged.rows, registryApp: app };
     }
     return { changed: false, published: false };

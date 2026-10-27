@@ -86,6 +86,26 @@ describe("per-project public registry", () =>
     });
 });
 
+describe("switching a built-in app off", () =>
+{
+    test("wethree can be emptied by an admin and stays empty; other built-in apps keep a server", async () =>
+    {
+        const admin = await signIn(ADMIN);
+        const ana = await signIn("ana@example.com");
+        expect((await request(app).get("/registry/wethree")).body.urls.length).toBe(1);
+
+        expect((await request(app).put("/registry/wethree").set(auth(admin)).send({ urls: [] })).status).toBe(200);
+        const off = await request(app).get("/registry/wethree");
+        expect(off.body.urls).toEqual([]);
+        expect(off.body.off).toBe(true);
+        expect((await request(app).put("/registry/wethree").set(auth(ana)).send({ urls: [] })).status).toBe(403);
+        expect((await request(app).put("/registry/stashr").set(auth(admin)).send({ urls: [] })).status).toBe(400);
+
+        expect((await request(app).put("/registry/wethree").set(auth(admin)).send({ urls: ["https://a.onrender.com/api"] })).status).toBe(200);
+        expect((await request(app).get("/registry/wethree")).body.urls).toEqual(["https://a.onrender.com/api"]);
+    });
+});
+
 describe("sync never undoes a change made while it was running", () =>
 {
     test("a domain saved after the background pass read the project is kept and published", async () =>
@@ -197,10 +217,10 @@ describe("switching a project list off", () =>
         expect((await request(app).get("/registry/my-shop")).body.off).toBe(undefined);
     });
 
-    test("the built-in apps always keep a server", async () =>
+    test("the built-in apps (except the switch-off-able ones) always keep a server", async () =>
     {
         const admin = await signIn("tanushchawla16@gmail.com");
-        expect((await request(app).put("/registry/wethree").set(auth(admin)).send({ urls: [] })).status).toBe(400);
+        expect((await request(app).put("/registry/stashr").set(auth(admin)).send({ urls: [] })).status).toBe(400);
     });
 });
 

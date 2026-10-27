@@ -6,7 +6,7 @@ const { mapWithConcurrency } = require("./renderGuards");
 const { planRegistrySync, applyRemovals } = require("./registrySync");
 const { loadRenderServices } = require("./projectStatus");
 const { loadHostSites } = require("./hostSites");
-const { ADMINS, DEFAULTS, APP_LABELS } = require("./registryDefaults");
+const { ADMINS, DEFAULTS, APP_LABELS, urlsFor } = require("./registryDefaults");
 
 /*
  * Servers tab <-> Render. Matching and status are read-only. The only automatic change to the registry is
@@ -27,7 +27,7 @@ async function deployBrief(accounts, service) {
   } catch { return null; }
 }
 
-const savedUrls = (doc, app) => (doc && doc.urls && doc.urls.length ? doc.urls : DEFAULTS[app]);
+const savedUrls = urlsFor;
 
 /** Per-app sync view for the admin Servers page. */
 async function buildRegistrySync(user, { refresh = false } = {}) {

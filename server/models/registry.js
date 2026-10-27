@@ -6,6 +6,8 @@ const registrySchema = new mongoose.Schema({
     urls: [{ type: String }],
     updatedAt: { type: Date, default: Date.now },
     updatedBy: { type: String },
+    // A built-in app (see OFFABLE) whose list was switched off on purpose: it stays empty instead of using the default.
+    off: { type: Boolean, default: false },
     // Per-project lists (any slug that is not one of the built-in apps) belong to the account that created them.
     owner: { type: mongoose.Schema.Types.ObjectId, index: true },
     // Render sync (Servers tab): suspended Render URLs are dropped automatically while this is on.
