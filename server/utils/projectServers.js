@@ -1,6 +1,7 @@
 const User = require("../models/schema");
 const { DEFAULTS, SLUG, ROLES, isAdminEmail } = require("./registryDefaults");
 const { linkedServices } = require("./projectMerge");
+const { domainsForServices } = require("./renderDomains");
 
 /*
  * A project's own list of backend URLs (project.serverUrls) and the public registry list it feeds.
@@ -19,8 +20,11 @@ function slugify(name) {
     return SLUG.test(slug) ? slug : "project";
 }
 
-/** Servers this project runs on Render: its linked services that are not static sites (those are clients, not servers). */
-function discoverServers(fields, services) {
+/**
+ * Servers this project runs on Render: its linked services that are not static sites (those are clients, not servers).
+ * A service's verified custom domains (`domains`: serviceId -> names) come first, then its onrender.com address.
+ */
+function discoverServers(fields, services, domains = new Map()) {
     const byId = new Map((services || []).map((s) => [String(s.id), s]));
     const out = [];
     const seen = new Set();
@@ -29,10 +33,16 @@ function discoverServers(fields, services) {
         const type = live ? String(live.type || "") : "";
         if (type === "static_site") continue;
         const url = (live && live.url) || link.url;
+        const suspended = live ? live.suspended === true : Boolean(link.suspended);
+        const name = link.name || (live && live.name) || "";
+        for (const domain of (domains.get(String(link.serviceId)) || [])) {
+            const d = "https://" + domain;
+            if (!seen.has(d)) { seen.add(d); out.push({ origin: d, name, suspended, domain: true }); }
+        }
         const o = origin(url);
         if (!o || !/^https:/.test(o) || seen.has(o)) continue;
         seen.add(o);
-        out.push({ origin: o, name: link.name || (live && live.name) || "", suspended: live ? live.suspended === true : Boolean(link.suspended) });
+        out.push({ origin: o, name, suspended });
     }
     return out;
 }
@@ -115,7 +125,7 @@ async function saveFields(user, dataKey, entry, fields) {
  * Brings one project's Server URLs in step with its Render servers and publishes them. Does nothing for a project that
  * has no registryApp (not published). `registryApp` here overrides the saved one (used when publishing is switched on).
  */
-async function syncProjectServers(user, dataKey, staleEntry, services, { registryApp } = {}) {
+async function syncProjectServers(user, dataKey, staleEntry, services, { registryApp, accounts } = {}) {
     // Always work from the newest copy: a person may have saved a change while a background pass was running, and
     // writing back an older copy would undo it (and publish the older list).
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -125,7 +135,9 @@ async function syncProjectServers(user, dataKey, staleEntry, services, { registr
         if (fields.broken || fields.enc === "e2e") return { changed: false, published: false };
         const app = registryApp || fields.registryApp;
         if (!app) return { changed: false, published: false };
-        const found = discoverServers(fields, services);
+        const linked = new Set(linkedServices([fields]).map((l) => String(l.serviceId)));
+        const domains = accounts ? await domainsForServices((services || []).filter((x) => linked.has(String(x.id))), accounts) : new Map();
+        const found = discoverServers(fields, services, domains);
         const merged = mergeServerUrls(fields.serverUrls, found, fields.serverUrlsIgnored);
         const appChanged = app !== fields.registryApp;
         if ((merged.changed || appChanged) && !(await saveFields(user, dataKey, entry, { ...fields, serverUrls: merged.rows, registryApp: app }))) continue; // changed meanwhile: read again

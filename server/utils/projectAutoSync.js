@@ -104,7 +104,7 @@ async function run(userId) {
   if (render.accounts.size) {
     for (const entry of (user.projects || []).filter((e) => e.enc === "udk").slice(0, 300)) {
       try {
-        const r = await syncProjectServers(user, dataKey, entry, render.services);
+        const r = await syncProjectServers(user, dataKey, entry, render.services, { accounts: render.accounts });
         if (r.changed) summary.serversSynced += 1;
       } catch { /* one project never blocks the rest */ }
     }

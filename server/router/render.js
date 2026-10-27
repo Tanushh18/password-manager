@@ -16,6 +16,7 @@ const { groupKey, mergeProjects } = require("../utils/projectMerge");
 const { syncAllProjects } = require("../utils/projectSyncAll");
 const { autoSyncProjects } = require("../utils/projectAutoSync");
 const { loadHostSites } = require("../utils/hostSites");
+const { domainsForServices } = require("../utils/renderDomains");
 const { runTick, getSchedulerStatus } = require("../utils/scheduler");
 const { runUserPings, pingResults, scanHealthRoutes } = require("../utils/pings");
 const { getProjectDeployments } = require("../utils/projectDeployments");
@@ -911,9 +912,14 @@ router.get("/render/all-servers", async (req, res) => {
   try {
     const dataKey = await req.rootUser.getDataKey();
     const refresh = req.query.refresh === "1";
-    const render = (req.rootUser.renderAccounts || []).length ? (await loadRenderServices(req.rootUser, dataKey, { refresh })).services : [];
+    const loaded = (req.rootUser.renderAccounts || []).length ? await loadRenderServices(req.rootUser, dataKey, { refresh }) : { services: [], accounts: new Map() };
+    const render = loaded.services;
+    // Verified custom domains of the web services (api.example.com in front of name.onrender.com), listed next to them.
+    const domains = await domainsForServices(render.filter((s) => s.type === "web_service" && !s.suspended), loaded.accounts, { force: refresh });
+    const domainRows = render.flatMap((s) => (domains.get(String(s.id)) || []).map((d) => ({ id: s.id + ":" + d, name: s.name, url: "https://" + d, kind: "server", domain: true, suspended: s.suspended, accountName: s.accountName, plan: s.plan, region: s.region, provider: "render", providerLabel: "Render" })));
     const hosts = (req.rootUser.hostAccounts || []).length ? (await loadHostSites(req.rootUser, dataKey, { refresh }).catch(() => ({ services: [] }))).services : [];
     const servers = [
+      ...domainRows,
       ...render.map((s) => ({ id: s.id, name: s.name, url: s.url, kind: s.type === "static_site" ? "site" : "server", suspended: s.suspended, accountName: s.accountName, plan: s.plan, region: s.region, provider: "render", providerLabel: "Render" })),
       ...hosts.map((s) => ({ id: s.id, name: s.name, url: s.url, kind: "site", suspended: false, accountName: s.accountName, plan: "", region: "", provider: s.provider, providerLabel: s.providerLabel }))
     ]

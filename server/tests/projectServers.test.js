@@ -13,6 +13,7 @@ const User = require("../models/schema");
 const Registry = require("../models/registry");
 const AuditEvent = require("../models/AuditEvent");
 const { slugify, discoverServers, mergeServerUrls, publishedServers, syncProjectServers } = require("../utils/projectServers");
+const { verifiedDomains, customDomains } = require("../utils/renderDomains");
 
 let mongo;
 beforeAll(async () => { mongo = await MongoMemoryServer.create(); await mongoose.connect(mongo.getUri()); });
@@ -108,6 +109,42 @@ describe("sync never undoes a change made while it was running", () =>
         const fields = User.publicEntry(after.projects[0], dataKey);
         expect(fields.serverUrls.map((r) => r.url).sort()).toEqual(["https://api.mysite.com", "https://site-server.onrender.com"]);
         expect((await request(app).get("/registry/my-site")).body.urls.sort()).toEqual(["https://api.mysite.com", "https://site-server.onrender.com"]);
+    });
+});
+
+describe("custom domains", () =>
+{
+    test("only verified, non-redirect domains are used", () =>
+    {
+        const items = [
+            { customDomain: { name: "API.Example.com", verificationStatus: "verified" } },
+            { customDomain: { name: "www.example.com", verificationStatus: "verified", redirectForName: "example.com" } },
+            { customDomain: { name: "pending.example.com", verificationStatus: "unverified" } },
+            { customDomain: { name: "api.example.com", verificationStatus: "verified" } }
+        ];
+        expect(verifiedDomains(items)).toEqual(["api.example.com"]);
+    });
+
+    test("the domain comes before the onrender.com address, and static sites stay out", () =>
+    {
+        const fields = { renderServiceId: "s1", renderAccountId: "a", renderServices: [
+            { accountId: "a", serviceId: "s1", name: "api", url: "https://api-x.onrender.com" },
+            { accountId: "a", serviceId: "s2", name: "web", url: "https://web-x.onrender.com" }
+        ] };
+        const live = [{ id: "s1", type: "web_service", url: "https://api-x.onrender.com" }, { id: "s2", type: "static_site", url: "https://web-x.onrender.com" }];
+        const found = discoverServers(fields, live, new Map([["s1", ["api.example.com"]], ["s2", ["site.example.com"]]]));
+        expect(found.map((f) => f.origin)).toEqual(["https://api.example.com", "https://api-x.onrender.com"]);
+        expect(found[0].domain).toBe(true);
+    });
+
+    test("a listing is read once and cached; a failing listing is not fatal", async () =>
+    {
+        let calls = 0;
+        const get = async () => { calls += 1; return [{ customDomain: { name: "cached.example.com", verificationStatus: "verified" } }]; };
+        expect(await customDomains("k", "srv-cache-1", { get })).toEqual(["cached.example.com"]);
+        expect(await customDomains("k", "srv-cache-1", { get })).toEqual(["cached.example.com"]);
+        expect(calls).toBe(1);
+        expect(await customDomains("k", "srv-bad-1", { get: async () => { throw new Error("boom"); } })).toEqual([]);
     });
 });
 

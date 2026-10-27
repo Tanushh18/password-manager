@@ -153,7 +153,7 @@ export default function ServerUrls({ project }) {
                 const added = rows.some((r) => originOf(r.url) === originOf(s.url));
                 return (
                   <div key={provider + s.id} className="proj-repeat-row">
-                    <span style={{ flex: 1 }}><strong>{s.name}</strong> <small>{s.url} · {s.kind === "site" ? "site" : "server"} · {s.accountName}{s.suspended ? " · suspended" : ""}</small></span>
+                    <span style={{ flex: 1 }}><strong>{s.name}</strong> <small>{s.url} · {s.domain ? "custom domain" : s.kind === "site" ? "site" : "server"} · {s.accountName}{s.suspended ? " · suspended" : ""}</small></span>
                     <button type="button" className="btn btn--sm" disabled={added} onClick={() => addFound(s)}>{added ? "Added" : "Add"}</button>
                   </div>
                 );

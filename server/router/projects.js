@@ -158,8 +158,9 @@ router.post("/projects/items/:id/servers/sync", authenticate, async (req, res) =
         if (fields.broken || fields.enc === "e2e") return res.status(422).json({ error: "This project could not be decrypted." });
         const registryApp = fields.registryApp || (req.body && req.body.publish === false ? "" : await pickSlug(req.rootUser, fields.name));
         let services = [];
-        if ((req.rootUser.renderAccounts || []).length) services = (await loadRenderServices(req.rootUser, dataKey, { refresh: true })).services;
-        const result = await syncProjectServers(req.rootUser, dataKey, entry, services, { registryApp });
+        let accounts = null;
+        if ((req.rootUser.renderAccounts || []).length) ({ services, accounts } = await loadRenderServices(req.rootUser, dataKey, { refresh: true }));
+        const result = await syncProjectServers(req.rootUser, dataKey, entry, services, { registryApp, accounts });
         res.set("Cache-Control", "no-store");
         return res.json({ registryApp: result.registryApp || "", serverUrls: result.serverUrls || fields.serverUrls || [], changed: result.changed, published: result.published });
     }
