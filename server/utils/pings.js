@@ -1,6 +1,8 @@
 const User = require("../models/schema");
 const { without } = require("./projection");
 const renderOps = require("./renderOps");
+const { loadRenderServices } = require("./projectStatus");
+const { domainsForServices } = require("./renderDomains");
 
 /*
  * Ping jobs: Stashr's own cron. Each enabled job GETs <url><path> every N minutes from the server scheduler.
@@ -60,20 +62,79 @@ async function pingOnce(url, path) {
 
 const dueFor = (job, last, now) => !last || now - Date.parse(last.at) >= job.everyMinutes * 60000 - 30000;
 
-/** Default jobs: every running web service with a Render URL that has no job of its own, every 10 minutes. Pure. */
+/** Default jobs: every running web service with a Render URL that has no job of its own, every 10 minutes. Static sites are clients and never sleep, so they are not pinged. Pure. */
 function defaultJobs(services, explicit) {
   const own = new Set((explicit || []).map((j) => j.serviceKey));
   return (services || [])
-    .filter((s) => !s.suspended && /^https:\/\/[^/]+\.onrender\.com\/?$/i.test(s.url || "") && !/cron|worker|private/i.test(s.type || ""))
+    .filter((s) => !s.suspended && /^https:\/\/[^/]+\.onrender\.com\/?$/i.test(s.url || "") && !/cron|worker|private|static/i.test(s.type || ""))
     .map((s) => ({ serviceKey: s.accountId + ":" + s.id, name: s.name, url: s.url.replace(/\/$/, ""), path: "/health", everyMinutes: renderOps.DEFAULT_PING_MINUTES, enabled: true, auto: true }))
     .filter((j) => !own.has(j.serviceKey));
+}
+
+const STATIC_HOST = /\.(vercel\.app|netlify\.app|pages\.dev|github\.io)$/i;
+const originOf = (url) => { try { return new URL(String(url || "")).origin.toLowerCase(); } catch { return ""; } };
+
+/**
+ * Brings the Server URLs lists into the cron without ever pinging one server twice.
+ *   - a URL that belongs to a Render web service (its onrender.com address or one of its custom domains) is that
+ *     service's job: the job stays a single one, and points at the custom domain when the list has one (that is the
+ *     address the clients really use, and it keeps the same service awake);
+ *   - any other switched-on https server gets its own job (/health, every 10 minutes);
+ *   - clients are left out: Render static sites and Vercel / Netlify / Pages / GitHub Pages hosts.
+ * `lists` = [{ name, urls }], `domains` = Map(serviceId -> [custom domain names]). Pure; returns the new job list.
+ */
+function withServerUrls(base, lists, services, domains = new Map()) {
+  const webs = (services || []).filter((s) => !/static|cron|worker|private/i.test(s.type || "") && s.url);
+  const clients = new Set((services || []).filter((s) => /static/i.test(s.type || "")).map((s) => originOf(s.url)).filter(Boolean));
+  const owner = new Map(); // origin -> { service, domain }
+  for (const s of webs) {
+    owner.set(originOf(s.url), { service: s, domain: false });
+    for (const d of domains.get(String(s.id)) || []) owner.set("https://" + d, { service: s, domain: true });
+  }
+  const jobs = (base || []).map((j) => ({ ...j }));
+  const byKey = new Map(jobs.map((j) => [j.serviceKey, j]));
+  const covered = new Set(jobs.map((j) => originOf(j.url)).filter(Boolean));
+  for (const list of lists || []) {
+    for (const url of list.urls || []) {
+      const origin = originOf(url);
+      if (!/^https:\/\//.test(origin) || clients.has(origin) || STATIC_HOST.test(new URL(origin).hostname)) continue;
+      const hit = owner.get(origin);
+      if (hit) {
+        const job = byKey.get(hit.service.accountId + ":" + hit.service.id);
+        // Only the automatic job moves to the domain; a job the person configured keeps its own address.
+        if (job && job.auto && hit.domain && !job.viaDomain) { covered.delete(originOf(job.url)); job.url = origin; job.viaDomain = true; covered.add(origin); }
+        continue;
+      }
+      if (covered.has(origin)) continue;
+      covered.add(origin);
+      jobs.push({ serviceKey: "url:" + origin, name: list.name || origin, url: origin, path: "/health", everyMinutes: renderOps.DEFAULT_PING_MINUTES, enabled: true, auto: true, fromServerUrls: true });
+    }
+  }
+  return jobs;
+}
+
+/** Switched-on Server URLs of every project of the user. */
+async function serverUrlLists(user) {
+  const dataKey = await user.getDataKey();
+  return (user.projects || []).filter((e) => e.enc === "udk").map((e) => {
+    const f = User.publicEntry(e, dataKey);
+    return f && !f.broken ? { name: f.name || "", urls: (f.serverUrls || []).filter((r) => r && r.enabled !== false).map((r) => r.url) } : null;
+  }).filter((l) => l && l.urls.length);
 }
 
 async function jobsFor(user, config) {
   const explicit = config.pings || [];
   if (config.pingAll === false) return explicit;
-  const { services } = await renderOps.listEveryService(user, await user.getDataKey());
-  return [...explicit, ...defaultJobs(services, explicit)];
+  const dataKey = await user.getDataKey();
+  const { services } = await renderOps.listEveryService(user, dataKey);
+  const base = [...explicit, ...defaultJobs(services, explicit)];
+  // Custom domains come from Render (cached 10 minutes); without them every URL still gets its job.
+  let domains = new Map();
+  try {
+    const loaded = await loadRenderServices(user, dataKey);
+    domains = await domainsForServices(loaded.services.filter((s) => s.type === "web_service" && !s.suspended), loaded.accounts);
+  } catch { /* domains are optional */ }
+  return withServerUrls(base, await serverUrlLists(user), services, domains);
 }
 
 /** Runs one user's jobs; `force` ignores the schedule (the "Run now" button). */
@@ -85,7 +146,7 @@ async function runUserPings(user, { force = false } = {}) {
   let ran = 0;
   for (const job of jobs) {
     if (!force && !dueFor(job, mine.get(job.serviceKey), now)) continue;
-    mine.set(job.serviceKey, await pingOnce(job.url, job.path));
+    mine.set(job.serviceKey, { ...(await pingOnce(job.url, job.path)), name: job.name, ...(job.fromServerUrls ? { fromServerUrls: true } : {}) });
     ran += 1;
   }
   results.set(String(user._id), mine);
@@ -128,4 +189,4 @@ async function scanHealthRoutes(user) {
   return out;
 }
 
-module.exports = { runUserPings, runAllPings, pingResults, scanHealthRoutes, pingOnce, defaultJobs, safeDetails, findAlternative };
+module.exports = { withServerUrls, runUserPings, runAllPings, pingResults, scanHealthRoutes, pingOnce, defaultJobs, safeDetails, findAlternative };

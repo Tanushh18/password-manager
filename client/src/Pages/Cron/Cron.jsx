@@ -213,6 +213,18 @@ export default function Cron() {
           <div><span>Render cron jobs</span><b>{crons.length}</b><small>across all accounts</small></div>
         </div>
 
+        {Object.entries(results).some(([k]) => k.startsWith("url:")) && (
+          <Section title="Servers from your projects" subtitle="Web servers in a project's Server URLs list that are not a Render service of yours. Pinged every 10 minutes. Clients (static sites) are not pinged.">
+            <div className="rd-tablewrap">
+              <table className="rd-table">
+                <thead><tr><th>Server</th><th>Address</th><th>Last ping</th></tr></thead>
+                <tbody>{Object.entries(results).filter(([k]) => k.startsWith("url:")).map(([k, r]) => (
+                  <tr key={k}><td><strong>{r.name || bare(k.slice(4))}</strong></td><td><Urls base={k.slice(4)} target={r.target} /></td><td><Result r={r} /></td></tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </Section>
+        )}
         <Section title="Recent scheduler runs" subtitle="Run history is persisted in the existing MongoDB database and survives a server restart." className="cr-run-history">
           {!status?.recentRuns?.length ? (
             <p className="cr-dim">No completed scheduler runs have been recorded yet. The first run normally starts about 90 seconds after the API boots.</p>

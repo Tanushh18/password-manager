@@ -12,9 +12,8 @@ test("every running web service gets a 10-minute /health ping unless it has its 
   ];
   const jobs = defaultJobs(services, [{ serviceKey: "a:s4", enabled: false }]);
   expect(jobs.map((j) => [j.serviceKey, j.url, j.path, j.everyMinutes, j.auto])).toEqual([
-    ["a:s1", "https://api.onrender.com", "/health", 10, true],
-    ["b:s5", "https://site.onrender.com", "/health", 10, true]
-  ]);
+    ["a:s1", "https://api.onrender.com", "/health", 10, true]
+  ]); // the static site is a client: it never sleeps and is not pinged
 });
 
 test("health details keep safe primitives and drop secret-looking keys", () => {
