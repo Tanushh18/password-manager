@@ -6,9 +6,6 @@ export const emptyDatabase = () => ({ label: "", provider: "", type: "", account
 export const emptyEnvVar = () => ({ name: "", value: "", purpose: "", source: "", renderHash: "" }); // source: "" (manual) | "render" | "render-removed"; renderHash = fingerprint of the value Render last had
 export const emptyExtraField = () => ({ label: "", value: "" });
 
-// What a server is for. Apps use "standby" only when the others fail; every other role is served equally.
-export const SERVER_ROLES = [["", "No role"], ["primary", "Main"], ["standby", "Standby"], ["ingest", "Fetcher (ingest)"], ["validator", "Validator"], ["user", "User server"]];
-
 export const emptyProject = () => ({
   name: "",
   description: "",
@@ -96,7 +93,7 @@ export function normalizeProject(raw = {}) {
   if (Array.isArray(raw.hostLinks) && raw.hostLinks.length) next.hostLinks = raw.hostLinks.filter((l) => l && l.id && l.remoteId);
   // Backend URLs this project's apps use, each switchable; `registryApp` names the app that reads them from Stashr.
   if (Array.isArray(raw.serverUrls) && raw.serverUrls.length) {
-    next.serverUrls = raw.serverUrls.filter((s) => s && /^https?:\/\//i.test(String(s.url || ""))).map((s) => ({ url: String(s.url).trim().replace(/\/+$/, ""), enabled: s.enabled !== false, ...(s.auto ? { auto: true } : {}), ...(SERVER_ROLES.some(([id]) => id === s.role) ? { role: s.role } : {}) }));
+    next.serverUrls = raw.serverUrls.filter((s) => s && /^https?:\/\//i.test(String(s.url || ""))).map((s) => ({ url: String(s.url).trim().replace(/\/+$/, ""), enabled: s.enabled !== false, ...(s.auto ? { auto: true } : {}) }));
   }
   // Servers removed by hand: the automatic sync never adds these back.
   if (Array.isArray(raw.serverUrlsIgnored) && raw.serverUrlsIgnored.length) next.serverUrlsIgnored = raw.serverUrlsIgnored.filter((u) => typeof u === "string" && /^https?:\/\//i.test(u)).map((u) => u.trim().replace(/\/+$/, "").toLowerCase());

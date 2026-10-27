@@ -13,8 +13,6 @@ const DEFAULTS = {
 const APP_LABELS = { stashr: "Stashr", dealradar: "Deal Radar", wethree: "We Three" };
 
 const isAdminEmail = (email) => Boolean(email && ADMINS.includes(String(email).toLowerCase()));
-// What a server is for. Apps use "standby" only when the others fail; every other role is served equally.
-const ROLES = ["primary", "standby", "ingest", "validator", "user"];
 const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
 
-module.exports = { ADMINS, DEFAULTS, APP_LABELS, isAdminEmail, SLUG, ROLES };
+module.exports = { ADMINS, DEFAULTS, APP_LABELS, isAdminEmail, SLUG };

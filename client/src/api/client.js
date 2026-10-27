@@ -205,8 +205,7 @@ refreshServers().finally(() => { pruneDeadServers().catch(() => {}); });
 
 /* ── Server registry (admin only) ── */
 export const getRegistry = () => instance.get("/registry");
-// `servers` is a list of URL strings, or of { url, role } when the roles matter.
-export const saveRegistry = (app, servers) => instance.put(`/registry/${app}`, servers.some((s) => typeof s === "object") ? { servers } : { urls: servers });
+export const saveRegistry = (app, urls) => instance.put(`/registry/${app}`, { urls });
 export const checkServer = (url) => instance.post("/registry/check", { url }, { timeout: 30000 });
 
 /* ── Personal AI Photo Cloud ── */

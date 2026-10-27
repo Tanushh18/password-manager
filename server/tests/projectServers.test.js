@@ -12,7 +12,7 @@ const app = require("../app");
 const User = require("../models/schema");
 const Registry = require("../models/registry");
 const AuditEvent = require("../models/AuditEvent");
-const { slugify, discoverServers, mergeServerUrls, publishedServers, syncProjectServers } = require("../utils/projectServers");
+const { slugify, discoverServers, mergeServerUrls, syncProjectServers } = require("../utils/projectServers");
 const { verifiedDomains, customDomains } = require("../utils/renderDomains");
 
 let mongo;
@@ -145,40 +145,6 @@ describe("custom domains", () =>
         expect(await customDomains("k", "srv-cache-1", { get })).toEqual(["cached.example.com"]);
         expect(calls).toBe(1);
         expect(await customDomains("k", "srv-bad-1", { get: async () => { throw new Error("boom"); } })).toEqual([]);
-    });
-});
-
-describe("server roles", () =>
-{
-    test("standby servers are published last, each with its role; unknown roles are ignored", () =>
-    {
-        const rows = [
-            { url: "https://standby.onrender.com", enabled: true, role: "standby" },
-            { url: "https://fetch.onrender.com/", enabled: true, role: "ingest" },
-            { url: "https://off.onrender.com", enabled: false, role: "user" },
-            { url: "https://odd.onrender.com", enabled: true, role: "nonsense" }
-        ];
-        expect(publishedServers(rows)).toEqual([
-            { url: "https://fetch.onrender.com", role: "ingest" },
-            { url: "https://odd.onrender.com", role: "" },
-            { url: "https://standby.onrender.com", role: "standby" }
-        ]);
-    });
-
-    test("the public list carries roles and puts standby last; a bad role is refused", async () =>
-    {
-        const ana = await signIn("ana@example.com");
-        const put = await request(app).put("/registry/radar").set(auth(ana)).send({ servers: [
-            { url: "https://standby.onrender.com", role: "standby" }, { url: "https://main.onrender.com", role: "primary" }, { url: "https://val.onrender.com", role: "validator" }
-        ] });
-        expect(put.status).toBe(200);
-        const read = (await request(app).get("/registry/radar")).body;
-        expect(read.urls).toEqual(["https://main.onrender.com", "https://val.onrender.com", "https://standby.onrender.com"]);
-        expect(read.servers.map((s) => s.role)).toEqual(["primary", "validator", "standby"]);
-        expect((await request(app).put("/registry/radar").set(auth(ana)).send({ servers: [{ url: "https://a.onrender.com", role: "boss" }] })).status).toBe(400);
-        // a plain URL list still works and has no roles
-        await request(app).put("/registry/plain").set(auth(ana)).send({ urls: ["https://p.onrender.com"] });
-        expect((await request(app).get("/registry/plain")).body.servers).toEqual([{ url: "https://p.onrender.com", role: "" }]);
     });
 });
 
