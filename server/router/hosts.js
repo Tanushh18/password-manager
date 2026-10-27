@@ -117,10 +117,11 @@ router.post("/hosts/deploy", deployLimiter, async (req, res) => {
     const fields = {
       name, description: text(b.description, 300), status: "in_progress", priority: "medium", repoUrl, repoAccount: owner,
       hostingProvider: provider.label, hostingServiceName: input.name, autoDeployBranch: input.branch, liveUrl: /^https:\/\//.test(result.service.url || "") ? result.service.url : "",
-      envVars: envVars.map((v) => ({ name: v.name, value: v.value, purpose: "", source: "" })), databases: [], extraFields: [], hostLinks: hostLink ? [hostLink] : []
+      envVars: envVars.map((v) => ({ name: v.name, value: v.value, purpose: "", source: "" })), databases: [], extraFields: [], hostLinks: []
     };
     // The host site is recorded as a link on the project, so its variables, deploys, logs and branch can be managed like a Render server.
     const hostLink = result.service?.id ? { id: crypto.randomBytes(8).toString("hex"), provider: account.provider, hostAccountId: text(b.hostAccountId, 40), remoteId: String(result.service.id), name: input.name, url: result.service.url || "", dashboardUrl: result.service.dashboardUrl || "", repo: owner + "/" + repo, branch: input.branch, meta: result.service.meta || {} } : null;
+    if (hostLink) fields.hostLinks = [hostLink];
     let projectId = null;
     let linkId = hostLink ? hostLink.id : "";
     try {
@@ -142,7 +143,8 @@ router.post("/hosts/deploy", deployLimiter, async (req, res) => {
     } catch { /* the deploy itself succeeded; saving the Stashr project is best-effort */ }
     res.set("Cache-Control", "no-store");
     return res.status(201).json({ ok: true, host: provider.label, projectId, linkId, repo: { owner, repo, url: repoUrl, branch: input.branch }, service: result.service, note: result.note || "" });
-  } catch {
+  } catch (error) {
+    console.error("hosts/deploy failed:", error?.message || error);
     return res.status(500).json({ ok: false, error: "Could not deploy. Check the host and GitHub for anything already created." });
   }
 });
