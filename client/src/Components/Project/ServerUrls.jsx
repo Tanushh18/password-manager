@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { API_URL, checkServer, errorMessage, getAllRenderServers, saveRegistry, syncProjectServers } from "../../api/client";
 import { useVault } from "../../state/vault";
+import { SERVER_ROLES } from "../../lib/projectItems";
 import { Plus, Trash } from "../Icons/Icons";
 
 const OWN = "__own__";
@@ -61,7 +62,7 @@ export default function ServerUrls({ project }) {
     setRows((list) => (list.some((r) => originOf(r.url) === originOf(url)) ? list : [...list, { url, enabled: !s.suspended }]));
   };
 
-  const cleanRows = (list) => list.filter((r) => r.url.trim()).map((r) => ({ url: r.url.trim().replace(/\/+$/, ""), enabled: r.enabled !== false, ...(r.auto ? { auto: true } : {}) }));
+  const cleanRows = (list) => list.filter((r) => r.url.trim()).map((r) => ({ url: r.url.trim().replace(/\/+$/, ""), enabled: r.enabled !== false, ...(r.auto ? { auto: true } : {}), ...(r.role ? { role: r.role } : {}) }));
 
   // Saves the project and, when a public list is chosen, publishes the switched-on URLs. `instant` = from a Turn off/on button.
   const persist = async (list, { instant = false } = {}) => {
@@ -79,7 +80,7 @@ export default function ServerUrls({ project }) {
         await updateProject(project.id, { serverUrls: res.serverUrls, registryApp: res.registryApp });
         toast.success(on ? (instant ? "Updated. The apps use " + on + " server" + (on === 1 ? "" : "s") + "." : "Saved. Public list updated.") : "All servers are off. The public list is empty now.");
       } else if (mode) {
-        try { await saveRegistry(mode, cleaned.filter((r) => r.enabled).map((r) => r.url)); toast.success(instant ? "Updated and published." : "Saved and published."); }
+        try { await saveRegistry(mode, cleaned.filter((r) => r.enabled).map((r) => ({ url: r.url, role: r.role || "" }))); toast.success(instant ? "Updated and published." : "Saved and published."); }
         catch (err) { toast.warn("Saved in this project, but not published: " + errorMessage(err, "only an admin can publish this app.")); }
       } else toast.success("Saved.");
     } catch (err) { toast.error(errorMessage(err, "Could not save.")); }
@@ -110,6 +111,9 @@ export default function ServerUrls({ project }) {
       {rows.length === 0 ? <p className="field__note">No server URLs yet. Deploy a server, or add one below.</p> : rows.map((r, i) => (
         <div key={i} className="proj-repeat-row">
           <input className="input" value={r.url} placeholder="https://your-server.onrender.com/api" onChange={(e) => edit(i, { url: e.target.value })} />
+          <select className="input" style={{ maxWidth: 150 }} value={r.role || ""} onChange={(e) => edit(i, { role: e.target.value })} aria-label="What this server is for" title="Standby is used only when the other servers fail">
+            {SERVER_ROLES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+          </select>
           <small>{status[r.url] || (r.auto ? "auto" : "")}</small>
           <button type="button" className={"btn btn--sm" + (r.enabled !== false ? "" : " btn--primary")} disabled={busy === "toggle" || !looksValid(r.url)} onClick={() => setOne(i, r.enabled === false)} title={r.enabled !== false ? "The apps use this server. Click to stop them using it, right now." : "Switched off. Click to let the apps use it again."}>{r.enabled !== false ? "Turn off" : "Turn on"}</button>
           <small>{r.enabled !== false ? "ON" : "OFF"}</small>

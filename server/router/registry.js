@@ -14,7 +14,7 @@ const Registry = require("../models/registry");
 const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
 
-const { ADMINS, DEFAULTS, APP_LABELS, SLUG } = require("../utils/registryDefaults");
+const { ADMINS, DEFAULTS, APP_LABELS, SLUG, ROLES } = require("../utils/registryDefaults");
 const MAX_URLS = 10;
 
 const isAdminUser = (user) => Boolean(user && user.email && ADMINS.includes(String(user.email).toLowerCase()));
@@ -92,14 +92,22 @@ router.put("/registry/:app", authenticate, writeLimiter, async (req, res) =>
     const existing = await Registry.findOne({ app }).lean();
     if (!mayWrite(req.rootUser, app, existing)) return res.status(403).json({ error: "Not allowed." });
 
-    const input = Array.isArray(req.body.urls) ? req.body.urls : [];
+    // Either { urls: [...] } or { servers: [{ url, role }] } (roles: primary, standby, ingest, validator, user).
+    const withRoles = Array.isArray(req.body.servers);
+    const input = withRoles ? req.body.servers : (Array.isArray(req.body.urls) ? req.body.urls : []);
     const urls = [];
+    const roles = new Map();
     for (const raw of input)
     {
-        const url = cleanUrl(raw);
-        if (!url) return res.status(400).json({ error: `"${String(raw).slice(0, 120)}" is not a valid https URL.` });
-        if (!urls.includes(url)) urls.push(url);
+        const url = cleanUrl(withRoles ? raw && raw.url : raw);
+        if (!url) return res.status(400).json({ error: `"${String((withRoles ? raw && raw.url : raw) || "").slice(0, 120)}" is not a valid https URL.` });
+        const role = withRoles ? String(raw.role || "") : "";
+        if (role && !ROLES.includes(role)) return res.status(400).json({ error: `Unknown role "${role.slice(0, 30)}".` });
+        if (!urls.includes(url)) { urls.push(url); roles.set(url, role); }
     }
+    // Standby servers go last so an app that just takes the first one gets a working main server.
+    urls.sort((a, b) => Number(roles.get(a) === "standby") - Number(roles.get(b) === "standby"));
+    const servers = urls.map((url) => ({ url, role: roles.get(url) || "" }));
     // Built-in apps always keep a server; a per-project list may be switched off entirely (to test that the apps stop using it).
     if (urls.length === 0 && DEFAULTS[app]) return res.status(400).json({ error: "Keep at least one server URL." });
     if (urls.length > MAX_URLS) return res.status(400).json({ error: `At most ${MAX_URLS} URLs per app.` });
@@ -108,10 +116,10 @@ router.put("/registry/:app", authenticate, writeLimiter, async (req, res) =>
     {
         const doc = await Registry.findOneAndUpdate(
             { app },
-            { urls, updatedAt: new Date(), updatedBy: req.rootUser.email, ...(!DEFAULTS[app] && !(existing && existing.owner) ? { owner: req.rootUser._id } : {}) },
+            { urls, servers, updatedAt: new Date(), updatedBy: req.rootUser.email, ...(!DEFAULTS[app] && !(existing && existing.owner) ? { owner: req.rootUser._id } : {}) },
             { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
         ).lean();
-        return res.json({ app, urls: doc.urls, updatedAt: doc.updatedAt });
+        return res.json({ app, urls: doc.urls, servers: doc.servers || [], updatedAt: doc.updatedAt });
     }
     catch (error)
     {
@@ -152,7 +160,11 @@ router.get("/registry/:app", async (req, res) =>
         // Any website or app may read this list; it holds URLs only.
         if (!res.getHeader("Access-Control-Allow-Origin")) res.set("Access-Control-Allow-Origin", "*");
         res.set("Cache-Control", "public, max-age=30");
-        return res.json({ app, urls, ...(urls.length === 0 ? { off: true } : {}) });
+        // `servers` = the same URLs with what each is for; only trusted when it matches the saved list.
+        const doc = await Registry.findOne({ app }, "urls servers").lean();
+        const saved = doc && Array.isArray(doc.servers) ? doc.servers : [];
+        const servers = saved.length && saved.map((s) => s.url).join("|") === urls.join("|") ? saved : urls.map((url) => ({ url, role: "" }));
+        return res.json({ app, urls, servers, ...(urls.length === 0 ? { off: true } : {}) });
     }
     catch (error)
     {

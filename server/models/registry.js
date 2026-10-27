@@ -4,6 +4,8 @@ const mongoose = require("mongoose");
 const registrySchema = new mongoose.Schema({
     app: { type: String, required: true, unique: true, index: true },
     urls: [{ type: String }],
+    // The same URLs with what each one is for (primary, standby, ingest, validator, user). Apps that care read this.
+    servers: [{ url: String, role: String, _id: false }],
     updatedAt: { type: Date, default: Date.now },
     updatedBy: { type: String },
     // Per-project lists (any slug that is not one of the built-in apps) belong to the account that created them.

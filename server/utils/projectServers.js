@@ -1,5 +1,5 @@
 const User = require("../models/schema");
-const { DEFAULTS, SLUG, isAdminEmail } = require("./registryDefaults");
+const { DEFAULTS, SLUG, ROLES, isAdminEmail } = require("./registryDefaults");
 const { linkedServices } = require("./projectMerge");
 
 /*
@@ -54,10 +54,17 @@ function mergeServerUrls(rows, found, ignored) {
     return { rows: next, changed: JSON.stringify(next) !== JSON.stringify(current) };
 }
 
+/** The switched-on servers as the registry serves them: standby ones last, each with its role. */
+function publishedServers(rows) {
+    const on = (rows || []).filter((r) => r.enabled !== false && trimUrl(r.url)).map((r) => ({ url: trimUrl(r.url), role: ROLES.includes(r.role) ? r.role : "" }));
+    return [...on.filter((s) => s.role !== "standby"), ...on.filter((s) => s.role === "standby")];
+}
+
 /** Publishes the switched-on URLs to /registry/<slug>. Returns false (never throws) when it is not allowed or fails. */
 async function publishToRegistry(app, rows, user) {
     const name = String(app || "").toLowerCase();
-    const urls = (rows || []).filter((r) => r.enabled !== false).map((r) => trimUrl(r.url)).filter(Boolean);
+    const servers = publishedServers(rows);
+    const urls = servers.map((s) => s.url);
     // A per-project list may be published empty (everything switched off); the built-in apps always keep a server.
     if ((urls.length === 0 && DEFAULTS[name]) || (!DEFAULTS[name] && !SLUG.test(name))) return false;
     try {
@@ -66,7 +73,7 @@ async function publishToRegistry(app, rows, user) {
         const admin = isAdminEmail(user && user.email);
         if (DEFAULTS[name] && !admin) return false;
         if (doc && doc.owner && String(doc.owner) !== String(user._id) && !admin) return false;
-        const set = { urls, updatedAt: new Date(), updatedBy: user.email || "project-sync" };
+        const set = { urls, servers, updatedAt: new Date(), updatedBy: user.email || "project-sync" };
         if (!DEFAULTS[name] && !(doc && doc.owner)) set.owner = user._id;
         await Registry.findOneAndUpdate({ app: name }, { $set: set }, { upsert: true, setDefaultsOnInsert: true });
         return true;
@@ -112,4 +119,4 @@ async function syncProjectServers(user, dataKey, entry, services, { registryApp 
     return { changed: merged.changed || appChanged, published, serverUrls: merged.rows, registryApp: app };
 }
 
-module.exports = { slugify, discoverServers, mergeServerUrls, publishToRegistry, pickSlug, syncProjectServers };
+module.exports = { publishedServers, slugify, discoverServers, mergeServerUrls, publishToRegistry, pickSlug, syncProjectServers };
