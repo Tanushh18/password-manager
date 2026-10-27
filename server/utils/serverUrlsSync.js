@@ -1,4 +1,3 @@
-const { DEFAULTS } = require("./registryDefaults");
 
 /*
  * When a Render server moves to another account its address changes. This keeps the project's own Server URLs
@@ -21,23 +20,9 @@ function swapServerUrl(serverUrls, oldUrl, newUrl) {
         if (origin(url) === from) { url = to + new URL(url).pathname.replace(/\/+$/, ""); changed = true; }
         if (seen.has(url)) continue;
         seen.add(url);
-        list.push({ url, enabled: !row || row.enabled !== false });
+        list.push({ ...row, url, enabled: !row || row.enabled !== false });
     }
     return { list, changed };
 }
 
-/** Publishes the switched-on URLs for the app the project feeds. Never throws: the move must not fail over this. */
-async function publishToRegistry(app, serverUrls, by) {
-    const name = String(app || "").toLowerCase();
-    const urls = (serverUrls || []).filter((r) => r.enabled !== false).map((r) => r.url);
-    if (!DEFAULTS[name] || urls.length === 0) return false;
-    try
-    {
-        const Registry = require("../models/registry");
-        await Registry.findOneAndUpdate({ app: name }, { urls, updatedAt: new Date(), updatedBy: by || "move-server" }, { upsert: true, setDefaultsOnInsert: true });
-        return true;
-    }
-    catch (e) { return false; }
-}
-
-module.exports = { swapServerUrl, publishToRegistry };
+module.exports = { swapServerUrl };

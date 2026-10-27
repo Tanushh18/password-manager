@@ -8,6 +8,7 @@ const { planAutoProjects } = require("./projectPlan");
 const { syncProjectEnv } = require("./renderEnvSync");
 const dns = require("dns").promises;
 const { deriveDetails, apexOf, hostOf } = require("./projectDerive");
+const { syncProjectServers } = require("./projectServers");
 
 const nsCache = new Map(); // apex -> { at, ns }
 async function nameserversFor(host) {
@@ -97,6 +98,16 @@ async function run(userId) {
     summary.refreshed = refreshed + linkedNow.length;
     // New projects start with their Render variables already pulled in.
     for (const id of newlyLinked) { try { await syncProjectEnv(user, id, { apply: true, resolveConflicts: false }); } catch { /* retried by the background env sync */ } }
+  }
+  /* Published projects: every server of the repo is in the project's Server URLs and in its public registry list. */
+  summary.serversSynced = 0;
+  if (render.accounts.size) {
+    for (const entry of (user.projects || []).filter((e) => e.enc === "udk").slice(0, 300)) {
+      try {
+        const r = await syncProjectServers(user, dataKey, entry, render.services);
+        if (r.changed) summary.serversSynced += 1;
+      } catch { /* one project never blocks the rest */ }
+    }
   }
   /* Fill blank details (databases, services used, custom domain, DNS provider) from what each project already has. */
   summary.derived = 0;

@@ -14,7 +14,7 @@ const Registry = require("../models/registry");
 const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
 
-const { ADMINS, DEFAULTS, APP_LABELS } = require("../utils/registryDefaults");
+const { ADMINS, DEFAULTS, APP_LABELS, SLUG } = require("../utils/registryDefaults");
 const MAX_URLS = 10;
 
 const isAdminUser = (user) => Boolean(user && user.email && ADMINS.includes(String(user.email).toLowerCase()));
@@ -42,8 +42,17 @@ const cleanUrl = (value) =>
 const listFor = async (app) =>
 {
     const doc = await Registry.findOne({ app }).lean();
-    return doc && doc.urls && doc.urls.length ? doc.urls : DEFAULTS[app];
+    return doc && doc.urls && doc.urls.length ? doc.urls : DEFAULTS[app] || null;
 };
+
+/** Built-in apps are for administrators; any other slug is a per-project list owned by the account that made it. */
+const mayWrite = (user, app, doc) =>
+{
+    if (isAdminUser(user)) return true;
+    if (DEFAULTS[app]) return false;
+    return !doc || !doc.owner || String(doc.owner) === String(user._id);
+};
+const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: "Too many changes. Slow down." });
 
 const checkLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: "Too many checks. Slow down." });
 
@@ -73,10 +82,12 @@ router.get("/registry", authenticate, requireAdmin, async (req, res) =>
     }
 });
 
-router.put("/registry/:app", authenticate, requireAdmin, async (req, res) =>
+router.put("/registry/:app", authenticate, writeLimiter, async (req, res) =>
 {
     const app = String(req.params.app || "").toLowerCase();
-    if (!DEFAULTS[app]) return res.status(404).json({ error: "Unknown app." });
+    if (!DEFAULTS[app] && !SLUG.test(app)) return res.status(400).json({ error: "Use 3-40 letters, numbers or dashes." });
+    const existing = await Registry.findOne({ app }).lean();
+    if (!mayWrite(req.rootUser, app, existing)) return res.status(403).json({ error: "Not allowed." });
 
     const input = Array.isArray(req.body.urls) ? req.body.urls : [];
     const urls = [];
@@ -93,7 +104,7 @@ router.put("/registry/:app", authenticate, requireAdmin, async (req, res) =>
     {
         const doc = await Registry.findOneAndUpdate(
             { app },
-            { urls, updatedAt: new Date(), updatedBy: req.rootUser.email },
+            { urls, updatedAt: new Date(), updatedBy: req.rootUser.email, ...(!DEFAULTS[app] && !(existing && existing.owner) ? { owner: req.rootUser._id } : {}) },
             { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
         ).lean();
         return res.json({ app, urls: doc.urls, updatedAt: doc.updatedAt });
@@ -130,11 +141,10 @@ router.post("/registry/check", authenticate, requireAdmin, checkLimiter, async (
 router.get("/registry/:app", async (req, res) =>
 {
     const app = String(req.params.app || "").toLowerCase();
-    if (!DEFAULTS[app]) return res.status(404).json({ error: "Unknown app." });
-
     try
     {
         const urls = await listFor(app);
+        if (!urls) return res.status(404).json({ error: "Unknown app." });
         // Any website or app may read this list; it holds URLs only.
         if (!res.getHeader("Access-Control-Allow-Origin")) res.set("Access-Control-Allow-Origin", "*");
         res.set("Cache-Control", "public, max-age=30");

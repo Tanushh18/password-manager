@@ -15,6 +15,7 @@ const { parseGithubRepo } = require("../utils/github");
 const { groupKey, mergeProjects } = require("../utils/projectMerge");
 const { syncAllProjects } = require("../utils/projectSyncAll");
 const { autoSyncProjects } = require("../utils/projectAutoSync");
+const { loadHostSites } = require("../utils/hostSites");
 const { runTick, getSchedulerStatus } = require("../utils/scheduler");
 const { runUserPings, pingResults, scanHealthRoutes } = require("../utils/pings");
 const { getProjectDeployments } = require("../utils/projectDeployments");
@@ -905,18 +906,22 @@ router.put("/render/usage-settings", async (req, res) => {
   catch { return res.status(500).json({ error: "Could not save settings." }); }
 });
 
-/* Every server with a public address in the Render accounts connected to this login, for the project's Server URLs picker. */
+/* Every server or site with a public address in the Render and hosting accounts connected to this login, grouped by provider in the picker. */
 router.get("/render/all-servers", async (req, res) => {
   try {
     const dataKey = await req.rootUser.getDataKey();
-    const { services } = await loadRenderServices(req.rootUser, dataKey, { refresh: req.query.refresh === "1" });
-    const servers = services
+    const refresh = req.query.refresh === "1";
+    const render = (req.rootUser.renderAccounts || []).length ? (await loadRenderServices(req.rootUser, dataKey, { refresh })).services : [];
+    const hosts = (req.rootUser.hostAccounts || []).length ? (await loadHostSites(req.rootUser, dataKey, { refresh }).catch(() => ({ services: [] }))).services : [];
+    const servers = [
+      ...render.map((s) => ({ id: s.id, name: s.name, url: s.url, kind: s.type === "static_site" ? "site" : "server", suspended: s.suspended, accountName: s.accountName, plan: s.plan, region: s.region, provider: "render", providerLabel: "Render" })),
+      ...hosts.map((s) => ({ id: s.id, name: s.name, url: s.url, kind: "site", suspended: false, accountName: s.accountName, plan: "", region: "", provider: s.provider, providerLabel: s.providerLabel }))
+    ]
       .filter((s) => /^https:\/\//i.test(s.url))
-      .map((s) => ({ id: s.id, name: s.name, url: s.url, type: s.type, suspended: s.suspended, accountName: s.accountName, plan: s.plan, region: s.region }))
-      .sort((a, b) => Number(a.suspended) - Number(b.suspended) || a.name.localeCompare(b.name));
+      .sort((a, b) => a.providerLabel.localeCompare(b.providerLabel) || Number(a.suspended) - Number(b.suspended) || a.name.localeCompare(b.name));
     res.set("Cache-Control", "no-store");
     return res.json({ servers });
-  } catch { return res.status(500).json({ error: "Could not load your Render servers." }); }
+  } catch { return res.status(500).json({ error: "Could not load your servers." }); }
 });
 
 /* Servers tab sync (admin only): each registry URL matched to its Render service, plus suggestions. */

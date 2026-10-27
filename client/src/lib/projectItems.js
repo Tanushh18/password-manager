@@ -93,8 +93,10 @@ export function normalizeProject(raw = {}) {
   if (Array.isArray(raw.hostLinks) && raw.hostLinks.length) next.hostLinks = raw.hostLinks.filter((l) => l && l.id && l.remoteId);
   // Backend URLs this project's apps use, each switchable; `registryApp` names the app that reads them from Stashr.
   if (Array.isArray(raw.serverUrls) && raw.serverUrls.length) {
-    next.serverUrls = raw.serverUrls.filter((s) => s && /^https?:\/\//i.test(String(s.url || ""))).map((s) => ({ url: String(s.url).trim().replace(/\/+$/, ""), enabled: s.enabled !== false }));
+    next.serverUrls = raw.serverUrls.filter((s) => s && /^https?:\/\//i.test(String(s.url || ""))).map((s) => ({ url: String(s.url).trim().replace(/\/+$/, ""), enabled: s.enabled !== false, ...(s.auto ? { auto: true } : {}) }));
   }
+  // Servers removed by hand: the automatic sync never adds these back.
+  if (Array.isArray(raw.serverUrlsIgnored) && raw.serverUrlsIgnored.length) next.serverUrlsIgnored = raw.serverUrlsIgnored.filter((u) => typeof u === "string" && /^https?:\/\//i.test(u)).map((u) => u.trim().replace(/\/+$/, "").toLowerCase());
   if (clean(raw.registryApp)) next.registryApp = clean(raw.registryApp).toLowerCase();
   return next;
 }

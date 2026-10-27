@@ -12,4 +12,7 @@ const DEFAULTS = {
 };
 const APP_LABELS = { stashr: "Stashr", dealradar: "Deal Radar", wethree: "We Three" };
 
-module.exports = { ADMINS, DEFAULTS, APP_LABELS };
+const isAdminEmail = (email) => Boolean(email && ADMINS.includes(String(email).toLowerCase()));
+const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
+
+module.exports = { ADMINS, DEFAULTS, APP_LABELS, isAdminEmail, SLUG };

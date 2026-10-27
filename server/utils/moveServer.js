@@ -6,7 +6,8 @@ const { fetchAllPages } = require("./renderPaging");
 const { linkedServices } = require("./projectMerge");
 const { findUrlReferences, replaceUrlReferences } = require("./urlRefs");
 const { checkServiceDeletion } = require("./renderGuards");
-const { swapServerUrl, publishToRegistry } = require("./serverUrlsSync");
+const { swapServerUrl } = require("./serverUrlsSync");
+const { publishToRegistry } = require("./projectServers");
 
 /*
  * Moving a Render server to another connected account, as steps the user runs one at a time:
@@ -591,7 +592,7 @@ async function relink(user, projectId, { oldServiceId, newAccountId, newServiceI
   const swapped = swapServerUrl(next.serverUrls, migration.sourceUrl, added.url);
   if (swapped.changed) next.serverUrls = swapped.list;
   await saveProjectFields(user, entry, dataKey, next);
-  const published = swapped.changed && next.registryApp ? await publishToRegistry(next.registryApp, swapped.list, user.email) : false;
+  const published = swapped.changed && next.registryApp ? await publishToRegistry(next.registryApp, swapped.list, user) : false;
   return { renderServiceId: newServiceId, renderAccountId: String(newAccountId), originAccountId: String(next.renderAccountOriginId), serverUrlsUpdated: swapped.changed, registryPublished: published };
 }
 

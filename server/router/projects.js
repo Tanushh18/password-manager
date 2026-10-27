@@ -6,6 +6,8 @@ const authenticate = require("../middlewares/authenticate");
 const hub = require("../utils/syncHub");
 const { serverError } = require("./helpers");
 const { pickPrimary, mergeProjects } = require("../utils/projectMerge");
+const { syncProjectServers, pickSlug } = require("../utils/projectServers");
+const { loadRenderServices } = require("../utils/projectStatus");
 
 /*
  * Project/infra tracker. Same scheme as the password vault (see
@@ -139,6 +141,30 @@ router.post("/projects/merge", authenticate, async (req, res) =>
     catch (error)
     {
         return serverError(res, "projects/merge", error);
+    }
+});
+
+/* Publishes a project's servers: picks its public registry name once, pulls in every server of the repo, and saves the list. */
+router.post("/projects/items/:id/servers/sync", authenticate, async (req, res) =>
+{
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: "Could not find that project." });
+    try
+    {
+        const dataKey = await req.rootUser.getDataKey();
+        const entry = (req.rootUser.projects || []).find((e) => String(e._id) === req.params.id);
+        if (!entry) return res.status(404).json({ error: "Could not find that project." });
+        const fields = User.publicEntry(entry, dataKey);
+        if (fields.broken || fields.enc === "e2e") return res.status(422).json({ error: "This project could not be decrypted." });
+        const registryApp = fields.registryApp || (req.body && req.body.publish === false ? "" : await pickSlug(req.rootUser, fields.name));
+        let services = [];
+        if ((req.rootUser.renderAccounts || []).length) services = (await loadRenderServices(req.rootUser, dataKey, { refresh: true })).services;
+        const result = await syncProjectServers(req.rootUser, dataKey, entry, services, { registryApp });
+        res.set("Cache-Control", "no-store");
+        return res.json({ registryApp: result.registryApp || "", serverUrls: result.serverUrls || fields.serverUrls || [], changed: result.changed, published: result.published });
+    }
+    catch (error)
+    {
+        return serverError(res, "projects/items/:id/servers/sync", error);
     }
 });
 

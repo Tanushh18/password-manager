@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
-import { getAdminUsers, setUserFeature, errorMessage } from "../../api/client";
+import { deleteAdminUser, getAdminUsers, setUserFeature, errorMessage } from "../../api/client";
 import "./Admin.css";
 
 const when = (v) => (v ? new Date(v).toLocaleDateString() : "");
@@ -16,6 +16,18 @@ export default function Admin() {
     catch (e) { setError(errorMessage(e, "Could not load users.")); }
   }, []);
   useEffect(() => { const t = setTimeout(() => void load(q), 250); return () => clearTimeout(t); }, [q, load]);
+
+  const remove = async (user) => {
+    const typed = window.prompt(`This permanently deletes ${user.email} and every record of theirs: passwords, projects, connected accounts, photos data and sign-ins. It cannot be undone.\n\nType their email to confirm:`);
+    if (typed === null) return;
+    setBusy("del" + user.id);
+    try {
+      await deleteAdminUser(user.id, typed);
+      setData((d) => ({ ...d, users: (d?.users || []).filter((u) => u.id !== user.id), total: Math.max(0, (d?.total || 1) - 1) }));
+      toast.success(`${user.email} and all their records were deleted.`);
+    } catch (e) { toast.error(errorMessage(e, "Could not delete that user.")); }
+    finally { setBusy(""); }
+  };
 
   const toggleable = (data?.features || []).filter((f) => !f.locked);
   const locked = (data?.features || []).filter((f) => f.locked);
@@ -48,12 +60,13 @@ export default function Admin() {
         <div className="admin__scroll">
           <table className="admin__table">
             <thead>
-              <tr><th>User</th>{toggleable.map((f) => <th key={f.key} title={f.description}>{f.label}<small>{f.audience === "admin" ? "default: admin" : "default: everyone"}</small></th>)}</tr>
+              <tr><th>User</th><th>Delete</th>{toggleable.map((f) => <th key={f.key} title={f.description}>{f.label}<small>{f.audience === "admin" ? "default: admin" : "default: everyone"}</small></th>)}</tr>
             </thead>
             <tbody>
               {(data?.users || []).map((u) => (
                 <tr key={u.id}>
                   <td className="admin__user"><strong>{u.email}</strong><small>{u.name || "No name"}{u.isAdmin ? " · admin" : ""}{u.createdAt ? ` · joined ${when(u.createdAt)}` : ""}</small></td>
+                  <td className="admin__cell">{u.isAdmin ? <small>admin</small> : <button type="button" className="btn btn--sm" disabled={busy === "del" + u.id} onClick={() => void remove(u)}>Delete</button>}</td>
                   {toggleable.map((f) => {
                     const custom = typeof u.overrides?.[f.key] === "boolean";
                     return (

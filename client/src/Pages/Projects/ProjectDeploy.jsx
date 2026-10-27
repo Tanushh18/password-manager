@@ -12,7 +12,7 @@ import { HOSTS, hostById } from "../../lib/hostGuides";
 import { Arrow, Check, Copy, Plus, Trash, Alert } from "../../Components/Icons/Icons";
 import { useVault } from "../../state/vault";
 import { parseEnvBlock } from "../../lib/projectItems";
-import { checkRepoCode, createRepo, deployProject, deployToHost, getGithubAccounts, getGithubBranches, getHostAccounts, getRenderAccounts, getRenderOwners } from "../../api/client";
+import { checkRepoCode, createRepo, deployProject, deployToHost, getGithubAccounts, getGithubBranches, getHostAccounts, getRenderAccounts, getRenderOwners, syncProjectServers } from "../../api/client";
 import "../Passwords/Passwords.css";
 import "./Projects.css";
 
@@ -227,6 +227,12 @@ export default function ProjectDeploy() {
     try {
       for (const job of jobs) parts.push({ ...(await job.run()), label: job.label });
       setResult({ ok: true, steps: parts.flatMap((p) => p.steps), parts });
+      // Every deployed server goes into its project's public Stashr list; later servers of the repo follow by themselves.
+      if (scope !== "client") {
+        parts.filter((p) => p.projectId && p.label !== "Client").forEach((p) => {
+          syncProjectServers(p.projectId).then((r) => { if (r.published) toast.info("Server URL published: /registry/" + r.registryApp); }).catch(() => { /* the background sync retries */ });
+        });
+      }
       void refreshProfile();
       toast.success(parts.length > 1 ? "Server and client are deploying." : parts[0].host ? "Project created and deploying on " + parts[0].host + "." : "Project created and deploying on the free plan.");
     } catch (e) {
