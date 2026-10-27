@@ -6,6 +6,8 @@ const { fetchAllPages } = require("./renderPaging");
 const { linkedServices } = require("./projectMerge");
 const { findUrlReferences, replaceUrlReferences, replaceHost } = require("./urlRefs");
 const { checkServiceDeletion } = require("./renderGuards");
+const Registry = require("../models/registry");
+const { ADMINS, DEFAULTS } = require("./registryDefaults");
 
 /*
  * Moving a Render server to another connected account, as steps the user runs one at a time:
@@ -551,6 +553,30 @@ async function frontends(user, projectId, { fromUrl, toUrl, targets, deploy }) {
   return replaceUrlReferences(user, { projectId, fromUrl, toUrl, targets: Array.isArray(targets) ? targets : [], deploy: deploy === true });
 }
 
+/**
+ * Apps read their backend list from the registry, so a moved server's address is swapped there too (same path, new host).
+ * Only a registry admin changes it; failures never block the move.
+ */
+async function swapRegistryUrls(user, fromUrl, toUrl) {
+  const to = (() => { try { return new URL(toUrl).origin; } catch { return ""; } })();
+  const fromHost = (() => { try { return new URL(fromUrl).hostname.toLowerCase(); } catch { return ""; } })();
+  if (!to || !fromHost || !ADMINS.includes(String(user.email || "").toLowerCase())) return [];
+  const swapped = [];
+  try {
+    for (const app of Object.keys(DEFAULTS)) {
+      const doc = await Registry.findOne({ app }).lean();
+      const urls = doc && doc.urls && doc.urls.length ? doc.urls : DEFAULTS[app];
+      const hit = urls.some((u) => { try { return new URL(u).hostname.toLowerCase() === fromHost; } catch { return false; } });
+      if (!hit) continue;
+      const next = urls.map((u) => { try { const x = new URL(u); return x.hostname.toLowerCase() === fromHost ? to + x.pathname.replace(/\/+$/, "") : u; } catch { return u; } }).filter((u, i, all) => all.indexOf(u) === i);
+      const entry = { at: new Date(), action: "moved", url: to, reason: "Server moved to another Render account" };
+      await Registry.updateOne({ app }, { $set: { urls: next, updatedAt: new Date(), updatedBy: user.email }, $push: { syncLog: { $each: [entry], $slice: -20 } } }, { upsert: true });
+      swapped.push(app);
+    }
+  } catch { /* the registry can be corrected on the Servers page */ }
+  return swapped;
+}
+
 /** Links the project to the new service in place of the old one (the old link is removed, nothing is deleted). */
 async function relink(user, projectId, { oldServiceId, newAccountId, newServiceId, newName, newUrl }) {
   if (!safeId(oldServiceId) || !safeId(newServiceId) || !mongoose.isValidObjectId(newAccountId)) throw fail(400, "Invalid servers.");
@@ -594,7 +620,8 @@ async function relink(user, projectId, { oldServiceId, newAccountId, newServiceI
   if (fields.hostingServiceName && fields.hostingServiceName === (migration.sourceName || "")) next.hostingServiceName = added.name;
   next.renderMigration = { ...migration, stage: "relinked", relinkedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   await saveProjectFields(user, entry, dataKey, next);
-  return { renderServiceId: newServiceId, renderAccountId: String(newAccountId), originAccountId: String(next.renderAccountOriginId) };
+  const registryApps = added.url && migration.sourceUrl ? await swapRegistryUrls(user, migration.sourceUrl, added.url) : [];
+  return { renderServiceId: newServiceId, renderAccountId: String(newAccountId), originAccountId: String(next.renderAccountOriginId), registryApps };
 }
 
 /** Deletes the old service. Refused while the project still points at it, and needs the exact name typed. */
