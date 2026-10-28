@@ -113,7 +113,7 @@ export default function Settings() {
     setUpdateStatus("Checking the Stashr update server…");
     try {
       const currentVersionCode = Number(releaseInfo.build) || 0;
-      const base = activeServer().replace(/\\/+$/, "");
+      const base = activeServer().replace(/\/+$/, "");
       const response = await fetch(`${base}/api/mobile-updates/android/latest?currentVersionCode=${currentVersionCode}`, {
         headers: { Accept: "application/json" },
       });
@@ -128,7 +128,7 @@ export default function Settings() {
       const sizeMb = manifest.sizeBytes ? (manifest.sizeBytes / (1024 * 1024)).toFixed(1) + " MB" : "size unknown";
       Alert.alert(
         "Stashr update available",
-        `Version ${manifest.version} · build ${manifest.versionCode}\\n${sizeMb}\\n\\n${manifest.releaseNotes || "Bug fixes and improvements"}\\n\\nThe complete APK will be downloaded. Android will ask you to confirm installation.`,
+        `Version ${manifest.version} · build ${manifest.versionCode}\n${sizeMb}\n\n${manifest.releaseNotes || "Bug fixes and improvements"}\n\nThe complete APK will be downloaded. Android will ask you to confirm installation.`,
         [
           { text: "Later", style: "cancel" },
           {
