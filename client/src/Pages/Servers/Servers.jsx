@@ -124,6 +124,14 @@ function AppCard({ entry, sync, onSaved, onSyncChanged }) {
     setDraft("");
   };
 
+  // Stashr's own list: the first URL is the main server. The toggle moves a URL to the top; save makes it live.
+  const isStashr = entry.app === "stashr";
+  const makeMain = (i) => {
+    const next = [...urls];
+    const [chosen] = next.splice(i, 1);
+    setUrls([chosen, ...next]);
+  };
+
   const move = (i, by) => {
     const next = [...urls];
     const j = i + by;
@@ -179,6 +187,8 @@ function AppCard({ entry, sync, onSaved, onSyncChanged }) {
             <li key={url} className="servers__row">
               <span className={`servers__dot servers__dot--${h?.state || "idle"}`} title={h?.state || "not tested"} />
               <code className="servers__url">{url}</code>
+              {isStashr && i === 0 ? <span className="servers__main">MAIN</span> : null}
+              {isStashr && i > 0 ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => makeMain(i)}>Make main</button> : null}
               {h?.state === "up" && <span className="servers__ms">{h.ms} ms</span>}
               {h?.state === "down" && <span className="servers__ms servers__ms--bad">down</span>}
               {sync ? <RenderTag item={item} willRemove={autoOn && sync.willRemove?.includes(url)} /> : null}
