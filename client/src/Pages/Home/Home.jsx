@@ -143,8 +143,8 @@ function Home() {
           <h2 id="hm-command-title">Your whole digital life. One protected orbit.</h2>
           <p>Move from personal logins to developer projects and security checks without losing your place. The scene is decorative; every station below opens a real Stashr feature.</p>
           <div className="hm-command__stats" aria-label="Vault overview">
-            <div><strong>{signedIn ? count : "—"}</strong><span>Vault items</span></div>
-            <div><strong>{signedIn ? "Ready" : "Private"}</strong><span>{signedIn ? "Account state" : "Sign in to view"}</span></div>
+            <div><strong>{status === "ready" ? count : "—"}</strong><span>Vault items</span></div>
+            <div><strong>{status === "locked" ? "Locked" : signedIn ? "Ready" : "Private"}</strong><span>{signedIn ? "Account state" : "Sign in to view"}</span></div>
           </div>
           <Link to={signedIn ? "/security-center" : "/signin"} className="btn btn--primary hm-command__cta">
             {signedIn ? "Open security center" : "Sign in to your vault"} <Arrow size={15} />
