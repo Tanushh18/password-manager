@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { getHoursBudget } from "../../api/client";
 
 const LEVEL_TEXT = { ok: "On track", warn: "80% used", over: "Over the limit" };
@@ -42,8 +43,12 @@ export default function HoursBudgetCard() {
             {b.projectedOver
               ? "At this pace it runs out before the month ends" + (day(b.runsOutAt) ? " (about " + day(b.runsOutAt) + ")" : "") + "."
               : "At this pace: about " + b.projectedHours + " h by month end."}
-            {b.level !== "ok" ? " Plan a migration to another workspace before the month ends." : ""}
           </small>
+          {b.level !== "ok" && (
+            <Link className="btn btn--sm sv-hours__migrate" to="/projects">
+              Plan a migration: Projects → Deployments
+            </Link>
+          )}
         </article>
       ))}
     </section>

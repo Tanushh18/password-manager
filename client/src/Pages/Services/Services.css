@@ -171,3 +171,4 @@
 .sv-status__form { display: grid; gap: 6px; margin: 8px 0; }
 .sv-status__services { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 4px; font-size: 0.9rem; }
 .sv-status__actions { display: flex; gap: 10px; align-items: center; }
+.sv-hours__migrate { margin-top: 6px; display: inline-block; }
