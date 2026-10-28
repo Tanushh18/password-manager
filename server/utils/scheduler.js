@@ -7,6 +7,7 @@ const renderOps = require("./renderOps");
 const { runAllEnvSync } = require("./renderEnvSync");
 const { runAllAutoLink } = require("./projectStatus");
 const { runAllUsage } = require("./usageIO");
+const { runAllRenderHours } = require("./renderHoursRunner");
 const { runAllProjectSync } = require("./projectAutoSync");
 const { runAllRegistrySync } = require("./registrySyncIO");
 const { runAllPings } = require("./pings");
@@ -106,6 +107,7 @@ async function runTick(source = "internal") {
       const envSync = await executeStep("envSync", runAllEnvSync, steps);
       const registrySync = await executeStep("registrySync", runAllRegistrySync, steps);
       const usage = await executeStep("usage", runAllUsage, steps);
+      const renderHours = await executeStep("renderHours", runAllRenderHours, steps);
       const telegram = await executeStep("telegram", runAllDigests, steps);
       const completedAt = new Date().toISOString();
       const status = overallStatus(steps);
@@ -125,6 +127,7 @@ async function runTick(source = "internal") {
         envSync,
         registrySync,
         usage,
+        renderHours,
         telegram
       };
       run.persisted = await persistRun(run);

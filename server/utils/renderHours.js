@@ -8,6 +8,9 @@
 
 const FREE_HOURS_PER_MONTH = 750;
 const WARN_AT_PERCENT = 80;
+// Sampling: the first sample stands for 5 minutes; a later one for the time since the last, capped so an outage adds nothing.
+const FIRST_SAMPLE_MINUTES = 5;
+const MAX_MINUTES_PER_SAMPLE = 15;
 
 const monthStart = (now = new Date()) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 const monthEnd = (now = new Date()) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
@@ -69,6 +72,23 @@ function shouldAlert(previousLevel, status) {
   return status.level !== "ok" && rank[status.level] > (rank[previousLevel] ?? 0);
 }
 
+/** The latest instance count in a Render metrics payload, or null when there is no point. Pure. */
+function latestCount(payload) {
+  const data = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+  const points = data.flatMap((series) => Array.isArray(series?.values) ? series.values : [])
+    .map((p) => ({ t: Date.parse(p?.timestamp), value: Number(p?.value) }))
+    .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.value))
+    .sort((a, b) => a.t - b.t);
+  return points.length ? points[points.length - 1].value : null;
+}
+
+/** Minutes this sample stands for: the time since the last sample, capped, so a long outage does not add hours. */
+function minutesSince(lastSampledAt, now) {
+  if (!lastSampledAt) return FIRST_SAMPLE_MINUTES;
+  const elapsed = (now.getTime() - Date.parse(lastSampledAt)) / 60000;
+  return Math.min(MAX_MINUTES_PER_SAMPLE, Math.max(0, elapsed));
+}
+
 const round = (n, digits = 1) => (Number.isFinite(n) ? Math.round(n * 10 ** digits) / 10 ** digits : null);
 
-module.exports = { FREE_HOURS_PER_MONTH, WARN_AT_PERCENT, monthKey, monthStart, monthEnd, addRunningMinutes, budgetStatus, shouldAlert };
+module.exports = { FREE_HOURS_PER_MONTH, WARN_AT_PERCENT, monthKey, monthStart, monthEnd, addRunningMinutes, budgetStatus, shouldAlert, latestCount, minutesSince };

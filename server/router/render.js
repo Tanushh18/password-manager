@@ -4,6 +4,8 @@ const renderOps = require("../utils/renderOps");
 const { fetchAllPages } = require("../utils/renderPaging");
 const { syncProjectEnv, runAllEnvSync } = require("../utils/renderEnvSync");
 const { getProjectStatuses, runAllAutoLink, clearServicesCache, loadRenderServices } = require("../utils/projectStatus");
+const renderHoursRunner = require("../utils/renderHoursRunner");
+const renderHours = require("../utils/renderHours");
 const { runUsage, runAllUsage, readSettings, saveSettings, getUsageCapabilityCatalog, hasReader } = require("../utils/usageIO");
 const { listNeedsReader } = require("../utils/unsupportedServices");
 const { pushProjectEnv } = require("../utils/renderEnvPush");
@@ -895,6 +897,12 @@ router.get("/render/live-dashboard", async (req, res) => {
     res.set("Cache-Control", "no-store");
     return res.json(data);
   } catch { return res.status(500).json({ error: "Could not build the services dashboard." }); }
+});
+
+/* Free-hours budget per Render account (estimate, from the instance counts Stashr sampled). No Render calls here. */
+router.get("/render/hours-budget", async (req, res) => {
+  try { return res.json({ budgets: await renderHoursRunner.budgetsFor(req.rootUser), freeHoursPerMonth: renderHours.FREE_HOURS_PER_MONTH }); }
+  catch { return res.status(500).json({ error: "Could not read the hours budget." }); }
 });
 
 router.get("/render/usage-settings", async (req, res) => {

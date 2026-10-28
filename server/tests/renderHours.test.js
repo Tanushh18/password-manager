@@ -1,6 +1,6 @@
 const { describe, test } = require("node:test");
 const expect = require("./expect");
-const { FREE_HOURS_PER_MONTH, monthKey, addRunningMinutes, budgetStatus, shouldAlert } = require("../utils/renderHours");
+const { FREE_HOURS_PER_MONTH, monthKey, addRunningMinutes, budgetStatus, shouldAlert, latestCount, minutesSince } = require("../utils/renderHours");
 
 const at = (iso) => new Date(iso);
 
@@ -99,5 +99,31 @@ describe("shouldAlert", () =>
         expect(shouldAlert("warn", warn)).toBe(false);
         expect(shouldAlert("warn", { level: "over" })).toBe(true);
         expect(shouldAlert("over", { level: "ok" })).toBe(false);
+    });
+});
+
+
+describe("latestCount", () =>
+{
+    test("reads the newest instance count from a Render metrics payload", () =>
+    {
+        const payload = { data: [{ values: [{ timestamp: "2026-10-10T12:05:00Z", value: 1 }, { timestamp: "2026-10-10T12:10:00Z", value: 0 }] }] };
+        expect(latestCount(payload)).toBe(0);
+    });
+
+    test("no points gives null, so nothing is counted", () =>
+    {
+        expect(latestCount({ data: [] })).toBe(null);
+        expect(latestCount(null)).toBe(null);
+    });
+});
+
+describe("minutesSince", () =>
+{
+    test("the first sample counts five minutes, and a long gap is capped at fifteen", () =>
+    {
+        expect(minutesSince(null, at("2026-10-10T12:00:00Z"))).toBe(5);
+        expect(minutesSince("2026-10-10T00:00:00Z", at("2026-10-10T12:00:00Z"))).toBe(15);
+        expect(minutesSince("2026-10-10T11:58:00Z", at("2026-10-10T12:00:00Z"))).toBe(2);
     });
 });
