@@ -1,12 +1,13 @@
-# Builds the Android APK on GitHub's own runner (Gradle), with no Expo cloud build and no EAS quota.
-# The APK is signed with the debug key that Expo's prebuild template ships, which is the same on every run,
-# so builds install over each other. (It is not the key of an APK installed from an EAS build: uninstall that one first.)
-#
-# EXPO_TOKEN is optional for building an APK, but required to embed the EAS project ID so that this APK can receive OTA updates.
-# Secrets used only when "distribute" is on: FIREBASE_APP_ID and FIREBASE_SERVICE_ACCOUNT_JSON.
+# Internal/test APK built on GitHub's Ubuntu runner. OTA publishing is a separate workflow.
 name: Android APK (GitHub runner)
 
 on:
+  # This guarded one-time trigger starts the first OTA-enabled APK after setup is committed.
+  # Future changes to this workflow do not rebuild unless the commit message includes [build-apk].
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/android-apk.yml"
   workflow_dispatch:
     inputs:
       channel:
@@ -14,26 +15,48 @@ on:
         type: choice
         options: [preview, production]
         default: preview
+        required: true
+      otaVersion:
+        description: "Base release label embedded in the APK (must match app version)"
+        type: string
+        default: "2.3.1-build.7"
+        required: true
+      releaseNotes:
+        description: "Release notes for tester distribution"
+        type: string
+        default: "Stashr 2.3.1 · Android build 7 · OTA enabled"
+        required: true
       distribute:
         description: "Send the APK to Firebase App Distribution testers"
         type: boolean
-        default: true
+        default: false
+        required: true
       testerGroups:
         description: "Firebase tester group alias(es), comma separated"
         type: string
         default: "tester-01"
       testers:
-        description: "Tester email addresses to send the APK to, comma separated"
+        description: "Tester email addresses, comma separated"
         type: string
-        default: "tanushchawla21@gmail.com"
+        default: ""
+
+permissions:
+  contents: read
 
 jobs:
   apk:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-apk]') }}
+    name: Validate OTA config and build APK
     runs-on: ubuntu-latest
     timeout-minutes: 60
     defaults:
       run:
         working-directory: mobile
+    env:
+      UPDATE_CHANNEL: ${{ inputs.channel || 'preview' }}
+      STASHR_UPDATE_CHANNEL: ${{ inputs.channel || 'preview' }}
+      STASHR_OTA_VERSION: ${{ inputs.otaVersion || '2.3.1-build.7' }}
+      EXPO_PUBLIC_OTA_VERSION: ${{ inputs.otaVersion || '2.3.1-build.7' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -48,28 +71,89 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      # GitHub's Ubuntu runners already ship the Android SDK (ANDROID_HOME), so no separate SDK install is needed.
-      - run: npm ci
-
-      # The project ID is public metadata, but the EAS token is kept in GitHub Secrets.
-      # If no token is set, keep the APK build working while clearly warning that OTA will be disabled.
-      - name: Link EAS project for OTA (optional)
+      - name: Verify Expo token
         shell: bash
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
-            echo "::warning::EXPO_TOKEN is not set. This APK will build without OTA updates; add the repository secret to enable them."
-          else
-            npx eas-cli@latest init --non-interactive --force
+            echo "::error::EXPO_TOKEN is required. Add it under Settings > Secrets and variables > Actions so this APK is OTA-enabled."
+            exit 1
           fi
 
-      # Generates the native android/ project from app.json and the plugins (it is not kept in git).
+      - name: Verify Firebase secrets if distribution is requested
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.distribute }}
+        shell: bash
+        env:
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          TESTER_GROUPS: ${{ inputs.testerGroups }}
+          TESTERS: ${{ inputs.testers }}
+        run: |
+          if [ -z "$FIREBASE_APP_ID" ] || { [ -z "$FIREBASE_SERVICE_ACCOUNT_JSON" ] && [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; }; then
+            echo "::error::Firebase distribution requested, but FIREBASE_APP_ID or Firebase service-account secret is missing."
+            exit 1
+          fi
+          if [ -z "$TESTER_GROUPS" ] && [ -z "$TESTERS" ]; then
+            echo "::error::Provide at least one tester group or tester email."
+            exit 1
+          fi
+
+      - run: npm ci
+
+      - name: Link EAS project for OTA
+        shell: bash
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest init --non-interactive --force
+
+      - name: Validate release label
+        shell: bash
+        run: |
+          APP_VERSION=$(node -p "require('./app.json').expo.version")
+          VERSION_CODE=$(node -p "require('./app.json').expo.android.versionCode")
+          if [[ ! "$STASHR_OTA_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-build\.[0-9]+$ ]]; then
+            echo "::error::APK label must look like 2.3.1-build.7."
+            exit 1
+          fi
+          case "$STASHR_OTA_VERSION" in
+            "${APP_VERSION}-build."*) ;;
+            *) echo "::error::APK label must start with app version $APP_VERSION-build."; exit 1 ;;
+          esac
+          echo "App version: $APP_VERSION"
+          echo "Android version code: $VERSION_CODE"
+          echo "OTA label: $STASHR_OTA_VERSION"
+          echo "Channel: $UPDATE_CHANNEL"
+
+      - name: Confirm OTA URL, channel and runtime are configured
+        shell: bash
+        run: |
+          npx expo config --json > /tmp/stashr-expo-config.json
+          node - <<'NODE'
+          const fs = require("fs");
+          const c = JSON.parse(fs.readFileSync("/tmp/stashr-expo-config.json", "utf8"));
+          const projectId = c.extra?.eas?.projectId;
+          const channel = c.updates?.requestHeaders?.["expo-channel-name"];
+          if (!projectId) throw new Error("EAS project ID is missing after eas init.");
+          if (c.updates?.enabled !== true) throw new Error("Expo Updates is disabled in the resolved app config.");
+          if (!String(c.updates?.url || "").startsWith("https://u.expo.dev/")) throw new Error("Expo Updates URL is not configured.");
+          if (channel !== process.env.STASHR_UPDATE_CHANNEL) throw new Error("Embedded channel does not match the selected channel.");
+          if (!c.runtimeVersion) throw new Error("Runtime version is missing.");
+          if (c.extra?.stashrRelease?.otaVersion !== process.env.STASHR_OTA_VERSION) throw new Error("OTA release label was not embedded in config.");
+          console.log("EAS project ID:", projectId);
+          console.log("OTA URL:", c.updates.url);
+          console.log("Enabled:", c.updates.enabled);
+          console.log("Channel:", channel);
+          console.log("Runtime:", typeof c.runtimeVersion === "string" ? c.runtimeVersion : JSON.stringify(c.runtimeVersion));
+          console.log("OTA label:", c.extra.stashrRelease.otaVersion);
+          NODE
+
+      # The prebuild writes the selected EAS URL and channel to Android's native config.
       - name: Generate the Android project
         run: npx expo prebuild --platform android --no-install --clean
         env:
           CI: "1"
-          STASHR_UPDATE_CHANNEL: ${{ inputs.channel }}
 
       - name: Build the release APK
         working-directory: mobile/android
@@ -77,20 +161,39 @@ jobs:
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
 
-      - name: Collect the APK
+      - name: Collect APK and build metadata
+        working-directory: mobile
+        shell: bash
         run: |
           apk=$(find android/app/build/outputs/apk/release -name '*.apk' | head -n 1)
-          test -n "$apk" || { echo "No APK was produced"; exit 1; }
+          test -n "$apk" || { echo "::error::No APK was produced"; exit 1; }
           cp "$apk" stashr-release.apk
-          ls -lh stashr-release.apk
+          APP_VERSION=$(node -p "require('./app.json').expo.version")
+          VERSION_CODE=$(node -p "require('./app.json').expo.android.versionCode")
+          {
+            echo "App: Stashr"
+            echo "App version: $APP_VERSION"
+            echo "Android version code: $VERSION_CODE"
+            echo "OTA release label: $STASHR_OTA_VERSION"
+            echo "OTA channel: $STASHR_UPDATE_CHANNEL"
+            echo "Runtime version policy: appVersion"
+            echo "API origin: https://password-manager-server-xxdr.onrender.com"
+            echo "Git commit: $GITHUB_SHA"
+            echo "Built at UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > stashr-build-info.txt
+          ls -lh stashr-release.apk stashr-build-info.txt
 
       - uses: actions/upload-artifact@v4
         with:
           name: stashr-android-apk
-          path: mobile/stashr-release.apk
+          path: |
+            mobile/stashr-release.apk
+            mobile/stashr-build-info.txt
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Distribute to Firebase testers
-        if: inputs.distribute
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.distribute }}
         uses: wzieba/Firebase-Distribution-Github-Action@v1
         with:
           appId: ${{ secrets.FIREBASE_APP_ID }}
@@ -98,4 +201,21 @@ jobs:
           groups: ${{ inputs.testerGroups }}
           testers: ${{ inputs.testers }}
           file: mobile/stashr-release.apk
-          releaseNotes: ${{ format('Build from {0} ({1})', github.ref_name, github.sha) }}
+          releaseNotes: ${{ inputs.releaseNotes }}
+
+      - name: Write build summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo "## Stashr OTA-enabled APK built"
+            echo ""
+            echo "- App version: $(node -p "require('./app.json').expo.version")"
+            echo "- Android version code: $(node -p "require('./app.json').expo.android.versionCode")"
+            echo "- OTA label: $STASHR_OTA_VERSION"
+            echo "- Channel: $STASHR_UPDATE_CHANNEL"
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Artifact: stashr-android-apk"
+            echo ""
+            echo "OTA JS/UI/assets releases are published separately with the Publish Android OTA Update workflow."
+          } >> "$GITHUB_STEP_SUMMARY"
