@@ -159,6 +159,9 @@ app.get("/", (req, res) =>
   });
 });
 
+// Mobile update endpoints: release metadata and APK download redirect.
+app.use("/api/mobile-updates", require("./router/mobileUpdates"));
+
 // LINKING THE ROUTER FILES 
 app.use(require("./router/routing"));
 
