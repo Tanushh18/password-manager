@@ -12,7 +12,13 @@ Stashr no longer publishes Expo/EAS OTA updates. Every change under `mobile/**` 
 
 ## Required GitHub Actions secrets
 
-Create one long-lived Android signing key and add these repository secrets:
+Create one long-lived Android signing key locally and add these repository secrets. Run this once on a trusted machine with Java's `keytool` installed (choose strong passwords and keep them in a password manager):
+
+```powershell
+keytool -genkeypair -v -keystore stashr-upload.jks -alias stashr-upload -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Use the keystore password for `ANDROID_KEYSTORE_PASSWORD`, alias `stashr-upload` for `ANDROID_KEY_ALIAS`, and the chosen key password for `ANDROID_KEY_PASSWORD`.
 
 - `ANDROID_KEYSTORE_BASE64`: base64-encoded JKS/PKCS12 keystore bytes.
 - `ANDROID_KEYSTORE_PASSWORD`: keystore password.
