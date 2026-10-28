@@ -57,8 +57,8 @@ Current values in `mobile/app.json`:
 | Expo slug | `aurelia-vault` |
 | Expo owner | `tanushhhhh18` |
 | Android application ID | `com.tanush.stashr.com` |
-| App version | `2.3.0` |
-| Android version code | `6` |
+| App version | `2.3.1` |
+| Android version code | `7` |
 | Runtime version policy | `appVersion` |
 | Native framework | Expo SDK 57 / React Native 0.86 |
 
@@ -101,18 +101,18 @@ For local development, set `EXPO_PUBLIC_API_URLS` to a server reachable from the
 
 ### What the release configuration now does
 
-- `mobile/app.config.js` enables Expo Updates only when an EAS project ID is available. It produces an update URL in the form `https://u.expo.dev/<EAS_PROJECT_ID>`.
+- `mobile/app.config.js` enables Expo Updates only when an EAS project ID is available. It produces an update URL in the form `https://u.expo.dev/<EAS_PROJECT_ID>` and exposes the current OTA release label in `extra.stashrRelease`.
 - The app checks for an OTA update on launch (`checkAutomatically: "ON_LOAD"`) and uses the configured channel header.
 - `mobile/eas.json` explicitly pairs the `preview` and `production` build profiles with their matching EAS channels/environments.
-- `.github/workflows/android-ota.yml` adds a manual **Publish Android OTA Update (EAS)** workflow.
-- `.github/workflows/android-apk.yml` now accepts a `preview` or `production` channel and tries to link the EAS project before generating the native project. It still builds without `EXPO_TOKEN`, but warns that OTA will be disabled in that APK.
-- In-app Settings now displays whether OTA is enabled for the installed build and shows a clearer message when it cannot check for an update.
+- `.github/workflows/android-ota.yml` is the separate manual **Publish Android OTA Update (EAS)** workflow. It accepts channel, OTA release version, message, and a production confirmation field.
+- `.github/workflows/android-apk.yml` is the separate APK workflow. It accepts a `preview` or `production` channel, OTA release label, and optional Firebase distribution fields. It requires `EXPO_TOKEN` and validates the EAS URL, channel, runtime and version label before building, so it will not silently create an OTA-disabled APK. A one-time `[build-apk]` push trigger starts this initial build; later builds can be triggered manually.
+- In-app Settings displays app version, Android build number, OTA release label, channel, runtime version, update ID/time, and the result of the last manual update check.
 
 ### First-time requirement
 
 The committed `mobile/app.json` does not contain a hard-coded `extra.eas.projectId`. The workflows link the app using `eas init --non-interactive --force` with the Expo account represented by the repository's `EXPO_TOKEN` secret. That token must have access to the intended EAS project under owner `tanushhhhh18` and slug `aurelia-vault`.
 
-**Install a new OTA-enabled APK once after this configuration is deployed.** An older APK that was built with OTA disabled cannot gain OTA support merely because a bundle was published later.
+**Install a new OTA-enabled APK once after this configuration is deployed.** The prepared base app version is `2.3.1`, Android version code `7`, OTA label `2.3.1-build.7`. An older APK that was built with OTA disabled cannot gain OTA support merely because a bundle was published later.
 
 ### Publish an OTA update from GitHub Actions
 
@@ -124,7 +124,7 @@ The committed `mobile/app.json` does not contain a hard-coded `extra.eas.project
 6. Review the job result and EAS update record. Install a preview APK that was built for the same channel/runtime to test preview updates.
 7. Open Stashr and use **Settings → App → Check for updates**. With OTA enabled, Stashr fetches the update and offers to restart. The normal launch check can also download a compatible update for the next launch.
 
-The workflow requires the repository Actions secret `EXPO_TOKEN`. It uses the EAS environment matching the selected channel (`preview` or `production`).
+The workflow requires the repository Actions secret `EXPO_TOKEN`. It uses the EAS environment matching the selected channel (`preview` or `production`). Choose a new label such as `2.3.1-ota.1` each time. Production publishing also requires the `confirmProduction` checkbox.
 
 ### Safe OTA boundaries
 
@@ -149,9 +149,9 @@ Workflow: `.github/workflows/android-apk.yml`
 - Runs `npm ci`, generates the Android native project with Expo prebuild, and runs Gradle `assembleRelease` on GitHub's Ubuntu runner.
 - Input `channel`: `preview` or `production`. The selected channel is embedded into the native app configuration.
 - Output artifact: `stashr-android-apk`, file `mobile/stashr-release.apk`.
-- `EXPO_TOKEN` is optional for producing an APK, but is required for this build path to link the EAS project and embed OTA configuration.
+- `EXPO_TOKEN` is required. The workflow fails early rather than silently producing an APK with OTA disabled.
 - This workflow uses the default/debug signing key from the generated Expo project. It is for internal/testing distribution, **not a Play Store production signing key**.
-- Firebase distribution is enabled by default. If Firebase secrets are not configured, turn off the `distribute` input when manually running the workflow, or configure the Firebase secrets below.
+- Firebase distribution is disabled by default. Turn on the `distribute` input only when the Firebase secrets and tester group/email are configured.
 
 ### B. Android build (EAS)
 
@@ -182,7 +182,7 @@ Open **GitHub → Settings → Secrets and variables → Actions**.
 
 | Secret | Required for | Notes |
 | --- | --- | --- |
-| `EXPO_TOKEN` | EAS build and OTA publish; optional for GitHub-runner APK | Expo access token for the account that owns/links this EAS project. Do not write it in the repository. |
+| `EXPO_TOKEN` | Required for the OTA workflow and OTA-enabled GitHub-runner APK | Expo access token for the account that owns/links this EAS project. Do not write it in the repository. |
 | `FIREBASE_APP_ID` | Firebase distribution only | Firebase Android app ID. |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Firebase distribution only | Entire service-account JSON value. The older secret name `FIREBASE_SERVICE_ACCOUNT` is also accepted by the workflows. |
 
@@ -241,7 +241,7 @@ The GitHub Actions workflow is preferred for team releases because it records th
 ### Settings says OTA is disabled
 
 - The installed APK was generated without an EAS project ID, or the app's update configuration was disabled at build time.
-- Ensure `EXPO_TOKEN` is configured, run the GitHub runner APK workflow again, and check that the optional **Link EAS project for OTA** step succeeded.
+- Ensure `EXPO_TOKEN` is configured, run the GitHub runner APK workflow again, and check that **Link EAS project** and **Confirm OTA configuration** succeeded.
 - Install that newly generated OTA-enabled APK before publishing an OTA update.
 
 ### OTA workflow succeeds but the phone sees no update
