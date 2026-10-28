@@ -9,7 +9,7 @@ const manifest = {
   versionCode: 100123,
   buildNumber: 100123,
   sha256: "a".repeat(64),
-  sizeBytes: 2_500_000,
+  sizeBytes: Buffer.byteLength("fake-apk-binary"),
   releaseNotes: "Native module fix",
 };
 
