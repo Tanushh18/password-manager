@@ -148,3 +148,13 @@
   .sv-group th { padding: .6rem .9rem; }
   .sv-stats b { font-size: 1.2rem; }
 }
+
+/* Free-hours budget card (HoursBudgetCard.jsx) */
+.sv-hours { border: 1px solid currentColor; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; opacity: 0.95; }
+.sv-hours header { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.sv-hours h2 { font-size: 1rem; margin: 0; }
+.sv-hours small { opacity: 0.75; font-size: 0.8rem; }
+.sv-hours__row + .sv-hours__row { margin-top: 12px; }
+.sv-hours__top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.sv-hours__row.is-warn .sv-bar i { background: #e0a800; }
+.sv-hours__row.is-over .sv-bar i { background: #d64545; }
