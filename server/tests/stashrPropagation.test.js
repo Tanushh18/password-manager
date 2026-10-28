@@ -1,7 +1,7 @@
 const { describe, test } = require("node:test");
 const expect = require("./expect");
 const { isMainServer } = require("../utils/mainServer");
-const { ENV_NAME, envNamesFor, namesFromKeys, targetsOf, projectsToUpdate, mayRunAutomatically, applyToTargets, projectApplied } = require("../utils/stashrPropagation");
+const { ENV_NAME, PROJECT_NAMES, envNamesFor, namesFromKeys, targetsOf, projectsToUpdate, mayRunAutomatically, applyToTargets, projectApplied } = require("../utils/stashrPropagation");
 
 describe("isMainServer", () =>
 {
@@ -91,9 +91,9 @@ describe("envNamesFor", () =>
 {
     test("always the plain name, plus a prefixed one for each build tool the project already uses", () =>
     {
-        expect(envNamesFor({ envVars: [] })).toEqual([ENV_NAME]);
-        const names = envNamesFor({ envVars: [{ name: "REACT_APP_LOGIN_URI" }, { name: "REACT_APP_X" }, { name: "VITE_API" }, { name: "JWT_SECRET" }] });
-        expect(names).toEqual([ENV_NAME, "REACT_APP_" + ENV_NAME, "VITE_" + ENV_NAME]);
+        expect(envNamesFor({ envVars: [] })).toEqual({ names: [ENV_NAME], exact: false });
+        const found = envNamesFor({ envVars: [{ name: "REACT_APP_LOGIN_URI" }, { name: "REACT_APP_X" }, { name: "VITE_API" }, { name: "JWT_SECRET" }] });
+        expect(found.names).toEqual([ENV_NAME, "REACT_APP_" + ENV_NAME, "VITE_" + ENV_NAME]);
     });
     test("applyToTargets writes every name before it deploys once", async () =>
     {
@@ -153,5 +153,36 @@ describe("prefix from the service's own variables", () =>
         const results = await applyToTargets([{ serviceId: "srv-1", accountId: "a", name: "site" }], "https://m.example", { request, apiKeyFor: () => "k", names: [ENV_NAME] });
         expect(puts).toEqual([ENV_NAME, "REACT_APP_" + ENV_NAME]);
         expect(results[0].actions["REACT_APP_" + ENV_NAME]).toBe("created");
+    });
+});
+
+describe("per-project names", () =>
+{
+    test("each known app gets its own fixed list", () =>
+    {
+        const of = (repoUrl) => envNamesFor({ repoUrl, envVars: [] });
+        expect(of("https://github.com/ggnhome629-git/ggnHome")).toEqual({ names: [ENV_NAME, "REACT_APP_" + ENV_NAME, "VITE_" + ENV_NAME], exact: true });
+        expect(of("https://github.com/Tanushh18/Deal_Radar.git").names).toEqual([ENV_NAME, "EXPO_PUBLIC_" + ENV_NAME]);
+        expect(of("https://github.com/Tanushh18/Tasks").names).toEqual([ENV_NAME, "EXPO_PUBLIC_" + ENV_NAME]);
+        expect(of("https://github.com/tanushhhh18/WeCode_WebSite").names).toEqual([ENV_NAME, "REACT_APP_" + ENV_NAME]);
+    });
+    test("an unknown repo falls back to detecting the prefix", () =>
+    {
+        expect(envNamesFor({ repoUrl: "https://github.com/someone/else", envVars: [{ name: "VITE_X" }] })).toEqual({ names: [ENV_NAME, "VITE_" + ENV_NAME], exact: false });
+    });
+    test("an exact list is not widened by the service's own variables", async () =>
+    {
+        const puts = [];
+        const request = async (key, path, options = {}) =>
+        {
+            if (!options.method) return [{ envVar: { key: "VITE_SOMETHING", value: "x" } }];
+            if (options.method === "PUT") puts.push(path.split("/env-vars/")[1]);
+        };
+        await applyToTargets([{ serviceId: "srv-1", accountId: "a", name: "site" }], "https://m.example", { request, apiKeyFor: () => "k", names: [ENV_NAME, "REACT_APP_" + ENV_NAME], exact: true });
+        expect(puts).toEqual([ENV_NAME, "REACT_APP_" + ENV_NAME]);
+    });
+    test("every mapped app includes the plain name", () =>
+    {
+        for (const names of Object.values(PROJECT_NAMES)) expect(names.includes(ENV_NAME)).toBe(true);
     });
 });

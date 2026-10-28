@@ -7,6 +7,18 @@ const ENV_NAME = "STASHR_SERVER_URL";
 // REACT_APP_* variables reads REACT_APP_STASHR_SERVER_URL, a Vite app VITE_..., and so on.
 const PREFIXES = ["REACT_APP_", "VITE_", "EXPO_PUBLIC_", "NEXT_PUBLIC_"];
 
+const { repoKey } = require("./projectLink");
+
+// What to write for each known app, by GitHub repo ("owner/repo", lower case). Each app's build tool only sees its own
+// prefix, so the list says exactly which names the app needs. A project that is not here falls back to detecting the
+// prefix from its variables (see namesFromKeys). Edit this list when an app is added or changes its build tool.
+const PROJECT_NAMES = {
+  "ggnhome629-git/ggnhome": [ENV_NAME, "REACT_APP_" + ENV_NAME, "VITE_" + ENV_NAME], // client (CRA), partner-portal (Vite), server (plain)
+  "tanushh18/deal_radar": [ENV_NAME, "EXPO_PUBLIC_" + ENV_NAME],
+  "tanushh18/tasks": [ENV_NAME, "EXPO_PUBLIC_" + ENV_NAME],
+  "tanushhhh18/wecode_website": [ENV_NAME, "REACT_APP_" + ENV_NAME]
+};
+
 const safeId = (value) => /^[A-Za-z0-9_-]{1,160}$/.test(String(value || ""));
 
 /** The Render services of one project (its primary link plus the merged ones), without duplicates. Pure. */
@@ -31,9 +43,14 @@ function namesFromKeys(keys) {
   return [...names];
 }
 
-/** The names to write for a project, from the variables Stashr has stored for it. Pure. */
+/**
+ * The names to write for a project. A known app uses its fixed list from PROJECT_NAMES and is written exactly (exact: true);
+ * any other project uses the prefixes found in the variables Stashr has stored for it. Pure.
+ */
 function envNamesFor(fields) {
-  return namesFromKeys((Array.isArray(fields.envVars) ? fields.envVars : []).map((row) => row && row.name));
+  const mapped = PROJECT_NAMES[repoKey(fields.repoUrl)];
+  if (mapped) return { names: [...mapped], exact: true };
+  return { names: namesFromKeys((Array.isArray(fields.envVars) ? fields.envVars : []).map((row) => row && row.name)), exact: false };
 }
 
 /** Project ids that still need the current URL. Pure. */
@@ -60,7 +77,7 @@ async function existingKeys(request, apiKey, base) {
  * Writes the variable to each target and deploys it. `request(apiKey, path, options)` is Render's API call and
  * `apiKeyFor(accountId)` the key of that account. Returns one result per target; never throws for a single service.
  */
-async function applyToTargets(targets, mainUrl, { request, apiKeyFor, names = [ENV_NAME], deploy = true }) {
+async function applyToTargets(targets, mainUrl, { request, apiKeyFor, names = [ENV_NAME], exact = false, deploy = true }) {
   const results = [];
   for (const target of targets) {
     const apiKey = apiKeyFor(target.accountId);
@@ -71,7 +88,7 @@ async function applyToTargets(targets, mainUrl, { request, apiKeyFor, names = [E
     const existing = await existingKeys(request, apiKey, base);
     // The service's own variables decide the prefix too, so an app whose env was never imported into Stashr still
     // gets the variant its build tool can see.
-    const targetNames = [...new Set([...names, ...namesFromKeys(existing || [])])];
+    const targetNames = exact ? [...names] : [...new Set([...names, ...namesFromKeys(existing || [])])];
     const actions = {};
     try {
       for (const name of targetNames) {
@@ -95,4 +112,4 @@ async function applyToTargets(targets, mainUrl, { request, apiKeyFor, names = [E
 /** A project counts as applied when every one of its services accepted the variable. Pure. */
 const projectApplied = (results) => results.length > 0 && results.every((r) => r.ok);
 
-module.exports = { ENV_NAME, envNamesFor, namesFromKeys, targetsOf, projectsToUpdate, mayRunAutomatically, applyToTargets, projectApplied };
+module.exports = { ENV_NAME, PROJECT_NAMES, envNamesFor, namesFromKeys, targetsOf, projectsToUpdate, mayRunAutomatically, applyToTargets, projectApplied };

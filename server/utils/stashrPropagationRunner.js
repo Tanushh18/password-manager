@@ -49,7 +49,7 @@ async function applyProject(user, dataKey, projectId, mainUrl) {
   const results = await P.applyToTargets(targets, mainUrl, {
     request: renderOps.renderRequest,
     apiKeyFor: (accountId) => renderOps.accountApiKey(user, dataKey, accountId),
-    names: P.envNamesFor(fields)
+    ...P.envNamesFor(fields)
   });
   return {
     projectId, name: fields.name, ok: P.projectApplied(results),
