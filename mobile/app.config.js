@@ -1,10 +1,17 @@
 // Stashr updates are delivered as signed, complete APKs from the Stashr API server.
-// Expo/EAS OTA is deliberately disabled: native modules and permission changes must ship
-// inside a freshly built APK and be installed by Android's package installer.
+// OTA updates are served by the Stashr API server (/api/ota/manifest). Native module and
+// permission changes still ship as a freshly built APK installed by Android.
 module.exports = ({ config }) => {
   const extra = config.extra || {};
   return {
     ...config,
+    updates: {
+      ...(config.updates || {}),
+      enabled: true,
+      url: process.env.STASHR_OTA_URL || "https://password-manager-server-xxdr.onrender.com/api/ota/manifest",
+      checkAutomatically: "ON_LOAD",
+      fallbackToCacheTimeout: 0,
+    },
     extra: {
       ...extra,
       stashrRelease: {
@@ -13,11 +20,6 @@ module.exports = ({ config }) => {
         channel: "server-managed",
         delivery: "server-managed-apk",
       },
-    },
-    updates: {
-      ...(config.updates || {}),
-      enabled: false,
-      checkAutomatically: "NEVER",
     },
   };
 };

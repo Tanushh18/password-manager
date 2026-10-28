@@ -37,18 +37,11 @@ The default API servers are in `app.json → expo.extra.apiServers`.
 
 ## Build an installable app
 
-### With EAS (recommended)
+### Through GitHub Actions (recommended)
 
-```sh
-export EXPO_TOKEN=<token from https://expo.dev/settings/access-tokens>
-npx eas-cli@latest init --non-interactive --force   # first time: creates/links the EAS project
-npm run build:apk    # installable .apk (profile "preview")
-npm run build:aab    # Play Store bundle (profile "production")
-```
-
-Or add `EXPO_TOKEN` as a GitHub secret and run the **Android build (EAS)** workflow.
-Once the project is linked, `app.config.js` turns on over-the-air updates (`eas update`), and the
-app's *Settings → Check for updates* pulls them.
+Push to `main` (or run **Stashr Android Release** from the Actions tab). The workflow builds the signed APK,
+exports the JavaScript bundle for OTA updates, and publishes both as a GitHub Release. The Stashr server serves
+them, and the app's *Settings → Check for updates* installs them. See `APP_DEVELOPMENT_AND_RELEASE.md`.
 
 ### Locally (Android SDK + JDK 17)
 
@@ -57,14 +50,14 @@ npx expo prebuild --platform android
 cd android && ./gradlew assembleRelease     # app/build/outputs/apk/release/app-release.apk
 ```
 
-Local release builds are signed with the debug key; use EAS (or your own keystore) for the Play Store.
+Local release builds without the upload keystore are signed with the debug key. Releases published by GitHub Actions use the persistent upload keystore.
 
 ## Play Store checklist
 
 - Privacy policy: `https://<your-website>/privacy` (page included in the website).
 - Data safety: account email + name (for sign-in); vault contents are end-to-end encrypted;
   camera used only for scanning 2FA QR codes; no ads, analytics or tracking.
-- Build with `npm run build:aab` and submit with `npx eas-cli submit -p android`.
+- The current pipeline publishes an APK through GitHub Releases. A Play Store bundle is not part of it yet.
 
 ## Structure
 

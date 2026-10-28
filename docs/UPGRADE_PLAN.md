@@ -130,7 +130,7 @@ Every change should pass applicable gates:
 
 - Server: unit/integration tests; authorization and cross-account isolation; error-path tests.
 - Web: unit tests, production build, route/accessibility checks and vault crypto regression suite.
-- Mobile: Expo dependency alignment, doctor, Android bundle/export, crypto interoperability and APK/AAB build in EAS or equivalent.
+- Mobile: Expo dependency alignment, doctor, Android bundle/export, crypto interoperability and APK build and OTA bundle in GitHub Actions.
 - Dependencies: full lockfile-based audit across all three package roots.
 - Security: CodeQL, Gitleaks, Trivy and PR dependency review.
 - Integration: mocked provider contract tests plus opt-in live smoke tests against a non-production account.

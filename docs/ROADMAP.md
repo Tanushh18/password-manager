@@ -73,7 +73,7 @@ This is a planning list, not a record of live competitor research.
   migration, so take a backup and ship a reversible migration script first.
 - **Offline mode on the web** (read-only vault from an encrypted local cache through the service worker).
 - **Android and iOS build pipeline**: the committed `client/public/apps/stashr.apk` is a manual upload. Build it in CI
-  (EAS) and publish to GitHub Releases instead of storing 80 MB in git.
+  (GitHub Actions) and publish to GitHub Releases instead of storing 80 MB in git.
 - **Shared code package** for item/crypto/sync logic. `items.js` and `sync.js` are currently copied between
   `client/src/lib` and `mobile/src/lib`; a test that fails when the two diverge is the cheap first step.
 - **Observability**: request IDs in logs, error tracking, richer `/health`.

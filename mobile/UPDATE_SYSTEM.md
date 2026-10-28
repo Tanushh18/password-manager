@@ -1,55 +1,59 @@
-# Stashr Android server-managed updates
+# Stashr Android updates: APK and OTA from our server
 
-Stashr no longer publishes Expo/EAS OTA updates. Every change under `mobile/**` builds a complete Android APK in GitHub Actions and publishes it with a versioned update manifest.
+Stashr ships through GitHub Actions and serves everything from the Stashr API server. Expo's servers are not used at runtime, and no `EXPO_TOKEN` is required.
+
+| Change | How it reaches the phone |
+| --- | --- |
+| Native code, Android permissions, Gradle or config-plugin changes, or a version bump in `mobile/app.json` | A new signed APK, installed through Android's package installer after the user confirms. |
+| JavaScript, screens, styles or assets, with the same version | An OTA bundle, downloaded and applied on launch. |
+
+## Build and publish (GitHub Actions)
+
+Workflow: `.github/workflows/android-apk.yml` (**Stashr Android Release**). It runs on pushes to `main` that touch `mobile/**`, and by hand with **Run workflow**.
+
+1. Stamps the Android `versionCode` from the run number.
+2. `npx expo prebuild` and `./gradlew assembleRelease`, signed with the persistent upload keystore.
+3. Verifies the APK with `apksigner` and writes `stashr-update.json`.
+4. `npx expo export --platform android` and `node scripts/build-ota-bundle.js <version> dist ota`.
+   This produces `ota/ota-manifest.json` plus one file per bundle or asset, named by its SHA-256.
+5. Publishes one GitHub Release with the APK, `stashr-update.json`, `ota-manifest.json` and the OTA files.
 
 ## Runtime flow
 
-1. Settings → Check for updates calls `GET /api/mobile-updates/android/latest?currentVersionCode=<installed-code>` on the configured Stashr API server.
-2. The server reads the latest stable GitHub Release for `Tanushh18/password-manager` and validates the manifest/package name.
-3. Stashr downloads the APK through `GET /api/mobile-updates/android/download`, which streams the release asset through the Stashr API server, then opens Android's package installer.
-4. Android requires the user to allow installs from Stashr if needed and confirm the installation. Android does not permit silent self-installation for an ordinary app.
-5. Native modules, Android permissions, Gradle/config-plugin changes and JavaScript/UI changes all use this same full-APK pipeline; no manual OTA publish is needed.
+### APK
+1. Settings → Check for updates calls `GET /api/mobile-updates/android/latest?currentVersionCode=<installed-code>`.
+2. The server reads the latest stable GitHub Release and validates the APK manifest.
+3. The app downloads `GET /api/mobile-updates/android/download`, which streams the APK through the Stashr server, then opens Android's installer.
+4. The user confirms. Android does not allow silent self-installation for an ordinary app.
+
+### OTA (Expo Updates protocol, version 1)
+1. On launch, the app requests `GET /api/ota/manifest` (`updates.url` in `mobile/app.config.js`) with `expo-protocol-version: 1`, `expo-platform: android` and `expo-runtime-version: <version>`.
+2. The server returns `204` when no bundle matches that runtime version. Otherwise it returns a `multipart/mixed` response with the manifest and asset URLs on the Stashr server.
+3. The app downloads `GET /api/ota/asset/<hash>.<ext>`. Each file is verified against its SHA-256 before use.
+4. The runtime version is `mobile/app.json` → `version` (`appVersion` policy). A bundle only reaches APKs with the same version, so a native change always needs a version bump and a new APK.
 
 ## Required GitHub Actions secrets
 
-Create one long-lived Android signing key locally and add these repository secrets. Run this once on a trusted machine with Java's `keytool` installed (choose strong passwords and keep them in a password manager):
+Create one long-lived Android signing key and keep it safe. Run this once on a trusted machine with Java's `keytool` installed, and store the passwords in a password manager:
 
-```powershell
-keytool -genkeypair -v -keystore stashr-upload.jks -alias stashr-upload -keyalg RSA -keysize 2048 -validity 10000
+```bash
+keytool -genkeypair -v -keystore stashr-upload.jks -alias stashr -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-Use the keystore password for `ANDROID_KEYSTORE_PASSWORD`, alias `stashr-upload` for `ANDROID_KEY_ALIAS`, and the chosen key password for `ANDROID_KEY_PASSWORD`.
-
-- `ANDROID_KEYSTORE_BASE64`: base64-encoded JKS/PKCS12 keystore bytes.
+- `ANDROID_KEYSTORE_BASE64`: base64 of the `.jks` file, on one line (`base64 -w 0 stashr-upload.jks`).
 - `ANDROID_KEYSTORE_PASSWORD`: keystore password.
-- `ANDROID_KEY_ALIAS`: key alias.
+- `ANDROID_KEY_ALIAS`: the alias used when creating the key (`stashr` above).
 - `ANDROID_KEY_PASSWORD`: key password.
 
-Keep the keystore and passwords private, back them up securely, and never rotate this key casually. Every update must be signed by the same key or Android will reject it as an update. Do not use a temporary CI-generated debug key.
-
-Example PowerShell conversion (run locally on the keystore file):
-```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes(".\stashr-upload.jks")) | Set-Clipboard
-```
-Paste the copied value into the `ANDROID_KEYSTORE_BASE64` secret. Do not commit the keystore or the base64 value to the repository.
+Keep the keystore and passwords private and backed up. Every release must be signed by the same key, or Android will reject it as an update. Never paste the base64 value into chat, issues or commits.
 
 ## Server configuration
 
-The API uses GitHub's Releases API for the public repository by default. Optional server environment variables:
+- `STASHR_UPDATE_REPOSITORY` (default `Tanushh18/password-manager`): repository whose latest release is served.
+- `STASHR_UPDATE_GITHUB_TOKEN` (optional): GitHub token for API rate limits.
+- App OTA URL: `updates.url` in `mobile/app.config.js`, overridable with `STASHR_OTA_URL` at build time.
 
-- `STASHR_UPDATE_REPOSITORY`: repository in `owner/name` format; defaults to `Tanushh18/password-manager`.
-- `STASHR_UPDATE_GITHUB_TOKEN`: fine-grained token with read-only Contents/Metadata access, only needed if the release repository is private.
+## Checks
 
-The API process needs outbound HTTPS access to api.github.com and GitHub release asset URLs. The APK is stored as a release asset, not on Render's ephemeral filesystem.
-
-## One-time migration
-
-Install the first APK built by this workflow over the existing app only if its signing certificate matches the currently installed app. If Android reports a signature conflict, uninstall the old app and install the new APK once (back up anything stored only locally first). The package ID stays `com.tanush.stashr.com`; server-backed account data is not removed by reinstalling, but local-only data can be.
-
-## Release behavior
-
-- Pushes to `main` that change `mobile/**` automatically build and publish a release.
-- The Android `versionCode` is assigned monotonically from the GitHub Actions run number.
-- `mobile/app.json` controls the user-facing app version. Bump `expo.version` for a visible version change; the pipeline stamps the unique Android versionCode at build time.
-- GitHub Actions build artifacts are diagnostic copies; the server update endpoint resolves the latest stable GitHub Release.
-- The legacy EAS OTA workflow is removed. No `EXPO_TOKEN` is required for this release pipeline.
+- `GET /api/ota/manifest` without the `expo-runtime-version` header returns `400`. With the right version it returns `200` (multipart) or `204`.
+- Server tests: `cd server && npm test` (includes `tests/ota.test.js` and `tests/mobileUpdates.test.js`).

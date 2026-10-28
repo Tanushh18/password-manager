@@ -41,7 +41,7 @@ Optional integrations require explicit configuration and their own provider cred
 ├── mobile/       Expo + React Native Android application
 ├── extension/    Chrome/Chromium autofill extension
 ├── docs/         Security design and project documentation
-├── .github/      CI, Android build and OTA workflows
+├── .github/      CI and the APK + OTA release workflow
 ├── render.yaml   Render Blueprint for web and API services
 ├── APP_DEVELOPMENT_AND_RELEASE.md  App structure, API, OTA and APK release guide
 └── README.md
@@ -95,7 +95,6 @@ Refer to each package manifest for the precise dependency versions and scripts.
 - npm
 - A MongoDB deployment for persistent local use (local MongoDB or MongoDB Atlas)
 - Android Studio / Android SDK and JDK compatible with the installed Expo/React Native toolchain for native Android builds
-- Expo/EAS access only if you intend to build through EAS
 
 Use a supported Node.js LTS release and install the Android tooling according to current Expo documentation.
 
@@ -244,14 +243,7 @@ cd mobile
 npm run doctor
 ```
 
-Build an APK or Play Store bundle using EAS:
-
-```bash
-npm run build:apk
-npm run build:aab
-```
-
-EAS account access and any required build secrets must be configured outside the repository. Test commands/builds were not run as part of this documentation change.
+The signed APK and the OTA bundle are built by the **Stashr Android Release** GitHub Actions workflow and published as a GitHub Release. The Stashr API server serves both to the app. Local builds: `npx expo prebuild --platform android` and `cd android && ./gradlew assembleRelease`. See [APP_DEVELOPMENT_AND_RELEASE.md](APP_DEVELOPMENT_AND_RELEASE.md) for secrets and the release checklist.
 
 ## Deployment
 

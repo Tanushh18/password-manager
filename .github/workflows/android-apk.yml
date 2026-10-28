@@ -155,6 +155,13 @@ jobs:
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
           echo "size=$SIZE" >> "$GITHUB_OUTPUT"
 
+      - name: Build OTA update bundle for the Stashr server
+        env:
+          APP_VERSION: ${{ steps.release.outputs.app_version }}
+        run: |
+          npx expo export --platform android --output-dir dist
+          node scripts/build-ota-bundle.js "$APP_VERSION" dist ota
+
       - name: Upload build artifact for diagnostics
         uses: actions/upload-artifact@v4
         with:
@@ -183,5 +190,6 @@ jobs:
           files: |
             mobile/stashr-release.apk
             mobile/stashr-update.json
+            mobile/ota/*
           make_latest: true
           fail_on_unmatched_files: true
