@@ -53,11 +53,9 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          missing=0
-          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
-            if [ -z "${!name}" ]; then echo "::error::Missing GitHub Actions secret: ${name/KEYSTORE_BASE64/ANDROID_KEYSTORE_BASE64}"; missing=1; fi
-          done
-          if [ "$missing" -ne 0 ]; then
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Add all four secrets: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD."
+          
             echo "::error::Add ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD. The same key must be used for every update."
             exit 1
           fi
@@ -126,6 +124,7 @@ jobs:
           apksigner verify --verbose stashr-release.apk
           SHA256=$(sha256sum stashr-release.apk | cut -d ' ' -f 1)
           SIZE=$(stat -c '%s' stashr-release.apk)
+          export SHA256 SIZE
           node - <<'NODE'
           const fs = require("fs");
           const manifest = {
