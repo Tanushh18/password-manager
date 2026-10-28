@@ -6,7 +6,7 @@ Stashr no longer publishes Expo/EAS OTA updates. Every change under `mobile/**` 
 
 1. Settings → Check for updates calls `GET /api/mobile-updates/android/latest?currentVersionCode=<installed-code>` on the configured Stashr API server.
 2. The server reads the latest stable GitHub Release for `Tanushh18/password-manager` and validates the manifest/package name.
-3. Stashr downloads the APK through `GET /api/mobile-updates/android/download`, which redirects to the release asset, then opens Android's package installer.
+3. Stashr downloads the APK through `GET /api/mobile-updates/android/download`, which streams the release asset through the Stashr API server, then opens Android's package installer.
 4. Android requires the user to allow installs from Stashr if needed and confirm the installation. Android does not permit silent self-installation for an ordinary app.
 5. Native modules, Android permissions, Gradle/config-plugin changes and JavaScript/UI changes all use this same full-APK pipeline; no manual OTA publish is needed.
 
