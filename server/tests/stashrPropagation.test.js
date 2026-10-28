@@ -1,7 +1,7 @@
 const { describe, test } = require("node:test");
 const expect = require("./expect");
 const { isMainServer } = require("../utils/mainServer");
-const { ENV_NAME, envNamesFor, targetsOf, projectsToUpdate, mayRunAutomatically, applyToTargets, projectApplied } = require("../utils/stashrPropagation");
+const { ENV_NAME, envNamesFor, namesFromKeys, targetsOf, projectsToUpdate, mayRunAutomatically, applyToTargets, projectApplied } = require("../utils/stashrPropagation");
 
 describe("isMainServer", () =>
 {
@@ -131,5 +131,27 @@ describe("create or update", () =>
         const results = await applyToTargets([{ serviceId: "srv-1", accountId: "a", name: "one" }], "https://m.example", { request, apiKeyFor: () => "k" });
         expect(results[0].ok).toBe(true);
         expect(results[0].actions).toEqual({ [ENV_NAME]: "set" });
+    });
+});
+
+describe("prefix from the service's own variables", () =>
+{
+    test("namesFromKeys adds the variant for each build tool seen", () =>
+    {
+        expect(namesFromKeys(["PORT", "JWT_SECRET"])).toEqual([ENV_NAME]);
+        expect(namesFromKeys(["REACT_APP_A", "VITE_B", "EXPO_PUBLIC_C"])).toEqual([ENV_NAME, "REACT_APP_" + ENV_NAME, "VITE_" + ENV_NAME, "EXPO_PUBLIC_" + ENV_NAME]);
+    });
+    test("an app whose env was never imported into Stashr still gets the prefixed variant from Render", async () =>
+    {
+        const puts = [];
+        const request = async (key, path, options = {}) =>
+        {
+            if (!options.method) return [{ envVar: { key: "REACT_APP_LOGIN_URI", value: "x" } }];
+            if (options.method === "PUT") puts.push(path.split("/env-vars/")[1]);
+        };
+        // names come from Stashr's stored project: nothing there, so only the plain name
+        const results = await applyToTargets([{ serviceId: "srv-1", accountId: "a", name: "site" }], "https://m.example", { request, apiKeyFor: () => "k", names: [ENV_NAME] });
+        expect(puts).toEqual([ENV_NAME, "REACT_APP_" + ENV_NAME]);
+        expect(results[0].actions["REACT_APP_" + ENV_NAME]).toBe("created");
     });
 });

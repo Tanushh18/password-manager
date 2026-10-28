@@ -23,14 +23,17 @@ function targetsOf(fields) {
   return out;
 }
 
-/** The variable names to write for a project: the plain one, plus the prefixed one for each build tool it already uses. Pure. */
-function envNamesFor(fields) {
+/** The names to write, given variable names a project or service already has: the plain one, plus the prefixed one
+ *  for each build tool in use. Pure. */
+function namesFromKeys(keys) {
   const names = new Set([ENV_NAME]);
-  for (const row of Array.isArray(fields.envVars) ? fields.envVars : []) {
-    const name = String((row && row.name) || "");
-    for (const prefix of PREFIXES) if (name.startsWith(prefix)) names.add(prefix + ENV_NAME);
-  }
+  for (const key of keys || []) for (const prefix of PREFIXES) if (String(key || "").startsWith(prefix)) names.add(prefix + ENV_NAME);
   return [...names];
+}
+
+/** The names to write for a project, from the variables Stashr has stored for it. Pure. */
+function envNamesFor(fields) {
+  return namesFromKeys((Array.isArray(fields.envVars) ? fields.envVars : []).map((row) => row && row.name));
 }
 
 /** Project ids that still need the current URL. Pure. */
@@ -66,9 +69,12 @@ async function applyToTargets(targets, mainUrl, { request, apiKeyFor, names = [E
     // Render's PUT creates the variable when it is missing and updates it when it exists. Read the keys first only to
     // tell the user which one happened; if the read fails the write still goes ahead and is reported as "set".
     const existing = await existingKeys(request, apiKey, base);
+    // The service's own variables decide the prefix too, so an app whose env was never imported into Stashr still
+    // gets the variant its build tool can see.
+    const targetNames = [...new Set([...names, ...namesFromKeys(existing || [])])];
     const actions = {};
     try {
-      for (const name of names) {
+      for (const name of targetNames) {
         await request(apiKey, base + "/env-vars/" + name, { method: "PUT", body: { value: mainUrl } });
         actions[name] = existing ? (existing.has(name) ? "updated" : "created") : "set";
       }
@@ -89,4 +95,4 @@ async function applyToTargets(targets, mainUrl, { request, apiKeyFor, names = [E
 /** A project counts as applied when every one of its services accepted the variable. Pure. */
 const projectApplied = (results) => results.length > 0 && results.every((r) => r.ok);
 
-module.exports = { ENV_NAME, envNamesFor, targetsOf, projectsToUpdate, mayRunAutomatically, applyToTargets, projectApplied };
+module.exports = { ENV_NAME, envNamesFor, namesFromKeys, targetsOf, projectsToUpdate, mayRunAutomatically, applyToTargets, projectApplied };
