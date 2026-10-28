@@ -64,6 +64,7 @@ export function VaultProvider({ children }) {
   const [prefs, setPrefsState] = useState(DEFAULT_PREFS);
 
   const backgroundAt = useRef(null);
+  const refreshRef = useRef(null); // latest refresh, for callbacks defined above it
   const syncedAt = useRef(null); // server time of the last successful delta sync
   const purgedOnce = useRef(false);
   const pauseLock = useRef(0);
@@ -166,9 +167,21 @@ export function VaultProvider({ children }) {
     const result = await LocalAuthentication.authenticateAsync(BIO_OPTIONS);
     if (!result.success) throw new Error(result.error === "user_cancel" ? "Cancelled" : "Fingerprint didn't match.");
     setStatus("ready");
+    void refreshRef.current?.();
   }, []);
 
   const lock = useCallback(() => {
+    setStatus((s) => (s === "ready" ? "locked" : s));
+  }, []);
+
+  /* Panic lock: lock now and drop the decrypted vault from memory and from the on-device cache. Unlocking reloads it. */
+  const panicLock = useCallback(async () => {
+    setItems([]);
+    setProjects([]);
+    setBreaches({});
+    setBreachChecked(false);
+    purgedOnce.current = false;
+    await safe(() => clearCache());
     setStatus((s) => (s === "ready" ? "locked" : s));
   }, []);
 
@@ -346,6 +359,7 @@ export function VaultProvider({ children }) {
       setSyncing(false);
     }
   }, [loadProfile]);
+  refreshRef.current = refresh;
 
   /* ── Breach check ── */
   const runBreachCheck = useCallback(async () => {
@@ -565,6 +579,7 @@ export function VaultProvider({ children }) {
       register,
       unlockWithBiometrics,
       lock,
+      panicLock,
       logout,
       wipeLocal,
       refresh,
@@ -590,7 +605,7 @@ export function VaultProvider({ children }) {
       deleteProject,
       importProjects,
     };
-  }, [status, profile, items, offline, syncing, breaches, breachChecked, breachProgress, biometric, biometricAvailable, prefs, setPrefs, login, register, unlockWithBiometrics, lock, logout, wipeLocal, refresh, loadProfile, addItem, updateItem, toggleFavorite, deleteItem, purgeItem, restoreItem, emptyTrash, trash, importItems, runBreachCheck, changeMasterPassword, setBiometric, withoutAutoLock, projects, addProject, updateProject, deleteProject, importProjects]);
+  }, [status, profile, items, offline, syncing, breaches, breachChecked, breachProgress, biometric, biometricAvailable, prefs, setPrefs, login, register, unlockWithBiometrics, lock, panicLock, logout, wipeLocal, refresh, loadProfile, addItem, updateItem, toggleFavorite, deleteItem, purgeItem, restoreItem, emptyTrash, trash, importItems, runBreachCheck, changeMasterPassword, setBiometric, withoutAutoLock, projects, addProject, updateProject, deleteProject, importProjects]);
 
   return <VaultContext.Provider value={value}>{children}</VaultContext.Provider>;
 }

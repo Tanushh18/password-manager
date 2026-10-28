@@ -72,7 +72,7 @@ export default function Settings() {
   const { theme, preference, setPreference } = useTheme();
   const [serviceOn, setServiceOn] = useState(false);
   const [saveOn, setSaveOn] = useState(false);
-  const { profile, items, biometric, biometricAvailable, setBiometric, logout, lock, prefs, setPrefs, setProfileName, refreshProfile } = useVault();
+  const { profile, items, biometric, biometricAvailable, setBiometric, logout, lock, panicLock, prefs, setPrefs, setProfileName, refreshProfile } = useVault();
   const toast = useToast();
   const [name, setName] = useState(profile?.name || "");
   const [updateStatus, setUpdateStatus] = useState("Not checked this session");
@@ -247,6 +247,7 @@ export default function Settings() {
             <Row icon="shieldCheck" title="Two-factor login" subtitle={profile?.twoFactorEnabled ? `On · ${profile.recoveryCodesLeft} recovery codes left` : "Off — add a second step to sign in"} color={profile?.twoFactorEnabled ? theme.ok : theme.warn} onPress={() => router.push("/account/twofactor")} />
             <Row icon="key" title="Change password" onPress={() => router.push("/account/password")} />
             {biometric ? <Row icon="lock" title="Lock now" onPress={lock} color={theme.accent2} /> : null}
+            {biometric ? <Row icon="lock" title="Panic lock" subtitle="Lock now and clear the vault from memory" onPress={() => panicLock()} color={theme.accent2} /> : null}
             <Row icon="logout" title="Sign out other devices" subtitle={`${Math.max(0, (profile?.sessions || 1) - 1)} other session(s)`} onPress={signOutOthers} color={theme.accent2} />
           </Section>
 
