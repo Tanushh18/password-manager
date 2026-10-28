@@ -26,10 +26,10 @@ function getReleaseInfo() {
     version: config.version || "unknown",
     build: Constants.nativeBuildVersion || config.android?.versionCode || "unknown",
     otaVersion: config.extra?.stashrRelease?.otaVersion || process.env.EXPO_PUBLIC_OTA_VERSION || "not tagged",
-    channel: Updates.channel || config.extra?.stashrRelease?.channel || (Updates.isEnabled ? "configured" : "disabled"),
+    channel: "server-managed",
     runtime: Updates.runtimeVersion || (typeof config.runtimeVersion === "string" ? config.runtimeVersion : config.version || "unknown"),
     updateId: Updates.updateId ? Updates.updateId.slice(0, 8) : "embedded",
-    launch: Updates.isEmbeddedLaunch ? "embedded bundle" : (Updates.updateId ? "OTA update" : "embedded / unknown"),
+    launch: "installed APK",
     createdAt: createdAtLabel,
   };
 }
@@ -354,7 +354,7 @@ export default function Settings() {
             <Row
               icon="refresh"
               title="Check for updates"
-              subtitle={`App ${releaseInfo.version} · Build ${releaseInfo.build}\nOTA ${releaseInfo.otaVersion} · Channel ${releaseInfo.channel}\nRuntime ${releaseInfo.runtime} · ${releaseInfo.launch}\nUpdate ID ${releaseInfo.updateId} · Created ${releaseInfo.createdAt}\n${updateStatus}`}
+              subtitle={`App ${releaseInfo.version} · Build ${releaseInfo.build}\nDelivery: complete APK from Stashr server\nChannel: ${releaseInfo.channel} · ${releaseInfo.launch}\n${updateStatus}`}
               onPress={checkUpdates}
             />
             <Row icon="phone" title="Open the website" subtitle="Same vault, bigger screen" onPress={() => Linking.openURL(WEBSITE)} />
