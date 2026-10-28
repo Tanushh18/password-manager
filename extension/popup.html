@@ -23,6 +23,14 @@
 
     <!-- Logged In State -->
     <div id="mainSection" class="section hidden">
+      <!-- Login just submitted on a page: ask before saving -->
+      <div id="savePrompt" class="hidden">
+        <p id="savePromptText"></p>
+        <button id="saveYes" class="btn btn-small">Save</button>
+        <button id="saveNo" class="btn btn-small btn-secondary">Not now</button>
+        <button id="saveNever" class="btn btn-small btn-secondary">Never for this site</button>
+      </div>
+
       <!-- Current Domain Passwords -->
       <div id="currentDomainSection">
         <h3>For this website</h3>

@@ -157,6 +157,7 @@ const userOf = (pwd) => pwd.username || pwd.platEmail || '';
 
 // Display passwords
 async function displayPasswords() {
+  await showPendingSave();
   const currentDomain = await getCurrentDomain();
 
   // Show passwords for current domain
@@ -323,6 +324,80 @@ async function autofillPassword(passwordId) {
 }
 
 // Copy password
+// Login captured by background.js on the current tab, if it is recent and not already saved.
+const SAVE_TTL_MS = 10 * 60 * 1000;
+async function pendingSaveForTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab) return null;
+  const { pendingSaves = {} } = await chrome.storage.session.get('pendingSaves');
+  const pending = pendingSaves[tab.id];
+  if (!pending || Date.now() - pending.at > SAVE_TTL_MS) return null;
+  return { tabId: tab.id, ...pending };
+}
+
+function alreadySaved(pending) {
+  const site = registrable(pending.host);
+  const user = pending.username.toLowerCase();
+  return allPasswords.some((p) => {
+    const itemHost = hostOf(p.url);
+    const itemSite = itemHost ? registrable(itemHost) : titleOf(p).toLowerCase();
+    return itemSite === site && userOf(p).toLowerCase() === user;
+  });
+}
+
+async function clearPendingSave(tabId) {
+  const { pendingSaves = {} } = await chrome.storage.session.get('pendingSaves');
+  delete pendingSaves[tabId];
+  await chrome.storage.session.set({ pendingSaves });
+  await chrome.action.setBadgeText({ tabId, text: '' });
+}
+
+async function showPendingSave() {
+  const card = document.getElementById('savePrompt');
+  const pending = await pendingSaveForTab();
+  if (!pending || alreadySaved(pending)) {
+    card.classList.add('hidden');
+    return;
+  }
+  const who = pending.username ? ` (${pending.username})` : '';
+  document.getElementById('savePromptText').textContent = `Save this login for ${registrable(pending.host)}${who}?`;
+  card.classList.remove('hidden');
+}
+
+async function savePendingLogin() {
+  const pending = await pendingSaveForTab();
+  if (!pending) return;
+  try {
+    const response = await api('/addnewpassword', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform: registrable(pending.host), platEmail: pending.username || 'NA', userPass: pending.password })
+    });
+    if (!response.ok) throw new Error('save failed');
+    await clearPendingSave(pending.tabId);
+    showSuccess('Login saved.');
+    await loadPasswords();
+    await showPendingSave();
+  } catch (error) {
+    showError('Could not save this login. Try again.');
+  }
+}
+
+document.getElementById('saveYes').addEventListener('click', savePendingLogin);
+document.getElementById('saveNo').addEventListener('click', async () => {
+  const pending = await pendingSaveForTab();
+  if (pending) await clearPendingSave(pending.tabId);
+  document.getElementById('savePrompt').classList.add('hidden');
+});
+document.getElementById('saveNever').addEventListener('click', async () => {
+  const pending = await pendingSaveForTab();
+  if (!pending) return;
+  const { neverSaveHosts = [] } = await chrome.storage.local.get('neverSaveHosts');
+  await chrome.storage.local.set({ neverSaveHosts: [...new Set([...neverSaveHosts, pending.host])] });
+  await clearPendingSave(pending.tabId);
+  document.getElementById('savePrompt').classList.add('hidden');
+});
+
 // A saved entry is a Google account when its website (or, without one, its name) is google.com.
 function isGoogleEntry(pwd) {
   const host = hostOf(pwd.url);
