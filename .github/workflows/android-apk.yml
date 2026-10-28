@@ -54,9 +54,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
-            echo "::error::Add all four secrets: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD."
-          
-            echo "::error::Add ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD. The same key must be used for every update."
+            echo "::error::Add all four secrets: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD. The same key must be used for every update."
             exit 1
           fi
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/stashr-upload.jks"
@@ -121,7 +119,9 @@ jobs:
           APK=$(find android/app/build/outputs/apk/release -name '*.apk' -type f | head -n 1)
           test -n "$APK" || { echo "::error::Gradle did not produce an APK"; exit 1; }
           cp "$APK" stashr-release.apk
-          apksigner verify --verbose stashr-release.apk
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          test -n "$APKSIGNER" || { echo "::error::Android apksigner was not found"; exit 1; }
+          "$APKSIGNER" verify --verbose stashr-release.apk
           SHA256=$(sha256sum stashr-release.apk | cut -d ' ' -f 1)
           SIZE=$(stat -c '%s' stashr-release.apk)
           export SHA256 SIZE
