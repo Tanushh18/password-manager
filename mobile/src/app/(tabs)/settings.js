@@ -139,7 +139,7 @@ export default function Settings() {
       setUpdateStatus("Update check failed · check internet, channel and runtime");
       toast("Could not check for updates. Check your connection and try again.", "error");
     }
-  };;
+  };
 
   return (
     <View style={{ flex: 1 }}>
@@ -330,7 +330,7 @@ export default function Settings() {
           <Section title="APP" delay={220}>
             <StatusPill />
             <Row icon="globe" title="Server" subtitle={activeServer().replace(/^https?:\/\//, "")} color={theme.ok} right={null} />
-                        <Row
+            <Row
               icon="refresh"
               title="Check for updates"
               subtitle={`App ${releaseInfo.version} · Build ${releaseInfo.build}\nOTA ${releaseInfo.otaVersion} · Channel ${releaseInfo.channel}\nRuntime ${releaseInfo.runtime} · ${releaseInfo.launch}\nUpdate ID ${releaseInfo.updateId} · Created ${releaseInfo.createdAt}\n${updateStatus}`}
