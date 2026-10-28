@@ -422,7 +422,7 @@ export const diagnoseRenderLogs = (serviceName, logs, allowExternalProcessing = 
 /* Live-services usage dashboard (running Render services only; read-only provider checks). */
 export const getLiveDashboard = ({ refresh, rescan } = {}) => instance.get("/render/live-dashboard", { params: { ...(refresh || rescan ? { refresh: 1 } : {}), ...(rescan ? { rescan: 1 } : {}) }, timeout: rescan ? 90000 : 45000 }).then((r) => r.data);
 export const getUsageNeeds = () => instance.get("/render/usage-needs").then((r) => r.data);
-export const getSecretExposure = () => instance.get("/render/secret-exposure").then((r) => r.data);
+export const getEnvScan = () => instance.get("/render/env-scan").then((r) => r.data);
 export const getHoursBudget = () => instance.get("/render/hours-budget").then((r) => r.data);
 export const getUsageSettings = () => instance.get("/render/usage-settings").then((r) => r.data);
 export const saveUsageSettings = (body) => instance.put("/render/usage-settings", body).then((r) => r.data);

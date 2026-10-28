@@ -167,3 +167,4 @@
 .sv-secrets__list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .sv-secrets__list li { display: grid; gap: 2px; }
 .sv-secrets__list li.is-high b { color: #d64545; }
+.sv-secrets__sub { font-size: 0.9rem; margin: 10px 0 4px; }

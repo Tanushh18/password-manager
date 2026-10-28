@@ -900,8 +900,8 @@ router.get("/render/live-dashboard", async (req, res) => {
   } catch { return res.status(500).json({ error: "Could not build the services dashboard." }); }
 });
 
-/* Env vars that look like secrets but reach the browser or app by their name (REACT_APP_, VITE_, ...). Names and masked previews only. */
-router.get("/render/secret-exposure", async (req, res) => {
+/* Env scan: secrets published to the browser by name, and backend addresses with no live Render service behind them. No values. */
+router.get("/render/env-scan", async (req, res) => {
   try { return res.json(await secretExposureRunner.scanUser(req.rootUser)); }
   catch { return res.status(500).json({ error: "Could not scan the env vars." }); }
 });

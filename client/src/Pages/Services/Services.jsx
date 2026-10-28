@@ -10,7 +10,7 @@ import { serviceProjectIndex } from "../../lib/serviceProjects";
 import { formatAmount, forecastText, summarize, projectSummary, metricRows, accountRows, STATUS_LABEL } from "./servicesUtils";
 import Robot from "../../Components/Robot/Robot";
 import HoursBudgetCard from "./HoursBudgetCard";
-import SecretExposureCard from "./SecretExposureCard";
+import EnvScanCard from "./EnvScanCard";
 import { usageMood } from "../../lib/robots";
 import "../Render/RenderDashboard.css";
 import "../Render/RobotArmy.css";
@@ -114,7 +114,7 @@ function Overview({ data, onOpen, projectOf }) {
   return (
     <div className="sv-stack">
       <HoursBudgetCard />
-      <SecretExposureCard />
+      <EnvScanCard />
       <div className="sv-stats">
         <div><span>Live projects</span><b>{data.projectCount ?? data.projects.length}</b><small>{data.liveCount} of {data.totalCount} Render services live · syncs every minute</small></div>
         <div><span>Services tracked</span><b>{summary.tracked}</b><small>with live usage data</small></div>
