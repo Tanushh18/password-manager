@@ -4,7 +4,7 @@
 const User = require("../models/schema");
 const { without } = require("./projection");
 const renderOps = require("./renderOps");
-const { addRunningMinutes, budgetStatus, shouldAlert, latestCount, minutesSince } = require("./renderHours");
+const { FREE_HOURS_PER_MONTH, addRunningMinutes, budgetStatus, shouldAlert, latestCount, minutesSince } = require("./renderHours");
 
 const FIELD = "renderHoursBudget";
 const WINDOW_MINUTES = 15;
@@ -36,6 +36,19 @@ async function sampleService(apiKey, serviceId, now) {
   });
   const payload = await renderOps.renderRequest(apiKey, "/v1/metrics/instance-count?" + params.toString());
   return latestCount(payload);
+}
+
+/** Telegram message for every account whose level just got worse. Uses the user's own Telegram settings; silent if none. */
+async function notifyAlerts(user, results, now) {
+  const due = Object.entries(results).filter(([, r]) => r.ok && r.alert);
+  if (!due.length) return;
+  const config = await renderOps.readConfig(user);
+  const lines = due.map(([accountId, r]) => {
+    const name = accountId.slice(-6);
+    const pct = Math.round((r.usedHours / FREE_HOURS_PER_MONTH) * 100);
+    return `Render account ...${name}: ${r.usedHours} of ${FREE_HOURS_PER_MONTH} free hours used (${pct}%, ${r.level === "over" ? "over the limit" : "80% reached"}). Plan a migration before the month ends (resets on the 1st, UTC).`;
+  });
+  await renderOps.sendTelegram(config, lines.join("\n"), { silent: false });
 }
 
 /** Samples every running service of one user and updates their budget. Returns per-account results (no secrets). */
@@ -71,6 +84,7 @@ async function sampleUser(user, now = new Date()) {
   }
 
   if (Object.keys(results).length) await writeState(user, dataKey, state);
+  await notifyAlerts(user, results, now);
   return results;
 }
 
