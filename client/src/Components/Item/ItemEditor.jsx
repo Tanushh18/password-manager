@@ -87,13 +87,6 @@ export default function ItemEditor({ open, item, folders, icons, onClose, onSave
           <Field id="it-name" label="Name" value={form.name} onChange={set("name")} placeholder="GitHub, Bank, Wi-Fi…" autoFocus />
           {isLogin ? <Field id="it-url" label="Website" value={form.url} onChange={set("url")} placeholder="github.com" inputMode="url" /> : null}
           {isLogin ? <Field id="it-user" label="Username or email" value={form.username} onChange={set("username")} placeholder="you@example.com" autoComplete="off" /> : null}
-          <div className="field">
-            <label className="field__label" htmlFor="it-folder">Folder</label>
-            <input id="it-folder" className="input" list="folder-list" value={form.folder} onChange={set("folder")} placeholder="Work, Personal, Finance…" />
-            <datalist id="folder-list">
-              {folders.map((f) => <option key={f} value={f} />)}
-            </datalist>
-          </div>
         </div>
 
         {(FIELD_DEFS[form.type] || []).map((d) => (
@@ -139,25 +132,36 @@ export default function ItemEditor({ open, item, folders, icons, onClose, onSave
           </div>
         </div>
 
-        <Field
-          id="it-totp"
-          label="2FA secret (optional)"
-          value={form.totp}
-          onChange={set("totp")}
-          placeholder="Setup key or otpauth://… link"
-          error={!totpValid ? "Not a valid 2FA secret" : ""}
-          hint="Store an authenticator secret here and Stashr shows the live code."
-          autoComplete="off"
-        />
-        {form.totp && totpValid ? (
-          <div className="editor__totp"><TotpCode secret={form.totp} /></div>
-        ) : null}
         </> : null}
 
-        <div className="field">
-          <label className="field__label" htmlFor="it-notes">Notes</label>
-          <textarea id="it-notes" className="input textarea" rows={isLogin ? 3 : form.type === "note" ? 10 : 3} value={form.notes} onChange={set("notes")} placeholder="Security questions, PINs, recovery info…" />
-        </div>
+
+        <details className="editor__more" open={Boolean(form.folder || form.totp || form.notes)}>
+          <summary>More fields</summary>
+            <div className="field">
+              <label className="field__label" htmlFor="it-folder">Folder</label>
+              <input id="it-folder" className="input" list="folder-list" value={form.folder} onChange={set("folder")} placeholder="Work, Personal, Finance…" />
+              <datalist id="folder-list">
+                {folders.map((f) => <option key={f} value={f} />)}
+              </datalist>
+            </div>
+          <Field
+            id="it-totp"
+            label="2FA secret (optional)"
+            value={form.totp}
+            onChange={set("totp")}
+            placeholder="Setup key or otpauth://… link"
+            error={!totpValid ? "Not a valid 2FA secret" : ""}
+            hint="Store an authenticator secret here and Stashr shows the live code."
+            autoComplete="off"
+          />
+          {form.totp && totpValid ? (
+            <div className="editor__totp"><TotpCode secret={form.totp} /></div>
+          ) : null}
+          <div className="field">
+            <label className="field__label" htmlFor="it-notes">Notes</label>
+            <textarea id="it-notes" className="input textarea" rows={isLogin ? 3 : form.type === "note" ? 10 : 3} value={form.notes} onChange={set("notes")} placeholder="Security questions, PINs, recovery info…" />
+          </div>
+        </details>
 
         <div className="editor__actions">
           {item ? (

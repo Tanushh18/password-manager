@@ -24,6 +24,7 @@ export default function Editor() {
   const params = useLocalSearchParams();
   const { items, addItem, updateItem, deleteItem, prefs } = useVault();
   const [showHistory, setShowHistory] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const toast = useToast();
   const existing = useMemo(() => items.find((i) => i.id === params.id), [items, params.id]);
 
@@ -155,6 +156,10 @@ export default function Editor() {
               <Chip label="Passphrase" onPress={() => set("password")(generatePassphrase({ words: 4 }))} />
             </View>
 
+            </> : null}
+
+            <Chip label="More fields" active={showMore} onPress={() => setShowMore((v) => !v)} />
+            {showMore || form.folder || form.totp || form.notes ? <>
             <Field
               label="2FA secret (optional)"
               icon="shieldCheck"
@@ -166,15 +171,12 @@ export default function Editor() {
               right={Platform.OS !== "web" ? <IconButton name="scan" size={34} iconSize={16} onPress={() => router.push("/scan")} /> : null}
             />
             {form.totp && totpValid ? <View style={{ marginTop: -4, marginBottom: 14 }}><TotpCode secret={form.totp} /></View> : null}
-            </> : null}
-
             <Field label="Folder" icon="folder" value={form.folder} onChangeText={set("folder")} placeholder="Work, Personal, Finance…" />
             {folders.length ? (
               <View style={[styles.row, { marginTop: -6 }]}>
                 {folders.map((f) => <Chip key={f} label={f} active={form.folder === f} onPress={() => set("folder")(form.folder === f ? "" : f)} />)}
               </View>
             ) : null}
-
             <Text style={[styles.label, { color: theme.textFaint, fontFamily: theme.font.bodySemi }]}>NOTES</Text>
             <TextInput
               value={form.notes}
@@ -184,6 +186,7 @@ export default function Editor() {
               multiline
               style={[styles.notes, { color: theme.text, borderColor: theme.line, backgroundColor: alpha(theme.accent, 0.06), fontFamily: theme.font.body }]}
             />
+            </> : null}
 
             <GradientButton title={existing ? "Save changes" : "Save to vault"} icon="lock" loading={saving} onPress={save} style={{ marginTop: 18 }} />
             <GhostButton title="Cancel" onPress={close} style={{ marginTop: 10 }} />
