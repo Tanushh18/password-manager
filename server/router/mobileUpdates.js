@@ -1,4 +1,5 @@
 const express = require("express");
+const { Readable } = require("node:stream");
 
 const router = express.Router();
 const GITHUB_REPOSITORY = process.env.STASHR_UPDATE_REPOSITORY || "Tanushh18/password-manager";
@@ -43,8 +44,12 @@ async function latestRelease() {
     throw error;
   }
 
-  const manifestResponse = await fetch(manifestAsset.browser_download_url, {
-    headers: { "User-Agent": "Stashr-Android-Updater" },
+  const manifestResponse = await fetch(manifestAsset.url, {
+    headers: {
+      Accept: "application/octet-stream",
+      "User-Agent": "Stashr-Android-Updater",
+      ...(process.env.STASHR_UPDATE_GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.STASHR_UPDATE_GITHUB_TOKEN}` } : {}),
+    },
     signal: AbortSignal.timeout(10_000),
   });
   if (!manifestResponse.ok) {
@@ -72,6 +77,7 @@ async function latestRelease() {
     publishedAt: release.published_at || null,
     tagName: release.tag_name,
     downloadUrl: apk.browser_download_url,
+    assetApiUrl: apk.url,
   };
   cachedAt = Date.now();
   return cachedRelease;
@@ -108,8 +114,25 @@ router.get("/android/download", async (_req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const release = await latestRelease();
-    return res.redirect(302, release.downloadUrl);
+    const headers = {
+      Accept: "application/octet-stream",
+      "User-Agent": "Stashr-Android-Updater",
+      ...(process.env.STASHR_UPDATE_GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.STASHR_UPDATE_GITHUB_TOKEN}` } : {}),
+    };
+    const response = await fetch(release.assetApiUrl, { headers, signal: AbortSignal.timeout(30_000) });
+    if (!response.ok || !response.body) {
+      const error = new Error(`GitHub asset download returned HTTP ${response.status}`);
+      error.status = 502;
+      throw error;
+    }
+    res.status(200);
+    res.set("Content-Type", "application/vnd.android.package-archive");
+    res.set("Content-Disposition", `attachment; filename="Stashr-${release.version}-build-${release.versionCode}.apk"`);
+    res.set("X-Content-Type-Options", "nosniff");
+    if (release.sizeBytes > 0) res.set("Content-Length", String(release.sizeBytes));
+    return Readable.fromWeb(response.body).pipe(res);
   } catch (error) {
+    if (res.headersSent) return res.destroy(error);
     return res.status(error.status || 502).json({
       error: "The latest Android APK is not available yet.",
       detail: process.env.NODE_ENV === "production" ? undefined : error.message,
