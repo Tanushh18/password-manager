@@ -59,7 +59,7 @@ test("APK endpoint streams the release asset through the server", async () => {
   assert.equal(response.status, 200);
   assert.equal(response.headers["content-type"], "application/vnd.android.package-archive");
   assert.match(response.headers["content-disposition"], /Stashr-2\.3\.1-build-100123\.apk/);
-  assert.equal(response.text, "fake-apk-binary");
+  assert.equal(response.body.toString(), "fake-apk-binary");
 });
 
 test.after(() => {
