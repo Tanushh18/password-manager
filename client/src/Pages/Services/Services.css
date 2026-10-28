@@ -158,3 +158,12 @@
 .sv-hours__top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .sv-hours__row.is-warn .sv-bar i { background: #e0a800; }
 .sv-hours__row.is-over .sv-bar i { background: #d64545; }
+
+/* Secrets in the browser card (SecretExposureCard.jsx) */
+.sv-secrets { border: 1px solid #d64545; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+.sv-secrets header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.sv-secrets h2 { font-size: 1rem; margin: 0; }
+.sv-secrets small { opacity: 0.75; font-size: 0.8rem; }
+.sv-secrets__list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.sv-secrets__list li { display: grid; gap: 2px; }
+.sv-secrets__list li.is-high b { color: #d64545; }

@@ -5,6 +5,7 @@ const { fetchAllPages } = require("../utils/renderPaging");
 const { syncProjectEnv, runAllEnvSync } = require("../utils/renderEnvSync");
 const { getProjectStatuses, runAllAutoLink, clearServicesCache, loadRenderServices } = require("../utils/projectStatus");
 const renderHoursRunner = require("../utils/renderHoursRunner");
+const secretExposureRunner = require("../utils/secretExposureRunner");
 const renderHours = require("../utils/renderHours");
 const { runUsage, runAllUsage, readSettings, saveSettings, getUsageCapabilityCatalog, hasReader } = require("../utils/usageIO");
 const { listNeedsReader } = require("../utils/unsupportedServices");
@@ -897,6 +898,12 @@ router.get("/render/live-dashboard", async (req, res) => {
     res.set("Cache-Control", "no-store");
     return res.json(data);
   } catch { return res.status(500).json({ error: "Could not build the services dashboard." }); }
+});
+
+/* Env vars that look like secrets but reach the browser or app by their name (REACT_APP_, VITE_, ...). Names and masked previews only. */
+router.get("/render/secret-exposure", async (req, res) => {
+  try { return res.json(await secretExposureRunner.scanUser(req.rootUser)); }
+  catch { return res.status(500).json({ error: "Could not scan the env vars." }); }
 });
 
 /* Free-hours budget per Render account (estimate, from the instance counts Stashr sampled). No Render calls here. */
