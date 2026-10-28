@@ -8,6 +8,7 @@ Stashr is a web and Android application for managing saved logins and project co
 
 - [Features](#features)
 - [Architecture](#architecture)
+- [App development, OTA and Android releases](APP_DEVELOPMENT_AND_RELEASE.md)
 - [Technology](#technology)
 - [Requirements](#requirements)
 - [Local setup](#local-setup)
@@ -38,9 +39,11 @@ Optional integrations require explicit configuration and their own provider cred
 ├── server/       Express API, database models, authentication, integrations
 ├── client/       React + Vite web application
 ├── mobile/       Expo + React Native Android application
+├── extension/    Chrome/Chromium autofill extension
 ├── docs/         Security design and project documentation
-├── .github/      CI workflows
+├── .github/      CI, Android build and OTA workflows
 ├── render.yaml   Render Blueprint for web and API services
+├── APP_DEVELOPMENT_AND_RELEASE.md  App structure, API, OTA and APK release guide
 └── README.md
 ```
 
