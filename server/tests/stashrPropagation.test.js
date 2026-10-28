@@ -1,7 +1,7 @@
 const { describe, test } = require("node:test");
 const expect = require("./expect");
 const { isMainServer } = require("../utils/mainServer");
-const { ENV_NAME, targetsOf, projectsToUpdate, mayRunAutomatically, applyToTargets, projectApplied } = require("../utils/stashrPropagation");
+const { ENV_NAME, envNamesFor, targetsOf, projectsToUpdate, mayRunAutomatically, applyToTargets, projectApplied } = require("../utils/stashrPropagation");
 
 describe("isMainServer", () =>
 {
@@ -84,5 +84,29 @@ describe("applyToTargets", () =>
         const results = await applyToTargets([targets[0]], "https://main.example", { request, apiKeyFor: () => "k" });
         expect(results[0].ok).toBe(true);
         expect(results[0].deployed).toBe(false);
+    });
+});
+
+describe("envNamesFor", () =>
+{
+    test("always the plain name, plus a prefixed one for each build tool the project already uses", () =>
+    {
+        expect(envNamesFor({ envVars: [] })).toEqual([ENV_NAME]);
+        const names = envNamesFor({ envVars: [{ name: "REACT_APP_LOGIN_URI" }, { name: "REACT_APP_X" }, { name: "VITE_API" }, { name: "JWT_SECRET" }] });
+        expect(names).toEqual([ENV_NAME, "REACT_APP_" + ENV_NAME, "VITE_" + ENV_NAME]);
+    });
+    test("applyToTargets writes every name before it deploys once", async () =>
+    {
+        const calls = [];
+        await applyToTargets([{ serviceId: "srv-1", accountId: "a", name: "one" }], "https://m.example", {
+            request: async (k, path, o) => { calls.push(o.method + " " + path); },
+            apiKeyFor: () => "k",
+            names: [ENV_NAME, "REACT_APP_" + ENV_NAME]
+        });
+        expect(calls).toEqual([
+            "PUT /v1/services/srv-1/env-vars/" + ENV_NAME,
+            "PUT /v1/services/srv-1/env-vars/REACT_APP_" + ENV_NAME,
+            "POST /v1/services/srv-1/deploys"
+        ]);
     });
 });

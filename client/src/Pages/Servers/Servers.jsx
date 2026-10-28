@@ -6,6 +6,7 @@ import * as api from "../../api/client";
 import "./Servers.css";
 
 import MascotBanner from "../../Components/Robot/MascotBanner";
+import StashrPropagation from "./StashrPropagation";
 import { registryMood } from "../../lib/pageMoods";
 /* One app's editable URL list. Saving updates the registry; apps pick it up the next time they start. */
 const ago = (value) => {
@@ -298,6 +299,7 @@ export default function Servers() {
         {apps && <MascotBanner kind="satellite" {...registryMood(apps)} />}
         {error && <p className="servers__error">{error}</p>}
         {!apps && !error && <p className="servers__hint">Loading…</p>}
+        {apps && <StashrPropagation />}
         {apps && (
           <div className="servers__grid">
             {apps.map((entry) => (

@@ -48,7 +48,8 @@ async function applyProject(user, dataKey, projectId, mainUrl) {
   if (!targets.length) return { projectId, name: fields.name, ok: false, error: "No Render service is linked to this project." };
   const results = await P.applyToTargets(targets, mainUrl, {
     request: renderOps.renderRequest,
-    apiKeyFor: (accountId) => renderOps.accountApiKey(user, dataKey, accountId)
+    apiKeyFor: (accountId) => renderOps.accountApiKey(user, dataKey, accountId),
+    names: P.envNamesFor(fields)
   });
   return {
     projectId, name: fields.name, ok: P.projectApplied(results),

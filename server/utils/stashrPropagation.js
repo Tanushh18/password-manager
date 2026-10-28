@@ -3,6 +3,9 @@
    Per project, Stashr remembers the URL it last applied, so a failed app is retried on the next tick and a newly
    selected app is brought up to date. Only the variable STASHR_SERVER_URL is written; nothing is ever deleted. */
 const ENV_NAME = "STASHR_SERVER_URL";
+// Build tools only expose variables with their own prefix to browser and app code, so an app that already has
+// REACT_APP_* variables reads REACT_APP_STASHR_SERVER_URL, a Vite app VITE_..., and so on.
+const PREFIXES = ["REACT_APP_", "VITE_", "EXPO_PUBLIC_", "NEXT_PUBLIC_"];
 
 const safeId = (value) => /^[A-Za-z0-9_-]{1,160}$/.test(String(value || ""));
 
@@ -20,6 +23,16 @@ function targetsOf(fields) {
   return out;
 }
 
+/** The variable names to write for a project: the plain one, plus the prefixed one for each build tool it already uses. Pure. */
+function envNamesFor(fields) {
+  const names = new Set([ENV_NAME]);
+  for (const row of Array.isArray(fields.envVars) ? fields.envVars : []) {
+    const name = String((row && row.name) || "");
+    for (const prefix of PREFIXES) if (name.startsWith(prefix)) names.add(prefix + ENV_NAME);
+  }
+  return [...names];
+}
+
 /** Project ids that still need the current URL. Pure. */
 function projectsToUpdate(state, mainUrl) {
   if (!mainUrl) return [];
@@ -35,14 +48,14 @@ function mayRunAutomatically(state) {
  * Writes the variable to each target and deploys it. `request(apiKey, path, options)` is Render's API call and
  * `apiKeyFor(accountId)` the key of that account. Returns one result per target; never throws for a single service.
  */
-async function applyToTargets(targets, mainUrl, { request, apiKeyFor, deploy = true }) {
+async function applyToTargets(targets, mainUrl, { request, apiKeyFor, names = [ENV_NAME], deploy = true }) {
   const results = [];
   for (const target of targets) {
     const apiKey = apiKeyFor(target.accountId);
     if (!apiKey) { results.push({ ...target, ok: false, error: "Render account not connected." }); continue; }
     const base = "/v1/services/" + encodeURIComponent(target.serviceId);
     try {
-      await request(apiKey, base + "/env-vars/" + ENV_NAME, { method: "PUT", body: { value: mainUrl } });
+      for (const name of names) await request(apiKey, base + "/env-vars/" + name, { method: "PUT", body: { value: mainUrl } });
     } catch (error) {
       results.push({ ...target, ok: false, error: error.status === 404 ? "Service no longer exists on Render." : "Render refused the variable." });
       continue;
@@ -60,4 +73,4 @@ async function applyToTargets(targets, mainUrl, { request, apiKeyFor, deploy = t
 /** A project counts as applied when every one of its services accepted the variable. Pure. */
 const projectApplied = (results) => results.length > 0 && results.every((r) => r.ok);
 
-module.exports = { ENV_NAME, targetsOf, projectsToUpdate, mayRunAutomatically, applyToTargets, projectApplied };
+module.exports = { ENV_NAME, envNamesFor, targetsOf, projectsToUpdate, mayRunAutomatically, applyToTargets, projectApplied };

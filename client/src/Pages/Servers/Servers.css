@@ -48,3 +48,4 @@
 .servers__row { border-radius: var(--r-lg); }
 @media (max-width: 640px) { .servers .btn, .security-page .btn { min-height: 44px; } }
 .servers__main { font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #2e7d32; color: #fff; letter-spacing: 0.06em; }
+.servers__auto { display: block; margin: 10px 0 6px; }

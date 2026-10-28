@@ -428,6 +428,10 @@ export const getStatusPage = () => instance.get("/render/status-page").then((r) 
 export const saveStatusPage = (body) => instance.put("/render/status-page", body).then((r) => r.data);
 export const getStatusPageServices = () => instance.get("/render/status-page/services").then((r) => r.data);
 export const getEnvScan = () => instance.get("/render/env-scan").then((r) => r.data);
+export const getStashrPropagation = () => instance.get("/stashr/propagation").then((r) => r.data);
+export const saveStashrPropagation = (body) => instance.put("/stashr/propagation", body).then((r) => r.data);
+export const testStashrPropagation = (projectId) => instance.post("/stashr/propagation/test", { projectId }, { timeout: 90000 }).then((r) => r.data);
+export const runStashrPropagation = () => instance.post("/stashr/propagation/run", {}, { timeout: 120000 }).then((r) => r.data);
 export const getHoursBudget = () => instance.get("/render/hours-budget").then((r) => r.data);
 export const getUsageSettings = () => instance.get("/render/usage-settings").then((r) => r.data);
 export const saveUsageSettings = (body) => instance.put("/render/usage-settings", body).then((r) => r.data);
