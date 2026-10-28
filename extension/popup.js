@@ -189,6 +189,24 @@ async function displayPasswords() {
   document.querySelectorAll('.qr-btn').forEach(btn => {
     btn.addEventListener('click', (e) => showQRCode(e.currentTarget.dataset.id));
   });
+
+  const googleAccounts = allPasswords.filter(isGoogleEntry);
+  document.getElementById('googleSection').classList.toggle('hidden', googleAccounts.length === 0);
+  document.getElementById('googleAccounts').innerHTML = googleAccounts
+    .map(pwd => `
+      <div class="password-item">
+        <div class="password-info">
+          <div class="password-service">${escapeHtml(titleOf(pwd))}</div>
+          <div class="password-username">${escapeHtml(userOf(pwd) || 'Unknown')}</div>
+        </div>
+        <div class="password-actions">
+          <button class="btn btn-small google-signin-btn" data-id="${escapeHtml(pwd._id)}">Sign in</button>
+        </div>
+      </div>`)
+    .join('');
+  document.querySelectorAll('.google-signin-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => googleSignIn(e.currentTarget.dataset.id));
+  });
 }
 
 // Create password element (all text is escaped: item names come from the vault)
@@ -305,6 +323,88 @@ async function autofillPassword(passwordId) {
 }
 
 // Copy password
+// A saved entry is a Google account when its website (or, without one, its name) is google.com.
+function isGoogleEntry(pwd) {
+  const host = hostOf(pwd.url);
+  if (host) return registrable(host) === 'google.com';
+  return /\bgoogle\b/i.test(titleOf(pwd));
+}
+
+// Resolves when the tab has finished loading, or after a timeout.
+function waitForTabComplete(tabId, timeoutMs = 15000) {
+  return new Promise((resolve) => {
+    const done = () => { chrome.tabs.onUpdated.removeListener(onUpdated); clearTimeout(timer); resolve(); };
+    const onUpdated = (id, info) => { if (id === tabId && info.status === 'complete') done(); };
+    const timer = setTimeout(done, timeoutMs);
+    chrome.tabs.onUpdated.addListener(onUpdated);
+  });
+}
+
+// Runs inside accounts.google.com, one step per call. Google navigates between its steps, which ends this script's
+// context, so the popup injects it again on each new page. Self-contained: it cannot use popup variables.
+// It picks the account in the chooser when this browser is already signed in with it, types the email, then the
+// password. It never clicks a challenge (code, passkey, "verify it's you").
+async function googleSignInInPage(email, password) {
+  if (location.hostname !== 'accounts.google.com') return { status: 'wrong-site' };
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const visible = (el) => !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  const setValue = (el, value) => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(el, value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  const clickNext = (id) => {
+    const button = document.querySelector('#' + id + ' button') || document.getElementById(id);
+    if (button) button.click();
+  };
+  const chooserRow = () => Array.from(document.querySelectorAll('[data-identifier]')).find((el) => el.getAttribute('data-identifier') === email);
+  const emailField = () => document.querySelector('input#identifierId');
+  const passwordField = () => document.querySelector('input[type="password"][name="Passwd"]') || document.querySelector('input[type="password"]');
+
+  let target = null;
+  const end = Date.now() + 15000;
+  while (Date.now() < end && !target) {
+    target = [chooserRow(), emailField(), passwordField()].find(visible) || null;
+    if (!target) await sleep(300);
+  }
+  if (!target) {
+    return { status: /verify|code|passkey/i.test(document.body.textContent || '') ? 'challenge' : 'not-found' };
+  }
+  if (target === chooserRow()) { target.click(); return { status: 'chooser-selected' }; }
+  if (target === emailField()) { setValue(target, email); clickNext('identifierNext'); return { status: 'email-submitted' }; }
+  setValue(target, password);
+  clickNext('passwordNext');
+  return { status: 'password-submitted' };
+}
+
+// Opens Google sign-in in a new tab and signs in with the chosen account, one page at a time.
+async function googleSignIn(passwordId) {
+  const pwd = allPasswords.find(p => p._id === passwordId);
+  if (!pwd) return;
+  try {
+    const tab = await chrome.tabs.create({ url: 'https://accounts.google.com/', active: true });
+    let status = 'failed';
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await waitForTabComplete(tab.id);
+      const [injected] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: googleSignInInPage,
+        args: [userOf(pwd), pwd.password || '']
+      });
+      status = injected && injected.result ? injected.result.status : 'failed';
+      if (status !== 'email-submitted' && status !== 'chooser-selected') break;
+      await new Promise((resolve) => setTimeout(resolve, 1500)); // let Google move to the next page
+    }
+    if (status === 'password-submitted') showSuccess('Signed in to Google. If Google asks for a code or approval, finish it on the page.');
+    else if (status === 'challenge') showError('Google wants a code or approval. Finish it on the page.');
+    else if (status === 'not-found') showError("Couldn't find Google's sign-in form.");
+    else showError('Google sign-in did not finish.');
+  } catch (error) {
+    showError('Google sign-in failed. Try again.');
+  }
+}
+
 async function copyPassword(passwordId) {
   try {
     const pwd = allPasswords.find(p => p._id === passwordId);
