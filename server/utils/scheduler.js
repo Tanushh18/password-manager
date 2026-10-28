@@ -9,6 +9,8 @@ const { runAllAutoLink } = require("./projectStatus");
 const { runAllUsage } = require("./usageIO");
 const { runAllRenderHours } = require("./renderHoursRunner");
 const { runAllStatusPages } = require("./statusPageRunner");
+const { runAllPropagation } = require("./stashrPropagationRunner");
+const { shouldRunScheduler } = require("./mainServer");
 const { runAllProjectSync } = require("./projectAutoSync");
 const { runAllRegistrySync } = require("./registrySyncIO");
 const { runAllPings } = require("./pings");
@@ -91,6 +93,8 @@ async function executeStep(name, fn, steps) {
 }
 
 async function runTick(source = "internal") {
+  // Only the main Stashr server runs the scheduled work; the others stay idle and Render spins them down.
+  if (source === "internal" && !(await shouldRunScheduler())) return { ok: false, status: "skipped", skipped: "not the main server" };
   if (running) return { ...(await running), skipped: "already running" };
   running = (async () => {
     const lease = await acquireLease();
@@ -110,6 +114,7 @@ async function runTick(source = "internal") {
       const usage = await executeStep("usage", runAllUsage, steps);
       const renderHours = await executeStep("renderHours", runAllRenderHours, steps);
       const statusPages = await executeStep("statusPages", runAllStatusPages, steps);
+      const stashrUrlSync = await executeStep("stashrUrlSync", runAllPropagation, steps);
       const telegram = await executeStep("telegram", runAllDigests, steps);
       const completedAt = new Date().toISOString();
       const status = overallStatus(steps);
@@ -131,6 +136,7 @@ async function runTick(source = "internal") {
         usage,
         renderHours,
         statusPages,
+        stashrUrlSync,
         telegram
       };
       run.persisted = await persistRun(run);

@@ -368,5 +368,6 @@ router.use(require("./photoImport"));
 router.use(require("./photoFolderShares"));
 router.use(require("./passwordReset"));
 router.use(registry);
+router.use(require("./stashrPropagation"));
 
 module.exports = router;
