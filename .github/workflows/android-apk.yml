@@ -2,12 +2,18 @@
 # The APK is signed with the debug key that Expo's prebuild template ships, which is the same on every run,
 # so builds install over each other. (It is not the key of an APK installed from an EAS build: uninstall that one first.)
 #
+# EXPO_TOKEN is optional for building an APK, but required to embed the EAS project ID so that this APK can receive OTA updates.
 # Secrets used only when "distribute" is on: FIREBASE_APP_ID and FIREBASE_SERVICE_ACCOUNT_JSON.
 name: Android APK (GitHub runner)
 
 on:
   workflow_dispatch:
     inputs:
+      channel:
+        description: "OTA channel embedded in this APK"
+        type: choice
+        options: [preview, production]
+        default: preview
       distribute:
         description: "Send the APK to Firebase App Distribution testers"
         type: boolean
@@ -45,11 +51,25 @@ jobs:
       # GitHub's Ubuntu runners already ship the Android SDK (ANDROID_HOME), so no separate SDK install is needed.
       - run: npm ci
 
+      # The project ID is public metadata, but the EAS token is kept in GitHub Secrets.
+      # If no token is set, keep the APK build working while clearly warning that OTA will be disabled.
+      - name: Link EAS project for OTA (optional)
+        shell: bash
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::warning::EXPO_TOKEN is not set. This APK will build without OTA updates; add the repository secret to enable them."
+          else
+            npx eas-cli@latest init --non-interactive --force
+          fi
+
       # Generates the native android/ project from app.json and the plugins (it is not kept in git).
       - name: Generate the Android project
         run: npx expo prebuild --platform android --no-install --clean
         env:
           CI: "1"
+          STASHR_UPDATE_CHANNEL: ${{ inputs.channel }}
 
       - name: Build the release APK
         working-directory: mobile/android
