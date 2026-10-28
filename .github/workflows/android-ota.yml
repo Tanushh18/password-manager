@@ -1,20 +1,29 @@
 name: Publish Android OTA Update (EAS)
 
-# Manual by design: review the code first, then explicitly publish an OTA update.
-# OTA can update JS/UI/assets, but cannot replace native code or Android permissions.
+# JS/UI/assets-only releases. Native changes require a new APK/AAB.
 on:
   workflow_dispatch:
     inputs:
       channel:
-        description: "Target installed app channel"
+        description: "Target installed APK channel"
         type: choice
         options: [preview, production]
         default: preview
         required: true
+      otaVersion:
+        description: "Unique OTA release label; example 2.3.1-ota.1"
+        type: string
+        default: "2.3.1-ota.1"
+        required: true
       message:
-        description: "Release note shown in Expo's update history"
+        description: "Release notes stored with this OTA update"
         type: string
         default: "Stashr Android OTA update"
+        required: true
+      confirmProduction:
+        description: "Required safety check when publishing to production"
+        type: boolean
+        default: false
         required: true
 
 concurrency:
@@ -26,12 +35,20 @@ permissions:
 
 jobs:
   publish:
-    name: Publish Android OTA
+    name: Validate and publish Android OTA
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
       run:
         working-directory: mobile
+    env:
+      UPDATE_CHANNEL: ${{ inputs.channel }}
+      UPDATE_VERSION: ${{ inputs.otaVersion }}
+      UPDATE_MESSAGE: ${{ inputs.message }}
+      UPDATE_ENVIRONMENT: ${{ inputs.channel == 'production' && 'production' || 'preview' }}
+      STASHR_UPDATE_CHANNEL: ${{ inputs.channel }}
+      STASHR_OTA_VERSION: ${{ inputs.otaVersion }}
+      EXPO_PUBLIC_OTA_VERSION: ${{ inputs.otaVersion }}
     steps:
       - uses: actions/checkout@v4
 
@@ -47,7 +64,17 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
-            echo "::error::Add EXPO_TOKEN in repository Actions secrets before publishing OTA updates."
+            echo "::error::Add EXPO_TOKEN under Settings > Secrets and variables > Actions before publishing OTA updates."
+            exit 1
+          fi
+
+      - name: Guard production publishing
+        shell: bash
+        env:
+          CONFIRM_PRODUCTION: ${{ inputs.confirmProduction }}
+        run: |
+          if [[ "$UPDATE_CHANNEL" == "production" && "$CONFIRM_PRODUCTION" != "true" ]]; then
+            echo "::error::Production publish blocked. Validate preview first, then re-run with confirmProduction enabled."
             exit 1
           fi
 
@@ -58,17 +85,61 @@ jobs:
 
       - run: npm ci
 
-      # Ensure the checked-out app is linked to the same EAS project as the installed release APKs.
+      - name: Validate OTA version
+        shell: bash
+        run: |
+          APP_VERSION=$(node -p "require('./app.json').expo.version")
+          if [[ ! "$UPDATE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-ota\.[0-9]+$ ]]; then
+            echo "::error::OTA version must look like 2.3.1-ota.1."
+            exit 1
+          fi
+          case "$UPDATE_VERSION" in
+            "${APP_VERSION}-ota."*) ;;
+            *) echo "::error::OTA version must start with $APP_VERSION-ota."; exit 1 ;;
+          esac
+
+      # Resolve/link the same EAS project used by the APK workflow.
       - name: Link EAS project
-        env:
-          STASHR_UPDATE_CHANNEL: ${{ inputs.channel }}
         run: eas init --non-interactive --force
 
-      - name: Publish update
-        env:
-          UPDATE_CHANNEL: ${{ inputs.channel }}
-          UPDATE_MESSAGE: ${{ inputs.message }}
-          UPDATE_ENVIRONMENT: ${{ inputs.channel == 'production' && 'production' || 'preview' }}
-          STASHR_UPDATE_CHANNEL: ${{ inputs.channel }}
+      - name: Confirm updates are enabled and the channel matches
+        shell: bash
         run: |
-          eas update --platform android --channel "$UPDATE_CHANNEL" --environment "$UPDATE_ENVIRONMENT" --message "$UPDATE_MESSAGE" --non-interactive
+          npx expo config --json > /tmp/stashr-expo-config.json
+          node - <<'NODE'
+          const fs = require("fs");
+          const c = JSON.parse(fs.readFileSync("/tmp/stashr-expo-config.json", "utf8"));
+          const projectId = c.extra?.eas?.projectId;
+          const channel = c.updates?.requestHeaders?.["expo-channel-name"];
+          if (!projectId) throw new Error("EAS project ID is missing after eas init.");
+          if (c.updates?.enabled !== true) throw new Error("Expo Updates is disabled in the resolved app config.");
+          if (!String(c.updates?.url || "").startsWith("https://u.expo.dev/")) throw new Error("Expo Updates URL is not configured.");
+          if (channel !== process.env.STASHR_UPDATE_CHANNEL) throw new Error("Embedded OTA channel does not match the requested channel.");
+          if (!c.runtimeVersion) throw new Error("Runtime version is missing.");
+          if (c.extra?.stashrRelease?.otaVersion !== process.env.STASHR_OTA_VERSION) throw new Error("OTA release label was not included in the app config.");
+          console.log("EAS project ID:", projectId);
+          console.log("OTA URL:", c.updates.url);
+          console.log("Channel:", channel);
+          console.log("Runtime:", typeof c.runtimeVersion === "string" ? c.runtimeVersion : JSON.stringify(c.runtimeVersion));
+          console.log("OTA version:", c.extra.stashrRelease.otaVersion);
+          NODE
+
+      - name: Publish OTA update
+        run: eas update --platform android --channel "$UPDATE_CHANNEL" --environment "$UPDATE_ENVIRONMENT" --message "$UPDATE_MESSAGE" --non-interactive
+
+      - name: Write release summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo "## Stashr Android OTA published"
+            echo ""
+            echo "- App/runtime version: $(node -p "require('./app.json').expo.version")"
+            echo "- OTA release label: $UPDATE_VERSION"
+            echo "- Channel: $UPDATE_CHANNEL"
+            echo "- EAS environment: $UPDATE_ENVIRONMENT"
+            echo "- Message: $UPDATE_MESSAGE"
+            echo "- Commit: $GITHUB_SHA"
+            echo ""
+            echo "OTA updates change compatible JavaScript/UI/assets only. Native changes require a new APK/AAB."
+          } >> "$GITHUB_STEP_SUMMARY"
