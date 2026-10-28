@@ -100,6 +100,8 @@ jobs:
 
       # Resolve/link the same EAS project used by the APK workflow.
       - name: Link EAS project
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: eas init --non-interactive --force
 
       - name: Confirm updates are enabled and the channel matches
@@ -125,6 +127,8 @@ jobs:
           NODE
 
       - name: Publish OTA update
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: eas update --platform android --channel "$UPDATE_CHANNEL" --environment "$UPDATE_ENVIRONMENT" --message "$UPDATE_MESSAGE" --non-interactive
 
       - name: Write release summary
