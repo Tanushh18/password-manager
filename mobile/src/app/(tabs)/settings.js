@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
+import * as FileSystem from "expo-file-system/legacy";
 import { LinearGradient } from "expo-linear-gradient";
 import Aurora from "../../components/Aurora";
 import Icon from "../../components/Icon";
@@ -109,35 +110,55 @@ export default function Settings() {
   };
 
   const checkUpdates = async () => {
-    if (!Updates.isEnabled) {
-      setUpdateStatus("OTA disabled in this installed APK");
-      toast("OTA is not enabled in this APK. Install the new OTA-enabled APK first.", "info");
-      return;
-    }
-    setUpdateStatus("Checking the " + releaseInfo.channel + " channel…");
+    setUpdateStatus("Checking the Stashr update server…");
     try {
-      const result = await Updates.checkForUpdateAsync();
+      const currentVersionCode = Number(releaseInfo.build) || 0;
+      const base = activeServer().replace(/\\/+$/, "");
+      const response = await fetch(`${base}/api/mobile-updates/android/latest?currentVersionCode=${currentVersionCode}`, {
+        headers: { Accept: "application/json" },
+      });
+      const manifest = await response.json();
+      if (!response.ok) throw new Error(manifest.error || "Update server unavailable");
       const checkedAt = new Date().toLocaleTimeString();
-      if (!result.isAvailable) {
-        setUpdateStatus("Checked " + checkedAt + ": already up to date");
-        toast("Stashr " + releaseInfo.version + " · OTA " + releaseInfo.otaVersion + " is up to date", "info");
+      if (!manifest.updateAvailable) {
+        setUpdateStatus(`Checked ${checkedAt}: latest build ${manifest.versionCode} installed`);
+        toast(`Stashr ${manifest.version} is up to date`, "info");
         return;
       }
-      const targetVersion = result.manifest?.extra?.expoClient?.extra?.stashrRelease?.otaVersion || "new OTA release";
-      const fetched = await Updates.fetchUpdateAsync();
-      if (!fetched.isNew) {
-        setUpdateStatus("Checked " + checkedAt + ": update was not downloaded");
-        toast("An update was found, but no new bundle was downloaded", "info");
-        return;
-      }
-      setUpdateStatus("Downloaded " + targetVersion + " · restart to apply");
-      Alert.alert("Update ready", "Stashr OTA " + targetVersion + " is downloaded. Restart now to apply it?", [
-        { text: "Later", style: "cancel" },
-        { text: "Restart", onPress: () => Updates.reloadAsync() },
-      ]);
-    } catch (e) {
-      setUpdateStatus("Update check failed · check internet, channel and runtime");
-      toast("Could not check for updates. Check your connection and try again.", "error");
+      const sizeMb = manifest.sizeBytes ? (manifest.sizeBytes / (1024 * 1024)).toFixed(1) + " MB" : "size unknown";
+      Alert.alert(
+        "Stashr update available",
+        `Version ${manifest.version} · build ${manifest.versionCode}\\n${sizeMb}\\n\\n${manifest.releaseNotes || "Bug fixes and improvements"}\\n\\nThe complete APK will be downloaded. Android will ask you to confirm installation.`,
+        [
+          { text: "Later", style: "cancel" },
+          {
+            text: "Download & install",
+            onPress: async () => {
+              try {
+                setUpdateStatus(`Downloading build ${manifest.versionCode}…`);
+                const destination = `${FileSystem.cacheDirectory}stashr-update-${manifest.versionCode}.apk`;
+                const downloaded = await FileSystem.downloadAsync(manifest.downloadUrl, destination);
+                if (downloaded.status !== 200) throw new Error(`Download returned HTTP ${downloaded.status}`);
+                const info = await FileSystem.getInfoAsync(downloaded.uri);
+                if (!info.exists || !info.size || info.size < 1024 * 1024) throw new Error("Downloaded APK is missing or incomplete");
+                const contentUri = await FileSystem.getContentUriAsync(downloaded.uri);
+                setUpdateStatus(`Build ${manifest.versionCode} downloaded · opening Android installer`);
+                await Linking.openURL(contentUri);
+                toast("APK downloaded. Confirm installation in Android to update Stashr.", "info");
+              } catch (error) {
+                setUpdateStatus("APK download/install could not be opened");
+                toast(error.message || "Could not download the update", "error");
+                try {
+                  await Linking.openURL(manifest.downloadUrl);
+                } catch (_) {}
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      setUpdateStatus("Update check failed · server or internet unavailable");
+      toast("Could not check the Stashr update server. Try again when online.", "error");
     }
   };
 
