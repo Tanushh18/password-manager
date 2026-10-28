@@ -352,6 +352,7 @@ router.get("/insights", authenticate, (req, res) =>
 router.use(require("./vault"));
 router.use(require("./projects"));
 router.use(require("./render"));
+router.use(require("./statusPage"));
 router.use(require("./github"));
 router.use(require("./hosts"));
 router.use(require("./deployOps"));

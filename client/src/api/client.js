@@ -13,6 +13,8 @@ const SERVERS = (import.meta.env.VITE_API_URLS || import.meta.env.REACT_APP_API_
     .map((u) => u.trim().replace(/\/+$/, ""))
     .filter(Boolean);
 if (SERVERS.length === 0) SERVERS.push(...DEFAULT_SERVERS);
+// The public status page is served by the API, so its link points at the first server.
+export const publicApiBase = SERVERS[0];
 
 // The build-time server list is the primary configured endpoint. The Stashr registry adds
 // fallback servers on startup; keeping the configured endpoint first ensures this deployment uses v2.
@@ -422,6 +424,9 @@ export const diagnoseRenderLogs = (serviceName, logs, allowExternalProcessing = 
 /* Live-services usage dashboard (running Render services only; read-only provider checks). */
 export const getLiveDashboard = ({ refresh, rescan } = {}) => instance.get("/render/live-dashboard", { params: { ...(refresh || rescan ? { refresh: 1 } : {}), ...(rescan ? { rescan: 1 } : {}) }, timeout: rescan ? 90000 : 45000 }).then((r) => r.data);
 export const getUsageNeeds = () => instance.get("/render/usage-needs").then((r) => r.data);
+export const getStatusPage = () => instance.get("/render/status-page").then((r) => r.data);
+export const saveStatusPage = (body) => instance.put("/render/status-page", body).then((r) => r.data);
+export const getStatusPageServices = () => instance.get("/render/status-page/services").then((r) => r.data);
 export const getEnvScan = () => instance.get("/render/env-scan").then((r) => r.data);
 export const getHoursBudget = () => instance.get("/render/hours-budget").then((r) => r.data);
 export const getUsageSettings = () => instance.get("/render/usage-settings").then((r) => r.data);

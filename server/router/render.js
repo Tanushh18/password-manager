@@ -6,6 +6,8 @@ const { syncProjectEnv, runAllEnvSync } = require("../utils/renderEnvSync");
 const { getProjectStatuses, runAllAutoLink, clearServicesCache, loadRenderServices } = require("../utils/projectStatus");
 const renderHoursRunner = require("../utils/renderHoursRunner");
 const secretExposureRunner = require("../utils/secretExposureRunner");
+const statusPageRunner = require("../utils/statusPageRunner");
+const { normalizeSlug, MAX_SERVICES: statusPageMax } = require("../utils/statusPage");
 const renderHours = require("../utils/renderHours");
 const { runUsage, runAllUsage, readSettings, saveSettings, getUsageCapabilityCatalog, hasReader } = require("../utils/usageIO");
 const { listNeedsReader } = require("../utils/unsupportedServices");
@@ -898,6 +900,36 @@ router.get("/render/live-dashboard", async (req, res) => {
     res.set("Cache-Control", "no-store");
     return res.json(data);
   } catch { return res.status(500).json({ error: "Could not build the services dashboard." }); }
+});
+
+/* Public status page settings (the page itself is read at GET /status/:slug, with no login). */
+router.get("/render/status-page", async (req, res) => {
+  const page = req.rootUser.publicStatus || {};
+  return res.json({ slug: page.slug || "", enabled: Boolean(page.enabled), title: page.title || "", serviceIds: page.serviceIds || [], snapshot: page.snapshot || null });
+});
+
+/* The services the owner can choose to publish: names and state only. */
+router.get("/render/status-page/services", async (req, res) => {
+  try {
+    const { services } = await renderOps.listEveryService(req.rootUser, await req.rootUser.getDataKey());
+    return res.json({ services: services.map((s) => ({ id: s.id, name: s.name, suspended: Boolean(s.suspended) })).sort((a, b) => a.name.localeCompare(b.name)) });
+  } catch { return res.status(500).json({ error: "Could not list the services." }); }
+});
+
+router.put("/render/status-page", async (req, res) => {
+  const body = req.body || {};
+  const slug = normalizeSlug(body.slug);
+  if (!slug) return res.status(400).json({ error: "Use 4-40 lowercase letters, numbers or dashes." });
+  if (await User.exists({ "publicStatus.slug": slug, _id: { $ne: req.rootUser._id } })) return res.status(409).json({ error: "That address is already taken." });
+  const serviceIds = (Array.isArray(body.serviceIds) ? body.serviceIds : []).map(String).slice(0, statusPageMax);
+  const title = String(body.title || slug).trim().slice(0, 80) || slug;
+  try {
+    await User.updateOne({ _id: req.rootUser._id }, { $set: { publicStatus: { slug, enabled: body.enabled === true, title, serviceIds, snapshot: (req.rootUser.publicStatus || {}).snapshot || null } } });
+    if (body.enabled === true) await statusPageRunner.refreshUser(await User.findById(req.rootUser._id));
+    return res.json({ ok: true, slug, enabled: body.enabled === true });
+  } catch {
+    return res.status(500).json({ error: "Could not save the status page." });
+  }
 });
 
 /* Env scan: secrets published to the browser by name, and backend addresses with no live Render service behind them. No values. */

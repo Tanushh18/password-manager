@@ -11,6 +11,7 @@ import { formatAmount, forecastText, summarize, projectSummary, metricRows, acco
 import Robot from "../../Components/Robot/Robot";
 import HoursBudgetCard from "./HoursBudgetCard";
 import EnvScanCard from "./EnvScanCard";
+import StatusPageCard from "./StatusPageCard";
 import { usageMood } from "../../lib/robots";
 import "../Render/RenderDashboard.css";
 import "../Render/RobotArmy.css";
@@ -115,6 +116,7 @@ function Overview({ data, onOpen, projectOf }) {
     <div className="sv-stack">
       <HoursBudgetCard />
       <EnvScanCard />
+      <StatusPageCard />
       <div className="sv-stats">
         <div><span>Live projects</span><b>{data.projectCount ?? data.projects.length}</b><small>{data.liveCount} of {data.totalCount} Render services live · syncs every minute</small></div>
         <div><span>Services tracked</span><b>{summary.tracked}</b><small>with live usage data</small></div>

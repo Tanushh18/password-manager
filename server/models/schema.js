@@ -116,6 +116,8 @@ const schema = new mongoose.Schema({
     // Live-services dashboard: sealed settings (consent, limits, per-service switches) and a bounded usage history.
     usageSettings: [entrySchema],
     renderHoursBudget: [entrySchema],
+    // Public status page: { slug, enabled, title, serviceIds, snapshot }. The snapshot is public; nothing else here is.
+    publicStatus: { type: mongoose.Schema.Types.Mixed, default: null },
     usageHistory: [entrySchema],
 
     // Telegram bot connection (sealed: bot token, chat id, PIN hash, digest settings) and the public id of its
