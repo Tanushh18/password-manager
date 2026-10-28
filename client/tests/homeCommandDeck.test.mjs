@@ -18,7 +18,7 @@ test("vault command deck links only to existing vault destinations", async () =>
     assert.ok(home.includes(route), `expected command deck destination ${route}`);
     assert.ok(app.includes(`path="${route}"`), `expected registered route ${route}`);
   }
-  assert.match(home, /signedIn \? count : "—"/);
+  assert.match(home, /status === "ready" \? count : "—"/);
 });
 
 test("immersive command deck has responsive and reduced-motion fallbacks", async () => {
