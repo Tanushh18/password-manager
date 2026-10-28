@@ -60,7 +60,9 @@ async function latestRelease() {
   const manifest = await manifestResponse.json();
   const versionCode = Number(manifest.versionCode);
   if (manifest.packageName !== EXPECTED_PACKAGE || !Number.isSafeInteger(versionCode) || versionCode < 1 ||
-      typeof manifest.version !== "string" || !/^[0-9]+\.[0-9]+\.[0-9]+$/.test(manifest.version)) {
+      typeof manifest.version !== "string" || !/^[0-9]+\\.[0-9]+\\.[0-9]+$/.test(manifest.version) ||
+      typeof manifest.sha256 !== "string" || !/^[a-f0-9]{64}$/i.test(manifest.sha256) ||
+      !Number.isSafeInteger(Number(manifest.sizeBytes)) || Number(manifest.sizeBytes) < 1) {
     const error = new Error("The latest Android release manifest is invalid.");
     error.status = 502;
     throw error;
