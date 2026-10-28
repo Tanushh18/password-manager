@@ -1,0 +1,74 @@
+name: Publish Android OTA Update (EAS)
+
+# Manual by design: review the code first, then explicitly publish an OTA update.
+# OTA can update JS/UI/assets, but cannot replace native code or Android permissions.
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Target installed app channel"
+        type: choice
+        options: [preview, production]
+        default: preview
+        required: true
+      message:
+        description: "Release note shown in Expo's update history"
+        type: string
+        default: "Stashr Android OTA update"
+        required: true
+
+concurrency:
+  group: stashr-ota-${{ inputs.channel }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish Android OTA
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Verify Expo token
+        shell: bash
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::Add EXPO_TOKEN in repository Actions secrets before publishing OTA updates."
+            exit 1
+          fi
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: npm ci
+
+      # Ensure the checked-out app is linked to the same EAS project as the installed release APKs.
+      - name: Link EAS project
+        env:
+          STASHR_UPDATE_CHANNEL: ${{ inputs.channel }}
+        run: eas init --non-interactive --force
+
+      - name: Publish update
+        env:
+          UPDATE_CHANNEL: ${{ inputs.channel }}
+          UPDATE_MESSAGE: ${{ inputs.message }}
+          UPDATE_ENVIRONMENT: ${{ inputs.channel == 'production' && 'production' || 'preview' }}
+          STASHR_UPDATE_CHANNEL: ${{ inputs.channel }}
+        run: |
+          eas update --platform android --channel "$UPDATE_CHANNEL" --environment "$UPDATE_ENVIRONMENT" --message "$UPDATE_MESSAGE" --non-interactive
