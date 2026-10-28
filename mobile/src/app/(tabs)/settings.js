@@ -16,6 +16,22 @@ import { api, activeServer } from "../../lib/api";
 import { autofillSupported, isServiceEnabled, openAccessibilitySettings, isAutofillServiceEnabled, openAutofillServiceSettings } from "../../../modules/stashr-autofill";
 
 const WEBSITE = "https://password-website.onrender.com";
+
+function getReleaseInfo() {
+  const config = Constants.expoConfig || {};
+  const createdAt = Updates.createdAt ? new Date(Updates.createdAt) : null;
+  const createdAtLabel = createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt.toLocaleString() : "not reported";
+  return {
+    version: config.version || "unknown",
+    build: Constants.nativeBuildVersion || config.android?.versionCode || "unknown",
+    otaVersion: config.extra?.stashrRelease?.otaVersion || process.env.EXPO_PUBLIC_OTA_VERSION || "not tagged",
+    channel: Updates.channel || config.extra?.stashrRelease?.channel || (Updates.isEnabled ? "configured" : "disabled"),
+    runtime: Updates.runtimeVersion || (typeof config.runtimeVersion === "string" ? config.runtimeVersion : config.version || "unknown"),
+    updateId: Updates.updateId ? Updates.updateId.slice(0, 8) : "embedded",
+    launch: Updates.isEmbeddedLaunch ? "embedded bundle" : (Updates.updateId ? "OTA update" : "embedded / unknown"),
+    createdAt: createdAtLabel,
+  };
+}
 const LOCK_OPTIONS = [
   { v: 0.5, label: "30s" },
   { v: 1, label: "1 min" },
@@ -58,6 +74,8 @@ export default function Settings() {
   const { profile, items, biometric, biometricAvailable, setBiometric, logout, lock, prefs, setPrefs, setProfileName, refreshProfile } = useVault();
   const toast = useToast();
   const [name, setName] = useState(profile?.name || "");
+  const [updateStatus, setUpdateStatus] = useState("Not checked this session");
+  const releaseInfo = getReleaseInfo();
 
   useEffect(() => {
     if (!autofillSupported) return undefined;
@@ -92,21 +110,36 @@ export default function Settings() {
 
   const checkUpdates = async () => {
     if (!Updates.isEnabled) {
-      toast("OTA is not enabled in this APK. Install a build made with the OTA-enabled release workflow.", "info");
+      setUpdateStatus("OTA disabled in this installed APK");
+      toast("OTA is not enabled in this APK. Install the new OTA-enabled APK first.", "info");
       return;
     }
+    setUpdateStatus("Checking the " + releaseInfo.channel + " channel…");
     try {
-      const res = await Updates.checkForUpdateAsync();
-      if (!res.isAvailable) return toast("You're on the latest version", "info");
-      await Updates.fetchUpdateAsync();
-      Alert.alert("Update ready", "Restart Stashr to use the new version?", [
+      const result = await Updates.checkForUpdateAsync();
+      const checkedAt = new Date().toLocaleTimeString();
+      if (!result.isAvailable) {
+        setUpdateStatus("Checked " + checkedAt + ": already up to date");
+        toast("Stashr " + releaseInfo.version + " · OTA " + releaseInfo.otaVersion + " is up to date", "info");
+        return;
+      }
+      const targetVersion = result.manifest?.extra?.expoClient?.extra?.stashrRelease?.otaVersion || "new OTA release";
+      const fetched = await Updates.fetchUpdateAsync();
+      if (!fetched.isNew) {
+        setUpdateStatus("Checked " + checkedAt + ": update was not downloaded");
+        toast("An update was found, but no new bundle was downloaded", "info");
+        return;
+      }
+      setUpdateStatus("Downloaded " + targetVersion + " · restart to apply");
+      Alert.alert("Update ready", "Stashr OTA " + targetVersion + " is downloaded. Restart now to apply it?", [
         { text: "Later", style: "cancel" },
         { text: "Restart", onPress: () => Updates.reloadAsync() },
       ]);
     } catch (e) {
-      toast("Couldn't check for updates. Check your connection and try again.", "error");
+      setUpdateStatus("Update check failed · check internet, channel and runtime");
+      toast("Could not check for updates. Check your connection and try again.", "error");
     }
-  };
+  };;
 
   return (
     <View style={{ flex: 1 }}>
@@ -297,7 +330,12 @@ export default function Settings() {
           <Section title="APP" delay={220}>
             <StatusPill />
             <Row icon="globe" title="Server" subtitle={activeServer().replace(/^https?:\/\//, "")} color={theme.ok} right={null} />
-            <Row icon="refresh" title="Check for updates" subtitle={`${Updates.isEnabled ? `OTA ${Updates.channel || "enabled"}` : "OTA disabled in this build"} · Version ${Constants.expoConfig?.version || "1.0.0"}`} onPress={checkUpdates} />
+                        <Row
+              icon="refresh"
+              title="Check for updates"
+              subtitle={`App ${releaseInfo.version} · Build ${releaseInfo.build}\nOTA ${releaseInfo.otaVersion} · Channel ${releaseInfo.channel}\nRuntime ${releaseInfo.runtime} · ${releaseInfo.launch}\nUpdate ID ${releaseInfo.updateId} · Created ${releaseInfo.createdAt}\n${updateStatus}`}
+              onPress={checkUpdates}
+            />
             <Row icon="phone" title="Open the website" subtitle="Same vault, bigger screen" onPress={() => Linking.openURL(WEBSITE)} />
           </Section>
 
