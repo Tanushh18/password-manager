@@ -91,6 +91,10 @@ export default function Settings() {
   };
 
   const checkUpdates = async () => {
+    if (!Updates.isEnabled) {
+      toast("OTA is not enabled in this APK. Install a build made with the OTA-enabled release workflow.", "info");
+      return;
+    }
     try {
       const res = await Updates.checkForUpdateAsync();
       if (!res.isAvailable) return toast("You're on the latest version", "info");
@@ -100,7 +104,7 @@ export default function Settings() {
         { text: "Restart", onPress: () => Updates.reloadAsync() },
       ]);
     } catch (e) {
-      toast("Updates are available in release builds.", "info");
+      toast("Couldn't check for updates. Check your connection and try again.", "error");
     }
   };
 
@@ -293,7 +297,7 @@ export default function Settings() {
           <Section title="APP" delay={220}>
             <StatusPill />
             <Row icon="globe" title="Server" subtitle={activeServer().replace(/^https?:\/\//, "")} color={theme.ok} right={null} />
-            <Row icon="refresh" title="Check for updates" subtitle={`Version ${Constants.expoConfig?.version || "1.0.0"}`} onPress={checkUpdates} />
+            <Row icon="refresh" title="Check for updates" subtitle={`${Updates.isEnabled ? `OTA ${Updates.channel || "enabled"}` : "OTA disabled in this build"} · Version ${Constants.expoConfig?.version || "1.0.0"}`} onPress={checkUpdates} />
             <Row icon="phone" title="Open the website" subtitle="Same vault, bigger screen" onPress={() => Linking.openURL(WEBSITE)} />
           </Section>
 
