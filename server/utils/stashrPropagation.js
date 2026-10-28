@@ -44,6 +44,15 @@ function mayRunAutomatically(state) {
   return Boolean(state.enabled && state.testedAt);
 }
 
+/** The variable names a service already has (Set), or null when they cannot be read. */
+async function existingKeys(request, apiKey, base) {
+  try {
+    const list = await request(apiKey, base + "/env-vars?limit=100");
+    if (!Array.isArray(list)) return null;
+    return new Set(list.map((item) => (item && item.envVar ? item.envVar.key : item && item.key)).filter(Boolean));
+  } catch { return null; }
+}
+
 /**
  * Writes the variable to each target and deploys it. `request(apiKey, path, options)` is Render's API call and
  * `apiKeyFor(accountId)` the key of that account. Returns one result per target; never throws for a single service.
@@ -54,8 +63,15 @@ async function applyToTargets(targets, mainUrl, { request, apiKeyFor, names = [E
     const apiKey = apiKeyFor(target.accountId);
     if (!apiKey) { results.push({ ...target, ok: false, error: "Render account not connected." }); continue; }
     const base = "/v1/services/" + encodeURIComponent(target.serviceId);
+    // Render's PUT creates the variable when it is missing and updates it when it exists. Read the keys first only to
+    // tell the user which one happened; if the read fails the write still goes ahead and is reported as "set".
+    const existing = await existingKeys(request, apiKey, base);
+    const actions = {};
     try {
-      for (const name of names) await request(apiKey, base + "/env-vars/" + name, { method: "PUT", body: { value: mainUrl } });
+      for (const name of names) {
+        await request(apiKey, base + "/env-vars/" + name, { method: "PUT", body: { value: mainUrl } });
+        actions[name] = existing ? (existing.has(name) ? "updated" : "created") : "set";
+      }
     } catch (error) {
       results.push({ ...target, ok: false, error: error.status === 404 ? "Service no longer exists on Render." : "Render refused the variable." });
       continue;
@@ -65,7 +81,7 @@ async function applyToTargets(targets, mainUrl, { request, apiKeyFor, names = [E
       try { await request(apiKey, base + "/deploys", { method: "POST", body: { clearCache: "do_not_clear", deployMode: "build_and_deploy" } }); deployed = true; }
       catch { /* a suspended service cannot deploy; the variable is saved and applies on its next start */ }
     }
-    results.push({ ...target, ok: true, deployed });
+    results.push({ ...target, ok: true, deployed, actions });
   }
   return results;
 }

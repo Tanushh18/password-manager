@@ -99,14 +99,37 @@ describe("envNamesFor", () =>
     {
         const calls = [];
         await applyToTargets([{ serviceId: "srv-1", accountId: "a", name: "one" }], "https://m.example", {
-            request: async (k, path, o) => { calls.push(o.method + " " + path); },
+            request: async (k, path, o = {}) => { calls.push((o.method || "GET") + " " + path); },
             apiKeyFor: () => "k",
             names: [ENV_NAME, "REACT_APP_" + ENV_NAME]
         });
         expect(calls).toEqual([
+            "GET /v1/services/srv-1/env-vars?limit=100",
             "PUT /v1/services/srv-1/env-vars/" + ENV_NAME,
             "PUT /v1/services/srv-1/env-vars/REACT_APP_" + ENV_NAME,
             "POST /v1/services/srv-1/deploys"
         ]);
+    });
+});
+
+describe("create or update", () =>
+{
+    test("a missing variable is reported as created and an existing one as updated", async () =>
+    {
+        const request = async (key, path, options = {}) =>
+        {
+            if (!options.method) return [{ envVar: { key: ENV_NAME, value: "old" } }, { envVar: { key: "OTHER", value: "x" } }];
+        };
+        const results = await applyToTargets([{ serviceId: "srv-1", accountId: "a", name: "one" }], "https://m.example", {
+            request, apiKeyFor: () => "k", names: [ENV_NAME, "REACT_APP_" + ENV_NAME]
+        });
+        expect(results[0].actions).toEqual({ [ENV_NAME]: "updated", ["REACT_APP_" + ENV_NAME]: "created" });
+    });
+    test("when the existing variables cannot be read, the write still happens and is reported as set", async () =>
+    {
+        const request = async (key, path, options = {}) => { if (!options.method) throw new Error("no list"); };
+        const results = await applyToTargets([{ serviceId: "srv-1", accountId: "a", name: "one" }], "https://m.example", { request, apiKeyFor: () => "k" });
+        expect(results[0].ok).toBe(true);
+        expect(results[0].actions).toEqual({ [ENV_NAME]: "set" });
     });
 });

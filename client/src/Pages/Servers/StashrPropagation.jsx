@@ -5,6 +5,13 @@ import * as api from "../../api/client";
 /* Admin: keep other apps pointed at Stashr's main server. Pick the apps (your GitHub projects); when the main server
    changes, Stashr writes its address into those apps' Render env and deploys them again. One test on a single app
    comes first; after it works, Automatic can be switched on. */
+// "created 1, updated 2" over every variable written in a run.
+function whatChanged(run) {
+  const counts = { created: 0, updated: 0, set: 0 };
+  for (const service of (run && run.services) || []) for (const action of Object.values(service.actions || {})) if (action in counts) counts[action] += 1;
+  return ["created", "updated", "set"].filter((k) => counts[k]).map((k) => `${k} ${counts[k]}`).join(", ");
+}
+
 export default function StashrPropagation() {
   const [data, setData] = useState(null);
   const [selected, setSelected] = useState([]);
@@ -38,7 +45,7 @@ export default function StashrPropagation() {
       const res = await api.testStashrPropagation(project.id);
       const run = (res.runs || [])[0];
       if (res.skipped) toast.info(res.skipped);
-      else if (run && run.ok) toast.success(`Updated ${project.name}. You can switch Automatic on.`);
+      else if (run && run.ok) toast.success(`${project.name}: ${whatChanged(run) || "done"}. You can switch Automatic on.`);
       else toast.error(run ? `${project.name}: ${run.error || "a service refused the update."}` : "Nothing was updated.");
       load();
     } catch (err) { toast.error(api.errorMessage(err, "The test failed.")); }
@@ -102,7 +109,7 @@ export default function StashrPropagation() {
           {busy === "all" ? "Updating…" : "Update selected apps now"}
         </button>
       </div>
-      {data.lastRunAt ? <small className="servers__hint">Last run {new Date(data.lastRunAt).toLocaleString()}: {(data.lastRun || []).map((r) => `${r.name || "app"} ${r.ok ? "ok" : "failed"}`).join(", ") || "nothing to update"}</small> : null}
+      {data.lastRunAt ? <small className="servers__hint">Last run {new Date(data.lastRunAt).toLocaleString()}: {(data.lastRun || []).map((r) => `${r.name || "app"} ${r.ok ? (whatChanged(r) || "ok") : "failed"}`).join(", ") || "nothing to update"}</small> : null}
     </section>
   );
 }

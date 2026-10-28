@@ -53,7 +53,7 @@ async function applyProject(user, dataKey, projectId, mainUrl) {
   });
   return {
     projectId, name: fields.name, ok: P.projectApplied(results),
-    services: results.map(({ name, ok, deployed, error }) => ({ name, ok, deployed: Boolean(deployed), error: error || "" }))
+    services: results.map(({ name, ok, deployed, error, actions }) => ({ name, ok, deployed: Boolean(deployed), error: error || "", actions: actions || {} }))
   };
 }
 
