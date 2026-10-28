@@ -55,3 +55,4 @@ mobile/ios/Pods/
 
 # Temporary git worktrees used by parallel coding agents
 .claude/worktrees/
+extension/dist/

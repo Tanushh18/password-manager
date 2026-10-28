@@ -8,9 +8,12 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
   "host_permissions": [
-    "https://password-manager-server-xxdr.onrender.com/*",
     "https://password-manager-server-xxdr.onrender.com/*"
   ],
   "action": {
