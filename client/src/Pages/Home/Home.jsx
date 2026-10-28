@@ -137,6 +137,43 @@ function Home() {
         </div>
       </section>
 
+      <section className="hm-command shell" aria-labelledby="hm-command-title">
+        <div className="hm-command__intro">
+          <p className="hm-board-head__label">Vault command deck</p>
+          <h2 id="hm-command-title">Your whole digital life. One protected orbit.</h2>
+          <p>Move from personal logins to developer projects and security checks without losing your place. The scene is decorative; every station below opens a real Stashr feature.</p>
+          <div className="hm-command__stats" aria-label="Vault overview">
+            <div><strong>{signedIn ? count : "—"}</strong><span>Vault items</span></div>
+            <div><strong>{signedIn ? "Ready" : "Private"}</strong><span>{signedIn ? "Account state" : "Sign in to view"}</span></div>
+          </div>
+          <Link to={signedIn ? "/security-center" : "/signin"} className="btn btn--primary hm-command__cta">
+            {signedIn ? "Open security center" : "Sign in to your vault"} <Arrow size={15} />
+          </Link>
+        </div>
+        <div className="hm-command__universe" aria-hidden="true">
+          <div className="hm-orbit hm-orbit--outer"><span /><span /><span /></div>
+          <div className="hm-orbit hm-orbit--inner"><span /><span /></div>
+          <div className="hm-core"><ShieldCheck size={44} /><small>STASHR</small></div>
+          <span className="hm-universe__spark hm-universe__spark--one" />
+          <span className="hm-universe__spark hm-universe__spark--two" />
+          <span className="hm-universe__spark hm-universe__spark--three" />
+        </div>
+        <nav className="hm-command__stations" aria-label="Vault stations">
+          <Link to={signedIn ? "/passwords" : "/signup"} className="hm-station hm-station--vault">
+            <span className="hm-station__symbol"><LockLine size={19} /></span><span><strong>Password vault</strong><small>Logins, notes &amp; codes</small></span><Arrow size={15} />
+          </Link>
+          <Link to={signedIn ? "/projects" : "/signup"} className="hm-station hm-station--dev">
+            <span className="hm-station__symbol"><Folder size={19} /></span><span><strong>Developer vault</strong><small>Projects &amp; configuration</small></span><Arrow size={15} />
+          </Link>
+          <Link to={signedIn ? "/security-center" : "/signup"} className="hm-station hm-station--security">
+            <span className="hm-station__symbol"><ShieldCheck size={19} /></span><span><strong>Security center</strong><small>Health, breaches &amp; sessions</small></span><Arrow size={15} />
+          </Link>
+          <Link to={signedIn ? "/generator" : "/signup"} className="hm-station hm-station--tools">
+            <span className="hm-station__symbol"><KeyLine size={19} /></span><span><strong>Creation lab</strong><small>Generate strong credentials</small></span><Arrow size={15} />
+          </Link>
+        </nav>
+      </section>
+
       <section className="hm-section shell" id="hm-destinations" tabIndex={-1} aria-labelledby="hm-dest-title">
         <header className="hm-board-head">
           <span className="hm-board-head__label">Destinations</span>
