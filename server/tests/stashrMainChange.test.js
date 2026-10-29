@@ -32,3 +32,18 @@ describe("frontendTargets", () =>
         expect(frontendTargets({ ...stashrProject, repoUrl: "https://github.com/someone/else" })).toEqual([]);
     });
 });
+
+describe("isFrontendService", () =>
+{
+    const { isFrontendService } = require("../utils/stashrMainChange");
+    test("matches the stashr-client service by name", () =>
+    {
+        expect(isFrontendService({ id: "srv-1", name: "stashr-client" })).toBe(true);
+        expect(isFrontendService({ id: "srv-2", name: "password-manager-server" })).toBe(false);
+    });
+    test("rejects a stashr-client service that Render reports from another repo", () =>
+    {
+        expect(isFrontendService({ id: "srv-3", name: "stashr-client", repo: "https://github.com/someone/else" })).toBe(false);
+        expect(isFrontendService({ id: "srv-4", name: "stashr-client", repo: "https://github.com/Tanushh18/password-manager" })).toBe(true);
+    });
+});

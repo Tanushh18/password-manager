@@ -5,6 +5,7 @@
       project feeds is published again. Nothing is deleted. */
 const User = require("../models/schema");
 const renderOps = require("./renderOps");
+const { fetchAllPages } = require("./renderPaging");
 const { repoKey } = require("./projectLink");
 const { swapServerUrl } = require("./serverUrlsSync");
 const { publishToRegistry } = require("./projectServers");
@@ -20,10 +21,16 @@ function frontendValue(urls) {
   return (urls || []).map((u) => String(u || "").trim().replace(/\/+$/, "")).filter(Boolean).join(",");
 }
 
-/** The stashr-client service of the Stashr project, or none for any other project. Pure. */
+/** The stashr-client service linked to the Stashr project, or none for any other project. Pure. */
 function frontendTargets(fields) {
   if (repoKey(fields.repoUrl) !== STASHR_REPO) return [];
   return P.targetsOf(fields).filter((t) => t.name === FRONTEND_SERVICE);
+}
+
+/** Is this Render service the Stashr frontend? Matched by name, and by repo when Render reports one. Pure. */
+function isFrontendService(service) {
+  if (!service || service.name !== FRONTEND_SERVICE) return false;
+  return !service.repo || repoKey(service.repo) === STASHR_REPO;
 }
 
 function fieldsOf(entry, dataKey) {
@@ -35,9 +42,29 @@ function fieldsOf(entry, dataKey) {
   }
 }
 
+/** Every stashr-client service in the connected Render accounts, whether or not a project links it. */
+async function findFrontendTargets(user, dataKey) {
+  const found = [];
+  for (const entry of user.renderAccounts || []) {
+    if (entry.enc !== "udk") continue;
+    const accountId = String(entry._id);
+    const apiKey = renderOps.accountApiKey(user, dataKey, accountId);
+    if (!apiKey) continue;
+    let services = [];
+    try {
+      services = (await fetchAllPages((p) => renderOps.renderRequest(apiKey, p), "/v1/services")).items.map((i) => i?.service || i).filter((s) => s?.id);
+    } catch {
+      continue;
+    }
+    for (const service of services) if (isFrontendService(service)) found.push({ serviceId: service.id, accountId, name: service.name });
+  }
+  return found;
+}
+
 /** Writes VITE_API_URLS to the Stashr frontend and deploys it, so the build picks up the new list. */
 async function updateFrontend(user, dataKey, urls) {
   const byService = new Map();
+  for (const target of await findFrontendTargets(user, dataKey)) byService.set(target.serviceId, target);
   for (const entry of user.projects || []) {
     const fields = fieldsOf(entry, dataKey);
     if (!fields) continue;
@@ -92,4 +119,4 @@ async function onStashrListSaved(user, { oldMain, urls }) {
   return result;
 }
 
-module.exports = { frontendValue, frontendTargets, onStashrListSaved };
+module.exports = { frontendValue, frontendTargets, isFrontendService, onStashrListSaved };
