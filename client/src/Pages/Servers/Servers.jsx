@@ -8,6 +8,7 @@ import "./Servers.css";
 import MascotBanner from "../../Components/Robot/MascotBanner";
 import StashrPropagation from "./StashrPropagation";
 import { registryMood } from "../../lib/pageMoods";
+import { addUrl, moveUrl, setPrimary, isDirty, describeChanges } from "../../lib/serverList";
 /* One app's editable URL list. Saving updates the registry; apps pick it up the next time they start. */
 const ago = (value) => {
   const t = new Date(value).getTime();
@@ -101,7 +102,9 @@ function AppCard({ entry, sync, onSaved, onSyncChanged }) {
   const [saving, setSaving] = useState(false);
   const [envOpen, setEnvOpen] = useState(false);
   const renderServers = sync?.items?.filter((i) => i.kind === "render").length || 0;
-  const dirty = JSON.stringify(urls) !== JSON.stringify(entry.urls);
+  const [addOpen, setAddOpen] = useState(false);
+  const [announce, setAnnounce] = useState("");
+  const dirty = isDirty(urls, entry.urls);
   // Optimistic: flip immediately, roll back only if the server refuses.
   const [autoOn, setAutoOn] = useState(sync?.autoSync ?? true);
   useEffect(() => { setAutoOn(sync?.autoSync ?? true); }, [sync?.autoSync]);
@@ -117,28 +120,25 @@ function AppCard({ entry, sync, onSaved, onSyncChanged }) {
   }, []);
 
   const add = () => {
-    const url = draft.trim().replace(/\/+$/, "");
-    if (!url) return;
-    if (!/^https:\/\//i.test(url)) return toast.error("Use a full https:// address.");
-    if (urls.includes(url)) return toast.info("That URL is already in the list.");
-    setUrls([...urls, url]);
+    const res = addUrl(urls, draft);
+    if (res.error) return toast.error(res.error);
+    setUrls(res.urls);
     setDraft("");
+    setAddOpen(false);
   };
 
   // Stashr's own list: the first URL is the main server. The toggle moves a URL to the top; save makes it live.
   const isStashr = entry.app === "stashr";
   const makeMain = (i) => {
-    const next = [...urls];
-    const [chosen] = next.splice(i, 1);
-    setUrls([chosen, ...next]);
+    setUrls(setPrimary(urls, i));
+    setAnnounce(`${urls[i]} is now the primary server. Not saved yet.`);
   };
 
   const move = (i, by) => {
-    const next = [...urls];
-    const j = i + by;
-    if (j < 0 || j >= next.length) return;
-    [next[i], next[j]] = [next[j], next[i]];
+    const next = moveUrl(urls, i, by);
+    if (next === urls) return;
     setUrls(next);
+    setAnnounce(`${urls[i]} moved to position ${i + by + 1} of ${urls.length}. Not saved yet.`);
   };
 
   const toggleAuto = async (enabled) => {
@@ -200,17 +200,17 @@ function AppCard({ entry, sync, onSaved, onSyncChanged }) {
               <span className={`servers__dot servers__dot--${h?.state || "idle"}`} title={h?.state || "not tested"} />
               <code className="servers__url">{url}</code>
               {isStashr && i === 0 ? <span className="servers__main">MAIN</span> : null}
-              {isStashr && i > 0 ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => makeMain(i)}>Set as primary</button> : null}
+              {isStashr && i > 0 ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => makeMain(i)} aria-label={"Set " + url + " as primary"}>Set as primary</button> : null}
               {h?.state === "up" && <span className="servers__ms">{h.ms} ms</span>}
               {h?.state === "down" && <span className="servers__ms servers__ms--bad">down</span>}
               {sync ? <RenderTag item={item} willRemove={autoOn && sync.willRemove?.includes(url)} /> : null}
               <span className="servers__tools">
-                <button type="button" className="btn btn--ghost btn--sm" onClick={() => test(url)} disabled={h?.state === "checking"}>
-                  {h?.state === "checking" ? "Testing…" : "Test"}
+                <button type="button" className="btn btn--ghost btn--sm" onClick={() => test(url)} aria-label={"Check health of " + url} disabled={h?.state === "checking"}>
+                  {h?.state === "checking" ? "Checking…" : "Check health"}
                 </button>
-                <button type="button" className="btn btn--ghost btn--sm" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up">↑</button>
-                <button type="button" className="btn btn--ghost btn--sm" onClick={() => move(i, 1)} disabled={i === urls.length - 1} aria-label="Move down">↓</button>
-                <button type="button" className="btn btn--ghost btn--sm" onClick={() => setUrls(urls.filter((u) => u !== url))} aria-label="Remove">
+                <button type="button" className="btn btn--ghost btn--sm" onClick={() => move(i, -1)} disabled={i === 0} aria-label={"Move " + url + " up"}>↑</button>
+                <button type="button" className="btn btn--ghost btn--sm" onClick={() => move(i, 1)} disabled={i === urls.length - 1} aria-label={"Move " + url + " down"}>↓</button>
+                <button type="button" className="btn btn--ghost btn--sm" onClick={() => setUrls(urls.filter((u) => u !== url))} aria-label={"Remove " + url + " from the list"}>
                   <Trash size={14} />
                 </button>
               </span>
@@ -226,17 +226,6 @@ function AppCard({ entry, sync, onSaved, onSyncChanged }) {
             Keep in sync with Render automatically
           </label>
           <span className="servers__hint">Suspended Render servers are dropped from this list in the background — never the last working one. Custom domains are never touched.</span>
-          {sync.add?.length ? (
-            <div className="servers__suggest">
-              <strong>Found on Render</strong>
-              {sync.add.map((a) => (
-                <div key={a.url} className="servers__suggest-row">
-                  <code>{a.url}</code><span className="servers__hint">{a.name}{a.accountName ? " · " + a.accountName : ""}</span>
-                  <button type="button" className="btn btn--ghost btn--sm" disabled={saving} onClick={() => void addSuggested(a.url)}>Add</button>
-                </div>
-              ))}
-            </div>
-          ) : null}
           {sync.log?.length ? (
             <ul className="servers__log" aria-label="Recent automatic changes">
               {sync.log.map((l, i) => <li key={i}><code>{l.url}</code> {l.action} · {l.reason} · {ago(l.at)}</li>)}
@@ -245,28 +234,59 @@ function AppCard({ entry, sync, onSaved, onSyncChanged }) {
         </div>
       ) : sync ? <p className="servers__hint">Connect a Render account on the Render page and this list syncs with it automatically.</p> : null}
 
-      <div className="servers__add">
-        <input
-          className="input"
-          value={draft}
-          placeholder="https://new-server.onrender.com"
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && add()}
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-        />
-        <button type="button" className="btn btn--ghost btn--sm" onClick={add}>Add</button>
+      <div className="servers__addmenu" onKeyDown={(e) => e.key === "Escape" && setAddOpen(false)}>
+        <button type="button" className="btn btn--ghost btn--sm" aria-expanded={addOpen} onClick={() => setAddOpen(!addOpen)}>
+          Add server
+        </button>
+        {addOpen && (
+          <div className="servers__addpanel">
+            <strong>Enter an address</strong>
+            <div className="servers__add">
+              <input
+                className="input"
+                value={draft}
+                autoFocus
+                aria-label={entry.label + " server address"}
+                placeholder="https://new-server.onrender.com"
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && add()}
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+              <button type="button" className="btn btn--ghost btn--sm" onClick={add}>Add to list</button>
+            </div>
+            {sync?.add?.length ? (
+              <div className="servers__suggest">
+                <strong>Found on Render</strong>
+                <span className="servers__hint">Adding one saves the list straight away.</span>
+                {sync.add.map((a) => (
+                  <div key={a.url} className="servers__suggest-row">
+                    <code>{a.url}</code><span className="servers__hint">{a.name}{a.accountName ? " · " + a.accountName : ""}</span>
+                    <button type="button" className="btn btn--ghost btn--sm" disabled={saving || dirty} title={dirty ? "Save or discard your edits first" : undefined} onClick={() => void addSuggested(a.url)}>Add and save</button>
+                  </div>
+                ))}
+              </div>
+            ) : sync?.renderConnected ? <p className="servers__hint">No other Render services found.</p> : null}
+          </div>
+        )}
       </div>
 
+      <p className="servers__sr" role="status" aria-live="polite">{announce}</p>
+
       <div className="servers__foot">
-        <button type="button" className="btn btn--primary btn--sm" onClick={save} disabled={!dirty || saving || urls.length === 0}>
-          {saving ? "Saving…" : "Save"}
-        </button>
-        {dirty && <button type="button" className="btn btn--ghost btn--sm" onClick={() => setUrls(entry.urls)}>Discard</button>}
         {renderServers >= 2 && <button type="button" className="btn btn--ghost btn--sm" onClick={() => setEnvOpen(true)}>Sync env across {renderServers} servers</button>}
         {!entry.saved && <span className="servers__hint">Showing the built-in defaults — nothing saved yet.</span>}
       </div>
+      {dirty && (
+        <div className="servers__unsaved" role="region" aria-label={entry.label + " unsaved changes"}>
+          <span><strong>Unsaved changes</strong> · {describeChanges(urls, entry.urls)}</span>
+          <span className="servers__unsaved-actions">
+            <button type="button" className="btn btn--ghost btn--sm" disabled={saving} onClick={() => { setUrls(entry.urls); setAnnounce("Changes discarded."); }}>Discard</button>
+            <button type="button" className="btn btn--primary btn--sm" onClick={save} disabled={saving || urls.length === 0}>{saving ? "Saving…" : "Save"}</button>
+          </span>
+        </div>
+      )}
       {envOpen && <EnvSyncModal app={entry.app} label={entry.label} onClose={() => setEnvOpen(false)} />}
     </section>
   );
