@@ -99,23 +99,44 @@ async function followProjects(user, dataKey, oldUrl, newUrl) {
   return updated;
 }
 
+const LOG_LIMIT = 20;
+
+/** Appends short, non-secret entries to the Stashr list's history (the same log the Servers page shows). Never throws. */
+async function logStashrChange(entries) {
+  if (!entries.length) return;
+  try {
+    const Registry = require("../models/registry");
+    await Registry.updateOne({ app: "stashr" }, { $push: { syncLog: { $each: entries, $slice: -LOG_LIMIT } } }, { upsert: true });
+  } catch {
+    /* the history is informational; a failed write must not fail the save */
+  }
+}
+
 /** Runs after the Stashr server list is saved. Never throws: the list is already saved, so each part reports its own error. */
 async function onStashrListSaved(user, { oldMain, urls }) {
   const dataKey = await user.getDataKey();
   const newMain = (urls || [])[0] || "";
   const result = { frontend: null, projectsUpdated: 0 };
+  const at = new Date();
+  const history = [];
+  if (oldMain && newMain && oldMain !== newMain) history.push({ at, action: "primary changed", url: newMain, reason: "was " + oldMain });
   try {
     result.frontend = await updateFrontend(user, dataKey, urls);
+    history.push({ at, action: result.frontend.ok ? "frontend updated" : "frontend failed", url: newMain, reason: result.frontend.ok ? "stashr-client redeployed with the new list" : (result.frontend.error || "not updated").slice(0, 160) });
   } catch {
     result.frontend = { ok: false, error: "Could not update the Stashr frontend. Save the list again to retry." };
+    history.push({ at, action: "frontend failed", url: newMain, reason: "error while updating stashr-client" });
   }
   if (oldMain && newMain && oldMain !== newMain) {
     try {
       result.projectsUpdated = await followProjects(user, dataKey, oldMain, newMain);
+      history.push({ at, action: "projects updated", url: newMain, reason: result.projectsUpdated + " project(s) moved from the old address" });
     } catch {
       result.projectsError = "Some projects still list the old Stashr address. Save the list again to retry.";
+      history.push({ at, action: "projects failed", url: newMain, reason: "some project server lists were not updated" });
     }
   }
+  await logStashrChange(history);
   return result;
 }
 

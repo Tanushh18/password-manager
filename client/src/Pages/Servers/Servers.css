@@ -49,3 +49,8 @@
 @media (max-width: 640px) { .servers .btn, .security-page .btn { min-height: 44px; } }
 .servers__main { font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #2e7d32; color: #fff; letter-spacing: 0.06em; }
 .servers__auto { display: block; margin: 10px 0 6px; }
+
+.servers__overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 0; }
+.servers__overview div { min-width: 0; }
+.servers__overview dt { font-size: 12px; opacity: 0.7; }
+.servers__overview dd { margin: 2px 0 0; overflow-wrap: anywhere; }

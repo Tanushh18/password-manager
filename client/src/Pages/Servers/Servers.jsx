@@ -272,6 +272,24 @@ function AppCard({ entry, sync, onSaved, onSyncChanged }) {
   );
 }
 
+/* Overview from data the page already has: no extra scan. Shows the primary, backups, Render status and the last Stashr change. */
+function ServerOverview({ apps, sync }) {
+  const stashr = apps.find((a) => a.app === "stashr");
+  const urls = (stashr && stashr.urls) || [];
+  const stashrSync = sync.stashr;
+  const lastChange = stashrSync && (stashrSync.log || [])[0];
+  return (
+    <section className="card servers__card" aria-label="Server overview">
+      <dl className="servers__overview">
+        <div><dt>Primary</dt><dd><code>{urls[0] || "none"}</code></dd></div>
+        <div><dt>Backups</dt><dd>{Math.max(urls.length - 1, 0)}</dd></div>
+        <div><dt>Render</dt><dd>{stashrSync ? (stashrSync.renderConnected ? "Connected" : "Not connected") : "Unknown"}</dd></div>
+        <div><dt>Last Stashr change</dt><dd>{lastChange ? `${lastChange.action} · ${ago(lastChange.at)}` : "None recorded"}</dd></div>
+      </dl>
+    </section>
+  );
+}
+
 export default function Servers() {
   const [apps, setApps] = useState(null);
   const [sync, setSync] = useState({}); // app -> Render sync info (automatic; optional)
@@ -329,6 +347,7 @@ export default function Servers() {
           ) : null}
         </header>
 
+        {apps && <ServerOverview apps={apps} sync={sync} />}
         {apps && <MascotBanner kind="satellite" {...registryMood(apps)} />}
         {error && <p className="servers__error">{error}</p>}
         {!apps && !error && <p className="servers__hint">Loading…</p>}
