@@ -54,3 +54,10 @@
 .servers__overview div { min-width: 0; }
 .servers__overview dt { font-size: 12px; opacity: 0.7; }
 .servers__overview dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+
+.servers__addmenu { display: grid; gap: .6rem; margin-bottom: 1rem; justify-items: start; }
+.servers__addpanel { display: grid; gap: .6rem; width: 100%; padding: .7rem; border: 1px solid var(--line-strong); border-radius: var(--r-md); }
+.servers__addpanel .servers__add { margin-bottom: 0; }
+.servers__unsaved { position: sticky; bottom: .5rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem; margin-top: .8rem; padding: .6rem .8rem; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface, #fff); box-shadow: 0 4px 16px rgba(0,0,0,.12); font-size: .85rem; }
+.servers__unsaved-actions { display: flex; gap: .5rem; }
+.servers__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; margin: 0; }
