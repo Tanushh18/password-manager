@@ -86,6 +86,7 @@
     },
     "extra": {
       "apiServers": [
+        "https://password-manager-server-g305.onrender.com",
         "https://password-manager-server-xxdr.onrender.com"
       ],
       "router": {}

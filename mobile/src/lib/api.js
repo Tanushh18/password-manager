@@ -12,6 +12,7 @@ let active = 0;
 const SERVERS = (fromEnv.length
   ? fromEnv
   : Constants.expoConfig?.extra?.apiServers || [
+      "https://password-manager-server-g305.onrender.com",
       "https://password-manager-server-xxdr.onrender.com",
     ]
 ).map((u) => u.replace(/\/+$/, ""));

@@ -7,6 +7,7 @@ const { isAdminEmail } = require("./registryDefaults");
 const { stashrUrls } = require("./mainServer");
 const P = require("./stashrPropagation");
 const { withRunLock } = require("./runLock");
+const { publishOta, otaWorkflowFor } = require("./stashrOta");
 
 const FIELD = "stashrPropagation";
 const emptyState = () => ({ enabled: false, projectIds: [], applied: {}, testedAt: null, lastRunAt: null, lastRun: [] });
@@ -45,6 +46,12 @@ function listProjects(user, dataKey) {
 async function applyProject(user, dataKey, projectId, mainUrl) {
   const fields = projectFields(user, dataKey, projectId);
   if (!fields) return { projectId, ok: false, error: "Project not found." };
+  // A mobile app that gets an OTA reads the address from its build, not from Render: its Render env and server are
+  // left alone and only the OTA is published.
+  if (otaWorkflowFor(fields.repoUrl)) {
+    const ota = await publishOta(user, dataKey, fields.repoUrl, mainUrl);
+    return { projectId, name: fields.name, ok: Boolean(ota.ok), error: ota.ok ? "" : ota.message, envSkipped: true, ota: { ok: Boolean(ota.ok), message: ota.message }, services: [] };
+  }
   const targets = P.targetsOf(fields);
   if (!targets.length) return { projectId, name: fields.name, ok: false, error: "No Render service is linked to this project." };
   const results = await P.applyToTargets(targets, mainUrl, {

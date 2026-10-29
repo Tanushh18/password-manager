@@ -7,6 +7,15 @@ const { stashrUrls } = require("../utils/mainServer");
 const { ENV_NAME } = require("../utils/stashrPropagation");
 const runner = require("../utils/stashrPropagationRunner");
 
+// The latest Stashr frontend (stashr-client) update from the same history log the Servers page shows.
+async function frontendStatus() {
+  try {
+    const row = await require("../models/registry").findOne({ app: "stashr" }, { syncLog: 1 }).lean();
+    const entry = ((row && row.syncLog) || []).filter((e) => /^frontend /.test(e.action || "")).pop();
+    return entry ? { ok: entry.action === "frontend updated", at: entry.at, message: String(entry.reason || "").slice(0, 160) } : null;
+  } catch { return null; }
+}
+
 const requireAdmin = (req, res, next) => (registry.isAdminUser(req.rootUser) ? next() : res.status(403).json({ error: "Not allowed." }));
 const fail = (res) => res.status(500).json({ error: "Could not complete that." });
 
@@ -19,7 +28,8 @@ router.get("/stashr/propagation", authenticate, requireAdmin, async (req, res) =
       mainUrl: (await stashrUrls())[0] || "",
       enabled: state.enabled, projectIds: state.projectIds, testedAt: state.testedAt,
       lastRunAt: state.lastRunAt, lastRun: state.lastRun, applied: state.applied,
-      projects: runner.listProjects(req.rootUser, dataKey)
+      projects: runner.listProjects(req.rootUser, dataKey),
+      frontend: await frontendStatus()
     });
   } catch { return fail(res); }
 });
