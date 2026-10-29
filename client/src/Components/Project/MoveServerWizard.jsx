@@ -25,6 +25,19 @@ const STEPS = [
   ["delete", "Delete the old server"]
 ];
 
+// What must be true before each stage can run. The server enforces these too; this text only explains them.
+const PREREQS = {
+  plan: "Both Render accounts must be connected and the new account must differ from the current one.",
+  create: "The plan has been checked and a destination account is chosen.",
+  config: "The replacement server exists.",
+  live: "The replacement has been created.",
+  frontends: "The replacement's latest deployment is Live.",
+  domains: "The replacement's configuration is copied.",
+  verify: "Custom domains are transferred (or none exist) and the replacement is Live.",
+  relink: "The replacement is verified. Relinking is refused until its latest deploy is Live.",
+  delete: "The project points at the new server. Type the old server's name to confirm."
+};
+
 /**
  * Moves one Render server to another connected account, step by step. Every step is a button you press; the old
  * server is only deleted at the very end, after the project points at the new one, and only when you type its name.
@@ -233,9 +246,15 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
     <Modal open={open} onClose={busy || initializing ? () => {} : onClose} center classNames={{ modal: "mv-modal" }}>
       <h2 className="mv__title">Move {target.name} to another account</h2>
       <p className="field__note">The new server is built first, and the old one is deleted last. You can stop at any step: nothing is deleted until the final one.</p>
-      <ol className="mv__steps">
-        {visibleSteps.map(([id, label]) => <li key={id} className={"is-" + state(id)}><span className="mv__dot">{state(id) === "done" ? "✓" : ""}</span>{label}</li>)}
+      <ol className="mv__steps" aria-label="Migration stages">
+        {visibleSteps.map(([id, label]) => (
+          <li key={id} className={"is-" + state(id)} aria-current={state(id) === "active" ? "step" : undefined}>
+            <span className="mv__dot">{state(id) === "done" ? "✓" : ""}</span>{label}
+            {state(id) === "active" ? <small className="field__note"> Needs: {PREREQS[id]}</small> : null}
+          </li>
+        ))}
       </ol>
+      <p className="field__note">The original server keeps running until the final step. Stopping or closing here is safe; reopen the wizard to resume.</p>
       {error ? <div className="notice notice--err" role="alert">{error}</div> : null}
       {initializing ? (
         <div className="mv__activity" role="status" aria-live="polite">
