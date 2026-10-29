@@ -3,13 +3,27 @@ import { toast } from "react-toastify";
 import * as api from "../../api/client";
 
 /* Admin: keep other apps pointed at Stashr's main server. Pick the apps (your GitHub projects); when the main server
-   changes, Stashr writes its address into those apps' Render env and deploys them again. One test on a single app
+   changes, Stashr writes its address into those apps' Render env and deploys them again; mobile apps with an OTA workflow get the OTA instead. One test on a single app
    comes first; after it works, Automatic can be switched on. */
 // "created 1, updated 2" over every variable written in a run.
 function whatChanged(run) {
   const counts = { created: 0, updated: 0, set: 0 };
   for (const service of (run && run.services) || []) for (const action of Object.values(service.actions || {})) if (action in counts) counts[action] += 1;
   return ["created", "updated", "set"].filter((k) => counts[k]).map((k) => `${k} ${counts[k]}`).join(", ");
+}
+
+// One clear line per step for an app, from its entry in the last run: Render env, Render deploy, OTA to phones.
+function steps(run) {
+  if (!run) return [];
+  if (run.envSkipped) return [{ label: "Server env", ok: true, text: "skipped (this app uses OTA)", neutral: true }, { label: "App OTA", ok: run.ota.ok, text: run.ota.ok ? "started" : run.ota.message || "failed" }];
+  const list = run.services || [];
+  const deployed = list.filter((x) => x.ok && x.deployed).length;
+  const out = [
+    { label: "Server env", ok: run.ok, text: run.ok ? "updated" : run.error || "failed" },
+    { label: "Server deploy", ok: list.length > 0 && deployed === list.length, text: `${deployed}/${list.length} deployed` }
+  ];
+  if (run.ota) out.push({ label: "App OTA", ok: run.ota.ok, text: run.ota.ok ? "started" : run.ota.message || "failed" });
+  return out;
 }
 
 export default function StashrPropagation() {
@@ -67,12 +81,18 @@ export default function StashrPropagation() {
     finally { setBusy(""); }
   };
 
+  const lastRun = Object.fromEntries((data.lastRun || []).map((r) => [r.projectId, r]));
+  const fe = data.frontend;
   return (
     <section className="card servers__card">
       <header className="servers__head">
         <h2>Apps that follow Stashr's main server</h2>
         <span className="servers__hint">Main now: <code>{data.mainUrl || "none"}</code> · variable <code>{data.envName}</code></span>
       </header>
+
+      <small className="servers__hint">
+        Stashr frontend: {fe ? `${fe.ok ? "✅ updated" : "❌ failed"} ${fe.at ? new Date(fe.at).toLocaleString() : ""}${fe.message ? " · " + fe.message : ""}` : "no update recorded yet"}
+      </small>
 
       <ul className="servers__list">
         {data.projects.map((p) => {
@@ -86,6 +106,14 @@ export default function StashrPropagation() {
               <code className="servers__url">{p.repo}</code>
               <span className="servers__ms">{p.services} service{p.services === 1 ? "" : "s"}</span>
               {checked && upToDate ? <span className="servers__main">UP TO DATE</span> : null}
+              {checked && lastRun[p.id] ? (
+                <span className="servers__steps" style={{ flexBasis: "100%", display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12 }}>
+                  {steps(lastRun[p.id]).map((st) => (
+                    <span key={st.label} title={st.text}>{st.neutral ? "➖" : st.ok ? "✅" : "❌"} {st.label}: {st.text}</span>
+                  ))}
+                  {!lastRun[p.id].ota && lastRun[p.id].ok ? <span>➖ App OTA: not configured for this app</span> : null}
+                </span>
+              ) : null}
               <span className="servers__tools">
                 {checked ? (
                   <button type="button" className="btn btn--ghost btn--sm" disabled={Boolean(busy)} onClick={() => test(p)}>
