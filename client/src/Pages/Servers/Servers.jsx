@@ -163,7 +163,15 @@ function AppCard({ entry, sync, onSaved, onSyncChanged }) {
   const save = async () => {
     setSaving(true);
     try {
-      const res = await api.saveRegistry(entry.app, urls);
+      let res;
+      try {
+        res = await api.saveRegistry(entry.app, urls);
+      } catch (err) {
+        // The new Stashr primary did not answer its health check. Saving is allowed only after an explicit OK.
+        if (!err.response?.data?.unhealthy) throw err;
+        if (!window.confirm(`${err.response.data.error}\n\nSave anyway?`)) return;
+        res = await api.saveRegistry(entry.app, urls, { force: true });
+      }
       toast.success(`${entry.label} servers saved.`);
       const frontend = res.data.stashr?.frontend;
       if (frontend && !frontend.ok) toast.error(frontend.error || "Stashr's own frontend was not updated. Save again to retry.");

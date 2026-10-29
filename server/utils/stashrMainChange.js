@@ -119,4 +119,10 @@ async function onStashrListSaved(user, { oldMain, urls }) {
   return result;
 }
 
-module.exports = { frontendValue, frontendTargets, isFrontendService, onStashrListSaved };
+/** True when saving Stashr's list changes its primary and the admin has not already accepted an unhealthy primary. Pure. */
+function needsPrimaryCheck({ app, previousUrls, urls, force }) {
+  if (app !== "stashr" || force || !(urls || [])[0]) return false;
+  return Boolean((previousUrls || [])[0]) && previousUrls[0] !== urls[0];
+}
+
+module.exports = { frontendValue, frontendTargets, isFrontendService, needsPrimaryCheck, onStashrListSaved };

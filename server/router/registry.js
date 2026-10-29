@@ -15,7 +15,7 @@ const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
 
 const { ADMINS, DEFAULTS, OFFABLE, APP_LABELS, SLUG, urlsFor } = require("../utils/registryDefaults");
-const { onStashrListSaved } = require("../utils/stashrMainChange");
+const { onStashrListSaved, needsPrimaryCheck } = require("../utils/stashrMainChange");
 const MAX_URLS = 10;
 
 const isAdminUser = (user) => Boolean(user && user.email && ADMINS.includes(String(user.email).toLowerCase()));
@@ -106,6 +106,13 @@ router.put("/registry/:app", authenticate, writeLimiter, async (req, res) =>
     if (urls.length === 0 && DEFAULTS[app] && !OFFABLE.has(app)) return res.status(400).json({ error: "Keep at least one server URL." });
     if (urls.length > MAX_URLS) return res.status(400).json({ error: `At most ${MAX_URLS} URLs per app.` });
 
+    // Changing Stashr's primary is what every app and the Stashr frontend follow. Check the new primary answers first;
+    // a slow free server can fail once, so the admin may save anyway after seeing the warning (force: true).
+    if (needsPrimaryCheck({ app, previousUrls: existing && existing.urls, urls, force: req.body.force === true })) {
+        const health = await probeHealth(urls[0]);
+        if (!health.ok) return res.status(409).json({ error: `The new primary did not answer its health check (${health.status || "no response"}). Check it, or save anyway.`, unhealthy: true, url: urls[0] });
+    }
+
     try
     {
         const doc = await Registry.findOneAndUpdate(
@@ -123,12 +130,8 @@ router.put("/registry/:app", authenticate, writeLimiter, async (req, res) =>
     }
 });
 
-router.post("/registry/check", authenticate, requireAdmin, checkLimiter, async (req, res) =>
-{
-    const url = cleanUrl(req.body.url);
-    if (!url) return res.status(400).json({ error: "Not a valid URL." });
-
-    // Apps keep their API under a path (".../api"); /health lives at the host root.
+/** GET <origin>/health with a 15 second limit. Apps keep their API under a path (".../api"); /health lives at the host root. Read-only. */
+async function probeHealth(url) {
     const target = new URL(url).origin + "/health";
     const started = Date.now();
     const controller = new AbortController();
@@ -136,13 +139,20 @@ router.post("/registry/check", authenticate, requireAdmin, checkLimiter, async (
     try
     {
         const response = await fetch(target, { signal: controller.signal, redirect: "manual" });
-        return res.json({ ok: response.ok, status: response.status, ms: Date.now() - started });
+        return { ok: response.ok, status: response.status, ms: Date.now() - started };
     }
     catch (error)
     {
-        return res.json({ ok: false, status: 0, ms: Date.now() - started });
+        return { ok: false, status: 0, ms: Date.now() - started };
     }
     finally { clearTimeout(timer); }
+}
+
+router.post("/registry/check", authenticate, requireAdmin, checkLimiter, async (req, res) =>
+{
+    const url = cleanUrl(req.body.url);
+    if (!url) return res.status(400).json({ error: "Not a valid URL." });
+    return res.json(await probeHealth(url));
 });
 
 // Public read. Registered last so it never shadows the fixed paths above.

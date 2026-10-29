@@ -207,7 +207,7 @@ refreshServers().finally(() => { pruneDeadServers().catch(() => {}); });
 
 /* ── Server registry (admin only) ── */
 export const getRegistry = () => instance.get("/registry");
-export const saveRegistry = (app, urls) => instance.put(`/registry/${app}`, { urls });
+export const saveRegistry = (app, urls, { force = false } = {}) => instance.put(`/registry/${app}`, { urls, force });
 export const checkServer = (url) => instance.post("/registry/check", { url }, { timeout: 30000 });
 
 /* ── Personal AI Photo Cloud ── */

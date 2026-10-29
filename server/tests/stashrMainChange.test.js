@@ -47,3 +47,27 @@ describe("isFrontendService", () =>
         expect(isFrontendService({ id: "srv-4", name: "stashr-client", repo: "https://github.com/Tanushh18/password-manager" })).toBe(true);
     });
 });
+
+describe("needsPrimaryCheck", () =>
+{
+    const { needsPrimaryCheck } = require("../utils/stashrMainChange");
+    const previous = ["https://old.onrender.com", "https://backup.onrender.com"];
+    test("a changed primary on the Stashr list needs a health check", () =>
+    {
+        expect(needsPrimaryCheck({ app: "stashr", previousUrls: previous, urls: ["https://new.onrender.com", "https://old.onrender.com"], force: false })).toBe(true);
+    });
+    test("saving with the same primary, or only changing backups, needs no check", () =>
+    {
+        expect(needsPrimaryCheck({ app: "stashr", previousUrls: previous, urls: ["https://old.onrender.com"], force: false })).toBe(false);
+        expect(needsPrimaryCheck({ app: "stashr", previousUrls: previous, urls: ["https://old.onrender.com", "https://new-backup.onrender.com"], force: false })).toBe(false);
+    });
+    test("an explicit force skips the check, and other apps are never checked", () =>
+    {
+        expect(needsPrimaryCheck({ app: "stashr", previousUrls: previous, urls: ["https://new.onrender.com"], force: true })).toBe(false);
+        expect(needsPrimaryCheck({ app: "ggnhome", previousUrls: previous, urls: ["https://new.onrender.com"], force: false })).toBe(false);
+    });
+    test("a first-ever save has no previous primary to compare with", () =>
+    {
+        expect(needsPrimaryCheck({ app: "stashr", previousUrls: [], urls: ["https://new.onrender.com"], force: false })).toBe(false);
+    });
+});
