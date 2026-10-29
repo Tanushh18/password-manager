@@ -163,6 +163,16 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
     timer.current = setInterval(() => void poll(), 8000);
     return () => clearInterval(timer.current);
   }, [step, created, poll]);
+  // Before the project link moves, the replacement's latest Render deploy must be Live. Show it and keep checking.
+  useEffect(() => {
+    if (step !== "relink" || !created) return undefined;
+    const check = () => moveStatus(projectId, { accountId: created.accountId, serviceId: created.serviceId })
+      .then((s) => setLive(s))
+      .catch((e) => setError(errorMessage(e, "Could not read the new server.")));
+    void check();
+    const t = setInterval(check, 8000);
+    return () => clearInterval(t);
+  }, [step, created, projectId]);
 
   const newUrl = live?.url || created?.url || "";
   const doFrontends = () => run(async () => {
@@ -392,7 +402,27 @@ export default function MoveServerWizard({ projectId, target, open, onClose, onD
       {!initializing && step === "relink" ? (
         <div className="mv__panel">
           <p>The project will point at <b>{live?.name || created?.name}</b> instead of the old server. Nothing is deleted yet.</p>
-          <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void doRelink()}>{busy ? "Saving…" : "Move the project link"}</button>
+          {live?.ready ? (
+            <>
+              <div className="mv__activity" role="status" aria-live="polite">
+                <strong>Replacement deploy is Live.</strong>
+              </div>
+              <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void doRelink()}>{busy ? "Saving…" : "Move the project link"}</button>
+            </>
+          ) : (
+            <>
+              <div className="mv__activity mv__activity--live" role="status" aria-live="polite">
+                <span className="mv__spinner" aria-hidden="true" />
+                <div className="mv__activity-copy">
+                  <strong>Waiting for the replacement deploy to go Live</strong>
+                  <span>Render status: {live?.deploy?.status ? live.deploy.status.replace(/_/g, " ") : "checking"} · The old server is still linked.</span>
+                </div>
+                <div className="mv__progress" aria-hidden="true"><span /></div>
+              </div>
+              <p className="field__note">Checking Render every few seconds. Continue unlocks when the deploy is Live.</p>
+              <button type="button" className="btn btn--primary" disabled>Move the project link</button>
+            </>
+          )}
         </div>
       ) : null}
 
