@@ -6,6 +6,7 @@ const renderOps = require("./renderOps");
 const { isAdminEmail } = require("./registryDefaults");
 const { stashrUrls } = require("./mainServer");
 const P = require("./stashrPropagation");
+const { withRunLock } = require("./runLock");
 
 const FIELD = "stashrPropagation";
 const emptyState = () => ({ enabled: false, projectIds: [], applied: {}, testedAt: null, lastRunAt: null, lastRun: [] });
@@ -61,7 +62,12 @@ async function applyProject(user, dataKey, projectId, mainUrl) {
  * Applies the current main URL. `only` runs a single project (the test); `force` runs the selected ones even when the
  * automatic switch is off (the manual button). Without either, it is the automatic run.
  */
-async function runForUser(user, { only = null, force = false } = {}) {
+/** One propagation run per account at a time: a second click or a scheduler tick during a run is reported as busy. */
+function runForUser(user, options = {}) {
+  return withRunLock(String(user._id), () => runForUserNow(user, options), { skipped: "A run is already in progress. Wait for it to finish, then check Last run." });
+}
+
+async function runForUserNow(user, { only = null, force = false } = {}) {
   const dataKey = await user.getDataKey();
   const state = readState(user, dataKey);
   const mainUrl = (await stashrUrls())[0] || "";

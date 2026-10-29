@@ -56,8 +56,12 @@ export default function StashrPropagation() {
     setBusy("all");
     try {
       const res = await api.runStashrPropagation();
-      const ok = (res.runs || []).filter((r) => r.ok).length;
-      toast[res.upToDate ? "info" : ok === (res.runs || []).length ? "success" : "error"](res.upToDate ? "All selected apps are up to date." : `${ok} of ${(res.runs || []).length} apps updated.`);
+      if (res.skipped) {
+        toast.info(res.skipped);
+      } else {
+        const ok = (res.runs || []).filter((r) => r.ok).length;
+        toast[res.upToDate ? "info" : ok === (res.runs || []).length ? "success" : "error"](res.upToDate ? "All selected apps are up to date." : `${ok} of ${(res.runs || []).length} apps updated.`);
+      }
       load();
     } catch (err) { toast.error(api.errorMessage(err, "Could not update.")); }
     finally { setBusy(""); }

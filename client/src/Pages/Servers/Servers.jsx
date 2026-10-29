@@ -192,7 +192,7 @@ function AppCard({ entry, sync, onSaved, onSyncChanged }) {
               <span className={`servers__dot servers__dot--${h?.state || "idle"}`} title={h?.state || "not tested"} />
               <code className="servers__url">{url}</code>
               {isStashr && i === 0 ? <span className="servers__main">MAIN</span> : null}
-              {isStashr && i > 0 ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => makeMain(i)}>Make main</button> : null}
+              {isStashr && i > 0 ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => makeMain(i)}>Set as primary</button> : null}
               {h?.state === "up" && <span className="servers__ms">{h.ms} ms</span>}
               {h?.state === "down" && <span className="servers__ms servers__ms--bad">down</span>}
               {sync ? <RenderTag item={item} willRemove={autoOn && sync.willRemove?.includes(url)} /> : null}
@@ -268,12 +268,27 @@ export default function Servers() {
   const [apps, setApps] = useState(null);
   const [sync, setSync] = useState({}); // app -> Render sync info (automatic; optional)
   const [error, setError] = useState("");
+  const [syncError, setSyncError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
+  // Render status is optional for editing the list, but a failed load is shown with a retry, never hidden.
   const loadSync = useCallback((refresh = false) => {
-    api.getRegistrySync({ refresh })
-      .then((data) => setSync(Object.fromEntries((data.apps || []).map((a) => [a.app, a]))))
-      .catch(() => { /* sync info is optional; the list still works */ });
+    setRefreshing(true);
+    return api.getRegistrySync({ refresh })
+      .then((data) => {
+        setSync(Object.fromEntries((data.apps || []).map((a) => [a.app, a])));
+        setSyncError("");
+        return data.apps ? data.apps.length : 0;
+      })
+      .catch((err) => { setSyncError(api.errorMessage(err, "Could not load Render status.")); return null; })
+      .finally(() => setRefreshing(false));
   }, []);
+
+  const refreshStatus = async () => {
+    const count = await loadSync(true);
+    if (count === null) toast.error("Render status could not be refreshed. Try again.");
+    else toast.success(`Status refreshed for ${count} app${count === 1 ? "" : "s"}.`);
+  };
 
   useEffect(() => {
     api.getRegistry()
@@ -296,7 +311,14 @@ export default function Servers() {
           <p className="vault__count">
             Change a backend URL here and every app picks it up the next time it starts — no code change, no redeploy.
           </p>
-          <button type="button" className="btn btn--ghost btn--sm" onClick={() => loadSync(true)}>↻ Refresh Render sync</button>
+          <button type="button" className="btn btn--ghost btn--sm" onClick={refreshStatus} disabled={refreshing}>
+            {refreshing ? "Refreshing…" : "Refresh status"}
+          </button>
+          {syncError ? (
+            <p className="servers__error" role="alert">
+              {syncError} <button type="button" className="btn btn--ghost btn--sm" onClick={() => loadSync(true)}>Retry</button>
+            </p>
+          ) : null}
         </header>
 
         {apps && <MascotBanner kind="satellite" {...registryMood(apps)} />}
