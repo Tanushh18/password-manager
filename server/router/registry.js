@@ -15,6 +15,7 @@ const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
 
 const { ADMINS, DEFAULTS, OFFABLE, APP_LABELS, SLUG, urlsFor } = require("../utils/registryDefaults");
+const { onStashrListSaved } = require("../utils/stashrMainChange");
 const MAX_URLS = 10;
 
 const isAdminUser = (user) => Boolean(user && user.email && ADMINS.includes(String(user.email).toLowerCase()));
@@ -112,7 +113,9 @@ router.put("/registry/:app", authenticate, writeLimiter, async (req, res) =>
             { urls, updatedAt: new Date(), updatedBy: req.rootUser.email, ...(OFFABLE.has(app) ? { off: urls.length === 0 } : {}), ...(!DEFAULTS[app] && !(existing && existing.owner) ? { owner: req.rootUser._id } : {}) },
             { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
         ).lean();
-        return res.json({ app, urls: doc.urls, updatedAt: doc.updatedAt });
+        // Stashr's own list drives its frontend and every project that points at it. A failure there is reported, not thrown.
+        const stashr = app === "stashr" ? await onStashrListSaved(req.rootUser, { oldMain: existing && existing.urls ? existing.urls[0] : "", urls }) : null;
+        return res.json({ app, urls: doc.urls, updatedAt: doc.updatedAt, ...(stashr ? { stashr } : {}) });
     }
     catch (error)
     {

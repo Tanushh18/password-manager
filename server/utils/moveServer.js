@@ -634,4 +634,4 @@ async function deleteOld(user, projectId, { serviceId, accountId, confirmName })
   return { deleted: true, name: service.name, domainsVerified: (migration.domains || []).length };
 }
 
-module.exports = { plan, create, status, frontends, prepareDomains, verifyDomains, copyEnvGroups, origin, relink, deleteOld, supportsDomains, normalizeDomains, missingVerifiedDomains, inspectDomainDns, listDirectEnvVars, listDirectSecretFiles, listLinkedEnvGroups, payloadFrom };
+module.exports = { saveProjectFields, plan, create, status, frontends, prepareDomains, verifyDomains, copyEnvGroups, origin, relink, deleteOld, supportsDomains, normalizeDomains, missingVerifiedDomains, inspectDomainDns, listDirectEnvVars, listDirectSecretFiles, listLinkedEnvGroups, payloadFrom };

@@ -165,6 +165,9 @@ function AppCard({ entry, sync, onSaved, onSyncChanged }) {
     try {
       const res = await api.saveRegistry(entry.app, urls);
       toast.success(`${entry.label} servers saved.`);
+      const frontend = res.data.stashr?.frontend;
+      if (frontend && !frontend.ok) toast.error(frontend.error || "Stashr's own frontend was not updated. Save again to retry.");
+      if (res.data.stashr?.projectsError) toast.error(res.data.stashr.projectsError);
       onSaved(entry.app, res.data.urls);
     } catch (err) {
       toast.error(api.errorMessage(err, "Could not save."));
