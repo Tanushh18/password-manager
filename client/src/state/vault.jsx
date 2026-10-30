@@ -22,7 +22,9 @@ import { pwnedCount } from "../lib/breach";
 
 const VaultContext = createContext(null);
 const PREFS_KEY = "aurelia_prefs";
-const DEFAULT_PREFS = { icons: false, searchValues: true, autoBreach: false, fx: true, jungle: true };
+// Decorative effects (jungle scenery, flying robots, mascot banners) are opt-in under Settings → Appearance.
+// People who already switched them on keep their saved choice.
+const DEFAULT_PREFS = { icons: false, searchValues: true, autoBreach: false, fx: false, jungle: false };
 
 const readPrefs = () => {
   try {

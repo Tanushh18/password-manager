@@ -403,3 +403,20 @@
   .vcard, .vx-menu__list { animation: none; }
   .vx-nav__item, .vcard { transition: none; }
 }
+
+/* ════════════════ 2026-10-30 redesign ════════════════
+   The vault starts with the shared page header (styles/system.css) instead of the
+   illustrated horizon banner; the sidebar holds categories and folders only. */
+.vx { padding-top: clamp(1.25rem, 3vw, 2rem); }
+.vx .ui-pagehead__sub { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.vx-status { font-size: 0.72rem; }
+body.has-sidebar .vx-side { top: 16px; max-height: calc(100vh - 32px); }
+.vx-nav__heading { font-family: var(--font-sans); font-size: 0.69rem; font-weight: 600; letter-spacing: 0.06em; }
+.vx-nav__count { font-family: var(--font-sans); }
+.vx-list-head__count { font-family: var(--font-sans); letter-spacing: 0; text-transform: none; font-size: 0.75rem; border-radius: var(--r-pill); }
+.vx-danger { color: var(--danger) !important; }
+.vx-main > .ui-empty { margin-top: 0.25rem; }
+@media (max-width: 759px) {
+  .vx-tools__actions { width: 100%; }
+  .vx-tools__actions .btn { flex: 1; }
+}

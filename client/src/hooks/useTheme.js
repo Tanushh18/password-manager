@@ -19,6 +19,13 @@ export default function useTheme() {
     }
   }, [theme]);
 
+  // Several toggles can be mounted at once (sidebar, settings): follow changes made by any of them.
+  useEffect(() => {
+    const obs = new MutationObserver(() => setTheme(current()));
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => obs.disconnect();
+  }, []);
+
   const toggle = useCallback(() => setTheme((t) => (t === "light" ? "dark" : "light")), []);
   return { theme, toggle };
 }

@@ -1,4 +1,4 @@
-/* Mobile bottom navigation: a calm glass rail above the jungle grass (z 40). */
+/* Mobile bottom navigation: a solid rail pinned to the bottom edge, above page content (z 50). */
 .bottomnav {
   position: fixed;
   left: 10px;
@@ -6,7 +6,8 @@
   bottom: calc(8px + env(safe-area-inset-bottom));
   z-index: 50;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 2px;
   padding: 5px;
   border-radius: var(--r-2xl);
@@ -56,8 +57,23 @@
   width: 18px;
   height: 2px;
   border-radius: 2px;
-  background: var(--runway);
+  background: var(--accent);
 }
+button.bottomnav__item { border: 0; background: transparent; font: inherit; cursor: pointer; }
+
+/* "More" sheet: every destination, grouped like the desktop sidebar. */
+.moresheet { padding: 0.5rem 0.75rem calc(1rem + env(safe-area-inset-bottom)) !important; }
+.moresheet__head { display: flex; align-items: center; justify-content: space-between; padding: 0.4rem 0.4rem 0.6rem; }
+.moresheet__head h2 { font-size: var(--fs-lg); }
+.moresheet__group { padding: 0.35rem 0; border-top: 1px solid var(--line); }
+.moresheet__group h3 { font-size: var(--fs-xs); font-weight: 600; color: var(--text-faint); letter-spacing: 0.04em; text-transform: uppercase; padding: 0.45rem 0.55rem 0.25rem; font-family: var(--font-sans); }
+.moresheet__group ul { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.moresheet__link { display: flex; align-items: center; gap: 0.65rem; width: 100%; min-height: 46px; padding: 0.5rem 0.6rem; border-radius: var(--r-md); color: var(--heading-2); font-size: var(--fs-sm); font-weight: 550; text-align: left; border: 0; background: transparent; cursor: pointer; font-family: inherit; }
+.moresheet__link svg { color: var(--text-muted); flex: none; }
+.moresheet__link:hover, .moresheet__link:active { background: var(--surface-hover); color: var(--heading); }
+.moresheet__link.is-active { background: rgba(var(--accent-rgb), 0.12); color: var(--heading); }
+.moresheet__link.is-active svg { color: var(--accent); }
+.moresheet__link.is-danger, .moresheet__link.is-danger svg { color: var(--danger); }
 .bottomnav__item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 @media (min-width: 760px) { .bottomnav { display: none; } }

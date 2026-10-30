@@ -5,6 +5,7 @@ import "react-toastify/dist/ReactToastify.css";
 import "./App.css";
 
 import Home from "./Pages/Home/Home";
+import Dashboard from "./Pages/Dashboard/Dashboard";
 import Login from "./Pages/Login/Login";
 import Signup from "./Pages/SignUp/Signup";
 import Vault from "./Pages/Passwords/Passwords";
@@ -40,6 +41,7 @@ import InfraTabs from "./Components/InfraTabs/InfraTabs";
 import NetBar from "./Components/NetBar/NetBar";
 import Splash from "./Components/Splash/Splash";
 import BottomNav from "./Components/BottomNav/BottomNav";
+import Sidebar from "./Components/AppShell/Sidebar";
 import { useVault } from "./state/vault";
 
 const WAKING = { title: "Waking the server…", body: "Your sign-in is saved. Free servers sleep when idle and can take up to a minute to start." };
@@ -69,9 +71,20 @@ function GuestOnly({ children }) {
   return children;
 }
 
+/* The marketing page is for visitors; signed-in people land on their overview. */
+function HomeOrDashboard() {
+  const { status } = useVault();
+  if (status === "ready" || status === "locked") return <Navigate to="/dashboard" replace />;
+  return <Home />;
+}
+
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  // Photos keeps its pre-redesign look: styles/system.css skips body.route-photos.
+  useEffect(() => {
+    document.body.classList.toggle("route-photos", pathname.startsWith("/photos") || pathname.startsWith("/share/photos"));
+  }, [pathname]);
   return null;
 }
 
@@ -94,15 +107,19 @@ export default function App() {
   return (
     <div className="App">
       <BrowserRouter>
+        <a className="skip-link" href="#main">Skip to content</a>
         <ScrollToTop />
         <NetBar />
         <CommandPalette />
         <JungleScene />
         <SkyFx />
         <Navbar />
+        <Sidebar />
         <ToastContainer position="top-right" autoClose={3500} newestOnTop closeOnClick pauseOnHover draggable theme="colored" />
+        <div id="main" tabIndex={-1} className="app-main">
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<HomeOrDashboard />} />
+          <Route path="/dashboard" element={<RequireVault><Dashboard /></RequireVault>} />
           <Route path="/signin" element={<GuestOnly><Login /></GuestOnly>} />
           <Route path="/forgot-password" element={<GuestOnly><Suspense fallback={<Splash />}><Forgot /></Suspense></GuestOnly>} />
           <Route path="/signup" element={<GuestOnly><Signup /></GuestOnly>} />
@@ -133,6 +150,7 @@ export default function App() {
           <Route path="/logout" element={<Logout />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </div>
         <InstallPrompt />
         <BottomNav />
       </BrowserRouter>
