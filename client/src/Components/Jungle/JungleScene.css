@@ -102,6 +102,8 @@ body.has-bottomnav .jungle { bottom: calc(68px + env(safe-area-inset-bottom, 0px
   97% { opacity: 0; }
 }
 /* Keep the left-side scenery clear of the sidebar. */
-body.has-sidebar .jg-vine--left, body.has-sidebar .jg-leaves--left { left: calc(var(--sidebar-w) - 26px); }
-body.has-sidebar.sidebar-collapsed .jg-vine--left, body.has-sidebar.sidebar-collapsed .jg-leaves--left { left: calc(var(--sidebar-w-collapsed) - 26px); }
+/* With the sidebar, the left vine would sit on page headings; the sidebar has its own little scene instead. */
+body.has-sidebar .jg-vine--left { display: none; }
+body.has-sidebar .jg-leaves--left { left: calc(var(--sidebar-w) - 40px); }
+body.has-sidebar.sidebar-collapsed .jg-leaves--left { left: calc(var(--sidebar-w-collapsed) - 40px); }
 @media (prefers-reduced-motion: reduce) { .jg-river__shine, .jg-pad, .jg-fish { animation: none; } .jg-fish { display: none; } }

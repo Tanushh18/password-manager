@@ -11,6 +11,7 @@ import { domainOf } from "../../lib/items";
 import { STATUS_LABEL } from "../../lib/projectItems";
 import { greeting, attentionItems, recentItems, favoriteItems, projectSummary, ago, boardRows } from "../../lib/dashboard";
 import DepartureBoard from "../../Components/DepartureBoard/DepartureBoard";
+import TransitCity from "../../Components/TransitCity/TransitCity";
 import VaultBackdrop from "../../Components/Vault/VaultBackdrop";
 import { securityStatus } from "../../lib/vaultView";
 import "../../Components/Vault/Vault.css";
@@ -79,6 +80,7 @@ export default function Dashboard() {
         </div>
 
         <DepartureBoard rows={board} title="Stashr departures" />
+        <TransitCity items={items} health={health} projects={projectsOn ? projects || [] : []} />
 
         {empty ? (
           <EmptyState

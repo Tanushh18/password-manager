@@ -6,6 +6,7 @@ export const APP_MAJOR_MINOR = APP_VERSION.split(".").slice(0, 2).join(".");
 
 export const WHATS_NEW = [
   ["Stashr departures board", "The Overview opens with a split-flap airport board that flips into your live status: vault, security score, breach check, favourites and projects. Tap a row to go straight there."],
+  ["Transit City", "Your vault as a living city on the Overview: every login is a building that rises with its strength, item trains pull into Stashr Central where a robot inspector stamps each car verified or held, project buses drive past the bus stop, your newest item lands at the airport, and the station ticker reads out your status. Jungle, river and waterfall included."],
   ["A new home: Overview", "Your vault health, what needs fixing, recent and favourite logins and your projects on one page, under the same jungle-and-runway horizon as the vault."],
   ["Sidebar navigation", "Every part of Stashr is grouped in a sidebar (Vault, Workspace, Infrastructure). Collapse it to icons, or use the bottom bar and the More sheet on your phone."],
   ["Search anything", "Press Ctrl+K (or ⌘K), or the search button, to jump to a login, project, page or action such as adding a password or importing."],
