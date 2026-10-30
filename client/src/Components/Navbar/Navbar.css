@@ -411,3 +411,6 @@
 @media (prefers-reduced-motion: reduce) {
   .drawer__link { transform: none; }
 }
+
+/* 2026-10-30: sentence-case links for the visitor navigation (the signed-in app uses the sidebar). */
+.nav__link { text-transform: none !important; letter-spacing: 0 !important; font-size: 0.9rem !important; }

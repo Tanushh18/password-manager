@@ -17,6 +17,8 @@ import "./Settings.css";
 
 import MascotBanner from "../../Components/Robot/MascotBanner";
 import { accountMood } from "../../lib/pageMoods";
+import { useDialogs } from "../../Components/UI/Dialogs";
+import { PageHeader, Badge } from "../../Components/UI/ui";
 const download = (name, text, type) => {
   const url = URL.createObjectURL(new Blob([text], { type }));
   const a = document.createElement("a");
@@ -46,7 +48,6 @@ function Section({ id, code, title, lede, danger, children }) {
   return (
     <section id={id} tabIndex={-1} className={`csec ${danger ? "csec--danger" : ""}`} aria-labelledby={`${id}-title`}>
       <header className="csec__sign">
-        <span className="csec__code" aria-hidden="true">{code}</span>
         <h2 id={`${id}-title`} className="csec__title">{title}</h2>
         {lede ? <p className="csec__lede">{lede}</p> : null}
       </header>
@@ -98,9 +99,9 @@ function useScrollSpy(ids) {
 function SectionNav({ active, onPick }) {
   return (
     <nav className="cnav" aria-label="Settings sections">
-      <p className="cnav__head" aria-hidden="true">Control center</p>
+      <p className="cnav__head" aria-hidden="true">On this page</p>
       <ul className="cnav__list">
-        {SECTIONS.map(([id, code, title]) => (
+        {SECTIONS.map(([id, , title]) => (
           <li key={id}>
             <a
               href={`#${id}`}
@@ -108,7 +109,6 @@ function SectionNav({ active, onPick }) {
               aria-current={active === id ? "location" : undefined}
               onClick={(e) => { e.preventDefault(); onPick(id); }}
             >
-              <span className="cnav__code" aria-hidden="true">{code}</span>
               <span className="cnav__text">{title}</span>
             </a>
           </li>
@@ -171,6 +171,7 @@ function AdminNeedsPanel() {
 
 /* Telegram bot: paste the token, press Start in the bot, done. */
 function TelegramBot() {
+  const { confirm } = useDialogs();
   const [state, setState] = useState(null);
   const [token, setToken] = useState("");
   const [pin, setPin] = useState("");
@@ -211,7 +212,7 @@ function TelegramBot() {
       <Row icon={<Alert size={15} />} label={"Connected to @" + state.botUsername} hint={"Chat: " + (state.chatName || "you") + (state.updates === "timer" && state.lastDigestAt ? " · last update " + new Date(state.lastDigestAt).toLocaleTimeString() : "")}>
         <div className="settings__inline">
           <button type="button" className="btn btn--ghost btn--sm" disabled={Boolean(busy)} onClick={() => void run("test", api.testTelegramBot, "Status sent to Telegram.")}>Send status now</button>
-          <button type="button" className="btn btn--ghost btn--sm" disabled={Boolean(busy)} onClick={() => { if (window.confirm("Disconnect the Telegram bot? Alerts stop.")) void run("off", api.disconnectTelegram, "Disconnected."); }}>Disconnect</button>
+          <button type="button" className="btn btn--ghost btn--sm" disabled={Boolean(busy)} onClick={async () => { if (await confirm({ title: "Disconnect the Telegram bot?", message: "Alerts stop until you connect it again.", confirmLabel: "Disconnect", tone: "danger" })) void run("off", api.disconnectTelegram, "Disconnected."); }}>Disconnect</button>
         </div>
       </Row>
       <Row label="When should the bot message me?" hint="Off by default: it stays quiet unless you ask. You can always ask in Telegram with the menu buttons under the chat box, or /updates." block>
@@ -629,7 +630,7 @@ function DeleteAccount() {
 }
 
 export default function Settings() {
-  const { profile, prefs, setPrefs, lock, importItems, setProfileName, refreshProfile } = useVault();
+  const { profile, prefs, setPrefs, lock, importItems, setProfileName } = useVault();
   const [name, setName] = useState(profile?.name || "");
   const [importing, setImporting] = useState(false);
 
@@ -639,16 +640,6 @@ export default function Settings() {
       await api.updateProfile(name.trim());
       setProfileName(name.trim());
       toast.success("Name updated.");
-    } catch (err) {
-      toast.error(api.errorMessage(err));
-    }
-  };
-
-  const signOutOthers = async () => {
-    try {
-      await api.logoutEverywhere();
-      await refreshProfile();
-      toast.success("Signed out of every other device.");
     } catch (err) {
       toast.error(api.errorMessage(err));
     }
@@ -672,43 +663,27 @@ export default function Settings() {
   return (
     <div className="settings page">
       <div className="cc">
-        <header className="cc__head">
-          <Link to="/passwords" className="proj-back">
-            <Arrow size={14} style={{ transform: "rotate(180deg)" }} /> Vault
-          </Link>
-          <div className="cc__bar">
-            <div className="cc__id">
+        <PageHeader
+          title="Settings"
+          subtitle={
+            <span className="cc__sub">
               <span className="cc__avatar" aria-hidden="true">{initial}</span>
-              <div className="cc__who">
-                <p className="cc__kicker">Settings · Control center</p>
-                <h1 className="cc__name">{profile?.name || "Settings"}</h1>
-                <p className="cc__email">{profile?.email}</p>
-              </div>
-            </div>
-            <ul className="cc__chips" aria-label="Account status">
-              <li className={`cc__chip ${twoFa ? "is-ok" : "is-warn"}`}>
-                <span className="cc__dot" aria-hidden="true" />
-                Two-factor {twoFa ? "on" : "off"}
-              </li>
-              <li className="cc__chip">
-                <span className="cc__dot" aria-hidden="true" />
-                {sessionCount} signed-in session{sessionCount === 1 ? "" : "s"}
-              </li>
-              {twoFa ? (
-                <li className="cc__chip">
-                  <span className="cc__dot" aria-hidden="true" />
-                  {profile.recoveryCodesLeft} recovery code{profile.recoveryCodesLeft === 1 ? "" : "s"} left
-                </li>
-              ) : null}
-            </ul>
-          </div>
-        </header>
+              <span><strong>{profile?.name || "Your account"}</strong> · {profile?.email}</span>
+            </span>
+          }
+        >
+          <ul className="cc__chips" aria-label="Account status">
+            <li><Badge tone={twoFa ? "ok" : "warn"} dot>Two-factor {twoFa ? "on" : "off"}</Badge></li>
+            <li><Badge tone="neutral" dot>{sessionCount} signed-in session{sessionCount === 1 ? "" : "s"}</Badge></li>
+            {twoFa ? <li><Badge tone={profile.recoveryCodesLeft > 2 ? "neutral" : "warn"} dot>{profile.recoveryCodesLeft} recovery code{profile.recoveryCodesLeft === 1 ? "" : "s"} left</Badge></li> : null}
+          </ul>
+        </PageHeader>
 
         <div className="cc__layout">
           <SectionNav active={active} onPick={pick} />
 
           <div className="cc__main">
-            <MascotBanner kind="gear" {...accountMood(profile)} />
+            {prefs.fx ? <MascotBanner kind="gear" {...accountMood(profile)} /> : null}
 
             <Section id="account" code="A1" title="Account" lede="Who you are and how you sign in.">
               <Group>
@@ -745,25 +720,22 @@ export default function Settings() {
 
             <Section id="devices" code="D3" title="Devices & activity" lede="Where you are signed in, and your recent security events.">
               <Group>
-                <Row icon={<Logout size={15} />} label="Other devices" hint={`${Math.max(0, (profile?.sessions || 1) - 1)} other signed-in session(s).`}>
-                  <button type="button" className="btn btn--ghost btn--sm" onClick={signOutOthers}>Sign out others</button>
-                </Row>
-                <Row label="Devices and activity" hint="Where you are signed in, and your recent security events." block>
+                <Row icon={<Logout size={15} />} label="Signed-in devices" hint={`This device and ${Math.max(0, (profile?.sessions || 1) - 1)} other session(s). Sign out any you don't recognise.`} block>
                   <SessionsPanel />
                 </Row>
               </Group>
             </Section>
 
-            <Section id="appearance" code="V4" title="Appearance" lede="Theme and the scenery around every page.">
+            <Section id="appearance" code="V4" title="Appearance" lede="Theme, icons and optional decoration. Changes apply right away on this browser.">
               <Group>
                 <Row icon={<Globe size={15} />} label="Theme">
                   <ThemeToggle />
                 </Row>
-                <Row label="Jungle scene" hint="Grass, vines, animals and birds around every page, with the robots mixed in. Day jungle in the light theme, night jungle in the dark theme.">
-                  <Toggle checked={prefs.jungle !== false} onChange={(v) => setPrefs({ jungle: v })} label="Jungle scene" />
+                <Row label="Jungle scene" hint="Decorative grass, vines and animals around every page. Off by default.">
+                  <Toggle checked={Boolean(prefs.jungle)} onChange={(v) => setPrefs({ jungle: v })} label="Jungle scene" />
                 </Row>
-                <Row label="Fun effects" hint="Robots fly by, planes land when you save, and things blow up when something is deleted for good or goes down. Off automatically if your device asks for reduced motion.">
-                  <Toggle checked={prefs.fx !== false} onChange={(v) => setPrefs({ fx: v })} label="Fun effects" />
+                <Row label="Playful effects" hint="Robots fly by, planes land when you save, and pages show the robot helper banners. Off by default, and always off if your device asks for reduced motion.">
+                  <Toggle checked={Boolean(prefs.fx)} onChange={(v) => setPrefs({ fx: v })} label="Playful effects" />
                 </Row>
                 <Row label="Website icons" hint="Fetched from DuckDuckGo, which can see which sites you have saved.">
                   <Toggle checked={prefs.icons} onChange={(v) => setPrefs({ icons: v })} label="Website icons" />

@@ -83,6 +83,9 @@ body:not(.route-photos) .btn:disabled { opacity: 0.55; }
 /* ════════════════ APP SHELL ════════════════ */
 
 body.has-sidebar { padding-left: var(--sidebar-w); }
+/* Sticky offsets across pages use --nav-h: there is no top bar beside the sidebar, and the phone bar is 56px. */
+body.has-sidebar:not(.route-photos) { --nav-h: 0px; }
+body.has-bottomnav:not(.route-photos) { --nav-h: 56px; }
 body.has-sidebar.sidebar-collapsed { padding-left: var(--sidebar-w-collapsed); }
 /* No top bar beside the sidebar, so pages start closer to the top. */
 body.has-sidebar .page { min-height: 100vh; padding-top: clamp(1.5rem, 3vw, 2.25rem); }

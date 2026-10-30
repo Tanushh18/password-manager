@@ -2,10 +2,12 @@ import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { deleteAdminUser, getAdminUsers, setUserFeature, errorMessage } from "../../api/client";
 import "./Admin.css";
+import { useDialogs } from "../../Components/UI/Dialogs";
 
 const when = (v) => (v ? new Date(v).toLocaleDateString() : "");
 
 export default function Admin() {
+  const { prompt } = useDialogs();
   const [data, setData] = useState(null);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState("");
@@ -18,7 +20,7 @@ export default function Admin() {
   useEffect(() => { const t = setTimeout(() => void load(q), 250); return () => clearTimeout(t); }, [q, load]);
 
   const remove = async (user) => {
-    const typed = window.prompt(`This permanently deletes ${user.email} and every record of theirs: passwords, projects, connected accounts, photos data and sign-ins. It cannot be undone.\n\nType their email to confirm:`);
+    const typed = await prompt({ title: `Delete ${user.email}?`, message: "This permanently deletes the account and every record of theirs: passwords, projects, connected accounts, photos data and sign-ins. It cannot be undone.", label: "Their email address", match: user.email, confirmLabel: "Delete account", tone: "danger", maxLength: 320 });
     if (typed === null) return;
     setBusy("del" + user.id);
     try {

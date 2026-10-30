@@ -225,3 +225,10 @@
 .proj-detail h1, .proj-detail h2, .dp-section h2, .proj-values__title { font-family: var(--font-display); letter-spacing: -0.01em; }
 .pv2-sync { border-radius: var(--r-xl); }
 .dp-template { min-height: 44px; }
+
+/* 2026-10-30: shared page header; actions live in the header, the toolbar is search only. */
+.pv2-ghbadge { margin-left: 0.4rem; }
+.vault.page .ui-pagehead + .pv2-sync { margin-top: 0; }
+.vault.page .vault__tools .vault__search { flex: 1 1 100%; }
+.vault.page > .shell > .ui-empty { margin-top: 0.5rem; }
+.pv2-servers { font: 600 0.7rem/1.2 var(--font-display) !important; cursor: pointer; }

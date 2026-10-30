@@ -5,10 +5,12 @@ import { AccountPicker } from "../../Components/Project/DeployParts";
 import MoveServerWizard from "../../Components/Project/MoveServerWizard";
 import { useVault } from "../../state/vault";
 import { errorMessage } from "./renderUtils";
+import { useDialogs } from "../../Components/UI/Dialogs";
 
 /* Branch and account of one Render service, from its overview. The account can only be changed for a service
    that belongs to a Stashr project, because the account is part of that project's link. */
 export default function ServiceBranch({ service }) {
+  const { confirm } = useDialogs();
   const { projects } = useVault();
   const [info, setInfo] = useState(null);
   const [choice, setChoice] = useState("");
@@ -24,7 +26,7 @@ export default function ServiceBranch({ service }) {
     finally { setBusy(false); }
   };
   const apply = async () => {
-    if (!window.confirm(`Switch ${service.name} to "${choice}" and deploy it?`)) return;
+    if (!(await confirm({ title: `Switch ${service.name} to “${choice}”?`, message: "The service is redeployed from that branch right away.", confirmLabel: "Switch and deploy" }))) return;
     setBusy(true);
     try {
       const r = await setServiceBranch(service.accountId, service.id, choice, true);

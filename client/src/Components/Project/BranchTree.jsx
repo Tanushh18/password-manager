@@ -4,6 +4,7 @@ import { getGithubAccounts, getGithubBranches, deleteGithubBranches, getDeployTa
 import { UrlMenu, DEPLOY_LABEL, PlatformBadge } from "./DeployParts";
 import { errorMessage, safeUrl, timeAgo } from "../../Pages/Render/renderUtils";
 import "./BranchTree.css";
+import { useDialogs } from "../../Components/UI/Dialogs";
 
 const SORTS = [["name", "Name"], ["deployed", "Deployed first"]];
 const parseRepo = (url) => { const m = String(url || "").match(/github\.com[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:[/?#]|$)/i); return m ? { owner: m[1], repo: m[2] } : null; };
@@ -24,6 +25,7 @@ const stateOf = (t) => (t.suspended ? "Suspended" : t.error && !t.url ? "Unreada
 
 /** The repository's branches as a tree, with multi-select delete. Each branch opens to show what runs it. Closed by default. */
 export default function BranchTree({ project, refreshKey, hideRefresh }) {
+  const { confirm } = useDialogs();
   const repo = useMemo(() => parseRepo(project.repoUrl), [project.repoUrl]);
   const [account, setAccount] = useState(null);
   const [noAccount, setNoAccount] = useState(false);
@@ -79,10 +81,15 @@ export default function BranchTree({ project, refreshKey, hideRefresh }) {
     const names = [...picked].filter((n) => deletable.includes(n));
     if (!names.length || !account) return;
     const live = rows.filter((r) => names.includes(r.name) && r.deployed.some(liveOf)).map((r) => r.name);
-    const msg = `Delete ${names.length} branch${names.length === 1 ? "" : "es"} from GitHub?\n\n${names.join("\n")}` +
-      (live.length ? `\n\n⚠ ${live.length} of them run a live server or site: ${live.join(", ")}. Those deployments keep running their last build, but they will stop updating.` : "") +
-      "\n\nThe default branch is never deleted. This cannot be undone from Stashr.";
-    if (!window.confirm(msg)) return;
+    const ok = await confirm({
+      title: `Delete ${names.length} branch${names.length === 1 ? "" : "es"} from GitHub?`,
+      details: names,
+      message: (live.length ? `${live.length} of them run a live server or site (${live.join(", ")}). Those deployments keep running their last build, but they will stop updating.\n\n` : "") +
+        "The default branch is never deleted. This cannot be undone from Stashr.",
+      confirmLabel: "Delete branches",
+      tone: "danger",
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       const r = await deleteGithubBranches({ githubAccountId: account.id, url: project.repoUrl, branches: names, live });

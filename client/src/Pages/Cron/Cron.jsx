@@ -238,8 +238,8 @@ export default function Cron() {
                     <td>{(run.durationMs / 1000).toFixed(1)}s</td>
                     <td>{run.persisted === false ? "Memory fallback" : run.source === "external" ? "External cron" : "In-process"}</td>
                     <td><span className={"cr-run-status cr-run-status--" + run.status}>{run.status === "success" ? "Success" : run.status === "partial" ? "Partial" : "Failed"}</span></td>
-                    <td><div className="cr-run-steps">{(run.steps || []).map((step) => (
-                      <span key={step.name} className={"cr-run-step cr-run-step--" + step.status} title={step.name + " · " + step.durationMs + "ms"}>{step.name} · {step.status}</span>
+                    <td><div className="cr-run-steps">{(run.steps || []).map((step, i) => (
+                      <span key={step.name + ":" + i} className={"cr-run-step cr-run-step--" + step.status} title={step.name + " · " + step.durationMs + "ms"}>{step.name} · {step.status}</span>
                     ))}</div></td>
                   </tr>
                 ))}</tbody>

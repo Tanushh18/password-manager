@@ -119,8 +119,8 @@ export default function SecurityCenter() {
       <section className="sc-hero" aria-labelledby="sc-title">
         <div className="sc-scan" aria-hidden="true" />
         <div className="sc-hero-text">
-          <p className="sc-eyebrow">Security checkpoint</p>
-          <h1 id="sc-title">Your vault, screened</h1>
+          <p className="sc-eyebrow">Security</p>
+          <h1 id="sc-title">Security center</h1>
           <p className={`sc-status sc-tone-${status.tone}`} role="status">
             <span className="sc-dot" aria-hidden="true" />{status.text}
           </p>

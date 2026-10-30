@@ -6,9 +6,11 @@ import Field from "../Field/Field";
 import { Check, Trash, ShieldCheck } from "../Icons/Icons";
 import { connectHostAccount, deleteHostAccount, getHostAccounts } from "../../api/client";
 import { HOSTS, hostById } from "../../lib/hostGuides";
+import { useDialogs } from "../../Components/UI/Dialogs";
 
 /** Connect Vercel / Netlify / Railway / Cloudflare Pages with an API token. The token is sent once, validated, stored encrypted and never returned. */
 export default function HostConnectModal({ open, onClose, onChange, initial = "vercel" }) {
+  const { confirm } = useDialogs();
   const [accounts, setAccounts] = useState([]);
   const [provider, setProvider] = useState(initial);
   const [name, setName] = useState("");
@@ -38,7 +40,7 @@ export default function HostConnectModal({ open, onClose, onChange, initial = "v
   };
 
   const remove = async (account) => {
-    if (!window.confirm("Disconnect " + account.name + "? Its saved token will be deleted from your Stashr account. Sites already deployed keep running.")) return;
+    if (!(await confirm({ title: `Disconnect ${account.name}?`, message: "Its saved token is deleted from your Stashr account. Sites already deployed keep running.", confirmLabel: "Disconnect", tone: "danger" }))) return;
     try { await deleteHostAccount(account.id); toast.success("Connection removed."); await load(); }
     catch (e) { toast.error(e?.response?.data?.error || "Could not remove this connection."); }
   };

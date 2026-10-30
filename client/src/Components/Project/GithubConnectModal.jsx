@@ -5,9 +5,11 @@ import { toast } from "react-toastify";
 import Field from "../Field/Field";
 import { Check, Trash, ShieldCheck } from "../Icons/Icons";
 import { connectGithubAccount, deleteGithubAccount, getGithubAccounts } from "../../api/client";
+import { useDialogs } from "../../Components/UI/Dialogs";
 
 /** Add / remove GitHub tokens. The token is sent once to the server, validated, stored encrypted, and never returned. */
 export default function GithubConnectModal({ open, onClose, onChange }) {
+  const { confirm } = useDialogs();
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
@@ -37,7 +39,7 @@ export default function GithubConnectModal({ open, onClose, onChange }) {
   };
 
   const remove = async (account) => {
-    if (!window.confirm("Disconnect " + account.login + "? Its saved token will be deleted from your Stashr account.")) return;
+    if (!(await confirm({ title: `Disconnect ${account.login}?`, message: "Its saved token is deleted from your Stashr account. Projects keep their details.", confirmLabel: "Disconnect", tone: "danger" }))) return;
     try { await deleteGithubAccount(account.id); toast.success("GitHub connection removed."); await load(); }
     catch (e) { toast.error(e?.response?.data?.error || "Could not remove this connection."); }
   };

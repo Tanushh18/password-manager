@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { syncDeployEnv } from "../../api/client";
 import { useVault } from "../../state/vault";
 import { errorMessage } from "../../Pages/Render/renderUtils";
+import { useDialogs } from "../../Components/UI/Dialogs";
 
 const list = (names) => (names?.length ? names.slice(0, 8).join(", ") + (names.length > 8 ? " +" + (names.length - 8) : "") : "—");
 
@@ -14,6 +15,7 @@ const list = (names) => (names?.length ? names.slice(0, 8).join(", ") + (names.l
  * (a secret) is listed as unreadable and is never overwritten.
  */
 export default function ServerEnvCopy({ projectId, target, targets, open, onClose, onDone }) {
+  const { confirm } = useDialogs();
   const { projects } = useVault();
   const [pick, setPick] = useState("");
   const [preview, setPreview] = useState(null);
@@ -46,7 +48,7 @@ export default function ServerEnvCopy({ projectId, target, targets, open, onClos
   const count = preview ? preview.create.length + (overwrite ? preview.update.length : 0) : 0;
   const apply = async () => {
     if (!count) return;
-    if (!window.confirm(`Write ${count} variable${count === 1 ? "" : "s"} to ${target.name} on ${target.label}?${deploy ? " It will then redeploy the latest commit." : ""}`)) return;
+    if (!(await confirm({ title: `Write ${count} variable${count === 1 ? "" : "s"} to ${target.name}?`, message: `On ${target.label}.${deploy ? " It will then redeploy the latest commit." : " Nothing is redeployed."}`, confirmLabel: deploy ? "Write and deploy" : "Write variables" }))) return;
     setBusy(true); setErr("");
     try {
       const r = await syncDeployEnv(projectId, { apply: true, overwrite, deploy, targetRefs: [target.ref], ...body(pick) });
