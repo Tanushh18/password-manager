@@ -9,7 +9,8 @@ import { Plus, Upload, KeyLine, Arrow, ShieldCheck, Folder } from "../../Compone
 import { sectionCounts } from "../../lib/vaultView";
 import { domainOf } from "../../lib/items";
 import { STATUS_LABEL } from "../../lib/projectItems";
-import { greeting, attentionItems, recentItems, favoriteItems, projectSummary, ago } from "../../lib/dashboard";
+import { greeting, attentionItems, recentItems, favoriteItems, projectSummary, ago, boardRows } from "../../lib/dashboard";
+import DepartureBoard from "../../Components/DepartureBoard/DepartureBoard";
 import VaultBackdrop from "../../Components/Vault/VaultBackdrop";
 import { securityStatus } from "../../lib/vaultView";
 import "../../Components/Vault/Vault.css";
@@ -47,6 +48,7 @@ export default function Dashboard() {
   const proj = useMemo(() => projectSummary(projects || []), [projects]);
   const empty = items.length === 0;
   const status = securityStatus(health, breachChecked);
+  const board = useMemo(() => boardRows({ health, breachChecked, favorites: items.filter((i) => i.favorite).length, proj: projectsOn ? proj : null }), [health, breachChecked, items, projectsOn, proj]);
 
   const subtitle = empty
     ? "Your vault is ready. Add a login or import from another manager to get started."
@@ -75,6 +77,8 @@ export default function Dashboard() {
           }
         />
         </div>
+
+        <DepartureBoard rows={board} title="Stashr departures" />
 
         {empty ? (
           <EmptyState

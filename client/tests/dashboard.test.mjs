@@ -48,3 +48,18 @@ test("ago is short and never negative", () => {
   assert.equal(ago("2026-10-31T12:00:00Z", now), "just now");
   assert.equal(ago(null, now), "");
 });
+
+import { boardRows } from "../src/lib/dashboard.js";
+
+test("departure board reflects real state and fits the flaps", () => {
+  const rows = boardRows({ health: { total: 5, score: 64, reused: 2 }, breachChecked: false, favorites: 2, proj: { active: 3, deployed: 1, broken: 1 } });
+  assert.deepEqual(rows.map((r) => r.status), ["2 REUSED", "DELAYED", "NOT CHECKED", "2 READY", "1 BROKEN"]);
+  assert.deepEqual(rows.map((r) => r.tone), ["warn", "warn", "warn", "ok", "danger"]);
+  for (const r of rows) { assert.ok(r.status.length <= 12 && r.dest.length <= 14 && r.code.length <= 6); assert.ok(r.to.startsWith("/")); }
+});
+
+test("empty vault boards as standby, projects row is optional", () => {
+  const rows = boardRows({ health: { total: 0 } });
+  assert.equal(rows[0].status, "BOARDING");
+  assert.equal(rows.length, 4);
+});

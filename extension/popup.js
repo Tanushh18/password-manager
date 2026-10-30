@@ -172,24 +172,9 @@ async function displayPasswords() {
     document.getElementById('currentDomainSection').style.display = 'none';
   }
 
-  // Show all passwords
-  document.getElementById('allPasswordsSection').style.display = allPasswords.length > 0 ? 'block' : 'none';
-  allPasswordsDiv.innerHTML = allPasswords
-    .map(pwd => createPasswordElement(pwd))
-    .join('');
-
-  // Add event listeners
-  document.querySelectorAll('.autofill-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => autofillPassword(e.currentTarget.dataset.id));
-  });
-
-  document.querySelectorAll('.copy-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => copyPassword(e.currentTarget.dataset.id));
-  });
-
-  document.querySelectorAll('.qr-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => showQRCode(e.currentTarget.dataset.id));
-  });
+  // Show all passwords (filtered by the search box)
+  renderAll();
+  bindItemButtons(currentPasswordsDiv);
 
   const googleAccounts = allPasswords.filter(isGoogleEntry);
   document.getElementById('googleSection').classList.toggle('hidden', googleAccounts.length === 0);
@@ -210,18 +195,43 @@ async function displayPasswords() {
   });
 }
 
+// The "All accounts" list, narrowed by the search box (matches names and usernames only, never passwords).
+function renderAll() {
+  const term = (document.getElementById('search')?.value || '').trim().toLowerCase();
+  const list = term ? allPasswords.filter((p) => (titleOf(p) + ' ' + userOf(p)).toLowerCase().includes(term)) : allPasswords;
+  document.getElementById('allPasswordsSection').style.display = allPasswords.length > 0 ? 'block' : 'none';
+  document.getElementById('emptyState').classList.toggle('hidden', allPasswords.length > 0);
+  allPasswordsDiv.innerHTML = list.length
+    ? list.map(pwd => createPasswordElement(pwd)).join('')
+    : (term ? `<p class="empty">No accounts match “${escapeHtml(term)}”.</p>` : '');
+  bindItemButtons(allPasswordsDiv);
+}
+
+function bindItemButtons(root) {
+  root.querySelectorAll('.autofill-btn').forEach(btn => btn.addEventListener('click', (e) => autofillPassword(e.currentTarget.dataset.id)));
+  root.querySelectorAll('.copy-btn').forEach(btn => btn.addEventListener('click', (e) => copyPassword(e.currentTarget.dataset.id)));
+  root.querySelectorAll('.qr-btn').forEach(btn => btn.addEventListener('click', (e) => showQRCode(e.currentTarget.dataset.id)));
+}
+
+document.getElementById('search')?.addEventListener('input', () => renderAll());
+
+const ICON_FILL = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="m13.5 6.5 4 4"/></svg>';
+const ICON_COPY = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></svg>';
+const ICON_QR = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h2v2h-2zM18 18h2v2h-2zM14 18h2"/></svg>';
+
 // Create password element (all text is escaped: item names come from the vault)
 function createPasswordElement(pwd) {
   return `
     <div class="password-item">
+      <span class="avatar" aria-hidden="true">${escapeHtml((titleOf(pwd).trim().charAt(0) || '•').toUpperCase())}</span>
       <div class="password-info">
         <div class="password-service">${escapeHtml(titleOf(pwd))}</div>
-        <div class="password-username">${escapeHtml(userOf(pwd) || 'Unknown')}</div>
+        <div class="password-username">${escapeHtml(userOf(pwd) || 'No username')}</div>
       </div>
       <div class="password-actions">
-        <button class="icon-btn autofill-btn" data-id="${escapeHtml(pwd._id)}" title="Autofill">📝</button>
-        <button class="icon-btn copy-btn" data-id="${escapeHtml(pwd._id)}" title="Copy Password">📋</button>
-        <button class="icon-btn qr-btn" data-id="${escapeHtml(pwd._id)}" title="QR Code">📱</button>
+        <button class="icon-btn autofill-btn" data-id="${escapeHtml(pwd._id)}" title="Fill on this page" aria-label="Fill ${escapeHtml(titleOf(pwd))} on this page">${ICON_FILL}</button>
+        <button class="icon-btn copy-btn" data-id="${escapeHtml(pwd._id)}" title="Copy password" aria-label="Copy password for ${escapeHtml(titleOf(pwd))}">${ICON_COPY}</button>
+        <button class="icon-btn qr-btn" data-id="${escapeHtml(pwd._id)}" title="Show as QR code" aria-label="Show ${escapeHtml(titleOf(pwd))} as a QR code">${ICON_QR}</button>
       </div>
     </div>
   `;

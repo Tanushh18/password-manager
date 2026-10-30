@@ -54,3 +54,31 @@ export function ago(when, now = Date.now()) {
   if (s < 86400 * 14) return `${Math.floor(s / 86400)}d ago`;
   return new Date(t).toLocaleDateString();
 }
+
+const pad2 = (n) => String(Math.max(0, n | 0)).padStart(2, "0");
+
+/**
+ * Rows for the split-flap departures board on the overview, from real state only.
+ * Status strings stay within 12 characters so they fit the flaps.
+ */
+export function boardRows({ health = {}, breachChecked = false, favorites = 0, proj = null }) {
+  const rows = [];
+  const total = health.total || 0;
+  const vault = !total ? ["BOARDING", "idle"]
+    : health.breached ? [`${health.breached} BREACHED`, "danger"]
+    : health.weak ? [`${health.weak} WEAK`, "danger"]
+    : health.reused ? [`${health.reused} REUSED`, "warn"]
+    : ["ON TIME", "ok"];
+  rows.push({ code: `VLT${pad2(total)}`, dest: "PASSWORDS", status: vault[0], tone: vault[1], to: "/passwords" });
+  const score = health.score ?? 100;
+  const sec = !total ? ["STANDBY", "idle"] : score >= 80 ? ["ON TIME", "ok"] : score >= 55 ? ["DELAYED", "warn"] : ["GATE CHECK", "danger"];
+  rows.push({ code: `SEC${pad2(Math.min(99, score))}`, dest: "SECURITY SCORE", status: sec[0], tone: sec[1], to: "/security-center" });
+  const breach = !total ? ["STANDBY", "idle"] : !breachChecked ? ["NOT CHECKED", "warn"] : health.breached ? [`${health.breached} FOUND`, "danger"] : ["CLEARED", "ok"];
+  rows.push({ code: "HIBP", dest: "BREACH CHECK", status: breach[0], tone: breach[1], to: "/security-center" });
+  rows.push({ code: `FAV${pad2(favorites)}`, dest: "FAVOURITES", status: favorites ? `${favorites} READY` : "NONE YET", tone: favorites ? "ok" : "idle", to: "/passwords?section=__fav" });
+  if (proj) {
+    const p = proj.broken ? [`${proj.broken} BROKEN`, "danger"] : proj.deployed ? [`${proj.deployed} LIVE`, "ok"] : proj.active ? ["IN HANGAR", "idle"] : ["BOARDING", "idle"];
+    rows.push({ code: `PRJ${pad2(proj.active)}`, dest: "PROJECTS", status: p[0], tone: p[1], to: "/projects" });
+  }
+  return rows;
+}
