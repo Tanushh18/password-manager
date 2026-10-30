@@ -113,17 +113,3 @@
   .ov-score__falls { animation: none; }
   .ov-score__bar i, .ov-card, .ov-chip { transition: none; }
 }
-
-/* 2026-10-30: the score sits on the same surface as its neighbours; colour carries the state. */
-.ov-score { background: var(--surface) !important; border: 1px solid var(--line) !important; color: var(--text); }
-.ov-score__falls { display: none; }
-.ov-score .ov-card__label { color: var(--text-muted); }
-.ov-score__value strong { color: var(--heading); }
-.ov-score__value small { color: var(--text-faint); }
-.ov-score__bar { background: var(--surface-sunken); }
-.ov-score__bar i { background: var(--ok); }
-.ov-score--warn .ov-score__bar i { background: var(--warn); }
-.ov-score--danger .ov-score__bar i { background: var(--danger); }
-.ov-score__flag { font-family: var(--font-sans) !important; letter-spacing: 0.02em !important; color: var(--ok) !important; background: rgba(var(--ok-rgb), 0.12) !important; border: 0 !important; border-radius: var(--r-pill) !important; padding: 0.1rem 0.5rem !important; text-transform: none !important; font-size: 0.7rem !important; }
-.ov-score--warn .ov-score__flag { color: var(--warn) !important; background: rgba(var(--warn-rgb), 0.15) !important; }
-.ov-score--danger .ov-score__flag { color: var(--danger) !important; background: rgba(var(--danger-rgb), 0.12) !important; }

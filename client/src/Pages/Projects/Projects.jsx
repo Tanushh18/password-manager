@@ -143,7 +143,7 @@ export default function Projects() {
             </>
           }
         />
-        {prefs.fx ? <MascotBanner kind="rocket" {...projectsMood(projects, statuses)} /> : null}
+        <MascotBanner kind="rocket" {...projectsMood(projects, statuses)} />
 
         <section className={"pv2-sync" + (syncFailed ? " is-error" : "")} aria-live="polite">
           <span className={"pv2-sync__dot" + (syncing ? " is-busy" : "")} aria-hidden="true" />

@@ -152,10 +152,3 @@
   .sc-row { animation: none; }
   .sc-gauge-fill, .sc-btn, .sc-switch::after, .sc-progress span { transition: none; }
 }
-
-/* 2026-10-30: shared title scale, plain status chips, no lane numbers or scan sweep. */
-.sc-page .sc-lane { display: none !important; }
-.sc-page .sc-scan { display: none; }
-.sc-eyebrow { letter-spacing: 0.02em; text-transform: none; font-size: var(--fs-xs); }
-.sc-hero h1 { font-size: var(--fs-2xl); }
-.sc-pill { font: 600 12px/1.2 var(--font-sans); letter-spacing: 0; text-transform: none; }

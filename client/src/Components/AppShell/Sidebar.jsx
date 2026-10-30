@@ -15,6 +15,24 @@ const readCollapsed = () => { try { return localStorage.getItem(COLLAPSE_KEY) ==
 const initials = (name = "", email = "") => (name.trim() ? name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("") : email.slice(0, 1)).toUpperCase() || "S";
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || "");
 
+/* Little world at the foot of the sidebar: canopy leaves, a river and a robot on watch. Decorative. */
+function SidebarScene() {
+  return (
+    <svg className="sb__scene" viewBox="0 0 248 120" preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">
+      <path className="sb__scene-hill" d="M0 120V78c30-14 56-18 84-10 26 8 46-6 74-8 34-2 58 14 90 6v54z" />
+      <path className="sb__scene-river" d="M0 104c40-10 78-12 116-6 40 6 86 4 132-6" />
+      <path className="sb__scene-shine" d="M18 102c22-4 40-5 58-4M140 99c20 0 40-2 62-6" />
+      <path className="sb__scene-leaf" d="M232 0c-6 24-24 40-48 44 10-20 26-36 48-44zM248 18c-10 18-26 28-44 30 10-14 24-24 44-30z" />
+      <path className="sb__scene-leaf" d="M0 6c8 20 24 32 44 34-8-18-22-30-44-34z" />
+      <g className="sb__scene-bot" transform="translate(196 74)">
+        <rect x="-6" y="-12" width="12" height="9" rx="2.5" /><rect x="-4" y="-3" width="8" height="7" rx="2" />
+        <circle cx="-2.4" cy="-7.5" r="1.1" className="sb__scene-eye" /><circle cx="2.4" cy="-7.5" r="1.1" className="sb__scene-eye" />
+        <path d="M0 -12v-4" /><circle cx="0" cy="-17" r="1.5" className="sb__scene-beacon" />
+      </g>
+    </svg>
+  );
+}
+
 /** Signed-in navigation for tablets and desktops: grouped destinations, search, alerts, theme and account. */
 export default function Sidebar() {
   const { status, profile, lock } = useVault();
@@ -86,6 +104,7 @@ export default function Sidebar() {
         ))}
       </nav>
 
+      <SidebarScene />
       <div className="sb__foot">
         <div className="sb__tools">
           <NavLink to="/settings" className={`sb__link ${pathname.startsWith("/settings") ? "is-active" : ""}`} aria-current={pathname.startsWith("/settings") ? "page" : undefined} title={collapsed ? "Settings" : undefined}>

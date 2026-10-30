@@ -28,6 +28,23 @@ function Switch({ id, label, sample, checked, onChange }) {
   );
 }
 
+/** Turquoise "river" that carries the chosen settings toward the output. Decorative only. */
+function FlowChannel() {
+  const v = "M60 0 C 20 80, 100 140, 60 200 S 20 320, 60 400";
+  const h = "M0 24 C 80 4, 140 44, 200 24 S 320 4, 400 24";
+  return (
+    <>
+      {[["v", "0 0 120 400", v], ["h", "0 0 400 48", h]].map(([k, box, d]) => (
+        <svg key={k} className={`gen-flow gen-flow--${k}`} viewBox={box} preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <path className="gen-flow__bed" d={d} />
+          <path className="gen-flow__current" d={d} />
+          <path className="gen-flow__current gen-flow__current--b" d={d} transform={k === "v" ? "translate(6 0)" : "translate(0 4)"} />
+        </svg>
+      ))}
+    </>
+  );
+}
+
 export default function Generator() {
   const uid = useId();
   const [mode, setMode] = useState("password");
@@ -91,8 +108,9 @@ export default function Generator() {
   return (
     <main className="gen">
       <header className="gen__head">
+        <p className="gen__sign"><span className="gen__gate">G</span> Creation station <span className="gen__dot" aria-hidden="true" /> <span className="gen__status">Online</span></p>
         <h1 className="gen__title">Password generator</h1>
-        <p className="gen__lede">Create a random password or passphrase. It is generated in your browser with <code>crypto.getRandomValues</code> and nothing here is saved.</p>
+        <p className="gen__lede">Shape a new password or passphrase. Generated in your browser with <code>crypto.getRandomValues</code>; nothing here is saved.</p>
       </header>
 
       <section className="gen-station" aria-label="Generator workstation">
@@ -161,6 +179,8 @@ export default function Generator() {
             </div>
           )}
         </div>
+
+        <FlowChannel />
 
         <div className="gen-out">
           <p className="gen-field__label" id={`${uid}-out-label`}>{mode === "password" ? "Generated password" : "Generated passphrase"}</p>

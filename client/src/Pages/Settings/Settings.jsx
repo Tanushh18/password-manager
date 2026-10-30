@@ -683,7 +683,7 @@ export default function Settings() {
           <SectionNav active={active} onPick={pick} />
 
           <div className="cc__main">
-            {prefs.fx ? <MascotBanner kind="gear" {...accountMood(profile)} /> : null}
+            <MascotBanner kind="gear" {...accountMood(profile)} />
 
             <Section id="account" code="A1" title="Account" lede="Who you are and how you sign in.">
               <Group>
@@ -726,16 +726,16 @@ export default function Settings() {
               </Group>
             </Section>
 
-            <Section id="appearance" code="V4" title="Appearance" lede="Theme, icons and optional decoration. Changes apply right away on this browser.">
+            <Section id="appearance" code="V4" title="Appearance" lede="Theme and the scenery around every page.">
               <Group>
                 <Row icon={<Globe size={15} />} label="Theme">
                   <ThemeToggle />
                 </Row>
-                <Row label="Jungle scene" hint="Decorative grass, vines and animals around every page. Off by default.">
-                  <Toggle checked={Boolean(prefs.jungle)} onChange={(v) => setPrefs({ jungle: v })} label="Jungle scene" />
+                <Row label="Jungle scene" hint="Grass, vines, animals, birds and fireflies around every page, with the robots mixed in. Day jungle in the light theme, night jungle in the dark theme.">
+                  <Toggle checked={prefs.jungle !== false} onChange={(v) => setPrefs({ jungle: v })} label="Jungle scene" />
                 </Row>
-                <Row label="Playful effects" hint="Robots fly by, planes land when you save, and pages show the robot helper banners. Off by default, and always off if your device asks for reduced motion.">
-                  <Toggle checked={Boolean(prefs.fx)} onChange={(v) => setPrefs({ fx: v })} label="Playful effects" />
+                <Row label="Fun effects" hint="Robots fly by, planes land when you save, and things blow up when something is deleted for good or goes down. Off automatically if your device asks for reduced motion.">
+                  <Toggle checked={prefs.fx !== false} onChange={(v) => setPrefs({ fx: v })} label="Fun effects" />
                 </Row>
                 <Row label="Website icons" hint="Fetched from DuckDuckGo, which can see which sites you have saved.">
                   <Toggle checked={prefs.icons} onChange={(v) => setPrefs({ icons: v })} label="Website icons" />

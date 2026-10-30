@@ -78,3 +78,30 @@ body.has-bottomnav .jungle { bottom: calc(68px + env(safe-area-inset-bottom, 0px
 
 /* Phones: the vines would sit on top of page headings, so they are hidden; grass, leaves and animals stay. */
 @media (max-width: 720px) { .jg-vine { display: none; } }
+
+/* ── River (2026-10-30): water, lily pads and a jumping fish behind the grass ── */
+.jg-river { position: absolute; left: 0; right: 0; bottom: 22px; height: 40px; }
+.jg-river__water { position: absolute; inset: 0; width: 100%; height: 100%; }
+.jungle.is-day { --water: #6fd0cb; --water-shine: rgba(255, 255, 255, 0.85); --pad: #4caf50; }
+.jungle.is-night { --water: #1d5e63; --water-shine: rgba(143, 224, 220, 0.6); --pad: #24603a; }
+.jg-river__bed { fill: var(--water); opacity: 0.75; }
+.jg-river__shine { fill: none; stroke: var(--water-shine); stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: 10 26; animation: jg-flow 5s linear infinite; }
+.jg-river__shine--b { stroke-dasharray: 6 30; animation-duration: 7s; opacity: 0.7; }
+@keyframes jg-flow { to { stroke-dashoffset: -72; } }
+.jg-pad { position: absolute; bottom: 12px; width: 26px; height: 9px; border-radius: 50%; background: var(--pad); box-shadow: inset -6px -2px 0 rgba(0, 0, 0, 0.12); animation: jg-bob 4s ease-in-out infinite alternate; }
+.jg-pad--sm { width: 16px; height: 6px; bottom: 16px; animation-delay: -1.5s; }
+.jg-frog { position: absolute; left: 2px; bottom: 4px; font-size: 15px; font-style: normal; }
+@keyframes jg-bob { from { transform: translateY(0); } to { transform: translateY(-2px); } }
+.jg-fish { position: absolute; left: 40%; bottom: 10px; font-size: 18px; opacity: 0; animation: jg-jump 14s ease-in-out infinite; }
+.jg-fish--b { left: 76%; animation-delay: -7s; animation-duration: 17s; }
+@keyframes jg-jump {
+  0%, 88%, 100% { opacity: 0; transform: translate(0, 0) rotate(0); }
+  90% { opacity: 1; transform: translate(10px, -26px) rotate(-30deg); }
+  93% { opacity: 1; transform: translate(26px, -34px) rotate(10deg); }
+  96% { opacity: 1; transform: translate(40px, -8px) rotate(50deg); }
+  97% { opacity: 0; }
+}
+/* Keep the left-side scenery clear of the sidebar. */
+body.has-sidebar .jg-vine--left, body.has-sidebar .jg-leaves--left { left: calc(var(--sidebar-w) - 26px); }
+body.has-sidebar.sidebar-collapsed .jg-vine--left, body.has-sidebar.sidebar-collapsed .jg-leaves--left { left: calc(var(--sidebar-w-collapsed) - 26px); }
+@media (prefers-reduced-motion: reduce) { .jg-river__shine, .jg-pad, .jg-fish { animation: none; } .jg-fish { display: none; } }

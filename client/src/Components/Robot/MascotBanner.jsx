@@ -1,12 +1,9 @@
 import React from "react";
 import Mascot from "./Mascot";
-import { useVault } from "../../state/vault";
 import "./MascotBanner.css";
 
-/** A page's mascot with its mood line and a few live readouts. Part of the opt-in playful effects (Settings → Appearance). */
+/** A page's mascot with its mood line and a few live readouts. Works on light and dark pages (always neon). */
 export default function MascotBanner({ kind, mood, title, line, stats = [], children }) {
-  const { prefs } = useVault();
-  if (!prefs?.fx) return null;
   return (
     <section className={"mbn is-" + mood} aria-label={title}>
       <Mascot kind={kind} mood={mood} size={64} />

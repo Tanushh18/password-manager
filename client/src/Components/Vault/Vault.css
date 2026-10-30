@@ -420,3 +420,42 @@ body.has-sidebar .vx-side { top: 16px; max-height: calc(100vh - 32px); }
   .vx-tools__actions { width: 100%; }
   .vx-tools__actions .btn { flex: 1; }
 }
+
+/* ── Horizon header v2: the themed panel around the shared page header ── */
+.vx-head--v2 { display: block; padding: clamp(1rem, 2.4vw, 1.5rem) clamp(1rem, 2.6vw, 1.75rem) clamp(1.1rem, 2.6vw, 1.6rem); margin-bottom: 1rem; min-height: 168px; }
+.vx-head--v2 .vx-board { margin-bottom: 0.75rem; }
+.vx-head--v2 .ui-pagehead { margin-bottom: 0; }
+.vx-head--v2 .ui-pagehead__title { color: var(--vx-head-text); font-size: clamp(1.6rem, 3vw, 2rem); }
+.vx-head--v2 .ui-pagehead__sub { color: var(--vx-head-muted); }
+.vx-head--v2 .btn--quiet { color: var(--vx-head-muted); }
+.vx-head--v2 .btn--quiet:hover { color: var(--vx-head-text); background: rgba(255, 255, 255, 0.08); }
+
+/* New horizon details */
+.vx-backdrop__stars circle { fill: #e9f4ef; opacity: 0.7; animation: vx-twinkle 4s ease-in-out infinite; }
+.vx-backdrop__orb circle { fill: #f3efd9; opacity: 0.85; }
+.vx-backdrop__orb .vx-backdrop__orb-glow { fill: #f3efd9; opacity: 0.08; }
+.vx-backdrop__birds { stroke: color-mix(in srgb, var(--midnight) 40%, var(--river-soft)); opacity: 0.55; }
+.vx-backdrop__plane { fill: #e9f4ef; opacity: 0.85; animation: vx-approach 26s linear infinite; }
+.vx-backdrop__towerglass { fill: var(--river-soft) !important; opacity: 0.8 !important; }
+.vx-backdrop__runway circle { fill: var(--runway); animation: vx-beacon 1.6s ease-in-out infinite; }
+.vx-backdrop__mist circle { fill: #ffffff; opacity: 0.16; animation: vx-mist 5s ease-in-out infinite; }
+.vx-backdrop__shimmer { fill: none; stroke: var(--river-soft); stroke-width: 1.5; stroke-linecap: round; stroke-dasharray: 6 14; opacity: 0.55; animation: vx-shimmer 3.5s linear infinite; }
+.vx-backdrop__bot rect, .vx-backdrop__bot path { fill: color-mix(in srgb, var(--midnight) 55%, var(--river)); stroke: color-mix(in srgb, var(--midnight) 55%, var(--river)); }
+.vx-backdrop__boteye { fill: var(--emerald-soft); }
+.vx-backdrop__botlight { fill: var(--runway); animation: vx-beacon 2.2s ease-in-out infinite; }
+:root[data-theme="light"] .vx-backdrop__stars { display: none; }
+:root[data-theme="light"] .vx-backdrop__orb circle { fill: var(--sun); opacity: 0.9; }
+:root[data-theme="light"] .vx-backdrop__orb .vx-backdrop__orb-glow { opacity: 0.25; }
+:root[data-theme="light"] .vx-backdrop__plane { fill: #5f8f86; }
+:root[data-theme="light"] .vx-backdrop__birds { stroke: #5f8f86; }
+:root[data-theme="light"] .vx-backdrop__bot rect, :root[data-theme="light"] .vx-backdrop__bot path { fill: #7fae9f; stroke: #7fae9f; }
+:root[data-theme="light"] .vx-backdrop__shimmer { stroke: #ffffff; opacity: 0.8; }
+@keyframes vx-twinkle { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.9; } }
+@keyframes vx-approach { 0% { transform: translate(260px, -18px); opacity: 0; } 8% { opacity: 0.85; } 60% { opacity: 0.85; } 70%, 100% { transform: translate(-520px, 40px); opacity: 0; } }
+@keyframes vx-beacon { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+@keyframes vx-mist { 0%, 100% { transform: translateY(0); opacity: 0.12; } 50% { transform: translateY(-4px); opacity: 0.26; } }
+@keyframes vx-shimmer { to { stroke-dashoffset: -40; } }
+@media (prefers-reduced-motion: reduce) {
+  .vx-backdrop__stars circle, .vx-backdrop__plane, .vx-backdrop__runway circle, .vx-backdrop__mist circle, .vx-backdrop__shimmer, .vx-backdrop__botlight { animation: none; }
+  .vx-backdrop__plane { opacity: 0; }
+}

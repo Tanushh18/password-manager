@@ -62,12 +62,6 @@
 /* Photos is out of scope for the redesign: App.jsx puts body.route-photos on its routes,
    and every global tweak below skips it so Photos renders exactly as before. */
 
-/* Quieter page ground: one soft wash instead of three radial glows. */
-body:not(.route-photos) {
-  background-image: linear-gradient(180deg, rgba(var(--accent-rgb), 0.035), transparent 320px) !important;
-  background-attachment: scroll !important;
-}
-
 /* Small-caps eyebrows were shouting; keep them quiet and readable. */
 body:not(.route-photos) .eyebrow { letter-spacing: 0.06em; font-size: var(--fs-xs); }
 
@@ -264,3 +258,26 @@ a.ui-row:hover, button.ui-row:hover { background: var(--surface-hover); color: i
   .ui-scrim, .ui-dialog, .cmdk, .cmdk__scrim, .sb { animation: none !important; transition: none !important; }
   .ui-skeleton span { animation: none; }
 }
+
+/* ════════════════ WORLD TOUCHES IN THE SHELL ════════════════ */
+.sb__nav, .sb__foot, .sb__brand, .sb__search { position: relative; z-index: 1; }
+.sb__scene { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 150px; pointer-events: none; z-index: 0; opacity: 0.9; }
+.sb__scene-hill { fill: color-mix(in srgb, var(--forest-700) 40%, transparent); }
+.sb__scene-river { fill: none; stroke: var(--river); stroke-width: 6; stroke-linecap: round; opacity: 0.28; }
+.sb__scene-shine { fill: none; stroke: var(--river-soft); stroke-width: 1.4; stroke-linecap: round; stroke-dasharray: 5 12; opacity: 0.6; animation: vx-shimmer-sb 4s linear infinite; }
+.sb__scene-leaf { fill: color-mix(in srgb, var(--emerald) 30%, transparent); }
+.sb__scene-bot rect, .sb__scene-bot path { fill: color-mix(in srgb, var(--river) 55%, transparent); stroke: color-mix(in srgb, var(--river) 55%, transparent); stroke-width: 1.2; }
+.sb__scene-eye { fill: var(--emerald-soft); }
+.sb__scene-beacon { fill: var(--runway); animation: sb-beacon 2.4s ease-in-out infinite; }
+:root[data-theme="light"] .sb__scene-hill { fill: #dcebe3; }
+:root[data-theme="light"] .sb__scene-leaf { fill: #c6e0d2; }
+.sb.is-collapsed .sb__scene { opacity: 0.5; }
+.sb__mark { position: relative; }
+.sb__mark::after { content: ""; position: absolute; left: 6px; right: 6px; bottom: -6px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--runway), transparent); background-size: 50% 100%; background-repeat: no-repeat; animation: splash-runway 2.4s var(--ease-soft) infinite; }
+.sb__link.is-active::before { background: linear-gradient(180deg, var(--emerald-soft), var(--river)); }
+@keyframes vx-shimmer-sb { to { stroke-dashoffset: -34; } }
+@keyframes sb-beacon { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sb__scene-shine, .sb__scene-beacon, .sb__mark::after { animation: none; } }
+.sb__scene { bottom: 112px; height: 110px; }
+.sb.is-collapsed .sb__scene { display: none; }
+body.has-jungle .vx-backdrop__orb { display: none; } /* the jungle already has its moon / sun */

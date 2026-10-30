@@ -10,8 +10,9 @@ import ItemEditor from "../../Components/Item/ItemEditor";
 import ImportModal from "../../Components/Item/ImportModal";
 import VaultSidebar from "../../Components/Vault/VaultSidebar";
 import { IcWand, IcTrash } from "../../Components/Vault/VaultIcons";
+import VaultBackdrop from "../../Components/Vault/VaultBackdrop";
 import { KeyLine, Plus, Search, Upload, Arrow, LockLine, Alert } from "../../Components/Icons/Icons";
-import { PageHeader, EmptyState, Badge } from "../../Components/UI/ui";
+import { PageHeader, EmptyState } from "../../Components/UI/ui";
 import { useDialogs } from "../../Components/UI/Dialogs";
 import { useVault } from "../../state/vault";
 import { SECTIONS, isBuiltinSection, visibleItems, sectionCounts, folderNames, securityStatus } from "../../lib/vaultView";
@@ -187,12 +188,19 @@ export default function Passwords() {
   return (
     <div className="vault vx page">
       <div className="vx__shell">
+        <div className="vx-head vx-head--v2">
+          <VaultBackdrop />
+          <p className="vx-board" aria-label={`Security status: ${status.label}`}>
+            <span className="vx-board__cell vx-hide-sm">Gate</span>
+            <span className="vx-board__cell vx-board__cell--strong">Vault</span>
+            <span className={`vx-board__status is-${status.tone}`}><i aria-hidden="true" />{status.label}</span>
+            {health.total ? <span className="vx-board__cell">Score {health.score}</span> : null}
+          </p>
         <PageHeader
           title="Passwords"
           subtitle={
             <>
               {headerSub}
-              {health.total ? <Badge tone={status.tone === "idle" ? "neutral" : status.tone} dot className="vx-status" aria-label={`Security status: ${status.label}`}>{status.label}</Badge> : null}
             </>
           }
           actions={
@@ -204,6 +212,7 @@ export default function Passwords() {
             </>
           }
         />
+        </div>
 
         <div className="vx-tools">
           <div className="vx-search">
@@ -252,11 +261,9 @@ export default function Passwords() {
               />
             ) : null}
 
-            {prefs.fx ? (
-              <div className="vx-bot">
-                <MascotBanner kind="safe" {...vaultMood(health, items.length)} stats={[]} />
-              </div>
-            ) : null}
+            <div className="vx-bot">
+              <MascotBanner kind="safe" {...vaultMood(health, items.length)} stats={[]} />
+            </div>
 
             <div className="vx-list-head">
               <div className="vx-list-head__title">

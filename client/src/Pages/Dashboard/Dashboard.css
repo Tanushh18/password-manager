@@ -58,3 +58,5 @@
   .dash .ui-pagehead__actions .btn { flex: 1; }
 }
 @media (max-width: 420px) { .dash__quick { grid-template-columns: 1fr; } }
+.dash.vx { padding-top: clamp(1.25rem, 3vw, 2rem); }
+.dash__hero { margin-bottom: 1rem; }

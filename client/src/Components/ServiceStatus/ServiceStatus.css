@@ -49,9 +49,3 @@
 .status__label { text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.12em; }
 .status--compact .status__label { font-size: 0.66rem; }
 .status__detail { font-family: var(--font-mono); letter-spacing: 0; }
-
-/* 2026-10-30: sentence case and a quieter chip; this is secondary information. */
-.status { font-family: var(--font-sans); letter-spacing: 0; background: transparent; box-shadow: none; padding: 0.3rem 0.75rem; min-height: 32px; }
-.status__label { text-transform: none; font-size: 0.78rem; letter-spacing: 0; font-weight: 600; }
-.status--compact .status__label { font-size: 0.74rem; }
-.status__detail { font-family: var(--font-sans); }

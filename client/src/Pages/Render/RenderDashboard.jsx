@@ -23,7 +23,7 @@ import { HOSTS } from "../../lib/hostGuides";
 import { useVault } from "../../state/vault";
 import { serviceProjectIndex } from "../../lib/serviceProjects";
 
-const VIEWS = [["overview", "Overview"], ["services", "Servers"], ["monitoring", "Monitoring"], ["incidents", "Incidents"], ["settings", "Settings"]];
+const VIEWS = [["overview", "🛰️ Overview"], ["services", "🤖 Servers"], ["monitoring", "📡 Monitoring"], ["incidents", "🚨 Incidents"], ["settings", "⚙️ Settings"]];
 const PAGE_SIZE = 15;
 const REFRESH_MS = 30000;
 const FAV_KEY = "stashr_render_favorites";
@@ -72,10 +72,7 @@ export default function RenderDashboard() {
   const [selectedGroupId, setSelectedGroupId] = useState("");
   const [ask, confirmDialog] = useConfirm();
   const ops = useOps();
-  const { projects: vaultProjects, prefs } = useVault();
-  // Robot views are part of the opt-in playful effects; everyone else gets the board and table.
-  const playful = Boolean(prefs?.fx);
-  const shownLayout = !playful && (layout === "robots" || layout === "floor") ? "board" : layout;
+  const { projects: vaultProjects } = useVault();
   const projectOf = useMemo(() => serviceProjectIndex(vaultProjects), [vaultProjects]);
   const projectCell = (list) => {
     const hit = list.map((x) => projectOf.get(x.id)).find(Boolean);
@@ -353,14 +350,14 @@ export default function RenderDashboard() {
       <header className="rd-topbar">
         <div className="rd-shell rd-topbar__inner">
           <div className="rd-topbar__title">
-            <div className="rd-eyebrow"><span />Infrastructure</div>
-            <h1>Control Center</h1>
+            <div className="rd-eyebrow"><span />ROBOT HQ · INFRASTRUCTURE</div>
+            <h1>🤖 Control Center</h1>
           </div>
           <div className="rd-topbar__tools">
             <span className="rd-sync" role="status" aria-live="polite">{loading ? "Loading…" : lastSync ? "Synced " + timeAgo(lastSync.toISOString()) : "Not synced"}</span>
             <label className="rd-check" title="Syncs services, monitoring history and incidents every 15 seconds while this tab is visible"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> Live sync</label>
-            <button type="button" className="rd-btn rd-btn--quiet" onClick={() => void refreshAll()} disabled={refreshing || loading}>{refreshing ? "Refreshing…" : "Refresh"}</button>
-            <button type="button" className="rd-btn rd-btn--primary" onClick={() => { setConnectError(""); setConnectOpen(true); }}>Connect account</button>
+            <button type="button" className="rd-btn rd-btn--quiet" onClick={() => void refreshAll()} disabled={refreshing || loading}>{refreshing ? "Refreshing…" : "↻ Refresh"}</button>
+            <button type="button" className="rd-btn rd-btn--primary" onClick={() => { setConnectError(""); setConnectOpen(true); }}>＋ Connect account</button>
           </div>
         </div>
         <nav className="rd-shell rd-nav" aria-label="Control center sections">
@@ -379,12 +376,12 @@ export default function RenderDashboard() {
 
         {view === "overview" && (
           <div className="rd-stack">
-            {playful && !loading && services.length > 0 && <RobotSquad services={services} series={series} onOpen={setSelectedKey} title="Robot HQ · all units" />}
+            {!loading && services.length > 0 && <RobotSquad services={services} series={series} onOpen={setSelectedKey} title="Robot HQ · all units" />}
             <div className="rd-kpis">
-              <Kpi label="Apps" value={loading ? "–" : appCount} hint={fleet.total + " servers · " + accounts.length + " account" + (accounts.length === 1 ? "" : "s")} onClick={() => go("services")} />
-              <Kpi label="Running" value={loading ? "–" : fleet.active} tone="ok" hint="Listed as not suspended" onClick={() => { clearFilters(); setStateFilter("active"); go("services"); }} />
-              <Kpi label="Open incidents" value={openNow.length} tone={openNow.length ? "danger" : undefined} hint={openNow.length ? "Review and fix" : staleCount ? staleCount + " stale to close" : "None open"} onClick={() => go("incidents")} />
-              <Kpi label="Suspended" value={loading ? "–" : fleet.suspended} tone={fleet.suspended ? "warn" : undefined} hint="May need attention" onClick={() => { clearFilters(); setStateFilter("suspended"); go("services"); }} />
+              <Kpi label="Squads (apps)" value={loading ? "–" : appCount} hint={fleet.total + " servers · " + accounts.length + " account" + (accounts.length === 1 ? "" : "s")} onClick={() => go("services")} />
+              <Kpi label="Bots awake" value={loading ? "–" : fleet.active} tone="ok" hint="Listed as not suspended" onClick={() => { clearFilters(); setStateFilter("active"); go("services"); }} />
+              <Kpi label="Bots in trouble" value={openNow.length} tone={openNow.length ? "danger" : undefined} hint={openNow.length ? "Review and fix" : staleCount ? staleCount + " stale to close" : "None open"} onClick={() => go("incidents")} />
+              <Kpi label="Bots sleeping" value={loading ? "–" : fleet.suspended} tone={fleet.suspended ? "warn" : undefined} hint="May need attention" onClick={() => { clearFilters(); setStateFilter("suspended"); go("services"); }} />
             </div>
 
             <div className="rd-grid">
@@ -429,7 +426,7 @@ export default function RenderDashboard() {
               <button type="button" className={"rd-btn rd-btn--quiet" + (favoriteOnly ? " is-active" : "")} aria-pressed={favoriteOnly} onClick={() => setFavoriteOnly((v) => !v)}>{favoriteOnly ? "★" : "☆"} Favorites</button>
               <label className="rd-check"><input type="checkbox" checked={hideSuspended} onChange={(e) => setHideSuspended(e.target.checked)} /> Hide suspended</label>
               {filtersActive && <button type="button" className="rd-btn rd-btn--link" onClick={clearFilters}>Clear filters</button>}
-              <span className="rd-layout-toggle" role="group" aria-label="Layout">{[...(playful ? [["robots", "Robots"], ["floor", "Floor"]] : []), ["board", "Board"], ["table", "Table"]].map(([id, label]) => <button key={id} type="button" aria-pressed={shownLayout === id} className={shownLayout === id ? "is-active" : ""} onClick={() => setLayout(id)}>{label}</button>)}</span>
+              <span className="rd-layout-toggle" role="group" aria-label="Layout">{[["robots", "🤖 Robots"], ["floor", "🏭 Floor"], ["board", "▦ Board"], ["table", "☰ Table"]].map(([id, label]) => <button key={id} type="button" aria-pressed={layout === id} className={layout === id ? "is-active" : ""} onClick={() => setLayout(id)}>{label}</button>)}</span>
             </div>
             {checked.length > 0 && (
               <div className="rd-selectbar" role="region" aria-label="Selection actions">
@@ -441,10 +438,10 @@ export default function RenderDashboard() {
 
               </div>
             )}
-            {shownLayout === "robots" && (loading ? <div className="rd-board"><Skeleton lines={4} height={120} /></div> : (
+            {layout === "robots" && (loading ? <div className="rd-board"><Skeleton lines={4} height={120} /></div> : (
               <RobotArmy groups={groups} series={series} incidentKeys={fleet.incidentKeys} projectCell={projectCell} onOpen={setSelectedKey} busy={busyKey} onAction={(kind, s) => void runAction(kind, [s])} />
             ))}
-            {shownLayout === "floor" && (loading ? <div className="rd-board"><Skeleton lines={4} height={120} /></div> : (services.length && !groups.length
+            {layout === "floor" && (loading ? <div className="rd-board"><Skeleton lines={4} height={120} /></div> : (services.length && !groups.length
               ? <Empty icon="🏭" title="Koi robot match nahi hua">Search ya filters badal ke dekho.</Empty>
               : <RobotFloor
                   lanes={groups.length ? lanesFromBots(groups.flatMap((g) => g.members.map((s) => botFor(s, series, fleet.incidentKeys))), fleet.incidentKeys) : demoLanes()}
@@ -452,15 +449,15 @@ export default function RenderDashboard() {
                   onOpen={setSelectedKey}
                 />
             ))}
-            {shownLayout === "robots" && !loading && !groups.length && <Empty icon="🤖" title={services.length ? "Koi robot match nahi hua" : "Robot army ready hai"}>{services.length ? "Search ya filters badal ke dekho." : "Render API key connect karo, robots aa jayenge."}</Empty>}
-            {shownLayout === "board" && (loading ? <div className="rd-board"><Skeleton lines={4} height={120} /></div> : (
+            {layout === "robots" && !loading && !groups.length && <Empty icon="🤖" title={services.length ? "Koi robot match nahi hua" : "Robot army ready hai"}>{services.length ? "Search ya filters badal ke dekho." : "Render API key connect karo, robots aa jayenge."}</Empty>}
+            {layout === "board" && (loading ? <div className="rd-board"><Skeleton lines={4} height={120} /></div> : (
               <ServerBoard groups={groups} incidentKeys={fleet.incidentKeys} series={series} checked={checked}
                 onToggle={toggleChecked} onToggleApp={(keys, all) => setChecked((old) => (all ? old.filter((k) => !keys.includes(k)) : [...new Set([...old, ...keys])]))}
                 projectCell={projectCell} onOpen={setSelectedKey} busy={busyKey}
                 onAction={(kind, s) => void runAction(kind, [s])} onDelete={(s) => void deleteOne(s)} />
             ))}
-            {shownLayout === "board" && !loading && !groups.length && <Empty icon="▣" title={services.length ? "No matching services" : "Your control center is ready"}>{services.length ? "Try changing your search or filters." : "Connect a Render API key to get started."}</Empty>}
-            {shownLayout === "table" && <>
+            {layout === "board" && !loading && !groups.length && <Empty icon="▣" title={services.length ? "No matching services" : "Your control center is ready"}>{services.length ? "Try changing your search or filters." : "Connect a Render API key to get started."}</Empty>}
+            {layout === "table" && <>
             <div className="rd-tablewrap">
               <table className="rd-table">
                 <thead><tr>

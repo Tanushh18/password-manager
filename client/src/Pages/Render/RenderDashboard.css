@@ -712,25 +712,4 @@
 .rd-hostlist small { color: var(--text-muted); }
 .rd-hostlist a { margin-left: auto; }
 
-/* ════════════════ 2026-10-30 redesign ════════════════
-   Plain status language and the shared surfaces: KPI tiles match .ui-stat, the
-   airport sub-labels (ON TIME, GROUNDED…) and the skyline are gone, the eyebrow
-   is sentence case. Applies to the Control Center, Usage, Map and Cron pages. */
-.rd-page--cyber .rd-topbar::before { content: none; }
-.rd-eyebrow { font-family: var(--font-sans); letter-spacing: 0.02em; font-size: var(--fs-xs); font-weight: 600; text-transform: none; }
-.rd-eyebrow span { display: none; }
-.rd-kpi, .rd-page--cyber .rd-kpi, .rd-page .cr-kpis > div { background: var(--surface); border: 1px solid var(--line); color: var(--text); }
-.rd-page .cr-kpis > div { border-top: 1px solid var(--line); }
-.rd-kpi > span, .cr-kpis span { font-family: var(--font-sans); color: var(--text-muted); letter-spacing: 0; font-size: var(--fs-xs); text-transform: none; }
-.rd-kpi > strong, .rd-page--cyber .rd-kpi strong, .cr-kpis b { font-family: var(--font-display); color: var(--heading); font-weight: 700; }
-.rd-kpi > small, .cr-kpis small { color: var(--text-faint); }
-.rd-kpi.is-ok > strong, .cr-kpis b.is-ok { color: var(--ok); }
-.rd-kpi.is-danger > strong { color: var(--danger); }
-.rd-kpi.is-warn > strong, .cr-kpis b.is-warn { color: var(--warn); }
-.rd-kpi.is-link:hover { border-color: rgba(var(--accent-rgb), 0.45); background: var(--surface-tint); }
-.rd-kpi--input { background: var(--surface); }
-.rd-kpi input, .rd-kpi select { background: var(--tint-light); color: var(--heading-2); border-color: var(--line-strong); }
-.rd-pill::after, .rd-deploy__status::after, .cr-run-status::after { content: none !important; }
-.rd-table th, .rd-page--cyber table th, .rd-badge, .rd-page--cyber .rd-badge { font-family: var(--font-sans); letter-spacing: 0.02em; }
-.rd-table th { font-size: 0.7rem; text-transform: none; }
 body.has-sidebar .rd-page--cyber .rd-topbar { top: 0; }

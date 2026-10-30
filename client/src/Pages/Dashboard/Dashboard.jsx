@@ -10,6 +10,9 @@ import { sectionCounts } from "../../lib/vaultView";
 import { domainOf } from "../../lib/items";
 import { STATUS_LABEL } from "../../lib/projectItems";
 import { greeting, attentionItems, recentItems, favoriteItems, projectSummary, ago } from "../../lib/dashboard";
+import VaultBackdrop from "../../Components/Vault/VaultBackdrop";
+import { securityStatus } from "../../lib/vaultView";
+import "../../Components/Vault/Vault.css";
 import "./Dashboard.css";
 
 const PROJECT_TONE = { deployed: "ok", broken: "danger", in_progress: "info", paused: "warn", planning: "neutral", archived: "neutral" };
@@ -43,24 +46,35 @@ export default function Dashboard() {
   const projectsOn = profile?.features?.projects !== false;
   const proj = useMemo(() => projectSummary(projects || []), [projects]);
   const empty = items.length === 0;
+  const status = securityStatus(health, breachChecked);
 
   const subtitle = empty
     ? "Your vault is ready. Add a login or import from another manager to get started."
     : `${items.length} item${items.length === 1 ? "" : "s"} in your vault${projectsOn ? ` · ${proj.active} active project${proj.active === 1 ? "" : "s"}` : ""}`;
 
   return (
-    <main className="page dash" aria-labelledby="dash-title">
+    <main className="page dash vx" aria-labelledby="dash-title">
       <div className="ui-page">
+        <div className="vx-head vx-head--v2 dash__hero">
+          <VaultBackdrop />
+          <p className="vx-board" aria-label={`Security status: ${status.label}`}>
+            <span className="vx-board__cell vx-hide-sm">Gate</span>
+            <span className="vx-board__cell vx-board__cell--strong">Home</span>
+            <span className={`vx-board__status is-${status.tone}`}><i aria-hidden="true" />{status.label}</span>
+            <span className="vx-board__cell">{items.length} item{items.length === 1 ? "" : "s"}</span>
+            {projectsOn ? <span className="vx-board__cell vx-hide-sm">{proj.active} project{proj.active === 1 ? "" : "s"}</span> : null}
+          </p>
         <PageHeader
           title={<span id="dash-title">{greeting()}{firstName ? `, ${firstName}` : ""}</span>}
           subtitle={subtitle}
           actions={
             <>
-              <button type="button" className="btn btn--ghost" onClick={openPalette}><NavIcon name="search" size={16} /> Search</button>
+              <button type="button" className="btn btn--quiet" onClick={openPalette}><NavIcon name="search" size={16} /> Search</button>
               <Link to="/passwords?new=1" className="btn btn--primary"><Plus size={15} /> Add password</Link>
             </>
           }
         />
+        </div>
 
         {empty ? (
           <EmptyState
