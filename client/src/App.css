@@ -28,3 +28,4 @@
 .splash__title { font-family: var(--font-display); font-size: 1.45rem; font-weight: 700; color: var(--heading); letter-spacing: -0.01em; }
 .splash__body { color: var(--text-muted); }
 @media (prefers-reduced-motion: reduce) { .splash__seal::after { animation: none; background-position: 50% 0; } }
+.app-main { outline: none; }

@@ -711,3 +711,5 @@
 .rd-hostlist .rd-host { margin-left: 0; }
 .rd-hostlist small { color: var(--text-muted); }
 .rd-hostlist a { margin-left: auto; }
+
+body.has-sidebar .rd-page--cyber .rd-topbar { top: 0; }

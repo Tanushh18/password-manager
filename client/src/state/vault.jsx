@@ -22,6 +22,7 @@ import { pwnedCount } from "../lib/breach";
 
 const VaultContext = createContext(null);
 const PREFS_KEY = "aurelia_prefs";
+// The jungle/robot/river theme is on by default; Settings → Appearance can switch to the plain look.
 const DEFAULT_PREFS = { icons: false, searchValues: true, autoBreach: false, fx: true, jungle: true };
 
 const readPrefs = () => {

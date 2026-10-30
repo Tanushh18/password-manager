@@ -9,6 +9,7 @@ import RenderMatrix from "./RenderMatrix";
 import MoveServerWizard from "./MoveServerWizard";
 import { UrlMenu, SortTh, AccountPicker, BranchChange, DeployLogs, PlatformBadge, StatusPill } from "./DeployParts";
 import "./ProjectDeployments.css";
+import { useDialogs } from "../../Components/UI/Dialogs";
 
 /* Sort keys for each column. */
 const SORTERS = {
@@ -21,6 +22,7 @@ const SORTERS = {
 
 /** Every server of the project, on every hosting provider: account, URLs, status, branch, env comparison, logs and actions. */
 export default function ProjectDeployments({ project, refreshKey, hideRefresh }) {
+  const { confirm } = useDialogs();
   const [targets, setTargets] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -66,13 +68,13 @@ export default function ProjectDeployments({ project, refreshKey, hideRefresh })
   };
 
   const unlink = async (t) => {
-    if (!window.confirm(`Unlink ${t.name} from this project? The site itself is not touched.`)) return;
+    if (!(await confirm({ title: `Unlink ${t.name}?`, message: "It is removed from this project only. The site itself is not touched.", confirmLabel: "Unlink" }))) return;
     try { await unlinkHostSite(project.id, t.ref.replace(/^host:/, "")); toast.success("Unlinked " + t.name + "."); void load({ quiet: true }); }
     catch (e) { toast.error(errorMessage(e, "Could not unlink.")); }
   };
 
   const redeploy = async (t) => {
-    if (!window.confirm(`Deploy the latest commit of ${t.name} on ${t.label} now?`)) return;
+    if (!(await confirm({ title: `Deploy ${t.name} now?`, message: `The latest commit is deployed on ${t.label}.`, confirmLabel: "Deploy" }))) return;
     setBusyRef(t.ref);
     try { await redeployDeployTarget(project.id, t.ref); toast.success("Deploy started on " + t.label + "."); void load({ quiet: true }); }
     catch (e) { toast.error(errorMessage(e, "Could not start the deploy.")); }

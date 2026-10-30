@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { Refresh, Check } from "../Icons/Icons";
 import { useVault } from "../../state/vault";
 import { getRenderAccounts, getRenderServices, syncProjectRenderEnv, pushProjectRenderEnv, triggerRenderDeploy } from "../../api/client";
+import { useDialogs } from "../../Components/UI/Dialogs";
 
 const ago = (value) => {
   const t = new Date(value).getTime();
@@ -19,6 +20,7 @@ const errorOf = (e, fallback) => e?.response?.data?.error || fallback;
  * project's saved (encrypted) variables. One-way: Render is only ever read, never written.
  */
 export default function RenderEnvSync({ project }) {
+  const { confirm } = useDialogs();
   const { updateProject, refreshProfile } = useVault();
   const linked = Boolean(project.renderAccountId && project.renderServiceId);
   const [accounts, setAccounts] = useState(null);
@@ -59,7 +61,7 @@ export default function RenderEnvSync({ project }) {
   };
 
   const unlink = async () => {
-    if (!window.confirm("Unlink this project from Render? Variables already saved here are kept, and it will not be linked automatically again.")) return;
+    if (!(await confirm({ title: "Unlink this project from Render?", message: "Variables already saved here are kept, and it will not be linked automatically again.", confirmLabel: "Unlink" }))) return;
     setBusy("unlink");
     try { await updateProject(project.id, { renderAccountId: "", renderServiceId: "", renderServiceName: "", renderAutoSync: "", renderAutoLinked: "off" }); setPreview(null); setServiceId(""); toast.success("Unlinked."); }
     catch (e) { setError(errorOf(e, "Could not unlink.")); }
@@ -86,7 +88,7 @@ export default function RenderEnvSync({ project }) {
       if (plan.updated.length) lines.push("Update " + plan.updated.length + ": " + list(plan.updated));
       if (plan.conflicts.length) lines.push("Replace " + plan.conflicts.length + " value" + (plan.conflicts.length === 1 ? "" : "s") + " you entered by hand with Render's: " + list(plan.conflicts));
       if (plan.removed.length) lines.push(plan.removed.length + " no longer in Render (kept, flagged): " + list(plan.removed));
-      if (!window.confirm("Sync environment variables from Render?\n\n" + (lines.join("\n") || "No variable changes.") + "\n\nRender is only read, never changed.")) return;
+      if (!(await confirm({ title: "Sync environment variables from Render?", details: lines.length ? lines : ["No variable changes."], message: "Render is only read, never changed.", confirmLabel: "Sync from Render" }))) return;
       const result = await run({ apply: true, resolveConflicts: true });
       setPreview(result);
       await refreshProfile();
@@ -110,13 +112,13 @@ export default function RenderEnvSync({ project }) {
       let overwrite = [];
       if (sendable.length) {
         const targets = (project.renderServiceName || "the Render service") + ((plan.alsoTo || []).length ? " and " + plan.alsoTo.length + " more deployment" + (plan.alsoTo.length === 1 ? "" : "s") + " of this repo (" + plan.alsoTo.join(", ") + ")" : "");
-        if (!window.confirm("Push environment variables to " + targets + "?\n\n" + lines.join("\n") + "\n\nThis changes the live service's variables.")) return;
+        if (!(await confirm({ title: "Push environment variables to " + targets + "?", details: lines, message: "This changes the live service's variables.", confirmLabel: "Push to Render", tone: "danger" }))) return;
       }
-      if (plan.conflicts.length && window.confirm("Overwrite the " + plan.conflicts.length + " variable" + (plan.conflicts.length === 1 ? "" : "s") + " that changed in Render with Stashr's value?\n\n" + list(plan.conflicts) + "\n\nOK = overwrite, Cancel = keep Render's.")) overwrite = plan.conflicts;
+      if (plan.conflicts.length && await confirm({ title: "Overwrite " + plan.conflicts.length + " variable" + (plan.conflicts.length === 1 ? "" : "s") + " changed in Render?", details: plan.conflicts, message: "These were changed in Render since your last sync. Overwriting replaces Render's value with Stashr's.", confirmLabel: "Overwrite with Stashr's", cancelLabel: "Keep Render's", tone: "danger" })) overwrite = plan.conflicts;
       const names = [...sendable, ...overwrite];
       if (!names.length) return;
       const many = (plan.alsoTo || []).length;
-      const deploy = window.confirm("Deploy now so the new values go live" + (many ? " on all " + (many + 1) + " services" : "") + "?\n\nOK = deploy now, Cancel = only save the variables.");
+      const deploy = await confirm({ title: "Deploy now so the new values go live" + (many ? " on all " + (many + 1) + " services" : "") + "?", message: "Variables are saved either way. Without a deploy they take effect on the next one.", confirmLabel: "Save and deploy", cancelLabel: "Only save" });
       const result = await pushProjectRenderEnv(project.id, { apply: true, names, overwrite, deploy });
       setPushed(result);
       await refreshProfile();
@@ -127,7 +129,7 @@ export default function RenderEnvSync({ project }) {
   };
 
   const deployNow = async () => {
-    if (!window.confirm("Deploy " + (project.renderServiceName || "the service") + " now so the new variables take effect?")) return;
+    if (!(await confirm({ title: "Deploy " + (project.renderServiceName || "the service") + " now?", message: "The new variables take effect after the deploy.", confirmLabel: "Deploy" }))) return;
     setBusy("deploy");
     try { await triggerRenderDeploy(project.renderAccountId, project.renderServiceId, false); toast.success("Deployment started."); setPushed(null); }
     catch (e) { setError(errorOf(e, "Could not start the deployment.")); }

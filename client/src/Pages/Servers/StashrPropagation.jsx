@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import * as api from "../../api/client";
+import { useDialogs } from "../../Components/UI/Dialogs";
 
 /* Admin: keep other apps pointed at Stashr's main server. Pick the apps (your GitHub projects); when the main server
    changes, Stashr writes its address into those apps' Render env and deploys them again; mobile apps with an OTA workflow get the OTA instead. One test on a single app
@@ -27,6 +28,7 @@ function steps(run) {
 }
 
 export default function StashrPropagation() {
+  const { confirm } = useDialogs();
   const [data, setData] = useState(null);
   const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState("");
@@ -52,7 +54,7 @@ export default function StashrPropagation() {
   };
 
   const test = async (project) => {
-    const ok = window.confirm(`Test on "${project.name}"?\n\nThis writes ${data.envName} to its Render service(s) and deploys it again now.`);
+    const ok = await confirm({ title: `Test on “${project.name}”?`, message: `This writes ${data.envName} to its Render service(s) and deploys it again now.`, confirmLabel: "Write and deploy" });
     if (!ok) return;
     setBusy("test:" + project.id);
     try {

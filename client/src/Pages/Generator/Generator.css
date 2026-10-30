@@ -192,3 +192,5 @@
   .gen-flow__current { animation: none; }
   .gen-switch__track, .gen-switch__thumb { transition: none; }
 }
+
+@media (max-width: 820px) { .gen-out { order: -1; } } /* the result comes first on phones */

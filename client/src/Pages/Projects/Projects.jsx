@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useShortcuts from "../../hooks/useShortcuts";
-import Reveal from "../../Components/Reveal/Reveal";
 import ProjectCard from "../../Components/Project/ProjectCard";
 import ProjectImportModal from "../../Components/Project/ProjectImportModal";
 import GithubConnectModal from "../../Components/Project/GithubConnectModal";
@@ -10,9 +9,9 @@ import { getGithubAccounts, getProjectStatuses, autoSyncProjects, mergeProjects 
 import { usePolling } from "../Render/renderHooks";
 import { timeAgo } from "../Render/renderUtils";
 import { repoKeyOf } from "../Render/renderUtils";
-import { APP_VERSION } from "../../lib/appVersion";
 import { TreeLeaf } from "../../Components/Project/ProjectTree";
-import { Globe, Plus, Search, Grid, Alert, Upload } from "../../Components/Icons/Icons";
+import { Globe, Plus, Search, Grid, Alert, Upload, Refresh } from "../../Components/Icons/Icons";
+import { PageHeader, EmptyState, Badge } from "../../Components/UI/ui";
 import { useVault } from "../../state/vault";
 import { STATUS_LABEL } from "../../lib/projectItems";
 import { searchProjects } from "../../lib/projectTree";
@@ -22,9 +21,11 @@ import "./Projects.css";
 
 import MascotBanner from "../../Components/Robot/MascotBanner";
 import { projectsMood } from "../../lib/pageMoods";
+import { useDialogs } from "../../Components/UI/Dialogs";
 const STATUSES = ["planning", "in_progress", "deployed", "broken", "paused", "archived"];
 
 export default function Projects() {
+  const { confirm } = useDialogs();
   const { projects, projectsBroken, importProjects, prefs, refreshProfile } = useVault();
 
   const [search, setSearch] = useState("");
@@ -64,7 +65,7 @@ export default function Projects() {
     setStatuses(Object.fromEntries((data.statuses || []).map((st) => [st.projectId, st])));
   };
   const mergeGroup = async (group) => {
-    if (!window.confirm("Merge " + group.list.length + " projects for " + group.repo + " into one?\n\n" + group.list.map((p) => "• " + p.name).join("\n") + "\n\nThe one with the most details is kept; the others fill in anything it’s missing. Every linked Render service stays linked.")) return;
+    if (!(await confirm({ title: `Merge ${group.list.length} projects for ${group.repo}?`, details: group.list.map((p) => p.name), message: "The one with the most details is kept; the others fill in anything it’s missing. Every linked Render service stays linked.", confirmLabel: "Merge" }))) return;
     try {
       const r = await mergeProjects(group.list.map((p) => String(p.id)));
       await refreshProfile();
@@ -126,16 +127,22 @@ export default function Projects() {
   return (
     <div className="vault page">
       <div className="shell">
-        <header className="vault__head pv2-head">
-          <div>
-            <h1 className="vault__title">Projects <span className="pv2-ver">v{APP_VERSION}</span></h1>
-            <p className="vault__count">
-              {projects.length === 0
-                ? "No projects yet."
-                : `${tiles.active} active project${tiles.active === 1 ? "" : "s"}${tiles.archived ? ` · ${tiles.archived} archived` : ""} · encrypted`}
-            </p>
-          </div>
-        </header>
+        <PageHeader
+          title="Projects"
+          subtitle={projects.length === 0
+            ? "Hosting, databases, accounts and environment variables for the apps you run, encrypted like your passwords."
+            : `${tiles.active} active project${tiles.active === 1 ? "" : "s"}${tiles.archived ? ` · ${tiles.archived} archived` : ""} · encrypted`}
+          actions={
+            <>
+              <button className="btn btn--quiet btn--sm" onClick={() => setGithubOpen(true)} title="Connect a GitHub token to fetch commits, pull requests and CI for each project">
+                GitHub{githubAccounts ? <Badge tone={githubAccounts.length ? "ok" : "neutral"} className="pv2-ghbadge">{githubAccounts.length ? githubAccounts.length + " connected" : "not connected"}</Badge> : null}
+              </button>
+              <button className="btn btn--ghost btn--sm" onClick={() => setImporting(true)}><Upload size={14} /> Import</button>
+              <Link className="btn btn--ghost btn--sm" to="/projects/deploy" title="Create a GitHub repo and deploy it on Render's free plan in one step">Create &amp; deploy</Link>
+              <Link className="btn btn--primary btn--sm" to="/projects/new"><Plus size={14} /> New project <kbd className="kbd">N</kbd></Link>
+            </>
+          }
+        />
         <MascotBanner kind="rocket" {...projectsMood(projects, statuses)} />
 
         <section className={"pv2-sync" + (syncFailed ? " is-error" : "")} aria-live="polite">
@@ -149,7 +156,7 @@ export default function Projects() {
             </small>
           </div>
           {githubAccounts && !githubAccounts.length ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => setGithubOpen(true)}>Connect GitHub to import repos</button> : null}
-          <button type="button" className="btn btn--ghost btn--sm" disabled={syncing} onClick={() => void runSync(true)}>{syncing ? "Syncing…" : "↻ Sync now"}</button>
+          <button type="button" className="btn btn--ghost btn--sm" disabled={syncing} onClick={() => void runSync(true)}><Refresh size={14} /> {syncing ? "Syncing…" : "Sync now"}</button>
         </section>
 
         <div className="pv2-tiles">
@@ -197,25 +204,11 @@ export default function Projects() {
               className="input vault__search-input"
               type="search"
               ref={searchRef}
-              placeholder="Search projects, variables (e.g. MONGO_URI), values…  ( / )"
+              placeholder="Search projects, variables (e.g. MONGO_URI) and values…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               aria-label="Search your projects and their variables"
             />
-          </div>
-          <div className="vault__actions">
-            <Link className="btn btn--primary" to="/projects/new">
-              <Plus size={15} /> New project <kbd className="kbd">N</kbd>
-            </Link>
-            <Link className="btn btn--ghost" to="/projects/deploy" title="Create a GitHub repo and deploy it on Render's free plan in one step">
-              Create &amp; deploy
-            </Link>
-            <button className="btn btn--ghost" onClick={() => setImporting(true)}>
-              <Upload size={15} /> Import
-            </button>
-            <button className="btn btn--ghost" onClick={() => setGithubOpen(true)} title="Connect a GitHub token to fetch commits, pull requests and CI for each project">
-              GitHub{githubAccounts ? <span className={"badge " + (githubAccounts.length ? "badge--ok" : "badge--muted")} style={{ marginLeft: 6 }}>{githubAccounts.length ? githubAccounts.length + " connected" : "not connected"}</span> : null}
-            </button>
           </div>
         </div>
 
@@ -278,25 +271,23 @@ export default function Projects() {
         ) : null}
 
         {projects.length === 0 ? (
-          <Reveal className="empty card" variant="reveal--scale">
-            <span className="empty__icon"><Globe size={28} /></span>
-            <h2 className="empty__title">Nothing tracked yet</h2>
-            <p className="empty__body">Add a project with its hosting, database, accounts and env vars, all encrypted the same way as your passwords.</p>
-            <div className="empty__actions">
-              <Link className="btn btn--primary btn--lg" to="/projects/new">Add your first project</Link>
-              <button className="btn btn--ghost btn--lg" onClick={() => setImporting(true)}>
-                <Upload size={15} /> Import from Excel
-              </button>
-            </div>
-          </Reveal>
+          <EmptyState
+            icon={<Globe size={24} />}
+            title="No projects yet"
+            actions={
+              <>
+                <Link className="btn btn--primary" to="/projects/new"><Plus size={15} /> Add your first project</Link>
+                <button className="btn btn--ghost" onClick={() => setGithubOpen(true)}>Connect GitHub</button>
+                <button className="btn btn--ghost" onClick={() => setImporting(true)}><Upload size={15} /> Import from Excel</button>
+              </>
+            }
+          >
+            Connect GitHub or Render and new repos and services become projects automatically. Or add one by hand with its hosting, database, accounts and env vars.
+          </EmptyState>
         ) : searching && !visible.length && !results.values.length ? (
-          <Reveal className="empty empty--slim card">
-            <span className="empty__icon"><Search size={24} /></span>
-            <h2 className="empty__title">Nothing matches “{search}”</h2>
-            <button className="btn btn--ghost" onClick={() => { setSearch(""); setStatus("__all"); setSource("any"); }}>
-              Show everything
-            </button>
-          </Reveal>
+          <EmptyState compact icon={<Search size={22} />} title={<>Nothing matches “{search}”</>} actions={<button className="btn btn--ghost" onClick={() => { setSearch(""); setStatus("__all"); setSource("any"); }}>Clear search and filters</button>}>
+            Search looks at project names, variable names and their values.
+          </EmptyState>
         ) : showProjects && visible.length ? (
           <>
             {searching ? <h2 className="proj-values__title proj-list__title">Projects</h2> : null}

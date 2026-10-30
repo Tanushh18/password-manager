@@ -1,69 +1,88 @@
-import React, { useEffect, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { useVault } from "../../state/vault";
+import { navGroups, bottomItems, activeEntry } from "../../lib/navigation";
+import useMediaQuery, { PHONE } from "../../hooks/useMediaQuery";
+import useTheme from "../../hooks/useTheme";
+import NavIcon from "../AppShell/NavIcon";
+import { DialogFrame } from "../UI/Dialogs";
 import "./BottomNav.css";
 
-const QUERY = "(max-width: 759px)";
-
-const Svg = ({ children }) => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">{children}</svg>
-);
-
-const ICONS = {
-  key: <Svg><circle cx="8" cy="15" r="4" /><path d="M10.8 12.2 20 3m-3 3 2.5 2.5M14.5 8.5 17 11" /></Svg>,
-  spark: <Svg><path d="M4 7h10M4 12h16M4 17h7" /><circle cx="18" cy="7" r="2" /><circle cx="15" cy="17" r="2" /></Svg>,
-  shield: <Svg><path d="M12 3 5 6v5c0 4.4 3 8.3 7 10 4-1.7 7-5.6 7-10V6l-7-3Z" /><path d="m9 12 2 2 4-4" /></Svg>,
-  tower: <Svg><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M7 20h10M12 16v4M7 9h4M7 12h7" /></Svg>,
-  gear: <Svg><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" /></Svg>,
-};
-
-const ITEMS = [
-  { to: "/passwords", label: "Passwords", icon: "key" },
-  { to: "/generator", label: "Generator", icon: "spark" },
-  { to: "/security-center", label: "Security", icon: "shield" },
-  { to: "/render", label: "Control", icon: "tower", aria: "Control Center", also: ["/services", "/cron"] },
-  { to: "/settings", label: "Settings", icon: "gear" },
-];
-
-function useNarrow() {
-  const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && !!window.matchMedia && window.matchMedia(QUERY).matches);
-  useEffect(() => {
-    if (!window.matchMedia) return undefined;
-    const mq = window.matchMedia(QUERY);
-    const on = () => setNarrow(mq.matches);
-    on();
-    mq.addEventListener ? mq.addEventListener("change", on) : mq.addListener(on);
-    return () => (mq.removeEventListener ? mq.removeEventListener("change", on) : mq.removeListener(on));
-  }, []);
-  return narrow;
-}
-
-/** Thumb-reach navigation for signed-in phones. Sits above the jungle grass. */
+/** Thumb-reach navigation for signed-in phones; "More" opens every other destination in a sheet. */
 export default function BottomNav() {
-  const { status } = useVault();
-  const narrow = useNarrow();
+  const { status, profile, lock } = useVault();
+  const narrow = useMediaQuery(PHONE);
   const { pathname } = useLocation();
+  const { theme, toggle } = useTheme();
+  const [sheet, setSheet] = useState(false);
   const show = status === "ready" && narrow;
+  const groups = useMemo(() => navGroups(profile), [profile]);
+  const items = useMemo(() => {
+    const base = bottomItems(profile);
+    const infra = groups.find((g) => g.id === "infra");
+    return infra ? [...base, { ...infra.items[0], label: "Control", icon: "tower" }] : base;
+  }, [profile, groups]);
+  const active = activeEntry(groups, pathname);
+  const inBar = items.some((it) => it.to === active?.to);
 
   useEffect(() => {
     document.body.classList.toggle("has-bottomnav", show);
     return () => document.body.classList.remove("has-bottomnav");
   }, [show]);
+  useEffect(() => { setSheet(false); }, [pathname]);
 
   if (!show) return null;
   return (
-    <nav className="bottomnav" aria-label="Main">
-      {ITEMS.map((it) => (
-        <NavLink
-          key={it.to}
-          to={it.to}
-          aria-label={it.aria}
-          className={({ isActive }) => `bottomnav__item ${isActive || (it.also || []).some((p) => pathname.startsWith(p)) ? "is-active" : ""}`}
-        >
-          <span className="bottomnav__icon">{ICONS[it.icon]}</span>
-          <span className="bottomnav__label">{it.label}</span>
-        </NavLink>
-      ))}
-    </nav>
+    <>
+      <nav className="bottomnav" aria-label="Main">
+        {items.map((it) => {
+          const on = active?.to === it.to;
+          return (
+            <NavLink key={it.to} to={it.to} aria-current={on ? "page" : undefined} className={`bottomnav__item ${on ? "is-active" : ""}`}>
+              <span className="bottomnav__icon"><NavIcon name={it.icon} size={22} /></span>
+              <span className="bottomnav__label">{it.label}</span>
+            </NavLink>
+          );
+        })}
+        <button type="button" className={`bottomnav__item ${!inBar && pathname !== "/dashboard" ? "is-active" : ""}`} onClick={() => setSheet(true)} aria-haspopup="dialog" aria-expanded={sheet}>
+          <span className="bottomnav__icon"><NavIcon name="more" size={22} /></span>
+          <span className="bottomnav__label">More</span>
+        </button>
+      </nav>
+      {sheet ? (
+        <DialogFrame labelledBy="more-sheet-title" onClose={() => setSheet(false)} size="sheet" className="moresheet">
+          <header className="moresheet__head">
+            <h2 id="more-sheet-title">All of Stashr</h2>
+            <button type="button" className="btn btn--quiet btn--sm" onClick={() => setSheet(false)}>Close</button>
+          </header>
+          <nav aria-label="All destinations">
+            {groups.map((g) => (
+              <section key={g.id} className="moresheet__group">
+                <h3>{g.label}</h3>
+                <ul>
+                  {g.items.map((it) => (
+                    <li key={it.to}>
+                      <Link to={it.to} className={`moresheet__link ${active?.to === it.to ? "is-active" : ""}`} aria-current={active?.to === it.to ? "page" : undefined}>
+                        <NavIcon name={it.icon} /> {it.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+            <section className="moresheet__group">
+              <h3>Account</h3>
+              <ul>
+                <li><Link to="/settings" className="moresheet__link"><NavIcon name="gear" /> Settings</Link></li>
+                <li><Link to="/apps" className="moresheet__link"><NavIcon name="apps" /> Apps and extension</Link></li>
+                <li><button type="button" className="moresheet__link" onClick={toggle}><NavIcon name={theme === "light" ? "moon" : "sun"} /> {theme === "light" ? "Dark theme" : "Light theme"}</button></li>
+                <li><button type="button" className="moresheet__link" onClick={() => { setSheet(false); lock(); }}><NavIcon name="lock" /> Lock vault</button></li>
+                <li><Link to="/logout" className="moresheet__link is-danger"><NavIcon name="logout" /> Sign out</Link></li>
+              </ul>
+            </section>
+          </nav>
+        </DialogFrame>
+      ) : null}
+    </>
   );
 }

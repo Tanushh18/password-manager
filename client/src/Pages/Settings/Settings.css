@@ -200,3 +200,14 @@ html[data-theme="light"] .settings { --cc-panel: var(--surface-solid, #fff); }
 @media (prefers-reduced-motion: reduce) {
   .cnav__link, .switch__track, .switch__thumb, .settings__mode { transition: none; }
 }
+
+/* 2026-10-30: shared page header, sentence-case section titles, no signage codes. */
+.cc .ui-pagehead { margin-bottom: 1.75rem; }
+.cc__sub { display: inline-flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; overflow-wrap: anywhere; }
+.cc__sub strong { color: var(--heading-2); font-weight: 600; }
+.cc__sub .cc__avatar { width: 28px; height: 28px; font-size: 0.8rem; border-radius: 50%; }
+.cc .ui-pagehead .cc__chips { flex-basis: 100%; }
+.csec__sign { grid-template-columns: 1fr; }
+.csec__title { letter-spacing: -0.01em; text-transform: none; font-size: var(--fs-lg); }
+.cnav__head { letter-spacing: 0.06em; font-weight: 600; }
+body.has-sidebar .settings { --cc-sticky: 24px; }

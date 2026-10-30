@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { getDeployHistory, getDeployLogs, getGithubAccounts, getGithubBranches, getHostAccounts, getRenderAccounts, moveDeployAccount, setDeployBranch } from "../../api/client";
 import { timeAgo, safeUrl, errorMessage } from "../../Pages/Render/renderUtils";
+import { useDialogs } from "../../Components/UI/Dialogs";
 
 export const hostOf = (url) => String(url || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
 export const DEPLOY_LABEL = {
@@ -94,6 +95,7 @@ export async function loadRepoBranches(repoUrl) {
 
 /** Switch the branch a server deploys (any provider), optionally deploying it straight away. */
 export function BranchChange({ projectId, project, target, onDone }) {
+  const { confirm } = useDialogs();
   const [info, setInfo] = useState(null);
   const [choice, setChoice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -107,7 +109,9 @@ export function BranchChange({ projectId, project, target, onDone }) {
   };
   const apply = async () => {
     const same = choice === target.branch;
-    if (!window.confirm(same ? `Deploy "${choice}" on ${target.name} again?` : `Switch ${target.name} from "${target.branch || "its current branch"}" to "${choice}" and deploy it?`)) return;
+    if (!(await confirm(same
+      ? { title: `Deploy “${choice}” again?`, message: `${target.name} is rebuilt from the same branch.`, confirmLabel: "Deploy" }
+      : { title: `Switch ${target.name} to “${choice}”?`, message: `It currently builds from “${target.branch || "its current branch"}”. The switch deploys right away.`, confirmLabel: "Switch and deploy" }))) return;
     setBusy(true);
     try {
       const r = await setDeployBranch(projectId, target.ref, choice, true);

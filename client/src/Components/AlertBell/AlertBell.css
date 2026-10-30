@@ -10,3 +10,9 @@
 .bell__item small, .bell__empty { color: var(--text-muted); font-size: 0.8rem; }
 .bell__empty { margin: 0.5rem; }
 .bell__menu .btn { min-height: 40px; }
+.bell__btn { color: var(--text-muted); }
+.bell__btn:hover { color: var(--heading); }
+.bell__count { top: 6px; right: 6px; }
+.bell__all { padding: 0.4rem 0.6rem; font-size: 0.8rem; font-weight: 600; }
+/* Opens upward and to the right when the bell sits at the bottom of the sidebar. */
+.bell--up .bell__menu { top: auto; bottom: calc(100% + 0.4rem); right: auto; left: 0; }

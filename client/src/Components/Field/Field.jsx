@@ -16,6 +16,8 @@ export default function Field({ id, label, error, hint, secret, className = "", 
           id={id}
           className={`input ${secret || right ? "input--icon" : ""} ${error ? "is-error" : ""} ${secret && shown ? "input--mono" : ""}`}
           type={secret ? (shown ? "text" : "password") : input.type || "text"}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error || hint ? `${id}-hint` : undefined}
           {...input}
         />
         {secret ? (
@@ -32,7 +34,7 @@ export default function Field({ id, label, error, hint, secret, className = "", 
           right
         )}
       </div>
-      {error ? <p className="field__hint">{error}</p> : hint ? <p className="field__note">{hint}</p> : null}
+      {error ? <p className="field__hint" id={`${id}-hint`} role="alert">{error}</p> : hint ? <p className="field__note" id={`${id}-hint`}>{hint}</p> : null}
     </div>
   );
 }

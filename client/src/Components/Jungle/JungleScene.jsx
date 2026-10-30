@@ -43,6 +43,25 @@ function Vine({ side, hanger, label }) {
   );
 }
 
+/* A slow river behind the grass: shimmering water, lily pads (with a frog by day), and now and then a fish jumps. */
+function River({ day }) {
+  return (
+    <div className="jg-river" aria-hidden="true">
+      <svg viewBox="0 0 1000 40" preserveAspectRatio="none" className="jg-river__water">
+        <path className="jg-river__bed" d="M0 14 C 160 4, 320 22, 500 12 S 840 4, 1000 14 V40 H0 Z" />
+        <path className="jg-river__shine" d="M0 20 C 160 12, 320 28, 500 19 S 840 12, 1000 20" />
+        <path className="jg-river__shine jg-river__shine--b" d="M0 28 C 180 22, 340 34, 520 27 S 860 22, 1000 28" />
+      </svg>
+      <span className="jg-pad" style={{ left: "18%" }} />
+      <span className="jg-pad jg-pad--sm" style={{ left: "21%" }} />
+      <span className="jg-pad" style={{ left: "63%" }}>{day ? <i className="jg-frog">🐸</i> : null}</span>
+      <span className="jg-pad jg-pad--sm" style={{ left: "84%" }} />
+      <span className="jg-fish">🐟</span>
+      <span className="jg-fish jg-fish--b">🐠</span>
+    </div>
+  );
+}
+
 function Leaves({ side }) {
   return (
     <svg className={"jg-leaves jg-leaves--" + side} viewBox="0 0 220 160" aria-hidden="true">
@@ -115,6 +134,7 @@ export default function JungleScene() {
         ))}
       </div>
       {actors.map((a) => <Actor key={a.id} a={a} onDone={() => remove(a.id)} />)}
+      <River day={day} />
       <Leaves side="left" />
       <Leaves side="right" />
       <Grass blades={blades} />

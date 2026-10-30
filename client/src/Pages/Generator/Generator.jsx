@@ -106,7 +106,7 @@ export default function Generator() {
   const fill = ((length - MIN) / (MAX - MIN)) * 100;
 
   return (
-    <main className="gen" id="main">
+    <main className="gen">
       <header className="gen__head">
         <p className="gen__sign"><span className="gen__gate">G</span> Creation station <span className="gen__dot" aria-hidden="true" /> <span className="gen__status">Online</span></p>
         <h1 className="gen__title">Password generator</h1>

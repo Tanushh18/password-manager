@@ -5,7 +5,31 @@ import { ShieldLine, Menu, Close, Arrow } from "../Icons/Icons";
 import AlertBell from "../AlertBell/AlertBell";
 import ThemeToggle from "../ThemeToggle/ThemeToggle";
 import VersionBadge from "../WhatsNew/WhatsNew";
+import NavIcon from "../AppShell/NavIcon";
+import { openPalette } from "../CommandPalette/CommandPalette";
+import useMediaQuery, { PHONE } from "../../hooks/useMediaQuery";
 import "./Navbar.css";
+
+/* Signed-in phones: brand, search and alerts. Destinations live in the bottom bar. */
+function MobileTopBar({ status }) {
+  return (
+    <header className="nav nav--app is-scrolled">
+      <div className="nav__inner">
+        <div className="nav__brandwrap">
+          <Link to="/dashboard" className="nav__brand" aria-label="Stashr overview">
+            <span className="nav__mark"><ShieldLine size={17} strokeWidth={1.9} /></span>
+            <span className="nav__wordmark"><span className="nav__name">Stashr</span></span>
+          </Link>
+          <VersionBadge autoOpen={status === "ready"} />
+        </div>
+        <div className="nav__actions">
+          <button type="button" className="nav__iconbtn" onClick={openPalette} aria-label="Search or jump to"><NavIcon name="search" size={19} /></button>
+          <AlertBell enabled={status === "ready"} />
+        </div>
+      </div>
+    </header>
+  );
+}
 
 function Navbar() {
   const { status, profile } = useVault();
@@ -16,6 +40,7 @@ function Navbar() {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef(null);
   const location = useLocation();
+  const phone = useMediaQuery(PHONE);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -65,6 +90,9 @@ function Navbar() {
   const cta = isAuthenticated
     ? { to: "/passwords", label: "My vault" }
     : { to: "/signup", label: "Create your vault" };
+
+  // Signed in: the sidebar (tablet/desktop) or the bottom bar (phone) is the navigation.
+  if (isAuthenticated) return phone ? <MobileTopBar status={status} /> : null;
 
   return (
     <>

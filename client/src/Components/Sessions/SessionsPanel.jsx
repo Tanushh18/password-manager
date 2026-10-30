@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { getSessions, revokeSession, logoutOtherDevices, getAuditLog } from "../../api/client";
 import "./SessionsPanel.css";
+import { useDialogs } from "../../Components/UI/Dialogs";
 
 const ACTIONS = {
   sign_in: "Signed in",
@@ -15,6 +16,7 @@ const when = (d) => (d ? new Date(d).toLocaleString() : "");
 
 /* Settings: where you are signed in (with sign-out per device) and a log of recent security events. */
 export default function SessionsPanel() {
+  const { confirm } = useDialogs();
   const [sessions, setSessions] = useState(null);
   const [events, setEvents] = useState(null);
   const [busy, setBusy] = useState("");
@@ -35,7 +37,7 @@ export default function SessionsPanel() {
     finally { setBusy(""); }
   };
   const revokeAll = async () => {
-    if (!window.confirm("Sign out of every other device?")) return;
+    if (!(await confirm({ title: "Sign out of every other device?", message: "This device stays signed in. Others need your password to get back in.", confirmLabel: "Sign out others", tone: "danger" }))) return;
     setBusy("all");
     try { await logoutOtherDevices(); toast.success("Signed out of every other device."); await load(); }
     catch { toast.error("Couldn't sign the other devices out."); }

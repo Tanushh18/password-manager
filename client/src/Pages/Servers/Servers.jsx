@@ -9,6 +9,7 @@ import MascotBanner from "../../Components/Robot/MascotBanner";
 import StashrPropagation from "./StashrPropagation";
 import { registryMood } from "../../lib/pageMoods";
 import { addUrl, moveUrl, setPrimary, isDirty, describeChanges } from "../../lib/serverList";
+import { useDialogs } from "../../Components/UI/Dialogs";
 /* One app's editable URL list. Saving updates the registry; apps pick it up the next time they start. */
 const ago = (value) => {
   const t = new Date(value).getTime();
@@ -96,6 +97,7 @@ function EnvSyncModal({ app, label, onClose }) {
 }
 
 function AppCard({ entry, sync, onSaved, onSyncChanged }) {
+  const { confirm } = useDialogs();
   const [urls, setUrls] = useState(entry.urls);
   const [draft, setDraft] = useState("");
   const [health, setHealth] = useState({}); // url -> { state, ms }
@@ -169,7 +171,7 @@ function AppCard({ entry, sync, onSaved, onSyncChanged }) {
       } catch (err) {
         // The new Stashr primary did not answer its health check. Saving is allowed only after an explicit OK.
         if (!err.response?.data?.unhealthy) throw err;
-        if (!window.confirm(`${err.response.data.error}\n\nSave anyway?`)) return;
+        if (!(await confirm({ title: "The new primary server did not answer", message: err.response.data.error, confirmLabel: "Save anyway", tone: "danger" }))) return;
         res = await api.saveRegistry(entry.app, urls, { force: true });
       }
       toast.success(`${entry.label} servers saved.`);
