@@ -30,6 +30,14 @@
       <div id="loginError" class="error hidden" role="alert"></div>
     </div>
 
+    <!-- Locked: signed in, waiting for the fingerprint -->
+    <div id="lockSection" class="section hidden">
+      <p class="lede">Stashr is locked. Use your fingerprint to open your logins.</p>
+      <button id="unlockBtn" class="btn btn-primary">Unlock with Touch ID</button>
+      <button id="lockSignOutBtn" class="btn btn-secondary">Sign out</button>
+      <div id="lockError" class="error hidden" role="alert"></div>
+    </div>
+
     <!-- Logged In State -->
     <div id="mainSection" class="section hidden">
       <!-- Login just submitted on a page: ask before saving -->
@@ -71,7 +79,9 @@
         <button id="closeQrBtn" class="btn btn-secondary">Close</button>
       </div>
 
+      <div id="mainError" class="error hidden" role="alert"></div>
       <div class="footer">
+        <button id="touchIdBtn" class="btn btn-secondary">Turn on Touch ID</button>
         <button id="logoutBtn" class="btn btn-secondary">Sign out</button>
       </div>
     </div>

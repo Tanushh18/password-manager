@@ -50,8 +50,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const stored = await chrome.storage.local.get(['token', 'server']);
   currentToken = stored.token || null;
   preferredServer = stored.server || null;
+  await refreshTouchIdButton();
 
-  if (currentToken) {
+  if (currentToken && (await touchIdCredential())) {
+    showLock();
+    unlockWithTouchId();
+  } else if (currentToken) {
     showMain();
     await loadPasswords();
   } else {
@@ -114,7 +118,8 @@ logoutBtn.addEventListener('click', async () => {
   } catch (error) {
     // still sign out locally
   }
-  await chrome.storage.local.remove(['token', 'server', 'email']);
+  await chrome.storage.local.remove(['token', 'server', 'email', TOUCH_KEY]);
+  await refreshTouchIdButton();
   currentToken = null;
   preferredServer = null;
   allPasswords = [];
@@ -377,6 +382,7 @@ async function showPendingSave() {
 async function savePendingLogin() {
   const pending = await pendingSaveForTab();
   if (!pending) return;
+  if (!(await verifyTouchId())) { showError('Touch ID was not verified, nothing was saved.'); return; }
   try {
     const response = await api('/addnewpassword', {
       method: 'POST',
@@ -539,17 +545,104 @@ closeQrBtn.addEventListener('click', () => {
 function showLogin() {
   loginSection.classList.remove('hidden');
   mainSection.classList.add('hidden');
+  document.getElementById('lockSection').classList.add('hidden');
 }
 
 function showMain() {
   loginSection.classList.add('hidden');
   mainSection.classList.remove('hidden');
+  document.getElementById('lockSection').classList.add('hidden');
 }
 
+function showLock() {
+  loginSection.classList.add('hidden');
+  mainSection.classList.add('hidden');
+  document.getElementById('lockSection').classList.remove('hidden');
+}
+
+/* Touch ID (WebAuthn platform authenticator). It gates opening the popup and saving a login; the stored session
+   token itself is not encrypted by it, so this stops someone using an unlocked, unattended browser. */
+const TOUCH_KEY = 'touchIdCredential';
+const randomChallenge = () => crypto.getRandomValues(new Uint8Array(32));
+const toB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const fromB64 = (text) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
+
+async function touchIdCredential() {
+  const stored = await chrome.storage.local.get(TOUCH_KEY);
+  return stored[TOUCH_KEY] || null;
+}
+
+async function refreshTouchIdButton() {
+  const button = document.getElementById('touchIdBtn');
+  const supported = window.PublicKeyCredential && (await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(() => false));
+  button.classList.toggle('hidden', !supported);
+  button.textContent = (await touchIdCredential()) ? 'Turn off Touch ID' : 'Turn on Touch ID';
+}
+
+/** Prompts for the fingerprint. Resolves true when verified (or when Touch ID is not turned on). */
+async function verifyTouchId() {
+  const id = await touchIdCredential();
+  if (!id) return true;
+  try {
+    const result = await navigator.credentials.get({
+      publicKey: {
+        challenge: randomChallenge(),
+        allowCredentials: [{ type: 'public-key', id: fromB64(id), transports: ['internal'] }],
+        userVerification: 'required',
+        timeout: 60000
+      }
+    });
+    return Boolean(result);
+  } catch (error) {
+    return false;
+  }
+}
+
+async function unlockWithTouchId() {
+  const lockError = document.getElementById('lockError');
+  lockError.classList.add('hidden');
+  if (await verifyTouchId()) {
+    showMain();
+    await loadPasswords();
+  } else {
+    lockError.textContent = 'Touch ID was not verified.';
+    lockError.classList.remove('hidden');
+  }
+}
+
+document.getElementById('unlockBtn').addEventListener('click', unlockWithTouchId);
+document.getElementById('lockSignOutBtn').addEventListener('click', () => logoutBtn.click());
+
+document.getElementById('touchIdBtn').addEventListener('click', async () => {
+  try {
+    if (await touchIdCredential()) {
+      if (!(await verifyTouchId())) return;
+      await chrome.storage.local.remove(TOUCH_KEY);
+    } else {
+      const { email = 'stashr' } = await chrome.storage.local.get('email');
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge: randomChallenge(),
+          rp: { name: 'Stashr' },
+          user: { id: crypto.getRandomValues(new Uint8Array(16)), name: email, displayName: email },
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+          authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+          timeout: 60000
+        }
+      });
+      await chrome.storage.local.set({ [TOUCH_KEY]: toB64(credential.rawId) });
+    }
+    await refreshTouchIdButton();
+  } catch (error) {
+    showError(`Touch ID: ${error.message}`);
+  }
+});
+
 function showError(msg) {
-  loginError.textContent = msg;
-  loginError.classList.remove('hidden');
-  setTimeout(() => loginError.classList.add('hidden'), 5000);
+  const target = mainSection.classList.contains('hidden') ? loginError : document.getElementById('mainError');
+  target.textContent = msg;
+  target.classList.remove('hidden');
+  setTimeout(() => target.classList.add('hidden'), 5000);
 }
 
 function showSuccess(msg) {
