@@ -21,8 +21,12 @@ const LOCK_MAX = 10, LOCK_WINDOW_MS = 15 * 60 * 1000; // failed sign-ins per acc
 
 /* ════════════════ AUTH ════════════════ */
 
+// Personal control center: new accounts are closed. Existing users still sign in. Set ALLOW_SIGNUP=true to reopen.
+const signupOpen = () => process.env.ALLOW_SIGNUP === "true";
+
 router.post("/register", authLimiter, async (req, res) =>
 {
+    if (!signupOpen()) return res.status(403).json({ error: "Sign-ups are closed. Only existing accounts can sign in." });
     const name = str(req.body.name);
     const email = str(req.body.email).toLowerCase();
     const password = raw(req.body.password);

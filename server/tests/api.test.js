@@ -1,3 +1,4 @@
+process.env.ALLOW_SIGNUP = "true";
 const { describe, test, before: beforeAll, after: afterAll, beforeEach } = require("node:test");
 const expect = require("./expect");
 const { MongoMemoryServer } = require("mongodb-memory-server");

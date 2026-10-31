@@ -33,7 +33,34 @@ function uploadFile(sig, file, onProgress) {
   });
 }
 
+const STAGES = ["", "Foundation", "Structure", "Finishing", "Interior Works", "Final Inspection", "Handover"];
+
+/** Progress %, stage and ETA the website shows for one sector / project. */
+function StatusEditor({ project, onSaved }) {
+  const [form, setForm] = useState({ status: project.status, area: project.area, progress: project.progress, stage: project.stage, eta: project.eta });
+  const [saving, setSaving] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const save = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try { onSaved(await api.updateShineSite(project.key, { ...form, progress: Number(form.progress) })); toast.success("Website status saved."); }
+    catch (err) { toast.error(api.errorMessage(err, "Could not save.")); }
+    finally { setSaving(false); }
+  };
+  return (
+    <form className="media__status" onSubmit={save}>
+      <label>Status<select className="input" value={form.status} onChange={set("status")}><option>Ongoing</option><option>Completed</option></select></label>
+      <label>Area<input className="input" value={form.area} onChange={set("area")} maxLength={60} /></label>
+      <label>Progress %<input className="input" type="number" min="0" max="100" value={form.status === "Completed" ? 100 : form.progress} onChange={set("progress")} disabled={form.status === "Completed"} /></label>
+      <label>Stage<select className="input" value={form.stage} onChange={set("stage")} disabled={form.status === "Completed"}>{STAGES.map((s) => <option key={s} value={s}>{s || "Automatic"}</option>)}</select></label>
+      <label>ETA<input className="input" value={form.eta} onChange={set("eta")} maxLength={60} placeholder="June 2027" /></label>
+      <button className="btn btn--primary btn--sm" type="submit" disabled={saving}>{saving ? "Saving…" : "Save status"}</button>
+    </form>
+  );
+}
+
 export default function Media() {
+  const [site, setSite] = useState(null);
   const [projects, setProjects] = useState(null);
   const [configured, setConfigured] = useState(true);
   const [error, setError] = useState("");
@@ -45,7 +72,7 @@ export default function Media() {
   const load = useCallback(() => api.getShineProjects()
     .then((d) => { setProjects(d.projects); setConfigured(d.configured); setError(""); })
     .catch((err) => setError(api.errorMessage(err, "Could not load the photos."))), []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); api.getShineSite().then(setSite).catch(() => {}); }, [load]);
 
   const addSector = async (e) => {
     e.preventDefault();
@@ -121,6 +148,9 @@ export default function Media() {
                     <input ref={fileRef} type="file" accept="image/*,video/*" multiple hidden disabled={Boolean(busy) || !configured} onChange={(e) => upload([...e.target.files])} />
                   </label>
                 </div>
+                {site && site.projects.find((p) => p.key === current.key) && (
+                  <StatusEditor key={current.key} project={site.projects.find((p) => p.key === current.key)} onSaved={setSite} />
+                )}
                 {current.items.length === 0 && <p className="servers__hint">Nothing here yet.</p>}
                 <div className="media__files">
                   {current.items.map((item) => (

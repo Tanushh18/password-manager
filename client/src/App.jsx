@@ -7,7 +7,6 @@ import "./App.css";
 import Home from "./Pages/Home/Home";
 import Dashboard from "./Pages/Dashboard/Dashboard";
 import Login from "./Pages/Login/Login";
-import Signup from "./Pages/SignUp/Signup";
 import Vault from "./Pages/Passwords/Passwords";
 import Projects from "./Pages/Projects/Projects";
 import ProjectDetail from "./Pages/Projects/ProjectDetail";
@@ -123,7 +122,7 @@ export default function App() {
           <Route path="/dashboard" element={<RequireVault><Dashboard /></RequireVault>} />
           <Route path="/signin" element={<GuestOnly><Login /></GuestOnly>} />
           <Route path="/forgot-password" element={<GuestOnly><Suspense fallback={<Splash />}><Forgot /></Suspense></GuestOnly>} />
-          <Route path="/signup" element={<GuestOnly><Signup /></GuestOnly>} />
+          <Route path="/signup" element={<Navigate to="/signin" replace />} />
           <Route path="/passwords" element={<RequireVault><Vault /></RequireVault>} />
           <Route path="/photos" element={<RequireVault><RequireFeature feature="photos"><PhotoCloud /></RequireFeature></RequireVault>} />
           <Route path="/photos/import" element={<RequireVault><RequireFeature feature="photoImport"><Suspense fallback={<Splash />}><PhotoImport /></Suspense></RequireFeature></RequireVault>} />

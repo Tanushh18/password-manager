@@ -214,6 +214,8 @@ export const addShineProject = (label) => instance.post("/shine/projects", { lab
 export const signShineUpload = (project, kind) => instance.post("/shine/sign", { project, kind }).then((r) => r.data);
 export const markShineUploaded = () => instance.post("/shine/uploaded", {});
 export const deleteShineMedia = (item) => instance.post("/shine/delete", { publicId: item.publicId, kind: item.kind });
+export const getShineSite = () => instance.get("/shine/site").then((r) => r.data);
+export const updateShineSite = (key, update) => instance.put("/shine/site/" + encodeURIComponent(key), update).then((r) => r.data);
 export const getRegistryVisitors = () => instance.get("/registry/stats").then((r) => r.data);
 export const checkServer = (url) => instance.post("/registry/check", { url }, { timeout: 30000 });
 

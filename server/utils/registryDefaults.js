@@ -8,12 +8,14 @@ const DEFAULTS = {
         "https://password-manager-server-xxdr.onrender.com"
     ],
     dealradar: ["https://dealradar.ggnhome.com"],
-    wethree: ["https://we-three-api-r310.onrender.com/api"]
+    wethree: ["https://we-three-api-r310.onrender.com/api"],
+    // The ShineOne Estate website reads its photo/status server from here; Stashr itself serves them.
+    shineoneestate: ["https://password-manager-server-xxdr.onrender.com"]
 };
 // Built-in apps that may be switched off completely (empty list) to test that the app stops using its server.
 // The others always keep a server.
 const OFFABLE = new Set(["wethree", "dealradar"]);
-const APP_LABELS = { stashr: "Stashr", dealradar: "Deal Radar", wethree: "We Three" };
+const APP_LABELS = { stashr: "Stashr", dealradar: "Deal Radar", wethree: "We Three", shineoneestate: "ShineOne Estate" };
 
 const isAdminEmail = (email) => Boolean(email && ADMINS.includes(String(email).toLowerCase()));
 const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;

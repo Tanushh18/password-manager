@@ -89,7 +89,7 @@ function Navbar() {
 
   const cta = isAuthenticated
     ? { to: "/passwords", label: "My vault" }
-    : { to: "/signup", label: "Create your vault" };
+    : { to: "/signin", label: "Sign in" };
 
   // Signed in: the sidebar (tablet/desktop) or the bottom bar (phone) is the navigation.
   if (isAuthenticated) return phone ? <MobileTopBar status={status} /> : null;

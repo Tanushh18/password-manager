@@ -6,6 +6,9 @@
  *   POST /shine/sign            admin   - signed upload parameters (files go straight to Cloudinary)
  *   POST /shine/uploaded        admin   - refresh the list after uploading
  *   POST /shine/delete          admin   - remove one file
+ *   GET  /shine/site            admin   - project status (progress %, stage, ETA)
+ *   PUT  /shine/site/:key       admin   - change one project's status
+ *   GET  /public/shine/site     public  - same status for the website
  *   GET  /public/shine/media    public  - { folders: { "<key>": [url, ...] } } for the website
  */
 const express = require("express");
@@ -15,6 +18,8 @@ const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
 const ShineSector = require("../models/shineSector");
 const media = require("../utils/shineMedia");
+const ShineSite = require("../models/shineSite");
+const site = require("../utils/shineSite");
 const registry = require("./registry");
 
 const requireAdmin = (req, res, next) => registry.isAdminUser(req.rootUser) ? next() : res.status(403).json({ error: "Not allowed." });
@@ -69,6 +74,31 @@ router.post("/shine/delete", authenticate, requireAdmin, writeLimiter, async (re
     if (!publicId.startsWith("ShineOne/") || (kind !== "image" && kind !== "video")) return res.status(400).json({ error: "That file can't be removed here." });
     try { await media.deleteMedia(publicId, kind); return res.json({ ok: true }); }
     catch (error) { return res.status(502).json({ error: "Could not remove it: " + error.message }); }
+});
+
+const loadSite = async () =>
+{
+    const doc = await ShineSite.findById("shine").lean();
+    return { projects: site.merge(doc && doc.projects, await allSectors()), updatedAt: doc && doc.updatedAt ? new Date(doc.updatedAt).toISOString() : null };
+};
+
+router.get("/shine/site", authenticate, requireAdmin, async (req, res) => { res.set("Cache-Control", "no-store"); res.json(await loadSite()); });
+
+router.put("/shine/site/:key", authenticate, requireAdmin, writeLimiter, async (req, res) =>
+{
+    const parsed = site.parseUpdate(req.body);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const current = (await loadSite()).projects;
+    if (!current.some((p) => p.key === req.params.key)) return res.status(400).json({ error: "Unknown project." });
+    const projects = current.map((p) => (p.key === req.params.key ? { ...p, ...parsed.value } : p));
+    await ShineSite.findByIdAndUpdate("shine", { projects, updatedAt: new Date() }, { upsert: true, setDefaultsOnInsert: true });
+    return res.json(await loadSite());
+});
+
+router.get("/public/shine/site", cors({ origin: true, methods: ["GET"] }), async (req, res) =>
+{
+    try { res.set("Cache-Control", "public, max-age=60"); return res.json(await loadSite()); }
+    catch (error) { return res.status(502).json({ error: "Could not load the status." }); }
 });
 
 router.get("/public/shine/media", cors({ origin: true, methods: ["GET"] }), async (req, res) =>
