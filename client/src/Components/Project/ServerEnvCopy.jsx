@@ -20,7 +20,7 @@ export default function ServerEnvCopy({ projectId, target, targets, open, onClos
   const { projects } = useVault();
   const [pick, setPick] = useState("");
   const [preview, setPreview] = useState(null);
-  const [overwrite, setOverwrite] = useState(false);
+  const [chosen, setChosen] = useState(() => new Set());
   const [deploy, setDeploy] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -30,7 +30,7 @@ export default function ServerEnvCopy({ projectId, target, targets, open, onClos
   const others = useMemo(() => (targets || []).filter((t) => t.ref !== target.ref), [targets, target.ref]);
   const withVars = useMemo(() => (projects || []).filter((p) => (p.envVars || []).length), [projects]);
 
-  useEffect(() => { if (open) { setPick(""); setPreview(null); setErr(""); setOverwrite(false); setResult(null); setEnvText(""); getAllDeployServers().then((d) => setAllServers(d.servers || [])).catch(() => setAllServers([])); } }, [open]);
+  useEffect(() => { if (open) { setPick(""); setPreview(null); setErr(""); setChosen(new Set()); setResult(null); setEnvText(""); getAllDeployServers().then((d) => setAllServers(d.servers || [])).catch(() => setAllServers([])); } }, [open]);
 
   // Servers of OTHER projects, on any hosting provider.
   const elsewhere = useMemo(() => allServers.filter((s) => String(s.projectId) !== String(projectId)), [allServers, projectId]);
@@ -49,18 +49,23 @@ export default function ServerEnvCopy({ projectId, target, targets, open, onClos
     try {
       const r = await syncDeployEnv(projectId, { apply: false, targetRefs: [target.ref], ...body(value) });
       setPreview(r.targets[0] || null);
+      // New variables start ticked; ones that already exist with a different value start unticked (ticking one overwrites it).
+      setChosen(new Set(r.targets[0]?.create || []));
       if (r.targets[0]?.error) setErr(r.targets[0].error);
     } catch (e) { setErr(errorMessage(e, "Could not compare the variables.")); }
     finally { setBusy(false); }
   };
 
-  const count = preview ? preview.create.length + (overwrite ? preview.update.length : 0) : 0;
+  const overwrite = preview ? preview.update.some((n) => chosen.has(n)) : false;
+  const count = preview ? [...preview.create, ...preview.update].filter((n) => chosen.has(n)).length : 0;
+  const toggle = (name) => setChosen((set) => { const next = new Set(set); if (next.has(name)) next.delete(name); else next.add(name); return next; });
+  const setAll = (names, on) => setChosen((set) => { const next = new Set(set); names.forEach((n) => (on ? next.add(n) : next.delete(n))); return next; });
   const apply = async () => {
     if (!count) return;
     if (!(await confirm({ title: `Write ${count} variable${count === 1 ? "" : "s"} to ${target.name}?`, message: `On ${target.label}.${deploy ? " It will then redeploy the latest commit." : " Nothing is redeployed."}`, confirmLabel: deploy ? "Write and deploy" : "Write variables" }))) return;
     setBusy(true); setErr("");
     try {
-      const r = await syncDeployEnv(projectId, { apply: true, overwrite, deploy, targetRefs: [target.ref], ...body(pick) });
+      const r = await syncDeployEnv(projectId, { apply: true, overwrite, deploy, names: [...chosen], targetRefs: [target.ref], ...body(pick) });
       const res = r.results[0];
       setResult(res);
       if (res.written) toast.success(`Wrote ${res.written} variable${res.written === 1 ? "" : "s"} to ${target.name}${res.deployed ? " and started a deploy" : ""}.`);
@@ -98,11 +103,25 @@ export default function ServerEnvCopy({ projectId, target, targets, open, onClos
         {preview && !preview.error ? (
           <div>
             <p className="field__note"><strong>{preview.create.length}</strong> new · <strong>{preview.update.length}</strong> different · {preview.same} already the same{preview.unreadable.length ? " · " + preview.unreadable.length + " hidden by " + target.label : ""}{preview.skipped ? " · " + preview.skipped + " skipped" : ""}</p>
-            {preview.create.length ? <p className="field__note"><strong>Will add:</strong> {list(preview.create)}</p> : null}
+            {preview.create.length ? (
+              <fieldset className="field" disabled={busy}>
+                <legend className="field__label">New on {target.name} — choose which to add</legend>
+                <div className="gh-panel__row">
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => setAll(preview.create, true)}>Select all</button>
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => setAll(preview.create, false)}>None</button>
+                </div>
+                {preview.create.map((n) => <label key={n} className="field__note" style={{ display: "block" }}><input type="checkbox" checked={chosen.has(n)} onChange={() => toggle(n)} /> {n}</label>)}
+              </fieldset>
+            ) : null}
             {preview.update.length ? (
-              <label className="field__note" style={{ display: "block" }}>
-                <input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} disabled={busy} /> Also overwrite {preview.update.length} that differ: {list(preview.update)}
-              </label>
+              <fieldset className="field" disabled={busy}>
+                <legend className="field__label">Already there with a different value — tick to overwrite</legend>
+                <div className="gh-panel__row">
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => setAll(preview.update, true)}>Select all</button>
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => setAll(preview.update, false)}>None</button>
+                </div>
+                {preview.update.map((n) => <label key={n} className="field__note" style={{ display: "block" }}><input type="checkbox" checked={chosen.has(n)} onChange={() => toggle(n)} /> {n}</label>)}
+              </fieldset>
             ) : null}
             {preview.unreadable.length ? <p className="field__note">{target.label} does not show these values, so they are left as they are: {list(preview.unreadable)}</p> : null}
           </div>

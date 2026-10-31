@@ -199,7 +199,7 @@ async function listAllServers(user) {
  * Stashr project (`sourceVars`). Default targets: every other target on the source's branch (`allTargets` for all).
  * Preview unless `apply`. Variables a provider will not reveal are never overwritten, and are listed instead.
  */
-async function syncEnv(user, projectId, { apply = false, overwrite = false, deploy = false, sourceRef = "", sourceProjectId = "", sourceVars = null, targetRefs = null, allTargets = false, acrossProjects = false } = {}) {
+async function syncEnv(user, projectId, { apply = false, overwrite = false, deploy = false, sourceRef = "", sourceProjectId = "", names: onlyNames = null, sourceVars = null, targetRefs = null, allTargets = false, acrossProjects = false } = {}) {
   const { dataKey, fields } = await loadProject(user, projectId);
   // acrossProjects: also the targets of every other project that deploys the same GitHub repository.
   const others = acrossProjects ? projectsSharingRepo((user.projects || []).filter((e) => e.enc === "udk").map((e) => ({ ...User.publicEntry(e, dataKey), id: String(e._id) })), { ...fields, id: String(projectId) }) : [];
@@ -255,7 +255,8 @@ async function syncEnv(user, projectId, { apply = false, overwrite = false, depl
   const results = [];
   for (const p of plans) {
     if (p.error || !p.plan || (p.info && !p.info.ok)) { results.push({ ref: p.t.ref, name: p.t.name, written: 0, failed: [], deployed: false, error: p.error || (p.info && p.info.error) || "" }); continue; }
-    const names = pendingNames(p.plan, { overwrite }).filter((n) => !p.unreadable.has(n));
+    const only = Array.isArray(onlyNames) ? new Set(onlyNames) : null;
+    const names = pendingNames(p.plan, { overwrite }).filter((n) => !p.unreadable.has(n) && (!only || only.has(n)));
     const written = [];
     const failedNames = [];
     let stop = "";

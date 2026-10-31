@@ -97,7 +97,7 @@ router.post("/deploy-ops/projects/:projectId/sync", writeLimiter, async (req, re
   try {
     const result = await ops.syncEnv(req.rootUser, req.params.projectId, {
       apply: b.apply === true, overwrite: b.overwrite === true, deploy: b.deploy === true,
-      sourceRef: refOf(b.sourceRef), sourceProjectId: text(b.sourceProjectId, 40), sourceVars, targetRefs: list(b.targetRefs), allTargets: b.allTargets === true, acrossProjects: b.acrossProjects === true
+      sourceRef: refOf(b.sourceRef), sourceProjectId: text(b.sourceProjectId, 40), names: Array.isArray(b.names) ? b.names.map((n) => text(n, 200)).filter(Boolean).slice(0, 300) : null, sourceVars, targetRefs: list(b.targetRefs), allTargets: b.allTargets === true, acrossProjects: b.acrossProjects === true
     });
     res.set("Cache-Control", "no-store");
     return res.json(result);
