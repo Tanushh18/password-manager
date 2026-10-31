@@ -312,6 +312,36 @@ function ServerOverview({ apps, sync }) {
   );
 }
 
+/** Distinct visitors per app/website, counted from the public registry reads (hashed, no IPs kept). */
+function VisitorsCard() {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api.getRegistryVisitors().then((d) => setRows(d.apps || [])).catch((err) => setError(api.errorMessage(err, "Could not load visitor counts.")));
+  }, []);
+  return (
+    <section className="card servers__visitors" aria-label="Visitors per app">
+      <h2>Visitors</h2>
+      <p className="servers__hint">Unique users who opened each app or website, counted when it reads its server list from the registry.</p>
+      {error && <p className="servers__error">{error}</p>}
+      {!rows && !error && <p className="servers__hint">Loading…</p>}
+      {rows && (
+        <table className="servers__table">
+          <thead><tr><th>App / website</th><th>Today</th><th>7 days</th><th>30 days</th><th>All time</th><th>Last seen</th></tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.app}>
+                <td>{r.label}</td><td>{r.today}</td><td>{r.last7}</td><td>{r.last30}</td><td>{r.total}</td>
+                <td>{r.lastSeen ? ago(r.lastSeen) : "never"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
 export default function Servers() {
   const [apps, setApps] = useState(null);
   const [sync, setSync] = useState({}); // app -> Render sync info (automatic; optional)
@@ -373,6 +403,7 @@ export default function Servers() {
         {apps && <MascotBanner kind="satellite" {...registryMood(apps)} />}
         {error && <p className="servers__error">{error}</p>}
         {!apps && !error && <p className="servers__hint">Loading…</p>}
+        {apps && <VisitorsCard />}
         {apps && <StashrPropagation />}
         {apps && (
           <div className="servers__grid">

@@ -208,6 +208,13 @@ refreshServers().finally(() => { pruneDeadServers().catch(() => {}); });
 /* ── Server registry (admin only) ── */
 export const getRegistry = () => instance.get("/registry");
 export const saveRegistry = (app, urls, { force = false } = {}) => instance.put(`/registry/${app}`, { urls, force });
+/* ── ShineOne website photos, per sector / area (admin) ── */
+export const getShineProjects = () => instance.get("/shine/projects").then((r) => r.data);
+export const addShineProject = (label) => instance.post("/shine/projects", { label }).then((r) => r.data);
+export const signShineUpload = (project, kind) => instance.post("/shine/sign", { project, kind }).then((r) => r.data);
+export const markShineUploaded = () => instance.post("/shine/uploaded", {});
+export const deleteShineMedia = (item) => instance.post("/shine/delete", { publicId: item.publicId, kind: item.kind });
+export const getRegistryVisitors = () => instance.get("/registry/stats").then((r) => r.data);
 export const checkServer = (url) => instance.post("/registry/check", { url }, { timeout: 30000 });
 
 /* ── Personal AI Photo Cloud ── */

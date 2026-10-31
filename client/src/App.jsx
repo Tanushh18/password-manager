@@ -19,6 +19,7 @@ import Security from "./Pages/Security/Security";
 // Loaded on demand: operations screens are large and only needed on their routes.
 const PhotoImport = lazy(() => import("./Pages/PhotoCloud/PhotoImport"));
 const SharedFolder = lazy(() => import("./Pages/PhotoCloud/SharedFolder"));
+const Media = lazy(() => import("./Pages/Media/Media"));
 const Admin = lazy(() => import("./Pages/Admin/Admin"));
 const Services = lazy(() => import("./Pages/Services/Services"));
 const ServiceMap = lazy(() => import("./Pages/Services/ServiceMap"));
@@ -138,6 +139,7 @@ export default function App() {
           <Route path="/generator" element={<RequireVault><Suspense fallback={<Splash />}><Generator /></Suspense></RequireVault>} />
           <Route path="/security-center" element={<RequireVault><Suspense fallback={<Splash />}><SecurityCenter /></Suspense></RequireVault>} />
           <Route path="/servers" element={<RequireVault><RequireAdmin><Servers /></RequireAdmin></RequireVault>} />
+          <Route path="/media" element={<RequireVault><RequireAdmin><Suspense fallback={<Splash />}><Media /></Suspense></RequireAdmin></RequireVault>} />
           <Route path="/security" element={<RequireVault><RequireAdmin><Security /></RequireAdmin></RequireVault>} />
           <Route element={<RequireVault><InfraTabs /></RequireVault>}>
             <Route path="/services/map" element={<Suspense fallback={<Splash />}><ServiceMap /></Suspense>} />

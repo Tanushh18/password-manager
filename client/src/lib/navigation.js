@@ -45,6 +45,7 @@ export function navGroups(profile) {
         ? [
             ...(f.adminPanel ? [{ to: "/admin", label: "Admin panel", icon: "users" }] : []),
             { to: "/servers", label: "Server URLs", icon: "server" },
+            { to: "/media", label: "Website photos", icon: "server" },
             { to: "/security", label: "Security scans", icon: "scan" },
           ]
         : [],
