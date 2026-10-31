@@ -10,6 +10,7 @@ import { Modal, StatePill, Skeleton, Empty, LineChart, Section } from "./RenderU
 import { usePolling, useRequestGate } from "./renderHooks";
 import DomainPanel from "./DomainPanel";
 import EnvText from "../../Components/Project/EnvText";
+import { parseEnvBlock } from "../../lib/projectItems";
 import ServiceBranch from "./ServiceBranch";
 import {
   serviceKind, serviceState, serviceKey, repoKeyOf, normalizeList, normalizeMetricPoints, timeAgo, formatDateTime, formatNumber,
@@ -65,6 +66,13 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
   const [newValue, setNewValue] = useState("");
   const [envGroups, setEnvGroups] = useState([]);
   const [syncOpen, setSyncOpen] = useState(false);
+  // "Import env": pick variables from any server (any account, any repo) or a pasted .env, staged here until Save and deploy.
+  const [importOpen, setImportOpen] = useState(false);
+  const [importSource, setImportSource] = useState("");
+  const [importText, setImportText] = useState("");
+  const [importRows, setImportRows] = useState(null);
+  const [importPick, setImportPick] = useState(() => new Set());
+  const [importBusy, setImportBusy] = useState(false);
   const [syncTarget, setSyncTarget] = useState("all");
   const [syncDirection, setSyncDirection] = useState("to");
   const [syncOverwrite, setSyncOverwrite] = useState(false);
@@ -263,6 +271,42 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
     if (!repo) return [];
     return (services || []).filter((s) => serviceKey(s) !== serviceKey(service) && repoKeyOf(s.repo) === repo && serviceKind(s) !== "PostgreSQL");
   }, [services, service]);
+
+  const importCandidates = useMemo(() => (services || []).filter((s) => serviceKey(s) !== serviceKey(service) && serviceKind(s) !== "PostgreSQL"), [services, service]);
+
+  const loadImport = async () => {
+    setImportBusy(true); setImportRows(null);
+    try {
+      let rows;
+      if (importSource === "paste") rows = parseEnvBlock(importText).map((r) => ({ key: r.name, value: r.value || "" }));
+      else {
+        const src = importCandidates.find((t) => serviceKey(t) === importSource);
+        if (!src) { toast.info("Choose a server first."); return; }
+        rows = normalizeList(await getRenderEnvVars(src.accountId, src.id), "envVar").map((v) => ({ key: v.key || "", value: v.value || "" }));
+      }
+      rows = rows.filter((r) => r.key && r.value !== "");
+      if (!rows.length) { toast.info("No variables with a value were found there."); return; }
+      const mine = new Map(envVars.filter((v) => !v.remove).map((v) => [v.key, v.value]));
+      const view = rows.map((r) => ({ ...r, state: !mine.has(r.key) ? "new" : mine.get(r.key) === r.value ? "same" : "different" }));
+      setImportRows(view);
+      setImportPick(new Set(view.filter((r) => r.state === "new").map((r) => r.key)));
+    } catch (e) { fail(e, "Could not read that server's variables."); }
+    finally { setImportBusy(false); }
+  };
+
+  const stageImport = () => {
+    const chosen = (importRows || []).filter((r) => importPick.has(r.key));
+    if (!chosen.length) { toast.info("Tick at least one variable."); return; }
+    setEnvVars((old) => {
+      const byKey = new Map(chosen.map((r) => [r.key, r.value]));
+      const updated = old.map((v) => (byKey.has(v.key) ? { ...v, value: byKey.get(v.key), remove: false } : v));
+      const known = new Set(old.map((v) => v.key));
+      const added = chosen.filter((r) => !known.has(r.key)).map((r) => ({ key: r.key, value: r.value, originalValue: "", isNew: true }));
+      return [...updated, ...added];
+    });
+    toast.success(chosen.length + " variable" + (chosen.length === 1 ? "" : "s") + " added below. Press Save and deploy to apply.");
+    setImportOpen(false); setImportRows(null);
+  };
 
   const copyEnv = async () => {
     const rows = envVars.filter((v) => !v.remove && v.key);
@@ -656,8 +700,34 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
             <button type="button" className="rd-btn rd-btn--quiet" disabled={snapshotBusy} onClick={() => void loadSnapshots()}>Snapshots</button>
             <button type="button" className="rd-btn rd-btn--quiet" onClick={() => void copyEnv()}>⧉ Copy env</button>
             <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setSyncOpen((v) => !v)} aria-expanded={syncOpen} disabled={!siblings.length} title={siblings.length ? "" : "No other server uses this repo"}>⇄ Sync env</button>
+            <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setImportOpen((v) => !v)} aria-expanded={importOpen}>⬇ Import env</button>
             <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setNewEnv((v) => !v)} aria-expanded={newEnv}>＋ Add variable</button>
           </div>
+          {importOpen && <div className="rd-listbox">
+            <strong>Import variables into {service.name}</strong>
+            <select className="rd-field" aria-label="Import from" value={importSource} onChange={(e) => { setImportSource(e.target.value); setImportRows(null); }}>
+              <option value="">Choose where to import from…</option>
+              <optgroup label="All servers (every account, any project)">
+                {importCandidates.map((t) => <option key={serviceKey(t)} value={serviceKey(t)}>{t.name} · {t.accountName || "account"}</option>)}
+              </optgroup>
+              <optgroup label="From env text"><option value="paste">Paste a .env…</option></optgroup>
+            </select>
+            {importSource === "paste" && <textarea className="rd-field" rows={5} spellCheck="false" aria-label="Paste env text" placeholder="NAME=value" value={importText} onChange={(e) => setImportText(e.target.value)} />}
+            <button type="button" className="rd-btn rd-btn--quiet" disabled={importBusy || !importSource || (importSource === "paste" && !importText.trim())} onClick={() => void loadImport()}>{importBusy ? "Reading…" : "Show variables"}</button>
+            {importRows && <>
+              <p className="rd-note">Tick the ones you want. New ones are ticked; ones that already exist with another value are unticked (ticking replaces them).</p>
+              <div>
+                <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setImportPick(new Set(importRows.map((r) => r.key)))}>Select all</button>{" "}
+                <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setImportPick(new Set())}>None</button>
+              </div>
+              {importRows.map((r) => (
+                <label key={r.key} style={{ display: "block" }}>
+                  <input type="checkbox" checked={importPick.has(r.key)} disabled={r.state === "same"} onChange={() => setImportPick((set) => { const n = new Set(set); if (n.has(r.key)) n.delete(r.key); else n.add(r.key); return n; })} /> {r.key} <small>({r.state === "new" ? "new" : r.state === "same" ? "already the same" : "different value"})</small>
+                </label>
+              ))}
+              <button type="button" className="rd-btn rd-btn--primary" onClick={stageImport}>Add {importPick.size} to {service.name}</button>
+            </>}
+          </div>}
           {syncOpen && siblings.length > 0 && <div className="rd-listbox">
             <strong>Sync environment variables</strong>
             <select className="rd-field" aria-label="Sync direction" value={syncDirection} onChange={(e) => setSyncDirection(e.target.value)}>
