@@ -27,6 +27,12 @@ router.get("/deploy-ops/projects/:projectId/targets", async (req, res) => {
   catch (error) { return send(res, error); }
 });
 
+/* Every server of every project, so env values can be copied from any of them. Names only. */
+router.get("/deploy-ops/servers", async (req, res) => {
+  try { res.set("Cache-Control", "no-store"); return res.json({ servers: await ops.listAllServers(req.rootUser) }); }
+  catch (error) { return send(res, error); }
+});
+
 router.get("/deploy-ops/projects/:projectId/env", async (req, res) => {
   const ref = refOf(req.query.ref);
   if (!ref) return res.status(400).json({ error: "Choose a server." });
@@ -91,7 +97,7 @@ router.post("/deploy-ops/projects/:projectId/sync", writeLimiter, async (req, re
   try {
     const result = await ops.syncEnv(req.rootUser, req.params.projectId, {
       apply: b.apply === true, overwrite: b.overwrite === true, deploy: b.deploy === true,
-      sourceRef: refOf(b.sourceRef), sourceVars, targetRefs: list(b.targetRefs), allTargets: b.allTargets === true, acrossProjects: b.acrossProjects === true
+      sourceRef: refOf(b.sourceRef), sourceProjectId: text(b.sourceProjectId, 40), sourceVars, targetRefs: list(b.targetRefs), allTargets: b.allTargets === true, acrossProjects: b.acrossProjects === true
     });
     res.set("Cache-Control", "no-store");
     return res.json(result);

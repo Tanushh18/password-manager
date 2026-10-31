@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Modal } from "react-responsive-modal";
 import "react-responsive-modal/styles.css";
 import { toast } from "react-toastify";
-import { syncDeployEnv } from "../../api/client";
+import { syncDeployEnv, getAllDeployServers } from "../../api/client";
+import { parseEnvBlock } from "../../lib/projectItems";
 import { useVault } from "../../state/vault";
 import { errorMessage } from "../../Pages/Render/renderUtils";
 import { useDialogs } from "../../Components/UI/Dialogs";
@@ -24,18 +25,26 @@ export default function ServerEnvCopy({ projectId, target, targets, open, onClos
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [result, setResult] = useState(null);
+  const [allServers, setAllServers] = useState([]);
+  const [envText, setEnvText] = useState("");
   const others = useMemo(() => (targets || []).filter((t) => t.ref !== target.ref), [targets, target.ref]);
   const withVars = useMemo(() => (projects || []).filter((p) => (p.envVars || []).length), [projects]);
 
-  useEffect(() => { if (open) { setPick(""); setPreview(null); setErr(""); setOverwrite(false); setResult(null); } }, [open]);
+  useEffect(() => { if (open) { setPick(""); setPreview(null); setErr(""); setOverwrite(false); setResult(null); setEnvText(""); getAllDeployServers().then((d) => setAllServers(d.servers || [])).catch(() => setAllServers([])); } }, [open]);
 
-  const body = (value) => (value.startsWith("project:")
+  // Servers of OTHER projects, on any hosting provider.
+  const elsewhere = useMemo(() => allServers.filter((s) => String(s.projectId) !== String(projectId)), [allServers, projectId]);
+  const body = (value) => value === "paste"
+    ? { sourceVars: parseEnvBlock(envText).map((v) => ({ name: v.name, value: v.value || "" })) }
+    : value.startsWith("other:")
+    ? (() => { const [, pid, ...ref] = value.split(":"); return { sourceProjectId: pid, sourceRef: ref.join(":") }; })()
+    : (value.startsWith("project:")
     ? { sourceVars: (withVars.find((p) => "project:" + p.id === value)?.envVars || []).map((v) => ({ name: v.name, value: v.value || "" })) }
     : { sourceRef: value.replace(/^server:/, "") });
 
-  const choose = async (value) => {
+  const choose = async (value, compare = false) => {
     setPick(value); setPreview(null); setErr(""); setResult(null);
-    if (!value) return;
+    if (!value || (value === "paste" && !compare)) return;
     setBusy(true);
     try {
       const r = await syncDeployEnv(projectId, { apply: false, targetRefs: [target.ref], ...body(value) });
@@ -73,9 +82,18 @@ export default function ServerEnvCopy({ projectId, target, targets, open, onClos
           <select id="sec-src" className="input" value={pick} onChange={(e) => void choose(e.target.value)} disabled={busy}>
             <option value="">Choose…</option>
             {others.length ? <optgroup label="Servers">{others.map((t) => <option key={t.ref} value={"server:" + t.ref}>{t.name} · {t.label}</option>)}</optgroup> : null}
+            {elsewhere.length ? <optgroup label="All servers (other projects, any host)">{elsewhere.map((s) => <option key={s.projectId + s.ref} value={"other:" + s.projectId + ":" + s.ref}>{s.projectName} › {s.name} · {s.label}</option>)}</optgroup> : null}
+            <optgroup label="From env text"><option value="paste">Paste a .env…</option></optgroup>
             {withVars.length ? <optgroup label="Stashr projects">{withVars.map((p) => <option key={p.id} value={"project:" + p.id}>{p.name} ({p.envVars.length})</option>)}</optgroup> : null}
           </select>
         </div>
+        {pick === "paste" ? (
+          <div className="field">
+            <label className="field__label" htmlFor="sec-env">Paste NAME=value lines</label>
+            <textarea id="sec-env" className="input" rows={6} spellCheck="false" value={envText} onChange={(e) => setEnvText(e.target.value)} placeholder="CLOUDINARY_CLOUD_NAME_shine=..." />
+            <div className="gh-panel__row"><button type="button" className="btn btn--ghost btn--sm" disabled={busy || !envText.trim()} onClick={() => void choose("paste", true)}>Compare</button></div>
+          </div>
+        ) : null}
         {busy && !preview ? <p className="field__note">Reading…</p> : null}
         {preview && !preview.error ? (
           <div>
