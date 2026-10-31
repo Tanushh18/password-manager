@@ -151,7 +151,7 @@ export default function Media() {
       <div className="shell-narrow">
         <header className="settings__top">
           <Link to="/settings" className="proj-back"><Arrow size={14} style={{ transform: "rotate(180deg)" }} /> Settings</Link>
-          <h1 className="vault__title">Website photos</h1>
+          <h1 className="vault__title">ShineOne Estate Manager</h1>
           <p className="vault__count">Photos and videos you add here appear on the ShineOne Estate website, per sector or area. Same folders as the Tasks app.</p>
         </header>
         {error && <p className="servers__error">{error}</p>}

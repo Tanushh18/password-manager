@@ -80,7 +80,7 @@ function Navbar() {
       ];
   const more = isAuthenticated
     ? [
-        ...(profile?.isAdmin ? [{ to: "/admin", label: "Admin panel" }, { to: "/servers", label: "Server URLs" }, { to: "/media", label: "Website photos" }, { to: "/security", label: "Security scans" }] : []),
+        ...(profile?.isAdmin ? [{ to: "/admin", label: "Admin panel" }, { to: "/servers", label: "Server URLs" }, { to: "/media", label: "ShineOne Estate Manager" }, { to: "/security", label: "Security scans" }] : []),
         { to: "/settings", label: "Settings" },
         { to: "/logout", label: "Sign out" },
       ]
