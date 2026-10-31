@@ -112,25 +112,9 @@ export default function ItemEditor({ open, item, folders, icons, onClose, onSave
           </details>
         ) : null}
 
-        <div className="gen editor__gen">
-          <div className="gen__label">
-            <span>Generator · length <strong>{gen.length}</strong></span>
-            <span className="gen__opts">
-              {[["upper", "A-Z"], ["digits", "0-9"], ["symbols", "!@#"]].map(([k, l]) => (
-                <label key={k} className="gen__opt">
-                  <input type="checkbox" checked={gen[k]} onChange={(e) => { const next = { ...gen, [k]: e.target.checked }; setGen(next); generate(next); }} />
-                  {l}
-                </label>
-              ))}
-            </span>
-          </div>
-          <div className="gen__row">
-            <input className="gen__range" type="range" min="8" max="48" value={gen.length} onChange={(e) => { const next = { ...gen, length: Number(e.target.value) }; setGen(next); generate(next); }} aria-label="Password length" />
-            <button type="button" className="btn btn--ghost btn--sm" onClick={() => generate()}>
-              <Sparkle size={14} /> Generate
-            </button>
-          </div>
-        </div>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={() => generate()}>
+          <Sparkle size={14} /> Generate password
+        </button>
 
         </> : null}
 

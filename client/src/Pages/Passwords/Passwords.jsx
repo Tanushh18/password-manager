@@ -1,6 +1,6 @@
 import { fx } from "../../lib/fx";
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import useShortcuts from "../../hooks/useShortcuts";
 import ServiceStatus from "../../Components/ServiceStatus/ServiceStatus";
@@ -9,7 +9,7 @@ import ItemCard from "../../Components/Item/ItemCard";
 import ItemEditor from "../../Components/Item/ItemEditor";
 import ImportModal from "../../Components/Item/ImportModal";
 import VaultSidebar from "../../Components/Vault/VaultSidebar";
-import { IcWand, IcTrash } from "../../Components/Vault/VaultIcons";
+import { IcTrash } from "../../Components/Vault/VaultIcons";
 import VaultBackdrop from "../../Components/Vault/VaultBackdrop";
 import { KeyLine, Plus, Search, Upload, Arrow, LockLine, Alert } from "../../Components/Icons/Icons";
 import { PageHeader, EmptyState } from "../../Components/UI/ui";
@@ -230,7 +230,6 @@ export default function Passwords() {
             <kbd className="kbd vx-search__kbd" aria-hidden="true">/</kbd>
           </div>
           <div className="vx-tools__actions">
-            <Link to="/generator" className="btn btn--ghost vx-tools__gen"><IcWand size={16} /> Generator</Link>
             <button className="btn btn--primary vx-add" onClick={() => setEditing("new")} aria-keyshortcuts="n">
               <Plus size={15} /> Add item <kbd className="kbd">N</kbd>
             </button>
