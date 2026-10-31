@@ -88,6 +88,93 @@ function StatusEditor({ project, onSaved }) {
   );
 }
 
+/** Pick or drop many files at once, choose the folder (or make a new one), and watch each file upload. */
+function BulkUploader({ projects, configured, onDone }) {
+  const [target, setTarget] = useState("");
+  const [newName, setNewName] = useState("");
+  const [files, setFiles] = useState([]);
+  const [rows, setRows] = useState([]);
+  const [running, setRunning] = useState(false);
+  const [drag, setDrag] = useState(false);
+  const inputRef = useRef(null);
+  const creating = target === "__new";
+  const ready = files.length > 0 && (creating ? newName.trim() : target) && configured && !running;
+
+  const addFiles = (list) => {
+    const ok = [...list].filter((f) => /^(image|video)\//.test(f.type));
+    if (ok.length < list.length) toast.info("Only photos and videos can be added.");
+    setFiles((cur) => [...cur, ...ok]);
+  };
+  const setRow = (i, patch) => setRows((r) => r.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+
+  const start = async () => {
+    setRunning(true);
+    let key = target;
+    try {
+      if (creating) { const added = await api.addShineProject(newName); key = added.key; setTarget(key); setNewName(""); }
+    } catch (err) { toast.error(api.errorMessage(err, "Could not create the folder.")); setRunning(false); return; }
+    const queue = files;
+    setRows(queue.map((f) => ({ name: f.name, pct: 0, state: "wait" })));
+    let done = 0;
+    for (let i = 0; i < queue.length; i++) {
+      try {
+        setRow(i, { state: "up" });
+        const sig = await api.signShineUpload(key, kindOf(queue[i]));
+        await uploadFile(sig, queue[i], (f) => setRow(i, { pct: Math.round(f * 100) }));
+        setRow(i, { state: "ok", pct: 100 });
+        done++;
+      } catch (err) { setRow(i, { state: "fail", error: err.message }); }
+    }
+    setFiles([]);
+    if (inputRef.current) inputRef.current.value = "";
+    if (done) { await api.markShineUploaded().catch(() => {}); await onDone(key); toast.success(done + " of " + queue.length + " uploaded."); }
+    else toast.error("Nothing was uploaded.");
+    setRunning(false);
+  };
+
+  return (
+    <section className="card media__bulk" aria-label="Upload many photos and videos">
+      <h2>Upload photos / videos</h2>
+      <div className="media__bulkrow">
+        <label>Folder
+          <select className="input" value={target} onChange={(e) => setTarget(e.target.value)} disabled={running}>
+            <option value="">Choose a folder…</option>
+            {projects.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+            <option value="__new">+ New folder…</option>
+          </select>
+        </label>
+        {creating && <label>New folder name<input className="input" value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={40} placeholder="e.g. Sector 12" disabled={running} /></label>}
+      </div>
+      <div
+        className={"media__drop" + (drag ? " media__drop--on" : "")}
+        onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={(e) => { e.preventDefault(); setDrag(false); if (!running) addFiles(e.dataTransfer.files); }}
+      >
+        <p>{files.length ? files.length + " file" + (files.length === 1 ? "" : "s") + " ready" : "Drag photos and videos here, or"}</p>
+        <label className={"btn btn--ghost btn--sm" + (running ? " is-disabled" : "")}>
+          Choose files
+          <input ref={inputRef} type="file" accept="image/*,video/*" multiple hidden disabled={running} onChange={(e) => addFiles(e.target.files)} />
+        </label>
+      </div>
+      <div className="media__bulkrow">
+        <button type="button" className="btn btn--primary btn--sm" disabled={!ready} onClick={start}>{running ? "Uploading…" : "Upload " + (files.length || "") + (files.length === 1 ? " file" : " files")}</button>
+        {files.length > 0 && !running && <button type="button" className="btn btn--ghost btn--sm" onClick={() => setFiles([])}>Clear</button>}
+      </div>
+      {rows.length > 0 && (
+        <ul className="media__queue">
+          {rows.map((r, i) => (
+            <li key={i} className={"media__q media__q--" + r.state}>
+              <span>{r.name}</span>
+              <small>{r.state === "ok" ? "✓ Done" : r.state === "fail" ? "✗ " + (r.error || "Failed") : r.state === "up" ? r.pct + "%" : "Waiting"}</small>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export default function Media() {
   const [site, setSite] = useState(null);
   const [projects, setProjects] = useState(null);
@@ -163,6 +250,7 @@ export default function Media() {
               <input className="input" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Add a sector or area, e.g. Sector 12" maxLength={40} aria-label="New sector or area name" />
               <button className="btn btn--primary btn--sm" type="submit" disabled={!newName.trim()}>Add sector / area</button>
             </form>
+            <BulkUploader projects={projects} configured={configured} onDone={async (key) => { await load(); api.getShineSite().then(setSite).catch(() => {}); setOpen(key); }} />
             <div className="media__grid">
               {projects.map((p) => {
                 const cover = p.items[0];
