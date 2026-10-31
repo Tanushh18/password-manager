@@ -10,7 +10,7 @@ const DEFAULTS = {
     dealradar: ["https://dealradar.ggnhome.com"],
     wethree: ["https://we-three-api-r310.onrender.com/api"],
     // The ShineOne Estate website reads its photo/status server from here; Stashr itself serves them.
-    shineoneestate: ["https://password-manager-server-xxdr.onrender.com"]
+    shineoneestate: ["https://password-manager-server-g305.onrender.com", "https://password-manager-server-xxdr.onrender.com"]
 };
 // Built-in apps that may be switched off completely (empty list) to test that the app stops using its server.
 // The others always keep a server.
