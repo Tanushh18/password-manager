@@ -14,7 +14,7 @@ const merge = (saved, extra = []) =>
 {
     const byKey = new Map((saved || []).map((p) => [p.key, p]));
     const known = new Set(DEFAULTS.map((d) => d.key));
-    const added = extra.filter((e) => !known.has(e.key)).map((e) => ({ key: e.key, name: e.label, status: "Ongoing", area: "", progress: 0, stage: "", eta: "" }));
+    const added = extra.filter((e) => !known.has(e.key)).map((e) => ({ key: e.key, name: e.label, status: "Ongoing", area: "", progress: 0, stage: "", eta: "", visible: true }));
     return [...DEFAULTS, ...added].map((d) =>
     {
         const s = byKey.get(d.key) || {};
@@ -25,7 +25,8 @@ const merge = (saved, extra = []) =>
             area: s.area != null ? s.area : d.area,
             progress: typeof s.progress === "number" ? s.progress : d.progress,
             stage: s.stage != null ? s.stage : d.stage,
-            eta: s.eta != null ? s.eta : d.eta
+            eta: s.eta != null ? s.eta : d.eta,
+            visible: s.visible !== false
         };
         if (m.status === "Completed") { m.progress = 100; m.stage = ""; }
         return m;
@@ -37,10 +38,11 @@ const parseUpdate = (body) =>
 {
     const b = body || {};
     const out = {};
-    for (const k of Object.keys(b)) if (!["status", "area", "progress", "stage", "eta"].includes(k)) return { error: "Unknown field: " + k };
+    for (const k of Object.keys(b)) if (!["status", "area", "progress", "stage", "eta", "visible"].includes(k)) return { error: "Unknown field: " + k };
     if (b.status !== undefined) { if (!["Completed", "Ongoing"].includes(b.status)) return { error: "status must be Completed or Ongoing." }; out.status = b.status; }
     if (b.progress !== undefined) { if (!Number.isInteger(b.progress) || b.progress < 0 || b.progress > 100) return { error: "progress must be 0-100." }; out.progress = b.progress; }
     if (b.stage !== undefined) { if (b.stage !== "" && !STAGES.includes(b.stage)) return { error: "Unknown stage." }; out.stage = b.stage; }
+    if (b.visible !== undefined) { if (typeof b.visible !== "boolean") return { error: "visible must be true or false." }; out.visible = b.visible; }
     for (const k of ["area", "eta"]) if (b[k] !== undefined) { if (typeof b[k] !== "string" || b[k].length > 60) return { error: k + " is too long." }; out[k] = b[k].trim(); }
     return { value: out };
 };

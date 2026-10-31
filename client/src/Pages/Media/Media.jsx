@@ -33,6 +33,35 @@ function uploadFile(sig, file, onProgress) {
   });
 }
 
+/** Tries to load one file the way a visitor's browser would; true if it came through. */
+const probe = (url) => new Promise((resolve) => {
+  const img = new Image();
+  const timer = setTimeout(() => resolve(false), 20000);
+  img.onload = () => { clearTimeout(timer); resolve(true); };
+  img.onerror = () => { clearTimeout(timer); resolve(false); };
+  img.src = url;
+});
+
+/** { [sectorKey]: { ok, total } } - how many of each sector's files actually load. */
+function useLoadCheck(projects) {
+  const [result, setResult] = useState({});
+  const [checking, setChecking] = useState(false);
+  const run = useCallback(async () => {
+    if (!projects) return;
+    setChecking(true);
+    const out = {};
+    for (const p of projects) {
+      // Videos are checked through their poster thumbnail.
+      const oks = await Promise.all(p.items.map((i) => probe(i.thumb || i.url)));
+      out[p.key] = { ok: oks.filter(Boolean).length, total: oks.length };
+    }
+    setResult(out);
+    setChecking(false);
+  }, [projects]);
+  useEffect(() => { run(); }, [run]);
+  return { result, checking, recheck: run };
+}
+
 const STAGES = ["", "Foundation", "Structure", "Finishing", "Interior Works", "Final Inspection", "Handover"];
 
 /** Progress %, stage and ETA the website shows for one sector / project. */
@@ -68,6 +97,7 @@ export default function Media() {
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState("");
   const fileRef = useRef(null);
+  const { result: loadStatus, checking, recheck } = useLoadCheck(projects);
 
   const load = useCallback(() => api.getShineProjects()
     .then((d) => { setProjects(d.projects); setConfigured(d.configured); setError(""); })
@@ -84,6 +114,12 @@ export default function Media() {
       setOpen(added.key);
       toast.success(added.label + " added. Now add its photos.");
     } catch (err) { toast.error(api.errorMessage(err, "Could not add it.")); }
+  };
+
+  const isVisible = (key) => { const p = site && site.projects.find((x) => x.key === key); return !p || p.visible !== false; };
+  const toggleVisible = async (key) => {
+    try { setSite(await api.updateShineSite(key, { visible: !isVisible(key) })); toast.success(isVisible(key) ? "Hidden from the website." : "Shown on the website."); }
+    catch (err) { toast.error(api.errorMessage(err, "Could not change it.")); }
   };
 
   const upload = async (files) => {
@@ -130,15 +166,27 @@ export default function Media() {
             <div className="media__grid">
               {projects.map((p) => {
                 const cover = p.items[0];
+                const st = loadStatus[p.key];
+                const live = isVisible(p.key);
                 return (
-                  <button key={p.key} type="button" className={"card media__sector" + (p.key === open ? " media__sector--on" : "")} onClick={() => setOpen(p.key === open ? "" : p.key)}>
-                    {cover ? <img src={cover.thumb} alt="" loading="lazy" /> : <span className="media__empty">No photos</span>}
-                    <strong>{p.label}</strong>
-                    <small>{p.items.filter((i) => i.kind === "image").length} photos · {p.items.filter((i) => i.kind === "video").length} videos</small>
-                  </button>
+                  <div key={p.key} className={"card media__sector" + (p.key === open ? " media__sector--on" : "") + (live ? "" : " media__sector--hidden")}>
+                    <button type="button" className="media__sector-main" onClick={() => setOpen(p.key === open ? "" : p.key)}>
+                      {cover ? <img src={cover.thumb} alt="" loading="lazy" /> : <span className="media__empty">No photos</span>}
+                      <strong>{p.label}</strong>
+                      <small>{p.items.filter((i) => i.kind === "image").length} photos · {p.items.filter((i) => i.kind === "video").length} videos</small>
+                    </button>
+                    <small className={"media__load" + (st && st.ok < st.total ? " media__load--bad" : "")}>
+                      {!st ? "Checking…" : st.total === 0 ? "No files" : st.ok === st.total ? "✓ All " + st.total + " loading" : "✗ " + (st.total - st.ok) + " of " + st.total + " not loading"}
+                    </small>
+                    <label className="media__toggle">
+                      <input type="checkbox" checked={live} onChange={() => toggleVisible(p.key)} />
+                      <span>{live ? "Shown on website" : "Hidden from website"}</span>
+                    </label>
+                  </div>
                 );
               })}
             </div>
+            <p className="servers__hint">Load check opens each file like a visitor's browser would. <button type="button" className="btn btn--ghost btn--sm" onClick={recheck} disabled={checking}>{checking ? "Checking…" : "Check again"}</button></p>
             {current && (
               <section className="card media__panel" aria-label={current.label + " files"}>
                 <div className="servers__head">

@@ -5,6 +5,11 @@
 .media__sector--on { outline: 2px solid var(--accent, currentColor); }
 .media__sector img, .media__empty { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; background: var(--line-strong, rgba(128,128,128,.2)); display: grid; place-items: center; font-size: 0.8rem; color: var(--text-muted); }
 .media__sector small { color: var(--text-muted); }
+.media__sector-main { all: unset; display: grid; gap: 0.25rem; cursor: pointer; }
+.media__sector--hidden { opacity: 0.6; }
+.media__load { font-weight: 600; color: #2e9e5b !important; }
+.media__load--bad { color: #d64545 !important; }
+.media__toggle { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; cursor: pointer; }
 .media__panel { padding: 1rem; }
 .media__files { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: 0.6rem; }
 .media__file { margin: 0; position: relative; display: grid; gap: 0.2rem; }

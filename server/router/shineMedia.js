@@ -97,7 +97,7 @@ router.put("/shine/site/:key", authenticate, requireAdmin, writeLimiter, async (
 
 router.get("/public/shine/site", cors({ origin: true, methods: ["GET"] }), async (req, res) =>
 {
-    try { res.set("Cache-Control", "public, max-age=60"); return res.json(await loadSite()); }
+    try { res.set("Cache-Control", "public, max-age=60"); const d = await loadSite(); return res.json({ ...d, projects: d.projects.filter((p) => p.visible !== false) }); }
     catch (error) { return res.status(502).json({ error: "Could not load the status." }); }
 });
 
@@ -107,9 +107,10 @@ router.get("/public/shine/media", cors({ origin: true, methods: ["GET"] }), asyn
     try
     {
         const sectors = await allSectors();
+        const hidden = new Set((await loadSite()).projects.filter((p) => p.visible === false).map((p) => p.key));
         const all = await media.listAll(sectors);
         const folders = {};
-        for (const s of sectors) folders[s.key] = (all[s.key] || []).map((i) => i.url);
+        for (const s of sectors.filter((x) => !hidden.has(x.key))) folders[s.key] = (all[s.key] || []).map((i) => i.url);
         res.set("Cache-Control", "public, max-age=60");
         return res.json({ folders });
     }
