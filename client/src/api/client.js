@@ -100,7 +100,7 @@ export const setBearer = (token) => { try { if (token) localStorage.setItem(BEAR
 instance.interceptors.request.use((config) =>
 {
     const bearer = getBearer();
-    if (bearer && !/\/(login|register)$/.test(String(config.url || "").split("?")[0])) config.headers.Authorization = "Bearer " + bearer;
+    if (bearer && !/\/(login|register|mpin-login)$/.test(String(config.url || "").split("?")[0])) config.headers.Authorization = "Bearer " + bearer;
     config.headers["X-Client-Id"] = CLIENT_ID;
     if (config._server === undefined) config._server = active;
     config.baseURL = SERVERS[config._server];
@@ -117,7 +117,7 @@ instance.interceptors.response.use(
         if (response.config._server !== undefined && response.config._server !== active)
             setActive(response.config._server);
         // The server that just signed us in (or confirmed the session) is the one that holds the cookie.
-        if (/\/(login|authenticate)$/.test(String(response.config.url || "").split("?")[0]) && SERVERS[response.config._server])
+        if (/\/(login|authenticate|mpin-login)$/.test(String(response.config.url || "").split("?")[0]) && SERVERS[response.config._server])
             writeSessionServer(SERVERS[response.config._server]);
         if (/\/logout$/.test(String(response.config.url || "").split("?")[0])) { writeSessionServer(""); setBearer(""); }
         return response;
@@ -126,7 +126,7 @@ instance.interceptors.response.use(
     {
         const config = error.config;
         // A 401 from a server that never signed us in is not "signed out": ask the server that holds the session once.
-        if (config && error.response?.status === 401 && !config._sessionRetry && !/\/(login|register)$/.test(String(config.url || "").split("?")[0]))
+        if (config && error.response?.status === 401 && !config._sessionRetry && !/\/(login|register|mpin-login)$/.test(String(config.url || "").split("?")[0]))
         {
             const home = SERVERS.indexOf(readSessionServer());
             if (home >= 0 && home !== config._server)
@@ -261,6 +261,11 @@ export const checkAuthenticated = () => {
     return profileInFlight;
 };
 export const loginUser = (data) => instance.post("/login", data);
+export const mpinLogin = (data) => instance.post("/mpin-login", data);
+export const setupMpin = (pin) => instance.post("/mpin", { pin }).then((r) => r.data);
+export const changeMpin = (deviceId, pin) => instance.put(`/mpin/${deviceId}`, { pin }).then((r) => r.data);
+export const listMpin = () => instance.get("/mpin").then((r) => r.data);
+export const removeMpin = (deviceId) => instance.delete(`/mpin/${deviceId}`).then((r) => r.data);
 export const logoutUser = () => instance.get("/logout");
 export const signupUser = (data) => instance.post("/register", data);
 
