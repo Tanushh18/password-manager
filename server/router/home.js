@@ -21,6 +21,8 @@ const HomeDevice = require("../models/homeDevice");
 const HomeEvent = require("../models/homeEvent");
 const home = require("../utils/home");
 const assistant = require("../utils/homeAssistant");
+const movies = require("../utils/homeMovies");
+const MovieSettings = require("../models/homeMovieSettings");
 const { record } = require("../utils/homeEvents");
 
 const MAX_DEVICES = 10;
@@ -226,6 +228,8 @@ async function ingest(d, body, seenAt = new Date()) {
         events.push({ kind: "online", text: `${d.name} is back online`, notify: false });
     }
     for (const e of events.slice(0, 30)) await record({ ...base, ...e });
+    // The TV's USB drive lists what it holds; complete copies of Drive movies can be cleared from Drive.
+    if (d.kind === "tv") void movies.settle(d.owner, status.movies);
 
     // Results of earlier commands.
     for (const a of (Array.isArray(body.acks) ? body.acks.slice(0, 20) : [])) {
@@ -243,6 +247,70 @@ async function ingest(d, body, seenAt = new Date()) {
 }
 
 const MAX_CHILDREN = 3;
+
+/* ───────── movies from Google Drive to the TV's USB drive ───────── */
+
+router.get("/home/movies/settings", authenticate, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const [connections, settings] = await Promise.all([movies.connectionsOf(req.rootUser._id), MovieSettings.findOne({ owner: req.rootUser._id }).lean()]);
+        const ctx = settings && settings.folderId ? await movies.context(req.rootUser._id) : null;
+        let waiting = null, error = null;
+        if (ctx && !ctx.missing) { try { waiting = (await movies.list(ctx)).map((f) => ({ name: f.name, size: f.size })); } catch (e) { error = e.message; } }
+        else if (ctx && ctx.missing) error = "The chosen Google account is not connected any more.";
+        return res.json({
+            connections,
+            settings: { connectionId: (settings && settings.connectionId) || "", folderId: (settings && settings.folderId) || "", deleteAfterSync: Boolean(settings && settings.deleteAfterSync) },
+            canDelete: Boolean(ctx && ctx.canDelete), waiting, error, lastDelete: (settings && settings.lastDelete) || null
+        });
+    } catch (e) { return fail(res, e, "Could not load the movie settings."); }
+});
+
+router.put("/home/movies/settings", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const b = req.body || {};
+        const folderId = movies.folderIdFrom(b.folder);
+        if (!folderId) return res.status(400).json({ error: "Paste the Drive folder's link." });
+        const connections = await movies.connectionsOf(req.rootUser._id);
+        const connection = connections.find((c) => c.id === String(b.connectionId || "")) || (connections.length === 1 ? connections[0] : null);
+        if (!connection) return res.status(400).json({ error: connections.length ? "Pick a Google account." : "Connect a Google account in Photo Cloud first." });
+        const deleteAfterSync = b.deleteAfterSync === true;
+        if (deleteAfterSync && !connection.canDelete) return res.status(400).json({ error: "This Google connection can only read Drive. Reconnect it with full Drive access to delete movies after they reach the TV." });
+        await MovieSettings.updateOne({ owner: req.rootUser._id }, { $set: { connectionId: connection.id, folderId, deleteAfterSync } }, { upsert: true });
+        return res.json({ ok: true });
+    } catch (e) { return fail(res, e, "Could not save the movie settings."); }
+});
+
+// What the TV asks for, through the tablet's token: the list of movies and each file (with resume).
+router.get("/home/movies/manifest", agentLimiter, async (req, res, next) => agentAuth(req, res, next), async (req, res) => {
+    try {
+        const ctx = await movies.context(req.device.owner);
+        if (!ctx || ctx.missing) return res.json({ mode: "mirror", files: [] });
+        const files = await movies.list(ctx);
+        // "move": the TV keeps what it downloaded after it leaves Drive. "mirror": the USB copy follows the Drive folder.
+        return res.json({ mode: ctx.settings.deleteAfterSync && ctx.canDelete ? "move" : "mirror", files: files.map((f) => ({ name: f.name, size: f.size, path: f.path })) });
+    } catch (e) { return fail(res, e, "Could not list the movies."); }
+});
+
+router.get("/home/movies/file", agentLimiter, async (req, res, next) => agentAuth(req, res, next), async (req, res) => {
+    try {
+        const ctx = await movies.context(req.device.owner);
+        if (!ctx || ctx.missing) return res.status(404).send("no movie folder");
+        const file = (await movies.list(ctx)).find((f) => f.path === String(req.query.path || ""));
+        if (!file) return res.status(404).send("file not found");
+        const up = await movies.open(ctx, file, req.headers.range);
+        if (up.status === 416) return res.status(416).set("Content-Range", up.headers.get("content-range") || "").end();
+        if (!up.ok || !up.body) return res.status(502).send(`Google Drive answered HTTP ${up.status}`);
+        res.status(up.status);
+        for (const h of ["content-length", "content-range", "content-type"]) if (up.headers.get(h)) res.setHeader(h, up.headers.get(h));
+        res.setHeader("Accept-Ranges", "bytes");
+        const { Readable } = require("stream");
+        const body = Readable.fromWeb(up.body);
+        req.on("close", () => body.destroy());
+        body.on("error", () => res.destroy());
+        body.pipe(res);
+    } catch (e) { return fail(res, e, "Could not send the movie."); }
+});
 
 /** The TV that reports through the tablet becomes a device of its own the first time it is seen. */
 async function childOf(hub, key, name) {

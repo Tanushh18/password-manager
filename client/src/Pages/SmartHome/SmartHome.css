@@ -39,3 +39,6 @@
 .sh-token code { word-break: break-all; font-size: .8rem; }
 .sh-reply { margin: .6rem 0 0; font-weight: 600; }
 @media (max-width: 640px) { .sh-sep { display: none; } }
+.sh-movies-form { display: grid; gap: .6rem; margin-bottom: .5rem; }
+.sh-switch { display: flex; gap: .5rem; align-items: center; font-size: .85rem; cursor: pointer; }
+.sh-row select { max-width: 100%; }

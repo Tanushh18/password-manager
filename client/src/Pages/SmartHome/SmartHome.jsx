@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
   getHomeDevices, removeHomeDevice, renameHomeDevice, sendHomeCommand, labelHomeLanDevice,
-  getHomeEvents, askHomeAssistant
+  getHomeEvents, askHomeAssistant, getHomeMovies, saveHomeMovies
 } from "../../api/client";
 import { Section, Skeleton, Empty, useConfirm } from "../Render/RenderUi";
 import { usePolling } from "../Render/renderHooks";
@@ -94,6 +94,13 @@ function TvCard({ device, send, onChanged }) {
             <p className="sh-dim">{fmtBytes(usb.free)} free of {fmtBytes(usb.total)}{usb.fs === "vfat" ? " · FAT32 (files must be under 4 GB)" : ""}</p>
           </>
         ) : <p className="sh-dim">No details yet.</p>}
+        {state !== "off" && usb.present !== false && s.wifi?.ip ? (
+          <p className="sh-dim">
+            Fastest way to add a movie: on your home Wi-Fi, open{" "}
+            <a href={`http://${s.wifi.ip}:${s.wifi.uploadPort || 8765}`} target="_blank" rel="noreferrer noopener">the TV's upload page</a>
+            {" "}and drop the file in (the PIN is on the TV, on the USB tile). It goes straight to the USB drive, with nothing in between.
+          </p>
+        ) : null}
         {s.upload?.active ? (
           <div className="sh-up">
             <b>Receiving {s.upload.name}</b>
@@ -201,6 +208,66 @@ function DeviceMenu({ device, onChanged }) {
   );
 }
 
+/** Movies from a Google Drive folder to the TV's USB drive, through the Google account connected in Photo Cloud. */
+function MoviesCard() {
+  const [data, setData] = useState(null);
+  const [folder, setFolder] = useState("");
+  const [account, setAccount] = useState("");
+  const [del, setDel] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => {
+    try {
+      const d = await getHomeMovies();
+      setData(d);
+      setAccount((a) => a || d.settings.connectionId || d.connections[0]?.id || "");
+      setDel(d.settings.deleteAfterSync);
+      setFolder((f) => f || (d.settings.folderId ? "https://drive.google.com/drive/folders/" + d.settings.folderId : ""));
+    } catch { /* the card simply stays empty */ }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  usePolling(load, 20000);
+
+  const save = async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    try { await saveHomeMovies({ connectionId: account, folder, deleteAfterSync: del }); toast.success("Saved. The TV picks up the movies within a few minutes."); await load(); }
+    catch (err) { toast.error(errorMessage(err, "Could not save.")); }
+    finally { setBusy(false); }
+  };
+  if (!data) return null;
+  const chosen = data.connections.find((c) => c.id === account);
+  return (
+    <Section title="Movies from Google Drive" subtitle="Put a movie in the Drive folder and the TV copies it to its USB drive on its own.">
+      {data.connections.length === 0 ? (
+        <p className="sh-dim">Connect a Google account in Photo Cloud first, then come back here.</p>
+      ) : (
+        <form className="sh-movies-form" onSubmit={save}>
+          <div className="sh-row">
+            <select value={account} onChange={(e) => setAccount(e.target.value)} aria-label="Google account">
+              {data.connections.map((c) => <option key={c.id} value={c.id}>{c.label}{c.email ? ` · ${c.email}` : ""}</option>)}
+            </select>
+            <input value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="Paste the Drive folder link" aria-label="Drive folder link" style={{ flex: "1 1 18rem" }} />
+            <button className="rd-btn rd-btn--primary" type="submit" disabled={busy || !folder.trim()}>Save</button>
+          </div>
+          <label className="sh-switch" title={chosen && !chosen.canDelete ? "This Google connection can only read Drive." : ""}>
+            <input type="checkbox" checked={del} disabled={chosen && !chosen.canDelete} onChange={(e) => setDel(e.target.checked)} />
+            Remove a movie from Drive once the TV has it on the USB drive
+          </label>
+          {chosen && !chosen.canDelete ? <p className="sh-dim">Removing needs full Drive access. This Google account was connected read-only, so movies stay in Drive and the USB drive mirrors the folder. Reconnect it with full Drive access to switch on removal.</p> : null}
+        </form>
+      )}
+      {data.error ? <p className="sh-bad" role="alert">{data.error}</p> : null}
+      {data.lastDelete?.error ? <p className="sh-bad">Could not remove “{data.lastDelete.name}” from Drive: {data.lastDelete.error}</p> : null}
+      {data.waiting ? (
+        data.waiting.length ? (
+          <ul className="sh-movies">{data.waiting.map((m) => <li key={m.name}><div><b>{m.name}</b><span>{fmtBytes(m.size)} · waiting in Drive for the TV</span></div></li>)}</ul>
+        ) : <p className="sh-dim">The Drive folder has no movies waiting.</p>
+      ) : null}
+    </Section>
+  );
+}
+
 function Assistant({ onDone }) {
   const [text, setText] = useState("");
   const [reply, setReply] = useState("");
@@ -245,6 +312,7 @@ export default function SmartHome() {
       </header>
       {error ? <p className="sh-bad" role="alert">{error}</p> : null}
       <Assistant onDone={load} />
+      <MoviesCard />
       {devices === null ? <Skeleton lines={5} /> : devices.length === 0 ? (
         <Empty icon="📺" title="Nothing connected yet">Open the Stashr Hub app on the always-on tablet and sign in with your Stashr account. The tablet appears here, and your TV joins by itself once its Stashr app is open.</Empty>
       ) : devices.map((d) => d.kind === "tv"

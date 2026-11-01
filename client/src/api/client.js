@@ -432,6 +432,8 @@ export const removeHomeDevice = (id) => instance.delete(`/home/devices/${id}`).t
 export const sendHomeCommand = (id, type, args = {}) => instance.post(`/home/devices/${id}/commands`, { type, args }).then((r) => r.data);
 export const labelHomeLanDevice = (id, key, label, room) => instance.put(`/home/devices/${id}/lan/${key}`, { label, room }).then((r) => r.data);
 export const getHomeEvents = (limit = 40) => instance.get("/home/events", { params: { limit } }).then((r) => r.data);
+export const getHomeMovies = () => instance.get("/home/movies/settings").then((r) => r.data);
+export const saveHomeMovies = (body) => instance.put("/home/movies/settings", body).then((r) => r.data);
 export const askHomeAssistant = (text) => instance.post("/home/assistant", { text }).then((r) => r.data);
 export const disconnectTelegram = () => instance.post("/telegram/disconnect").then((r) => r.data);
 export const getRenderOpsStatus = () => instance.get("/render/ops/status").then((r) => r.data);
