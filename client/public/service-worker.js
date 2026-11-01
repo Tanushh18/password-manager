@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════
    Aurelia service worker
 
-   Deliberately conservative for a password manager:
+   Deliberately conservative for Stashr:
    only same-origin GET requests for the app shell and static
    assets are cached. API calls (a different origin) and any
    request carrying credentials always go straight to the

@@ -1,4 +1,4 @@
-# Password Manager Extension - Complete Setup Guide
+# Stashr Extension - Complete Setup Guide
 
 ## What You Got
 
@@ -107,7 +107,7 @@ Or use placeholder icons (the extension will still work without them).
 ### Test Login
 
 1. Click the extension icon in toolbar
-2. Enter your password manager credentials
+2. Enter your Stashr credentials
 3. Click **Login**
 4. If successful, you'll see your password list
 

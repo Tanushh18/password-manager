@@ -154,7 +154,7 @@ app.get("/", (req, res) =>
   res.set("Cache-Control", "no-store");
   res.status(200).json({
     status: "ok",
-    message: "Password Manager API is running.",
+    message: "Stashr API is running.",
     health: "/health"
   });
 });

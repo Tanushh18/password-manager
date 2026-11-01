@@ -8,6 +8,7 @@ const { connect } = require("./db/connection");
 const { startKeepAlive } = require("./utils/keepAlive");
 const { startScheduler } = require("./utils/scheduler");
 const { startImportWorker } = require("./utils/photoImport");
+const { startHomeSweep } = require("./utils/homeSweep");
 
 const PORT = process.env.PORT || 8000;
 
@@ -24,6 +25,7 @@ const server = app.listen(PORT, () =>
     // Monitoring, project/link sync and usage every few minutes, inside the server
     startScheduler();
     startImportWorker();
+    startHomeSweep();
 });
 
 // KEEPING THE PROCESS ALIVE ON UNEXPECTED FAILURES

@@ -77,7 +77,7 @@ const excludedFieldsFor = (req) =>
 {
     const needed = historyFieldsFor(req);
     const excluded = HISTORY.filter((field) => !needed.includes(field));
-    if (/^\/(render|github|projects)(\/|$)/.test(PATH(req))) excluded.push("passwords");
+    if (/^\/(render|github|projects|home)(\/|$)/.test(PATH(req))) excluded.push("passwords");
     // The photo library is by far the largest part of the account and only the photo routes read it. Loading it for
     // every other request (Render pages poll several routes at once) is what made each call take 15-25 seconds.
     if (!/^\/(photo-cloud|photo-import|worker|public)(\/|$)/.test(PATH(req))) excluded.push(...User.PHOTO_FIELDS);

@@ -38,7 +38,7 @@ export default function Welcome() {
         </FadeIn>
 
         <FadeIn delay={120}>
-          <Text style={[styles.eyebrow, { color: theme.accentSoft, fontFamily: theme.font.bodySemi }]}>STASHR · PASSWORD MANAGER</Text>
+          <Text style={[styles.eyebrow, { color: theme.accentSoft, fontFamily: theme.font.bodySemi }]}>STASHR</Text>
           <Text style={[styles.title, { color: theme.heading, fontFamily: theme.font.displayHeavy }]}>
             Every password,{"\n"}
             <GradientText>in one safe place.</GradientText>

@@ -364,6 +364,7 @@ router.use(require("./moveServer"));
 router.use(require("./account"));
 router.use(require("./extension"));
 router.use(require("./telegram"));
+router.use(require("./home"));
 router.use(require("./photoCloud"));
 router.use(require("./photoUpload"));
 router.use(require("./photoWorker"));

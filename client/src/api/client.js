@@ -420,6 +420,14 @@ export const getTelegram = () => instance.get("/telegram").then((r) => r.data);
 export const connectTelegram = (token) => instance.post("/telegram/connect", { token }, { timeout: 60000 }).then((r) => r.data);
 export const saveTelegram = (patch) => instance.put("/telegram/settings", patch).then((r) => r.data);
 export const testTelegramBot = () => instance.post("/telegram/test", {}, { timeout: 60000 }).then((r) => r.data);
+/* Stashr Home: the TV, the tablet hub and the assistant. */
+export const getHomeDevices = () => instance.get("/home/devices").then((r) => r.data);
+export const renameHomeDevice = (id, name) => instance.put(`/home/devices/${id}`, { name }).then((r) => r.data);
+export const removeHomeDevice = (id) => instance.delete(`/home/devices/${id}`).then((r) => r.data);
+export const sendHomeCommand = (id, type, args = {}) => instance.post(`/home/devices/${id}/commands`, { type, args }).then((r) => r.data);
+export const labelHomeLanDevice = (id, key, label, room) => instance.put(`/home/devices/${id}/lan/${key}`, { label, room }).then((r) => r.data);
+export const getHomeEvents = (limit = 40) => instance.get("/home/events", { params: { limit } }).then((r) => r.data);
+export const askHomeAssistant = (text) => instance.post("/home/assistant", { text }).then((r) => r.data);
 export const disconnectTelegram = () => instance.post("/telegram/disconnect").then((r) => r.data);
 export const getRenderOpsStatus = () => instance.get("/render/ops/status").then((r) => r.data);
 export const getPingResults = () => instance.get("/render/ops/pings").then((r) => r.data);

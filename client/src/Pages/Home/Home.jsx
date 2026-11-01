@@ -93,7 +93,7 @@ function Home() {
         <div className="hm-hero__inner shell">
           <div className="hm-hero__copy">
             <p className="hm-hero__eyebrow">
-              {signedIn ? `Welcome back${firstName ? `, ${firstName}` : ""}` : "Stashr · Password manager"}
+              {signedIn ? `Welcome back${firstName ? `, ${firstName}` : ""}` : "Stashr"}
             </p>
             <h1 className="hm-hero__title" id="hm-hero-title">
               <span>Your Digital World.</span>

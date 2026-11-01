@@ -449,4 +449,13 @@ async function sendTest(user) {
   return sendDigest(user, state, { force: true });
 }
 
-module.exports = { modeOf, MODES, connect, disconnect, updateSettings, readState, publicState, handleUpdate, runAllDigests, sendTest, DIGEST_CHOICES, isValidHookId: (id) => mongoose.isValidObjectId(id) || /^[a-f0-9]{32}$/.test(String(id)) };
+/* One short message to the user's connected bot, for things Stashr Home notices (the TV came online, a new device on the Wi-Fi). */
+async function notifyUser(user, text) {
+  try {
+    const s = await readState(user);
+    if (!s || !s.chatId || !s.botToken) return false;
+    return (await send(s.botToken, s.chatId, text)).ok;
+  } catch { return false; }
+}
+
+module.exports = { notifyUser, modeOf, MODES, connect, disconnect, updateSettings, readState, publicState, handleUpdate, runAllDigests, sendTest, DIGEST_CHOICES, isValidHookId: (id) => mongoose.isValidObjectId(id) || /^[a-f0-9]{32}$/.test(String(id)) };
