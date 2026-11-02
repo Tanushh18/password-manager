@@ -276,7 +276,7 @@ async function etaTick(owner, now, settings, devices) {
                 const reuse = r0 && Date.now() - r0.at < 3 * 60000 && distanceM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: r0.lat, lon: r0.lon }) < 400;
                 const got = reuse ? { seconds: Math.max(60, r0.seconds - Math.round((Date.now() - r0.at) / 1000)), meters: r0.meters } : await route.drivingRoute({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: spot.lat, lon: spot.lon });
                 if (got) {
-                    next.minutes = Math.max(1, Math.round(got.seconds / 60)); next.km = Math.round(got.meters / 100) / 10; next.road = true;
+                    next.minutes = Math.max(1, Math.round(got.seconds / 60)); next.km = Math.round(got.meters / 100) / 10; next.road = true; next.traffic = Boolean(got.traffic) || Boolean(reuse && r0.traffic);
                     next.route = reuse ? r0 : { at: Date.now(), lat: Number(loc.lat), lon: Number(loc.lon), seconds: got.seconds, meters: got.meters };
                 }
             }
@@ -307,7 +307,7 @@ function whereIs(settings, phone, now = Date.now()) {
     const d = distanceM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: spot.lat, lon: spot.lon });
     const km = e.road && e.km ? e.km : Math.round(d / 100) / 10;
     if (e.atHome || d <= (spot.radius || 200)) return { state: "home", distanceKm: km, fixAt: Number(loc.at) };
-    return { state: e.coming ? "coming" : "away", distanceKm: km, etaMinutes: e.minutes || null, fixAt: Number(loc.at) };
+    return { state: e.coming ? "coming" : "away", distanceKm: km, etaMinutes: e.minutes || null, traffic: Boolean(e.road && e.traffic), fixAt: Number(loc.at) };
 }
 
 /** How long the Stashr Location app should wait before it looks again: often when heading home, rarely when far away. */
@@ -322,7 +322,7 @@ function checkInterval(where) {
 function comingList(settings, now = Date.now()) {
     return Object.values(settings.etaState || {})
         .filter((e) => e && e.coming && now - e.locAt < 40 * 60 * 1000)
-        .map((e) => ({ person: e.person, minutes: Math.max(1, e.minutes - Math.floor((now - e.locAt) / 60000)), km: e.km }))
+        .map((e) => ({ person: e.person, minutes: Math.max(1, e.minutes - Math.floor((now - e.locAt) / 60000)), km: e.km, traffic: Boolean(e.road && e.traffic) }))
         .sort((a, b) => a.minutes - b.minutes);
 }
 const comingLine = (c) => (c.minutes <= 1 ? `${c.person} bas pahunchne wale hain` : `${c.person} ${c.minutes} minute mein aa rahe hain`);

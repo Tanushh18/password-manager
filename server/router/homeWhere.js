@@ -118,7 +118,7 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
         const me = all.find((x) => String(x._id) === String(d._id)) || d;
         const where = automation.whereIs(fresh, { ...me, status: { ...(me.status || {}), location: loc } }, now);
         return res.json({
-            ok: true, state: where.state, distanceKm: where.distanceKm ?? null, etaMinutes: where.state === "home" ? 0 : where.etaMinutes ?? null,
+            ok: true, state: where.state, traffic: Boolean(where.traffic), distanceKm: where.distanceKm ?? null, etaMinutes: where.state === "home" ? 0 : where.etaMinutes ?? null,
             nextCheckSec: automation.checkInterval(where), home: { set: where.state !== "unset" },
             notices: (out.commands || []).filter((c) => c.type === "notice").map((c) => ({ id: c.id, text: (c.args || {}).text || "" })).filter((n) => n.text)
         });

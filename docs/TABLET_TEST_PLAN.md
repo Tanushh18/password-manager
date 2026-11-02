@@ -98,6 +98,10 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] Switch "Use real roads" off on the website: the time becomes the straight-line one. On again: road time returns.
 - [ ] Airplane mode on the server side is hard to test: check that the page still shows an ETA if router.project-osrm.org is unreachable (set HOME_ROUTING=off locally).
 
+## 7f. Live traffic (needs MAPBOX_TOKEN on both servers)
+- [ ] Family locations shows "live traffic" next to a coming-home phone; the minutes match Google Maps' current time within a few minutes, at rush hour and at night.
+- [ ] Remove the token: the label disappears and the OSRM time returns.
+
 ## 8. Updates (OTA)
 - [ ] Push a change under `hub-app/` to `main`; the GitHub Release is created and is **not** "latest".
 - [ ] The app (or "check_update") finds it, verifies it and Android asks for one tap to install.

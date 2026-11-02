@@ -560,3 +560,32 @@ describe("arrival time by road", () => {
     });
 });
 
+describe("live traffic from Mapbox", () => {
+    const routeMod = require("../utils/homeRoute");
+    test("with a Mapbox token the traffic time is used; without it, or when it fails, OSRM answers", async () => {
+        const realFetch = global.fetch;
+        const seen = [];
+        global.fetch = async (url) => {
+            seen.push(String(url));
+            if (String(url).includes("api.mapbox.com")) return { ok: true, json: async () => ({ code: "Ok", routes: [{ duration: 1800, distance: 15000 }] }) };
+            return { ok: true, json: async () => ({ code: "Ok", routes: [{ duration: 900, distance: 14000 }] }) };
+        };
+        process.env.HOME_ROUTING = "on";
+        try {
+            delete process.env.MAPBOX_TOKEN;
+            const a = await routeMod.drivingRoute({ lat: 28.7, lon: 77.2 }, { lat: 28.6, lon: 77.2 });
+            expect(a).toEqual({ seconds: 900, meters: 14000 });
+            process.env.MAPBOX_TOKEN = "pk.eyJ1IjoidGVzdCIsImEiOiJ0ZXN0dG9rZW4xMjM0NTY3ODkwIn0.abcdefghijklmnop";
+            const b = await routeMod.drivingRoute({ lat: 28.7, lon: 77.2 }, { lat: 28.6, lon: 77.2 });
+            expect(b).toEqual({ seconds: 1800, meters: 15000, traffic: true });
+            expect(seen.some((u) => u.includes("driving-traffic/77.20000,28.70000;77.20000,28.60000"))).toBe(true);
+            // Mapbox fails: OSRM answers
+            global.fetch = async (url) => (String(url).includes("api.mapbox.com") ? { ok: false } : { ok: true, json: async () => ({ code: "Ok", routes: [{ duration: 900, distance: 14000 }] }) });
+            expect(await routeMod.drivingRoute({ lat: 28.7, lon: 77.2 }, { lat: 28.6, lon: 77.2 })).toEqual({ seconds: 900, meters: 14000 });
+            // a token that is not a public token is never sent
+            process.env.MAPBOX_TOKEN = "sk.secret-token-should-never-be-used-here-1234567890";
+            expect(routeMod.hasTraffic()).toBe(false);
+        } finally { global.fetch = realFetch; delete process.env.MAPBOX_TOKEN; process.env.HOME_ROUTING = "off"; }
+    });
+});
+

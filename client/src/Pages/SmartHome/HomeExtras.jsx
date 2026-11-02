@@ -326,7 +326,7 @@ function HomeSpotBlock({ home }) {
   return (
     <div className="sh-editor">
       <b>Home location · arrival time</b>
-      <p className="sh-dim">With a home location, the tablet and this page show “Papa 10 minute mein aa rahe hain” for family phones that share their location and are heading home. With “real roads” on, Stashr asks the free OpenStreetMap routing service (OSRM) for the driving time and sends it only two points: the phone’s position and your home. It is the normal driving time without live traffic. Off, or if the service does not answer, it falls back to a straight-line estimate, good to a few minutes.</p>
+      <p className="sh-dim">With a home location, the tablet and this page show “Papa 10 minute mein aa rahe hain” for family phones that share their location and are heading home. With “real roads” on, Stashr asks the free OpenStreetMap routing service (OSRM) for the driving time and sends it only two points: the phone’s position and your home. With a Mapbox token set on the server it is the driving time for right now including live traffic; without one it is the normal driving time. Off, or if the service does not answer, it falls back to a straight-line estimate, good to a few minutes.</p>
       <div className="sh-row">
         <input type="number" step="any" value={lat} onChange={(e) => setLat(e.target.value)} placeholder="Home latitude" aria-label="Home latitude" />
         <input type="number" step="any" value={lon} onChange={(e) => setLon(e.target.value)} placeholder="Home longitude" aria-label="Home longitude" />
@@ -639,8 +639,8 @@ export function FeaturesCard({ home, devices, goTo }) {
 
 const whereText = (p) => {
   if (p.state === "home") return "At home";
-  if (p.state === "coming") return `${p.etaMinutes <= 1 ? "Almost home" : `About ${p.etaMinutes} min away`} · ${p.distanceKm} km · heading home`;
-  if (p.state === "away") return `${p.distanceKm} km from home${p.etaMinutes ? ` · about ${p.etaMinutes} min if they head home now` : ""}`;
+  if (p.state === "coming") return `${p.etaMinutes <= 1 ? "Almost home" : `About ${p.etaMinutes} min away`} · ${p.distanceKm} km · heading home${p.traffic ? " · live traffic" : ""}`;
+  if (p.state === "away") return `${p.distanceKm} km from home${p.etaMinutes ? ` · about ${p.etaMinutes} min if they head home now${p.traffic ? " (live traffic)" : ""}` : ""}`;
   if (p.state === "unset") return "Set your home location (Automations → Places) to see the distance";
   return "Waiting for the first location";
 };
