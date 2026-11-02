@@ -18,6 +18,7 @@ const HomeSettings = require("../models/homeSettings");
 const home = require("../utils/home");
 const automation = require("../utils/homeAutomation");
 const { record } = require("../utils/homeEvents");
+const route = require("../utils/homeRoute");
 const homeRouter = require("./home");
 const insights = () => require("./homeInsights");
 
@@ -119,9 +120,11 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
         const fresh = await automation.settingsOf(d.owner);
         const me = all.find((x) => String(x._id) === String(d._id)) || d;
         const where = automation.whereIs(fresh, { ...me, status: { ...(me.status || {}), location: loc } }, now);
+        // While a TV shows the live map, phones that are out look every few seconds.
+        const liveOn = Boolean(fresh.liveUntil && new Date(fresh.liveUntil).getTime() > now) && fresh.tvLive?.enabled !== false && where.state !== "home";
         return res.json({
-            ok: true, state: where.state, traffic: Boolean(where.traffic), distanceKm: where.distanceKm ?? null, etaMinutes: where.state === "home" ? 0 : where.etaMinutes ?? null,
-            nextCheckSec: automation.checkInterval(where), home: { set: where.state !== "unset" },
+            live: liveOn, ok: true, state: where.state, traffic: Boolean(where.traffic), distanceKm: where.distanceKm ?? null, etaMinutes: where.state === "home" ? 0 : where.etaMinutes ?? null,
+            nextCheckSec: liveOn ? 8 : automation.checkInterval(where), home: { set: where.state !== "unset" },
             notices: (out.commands || []).filter((c) => c.type === "notice").map((c) => ({ id: c.id, text: (c.args || {}).text || "" })).filter((n) => n.text)
         });
     } catch (e) { return fail(res, e, "Could not save the location."); }
@@ -134,6 +137,40 @@ router.post("/home/agent/unlink", agentLimiter, (req, res, next) => homeRouter.a
         await record({ owner: d.owner, kind: "unpaired", text: `${d.name} disconnected their phone (Stashr Location)` });
         return res.json({ ok: true });
     } catch (e) { return fail(res, e, "Could not disconnect."); }
+});
+
+// The TV's live map: the phones that are out, where they are right now, and the road home.
+const routeCache = new Map();   // phone id -> { at, lat, lon, line, seconds, meters, traffic }
+router.get("/home/agent/tv-live", agentLimiter, (req, res, next) => homeRouter.agentAuth(req, res, next), async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const d = req.device;
+        if (d.kind !== "tv" && d.kind !== "hub") return res.status(403).json({ error: "Only the TV or the tablet can show the live map." });
+        const owner = d.owner, now = Date.now();
+        const s = await automation.settingsOf(owner);
+        if (s.tvLive && s.tvLive.enabled === false) return res.json({ ok: false, error: "The live map is switched off on the Stashr website.", devices: [], home: null });
+        await HomeSettings.updateOne({ owner }, { $set: { liveUntil: new Date(now + 2 * 60 * 1000) } });
+        const spot = s.homeSpot && Number.isFinite(s.homeSpot.lat) ? { lat: s.homeSpot.lat, lon: s.homeSpot.lon, radius: s.homeSpot.radius || 200 } : null;
+        const phones = (await HomeDevice.find({ owner, kind: "phone" }).lean()).filter((p) => p.status && p.status.agent === "stashr-where" && p.status.location);
+        const devices = [];
+        for (const p of phones.slice(0, 8)) {
+            const w = automation.whereIs(s, p, now), loc = p.status.location;
+            if (w.state !== "away" && w.state !== "coming") continue;          // only the ones that are out
+            let line = spot ? [[loc.lat, loc.lon], [spot.lat, spot.lon]] : [];
+            if (spot && devices.length < 6) {
+                const key = String(p._id), c = routeCache.get(key);
+                if (c && now - c.at < 45000 && automation.distanceM({ lat: loc.lat, lon: loc.lon }, c) < 300) line = c.line;
+                else {
+                    const r = await route.drivingRoute({ lat: loc.lat, lon: loc.lon }, { lat: spot.lat, lon: spot.lon }, { geometry: true });
+                    if (r && r.line && r.line.length > 1) { line = r.line; routeCache.set(key, { at: now, lat: loc.lat, lon: loc.lon, line }); }
+                }
+            }
+            devices.push({ id: String(p._id), name: p.person || p.name, lat: loc.lat, lon: loc.lon, acc: Math.round(loc.acc || 0), speedKmh: Number.isFinite(loc.speed) ? Math.round(loc.speed * 3.6) : null,
+                at: Number(loc.at), ageSec: Math.max(0, Math.round((now - Number(loc.at)) / 1000)), state: w.state, etaMinutes: w.etaMinutes || null, km: w.distanceKm ?? null, traffic: Boolean(w.traffic),
+                live: now - Number(loc.at) < 40000, route: line });
+        }
+        return res.json({ ok: true, now, home: spot, devices: devices.sort((a, b) => (a.etaMinutes || 999) - (b.etaMinutes || 999)) });
+    } catch (e) { return fail(res, e, "Could not load the live map."); }
 });
 
 // The page: who is where, how far from home, and how long they will take.

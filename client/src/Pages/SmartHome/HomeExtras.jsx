@@ -676,6 +676,7 @@ export function LocationsCard() {
     if (!(await confirm.ask({ title: `Disconnect ${p.name}?`, message: "Their phone stops being tracked here. They can link again with the code.", confirmLabel: "Disconnect", danger: true }))) return;
     try { await removeHomeDevice(p.id); load(); } catch (e) { toast.error(errorMessage(e, "Could not disconnect.")); }
   };
+  const { settings: st, save: saveSettings } = useHomeSettings();
   return (
     <Section title="Family locations" subtitle="Who is where, how far from home and when they will arrive. Phones run the separate Stashr Location app (it never sees your passwords).">
       <div className="sh-editor">
@@ -683,6 +684,7 @@ export function LocationsCard() {
         <div className="sh-row"><code className="sh-code" aria-label="Link code">{code || "…"}</code><button className="rd-btn rd-btn--quiet" onClick={copy} disabled={!code}>Copy</button><button className="rd-btn rd-btn--quiet" onClick={renew}>New code</button></div>
         <p className="sh-dim">Install Stashr Location from the Apps page on the family phone, type this code and the person’s name. It stays linked until you disconnect it here or they press Disconnect in the app.</p>
       </div>
+      {st ? <label className="sh-switch"><input type="checkbox" checked={st.tvLive?.enabled !== false} onChange={(e) => saveSettings({ tvLive: { enabled: e.target.checked } }, e.target.checked ? "The TV can show the live map." : "The live map on the TV is off.")} />Allow the live map on the TV (phones that are out then update every few seconds while it is open)</label> : null}
       {data && !data.homeSet ? <p className="sh-bad">Home location is not set yet. Set it under Automations → Places so distances and arrival times can be worked out.</p> : null}
       {data && data.people.length ? (
         <ul className="sh-lan">{data.people.map((p) => (

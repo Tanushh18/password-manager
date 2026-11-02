@@ -39,6 +39,9 @@ const homeSettingsSchema = new mongoose.Schema({
     // Family insights: keep a location history for places, trips and the commute (off until the owner turns it on).
     history: { enabled: { type: Boolean, default: false }, speedKmh: { type: Number, default: 80 } },
     spots: { type: [mongoose.Schema.Types.Mixed], default: [] },   // named places: { id, name, lat, lon, radius }
+    // Live map on the TV: phones that are out check their location every few seconds while the TV shows it.
+    tvLive: { enabled: { type: Boolean, default: true } },
+    liveUntil: { type: Date },
     homeSpot: { lat: Number, lon: Number, radius: { type: Number, default: 200 } },
     eta: { enabled: { type: Boolean, default: true }, maxKm: { type: Number, default: 40 }, notifyMinutes: { type: Number, default: 15 }, routing: { type: Boolean, default: true }, toTablet: { type: Boolean, default: true }, toTv: { type: Boolean, default: true }, toPhones: { type: Boolean, default: true } },
     locationCode: { type: String, default: "", index: true },

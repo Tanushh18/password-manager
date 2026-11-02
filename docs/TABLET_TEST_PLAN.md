@@ -123,6 +123,14 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] Nothing about history shows on the TV or on any phone (apart from the privacy line in Stashr Location).
 - [ ] "Delete the history" erases it; switching it off stops new fixes.
 
+## 7j. Live location on the TV
+- [ ] A phone is out (a few km away): TV launcher → Live location. Within 1–3 minutes the card turns live ("updated N s ago" stays under ~30 s) and the pin moves.
+- [ ] The road line goes toward home; the minutes match the Family locations card.
+- [ ] A phone at home is not on the map. "Everyone is at home" when nobody is out.
+- [ ] Close the screen: after ~2–3 minutes the phone goes back to slow checks (battery!).
+- [ ] Say "tv par live location" in Stashr (website/Telegram): the TV opens the screen.
+- [ ] Turn the website switch off: the TV shows that it is switched off.
+
 ## 8. Updates (OTA)
 - [ ] Push a change under `hub-app/` to `main`; the GitHub Release is created and is **not** "latest".
 - [ ] The app (or "check_update") finds it, verifies it and Android asks for one tap to install.

@@ -725,3 +725,40 @@ describe("family insights", () => {
     });
 });
 
+describe("live map on the TV", () => {
+    const routeMod = require("../utils/homeRoute");
+    test("the TV sees only the phones that are out, with the road home; they are told to look every few seconds meanwhile", async () => {
+        const auth = await signUp();
+        const code = (await request(app).get("/home/location-code").set(auth)).body.code;
+        const hubCode = (await request(app).get("/home/hub-code").set(auth)).body.code;
+        const papa = (await request(app).post("/home/agent/link").send({ code, name: "Papa" })).body;
+        const mom = (await request(app).post("/home/agent/link").send({ code, name: "Mom" })).body;
+        const tv = (await request(app).post("/home/agent/link").send({ code: hubCode, name: "TV", kind: "tv" })).body;
+        await request(app).put("/home/settings").set(auth).send({ homeSpot: { lat: 28.6139, lon: 77.209, radius: 200 } });
+        const loc = (t, lat, at) => request(app).post("/home/agent/location").set(bearer(t)).send({ lat, lon: 77.209, acc: 20, at, speed: 10 });
+        routeMod.use(async (from, to, o) => ({ seconds: 1200, meters: 9000, traffic: true, line: o && o.geometry ? [[from.lat, from.lon], [28.65, 77.209], [to.lat, to.lon]] : undefined }));
+        try {
+            const t0 = Date.now();
+            const quiet = await loc(papa.token, 28.70, t0);
+            expect(quiet.body.live).toBe(false);
+            await loc(mom.token, 28.6139, t0);                               // Mom is home
+            await loc(papa.token, 28.68, t0 + 1000);                          // Papa is out and heading home
+            const r = await request(app).get("/home/agent/tv-live").set(bearer(tv.token));
+            expect(r.status).toBe(200);
+            expect(r.body.devices.length).toBe(1);                            // not Mom
+            expect(r.body.devices[0].name).toBe("Papa");
+            expect(r.body.devices[0].route.length).toBe(3);
+            expect(r.body.devices[0].etaMinutes).toBe(20);
+            expect(r.body.home.lat).toBe(28.6139);
+            const fast = await loc(papa.token, 28.67, t0 + 5000);
+            expect(fast.body.live).toBe(true);
+            expect(fast.body.nextCheckSec).toBe(8);
+            const homeBody = await loc(mom.token, 28.6139, t0 + 6000);
+            expect(homeBody.body.live).toBe(false);                           // the one at home keeps its normal pace
+            await request(app).put("/home/settings").set(auth).send({ tvLive: { enabled: false } });
+            expect((await request(app).get("/home/agent/tv-live").set(bearer(tv.token))).body.ok).toBe(false);
+            expect((await request(app).get("/home/agent/tv-live").set(bearer(papa.token))).status).toBe(403);
+        } finally { routeMod.use(null); }
+    });
+});
+

@@ -26,6 +26,8 @@ const COMMANDS = {
         // Opens a YouTube or YouTube Music link in the TV's own YouTube app, where your Premium account already works.
         open_url: (a) => (okYoutube(a.url) ? { url: a.url } : null),
         sync_now: () => ({}),
+        // Opens the live map of the family members who are out.
+        live_location: () => ({}),
         // A short message on the TV screen (needs a TV app that understands it).
         notify: (a) => (okText(a.text, 200) ? { text: a.text.trim() } : null)
     },

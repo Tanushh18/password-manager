@@ -54,6 +54,9 @@ function parse(sentence, devices, scenes = []) {
     // Who is home
     if (has(text, ["kaun ghar", "kon ghar", "who is home", "whos home", "ghar pe kaun", "ghar par kaun", "ghar me kaun", "ghar mein kaun", "anyone home"])) return { reply: "presence", presence: true };
 
+    // The live map of the family on the TV
+    if (has(text, ["live location", "location live", "live map", "kaun kahan", "kahan hain sab", "sab kahan", "family kahan", "live dikhao"]) && tv) return toTv("live_location", {}, "Opening the live map on the TV.");
+
     // Who is on the way home
     if (has(text, ["kab aayenge", "kab aayega", "kab aayegi", "kab tak aayenge", "kab pahunchenge", "kab pahunchega", "kitni der mein", "aa rahe", "aa raha", "eta", "on the way", "when will"]) && !has(text, ["tv", "movie"])) return { reply: "coming", coming: true };
 

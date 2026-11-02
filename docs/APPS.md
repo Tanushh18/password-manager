@@ -52,6 +52,17 @@ All are listed with download buttons on the website's **/apps** page.
   Linking is rate-limited and capped by the device limit. Replace the code any time; linked phones stay linked.
 - **ETA:** by road, with live traffic when `MAPBOX_TOKEN` (a public `pk.` token) is set on the server: Mapbox's `driving-traffic` time for right now, shown as “live traffic” on the page. Without it, or when Mapbox does not answer: by road without traffic. The server asks an OSRM routing server (the free public one at router.project-osrm.org, or your own through `OSRM_URL`) for the driving time and distance from the phone to home, sending only those two coordinates, at most once per 3 minutes or 400 m per phone. No live traffic. At walking pace, when the service is down or timed out (2.5 s), when switched off per account (Home location → *Use real roads*), or server-wide with `HOME_ROUTING=off`, it falls back to a straight line × 1.3 at the phone's speed (or 25 km/h).
 
+## Live location on the TV
+- Stashr TV has a **Live location** tile (or say "tv par live location" in Stashr / Telegram): a map drawn on the TV with home in the
+  centre, a pin for every family member who is **out**, the road home (from the routing service) and a card each with "About 12 min
+  away · 6.4 km · live traffic", speed and "updated 8 s ago". It refreshes every 5 seconds (`GET /home/agent/tv-live`).
+- While the TV screen is open, the server keeps a 2-minute "live" window; phones that are out then check their location every ~8 s
+  (`live: true`, `nextCheckSec: 8`) instead of every 1–30 min. Phones at home are not affected. When the screen closes, they go back
+  to the normal pace within a couple of minutes. Switch: *Family locations → Allow the live map on the TV*.
+- **Honest limits:** a phone only learns about live mode at its next normal check (1–30 min; usually 1–10 min when heading home), and
+  Android may stretch the 8-second checks in the background (Doze), so expect updates every 10–60 s, not exactly 5. Instant start needs
+  push messages (Firebase), which this project does not use. The map has no street tiles (no map-tile service), only the route line.
+
 ## Local mode (when the server or the internet is down)
 - The tablet (Stashr Hub 1.8+) runs a tiny LAN server on port 8765 and advertises `_stashr-hub._tcp`. Server answers carry a shared key
   (`local.key`) that the tablet and the TV store while they are online. If the server cannot be reached for 90 s (tablet) / 45 s (TV):
