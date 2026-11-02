@@ -9,7 +9,7 @@ import { usePolling } from "../Render/renderHooks";
 import { errorMessage } from "../Render/renderUtils";
 import { stateOf, STATE_LABEL, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName, splitStale, TAG_LABEL, batteryOf } from "../../lib/smartHome";
 import { LiveMapCard } from "./HomeMap";
-import { InsightsCard, LocationsCard, HomeScreenCard, FeaturesCard, PairCard, PeopleCard, PhonesCard, AlertsCard, TvTimeCard, ScenesCard, SchedulesCard, PlacesCard, SpeedCard, CameraCard, SlideshowCard, useHomeSettings } from "./HomeExtras";
+import { HealthCard, healthCounts, InsightsCard, LocationsCard, HomeScreenCard, FeaturesCard, PairCard, PeopleCard, PhonesCard, AlertsCard, TvTimeCard, ScenesCard, SchedulesCard, PlacesCard, SpeedCard, CameraCard, SlideshowCard, useHomeSettings } from "./HomeExtras";
 import "../Render/RenderDashboard.css";
 import "./SmartHome.css";
 
@@ -405,7 +405,7 @@ export default function SmartHome() {
   const smartHub = list.find((d) => d.kind === "hub" && d.status?.agent === "stashr-hub");
   const phones = list.filter((d) => d.kind === "phone");
 
-  const TABS = [["overview", "Overview"], ["devices", "Devices"], ["security", "Camera & alerts"], ["automations", "Automations"], ["insights", "Insights"], ["media", "Media & network"]];
+  const TABS = [["overview", "Overview"], ["devices", "Devices"], ["security", "Camera & alerts"], ["automations", "Automations"], ["insights", "Insights"], ["media", "Media & network"], ["health", "Health"]];
   const [tab, setTabState] = useState(() => { try { const t = localStorage.getItem("smartHomeTab"); return TABS.some(([k]) => k === t) ? t : "overview"; } catch { return "overview"; } });
   const goTo = (t) => { setTabState(t); try { localStorage.setItem("smartHomeTab", t); } catch { /* optional */ } window.scrollTo?.({ top: 0 }); };
 
@@ -419,6 +419,7 @@ export default function SmartHome() {
         {TABS.map(([k, label]) => <button key={k} type="button" className={"sh-tab" + (tab === k ? " is-on" : "")} aria-current={tab === k ? "page" : undefined} onClick={() => goTo(k)}>{label}</button>)}
       </nav>
       {tab === "overview" ? (<CardBoundary key="overview"><>
+        {(() => { const c = healthCounts(list); return c.bad ? <p className="sh-bad" role="status">{c.bad} thing{c.bad > 1 ? "s" : ""} on your devices need{c.bad > 1 ? "" : "s"} fixing. <button type="button" className="rd-btn rd-btn--quiet" onClick={() => goTo("health")}>Open the health check</button></p> : null; })()}
         <Assistant onDone={load} />
         <HomeScreenCard />
         <FeaturesCard home={home} devices={list} goTo={goTo} />
@@ -449,6 +450,9 @@ export default function SmartHome() {
         <SchedulesCard home={home} />
         <PlacesCard home={home} phones={phones} hasSmartHub={Boolean(smartHub)} />
         <TvTimeCard home={home} />
+      </></CardBoundary>) : null}
+      {tab === "health" ? (<CardBoundary key="health"><>
+        <HealthCard devices={list} />
       </></CardBoundary>) : null}
       {tab === "insights" ? (<CardBoundary key="insights"><>
         <InsightsCard />

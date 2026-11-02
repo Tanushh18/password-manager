@@ -10,7 +10,7 @@ import { errorMessage } from "../Render/renderUtils";
 import { ago, fmtBytes, fmtMinutes, daysLabel, stepLabel, STEP_CHOICES } from "../../lib/smartHome";
 import { TvTimeChart, SpeedChart, CommuteChart } from "./HomeCharts";
 import { MapPicker } from "./HomeMap";
-import { parseCoords, batteryOf } from "../../lib/smartHome";
+import { parseCoords, batteryOf, healthItems, healthReport } from "../../lib/smartHome";
 
 /** The settings every card here edits, loaded once. */
 export function useHomeSettings() {
@@ -775,6 +775,43 @@ export function InsightsCard() {
         </div>
       ))}
       {confirm.dialog}
+    </Section>
+  );
+}
+
+
+/* ───────── health check: is every device set up properly? ───────── */
+
+const DOT = { ok: "🟢", bad: "🔴", warn: "🟡", unknown: "⚪" };
+
+/** Counts of red and amber items over all devices, for the banner on the Overview tab. */
+export function healthCounts(devices) {
+  let bad = 0, warn = 0;
+  for (const d of devices) for (const i of healthItems(d)) { if (i.state === "bad") bad++; else if (i.state === "warn") warn++; }
+  return { bad, warn };
+}
+
+export function HealthCard({ devices }) {
+  const list = devices.filter((d) => d.kind === "tv" || d.kind === "hub" || d.kind === "phone");
+  const { bad, warn } = healthCounts(list);
+  const copy = async () => { try { await navigator.clipboard.writeText(healthReport(list)); toast.success("Report copied. Paste it in the chat."); } catch { toast.error("Could not copy."); } };
+  return (
+    <Section title="Health check" subtitle="Every device tells Stashr what it is allowed to do and its last error. Red stops a feature, yellow works but worse, grey means the app is too old to say.">
+      <p className={bad ? "sh-bad" : "sh-ok"} role="status">{bad ? `${bad} thing${bad > 1 ? "s" : ""} need${bad > 1 ? "" : "s"} fixing${warn ? `, ${warn} could be better` : ""}.` : warn ? `Nothing is broken; ${warn} thing${warn > 1 ? "s" : ""} could be better.` : list.length ? "Everything looks fine." : "No devices yet."}</p>
+      <div className="sh-row"><button className="rd-btn rd-btn--quiet" onClick={copy} disabled={!list.length}>Copy a report (to paste in the chat)</button></div>
+      {list.map((d) => {
+        const items = healthItems(d), h = (d.status || {}).health || {};
+        return (
+          <div key={d.id} className="sh-feat">
+            <h3>{d.kind === "tv" ? "📺" : d.kind === "hub" ? "🧩" : "📱"} {d.name} <span className="sh-dim">· {h.appVersion ? `app ${h.appVersion}` : "app version unknown"}{h.sdk ? ` · Android API ${h.sdk}` : ""}{h.model ? ` · ${h.model}` : ""}</span></h3>
+            <ul className="sh-lan">{items.map((i) => (
+              <li key={i.id}>
+                <div className="sh-lan__main"><b>{DOT[i.state]} {i.label}</b>{i.state !== "ok" && i.fix ? <span>{i.fix}</span> : null}</div>
+              </li>
+            ))}</ul>
+          </div>
+        );
+      })}
     </Section>
   );
 }

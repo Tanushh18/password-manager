@@ -130,6 +130,8 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
         if (b.same === true && prev && Number.isFinite(prev.lat) && now - Number(prev.at) < 12 * 3600 * 1000) {
             const set = { lastSeen: new Date(now), online: true, "status.location.at": now };
             if (b.battery && Number.isFinite(num(b.battery.pct))) { set["status.battery"] = Math.min(Math.max(Math.round(num(b.battery.pct)), 0), 100); set["status.charging"] = b.battery.charging === true; }
+            const health = home.cleanHealth(b.health);
+            if (health) set["status.health"] = health;
             if (b.wifi) { set["status.wifi"] = Boolean(b.wifi.connected); if (/^\d{1,3}(\.\d{1,3}){3}$/.test(String(b.wifi.ip || ""))) set["status.ip"] = String(b.wifi.ip); }
             await HomeDevice.updateOne({ _id: d._id }, { $set: set });
             const settings = await automation.settingsOf(d.owner);
@@ -149,6 +151,8 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
         const status = { agent: "stashr-where", location: loc };
         // Stored the way every family phone reports it: a number, plus `charging`.
         if (b.battery && Number.isFinite(num(b.battery.pct))) { status.battery = Math.min(Math.max(Math.round(num(b.battery.pct)), 0), 100); status.charging = b.battery.charging === true; }
+        const health = home.cleanHealth(b.health);
+        if (health) status.health = health;
         status.wifi = Boolean(b.wifi && b.wifi.connected);
         status.ip = b.wifi && /^\d{1,3}(\.\d{1,3}){3}$/.test(String(b.wifi.ip || "")) ? String(b.wifi.ip) : "";
         const out = await homeRouter.ingest(d, { status });

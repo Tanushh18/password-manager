@@ -803,3 +803,27 @@ describe("fewer calls, less battery", () => {
     });
 });
 
+describe("health reports", () => {
+    test("an app's own health is kept (only the known keys) and shown with the device", async () => {
+        const auth = await signUp();
+        const code = (await request(app).get("/home/location-code").set(auth)).body.code;
+        const hubCode = (await request(app).get("/home/hub-code").set(auth)).body.code;
+        const phone = (await request(app).post("/home/agent/link").send({ code, name: "Papa" })).body.token;
+        const tv = (await request(app).post("/home/agent/link").send({ code: hubCode, name: "TV", kind: "tv" })).body.token;
+        const health = { appVersion: "1.5.0", versionCode: 100011, sdk: 34, location: "always", gpsEnabled: true, notifications: true, batteryUnrestricted: false, evil: "x", lastError: { at: Date.now(), where: "worker", text: "boom".repeat(200) } };
+        await request(app).post("/home/agent/location").set(bearer(phone)).send({ lat: 28.6, lon: 77.2, acc: 20, at: Date.now(), health });
+        await report(tv, { status: { screen: "on", health: { overlay: false, accessibility: true, appVersion: "1.3.0", junk: 1 } } });
+        const list = (await devices(auth)).devices;
+        const p = list.find((d) => d.name === "Papa"), t = list.find((d) => d.name === "TV");
+        expect(p.status.health.location).toBe("always");
+        expect(p.status.health.batteryUnrestricted).toBe(false);
+        expect(p.status.health.evil).toBeUndefined();
+        expect(p.status.health.lastError.text.length).toBe(400);
+        expect(t.status.health.overlay).toBe(false);
+        expect(t.status.health.junk).toBeUndefined();
+        // a 'same' call can carry it too
+        await request(app).post("/home/agent/location").set(bearer(phone)).send({ same: true, health: { ...health, location: "whileInUse" } });
+        expect((await devices(auth)).devices.find((d) => d.name === "Papa").status.health.location).toBe("whileInUse");
+    });
+});
+

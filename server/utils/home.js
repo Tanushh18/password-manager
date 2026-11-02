@@ -104,9 +104,29 @@ function scrub(value, depth = 0) {
     return typeof value === "boolean" || value === null ? value : null;
 }
 
+/**
+ * What an app says about its own state ("health"): which permissions and switches it has and its last error. Only these keys, with
+ * these types, are kept, so the website can show a checklist without trusting anything else in the report.
+ */
+const HEALTH_BOOLS = ["overlay", "accessibility", "batteryUnrestricted", "notifications", "camera", "microphone", "gpsEnabled", "usbStorage", "wifi", "serverReachable"];
+function cleanHealth(h) {
+    if (!h || typeof h !== "object" || Array.isArray(h)) return undefined;
+    const out = { v: 1 };
+    for (const k of HEALTH_BOOLS) if (typeof h[k] === "boolean") out[k] = h[k];
+    if (["always", "whileInUse", "denied", "off"].includes(h.location)) out.location = h.location;
+    if (typeof h.appVersion === "string") out.appVersion = h.appVersion.slice(0, 20);
+    for (const k of ["versionCode", "sdk"]) if (Number.isFinite(Number(h[k]))) out[k] = Math.round(Number(h[k]));
+    if (typeof h.model === "string") out.model = h.model.slice(0, 40);
+    if (h.lastError && typeof h.lastError === "object" && typeof h.lastError.text === "string" && Number.isFinite(Number(h.lastError.at))) {
+        out.lastError = { at: Math.round(Number(h.lastError.at)), where: String(h.lastError.where || "").slice(0, 40), text: h.lastError.text.slice(0, 400) };
+    }
+    return out;
+}
+
 function cleanStatus(status) {
     if (!status || typeof status !== "object" || Array.isArray(status)) return null;
     const clean = scrub(status);
+    if (clean && clean.health !== undefined) { const h = cleanHealth(clean.health); if (h) clean.health = h; else delete clean.health; }
     return JSON.stringify(clean).length > MAX_STATUS_BYTES ? null : clean;
 }
 
@@ -249,5 +269,5 @@ function inWindow(minutes, from, to) {
 
 module.exports = {
     ONLINE_MS, LAN_GONE_MS, MAX_COMMANDS, COMMANDS, KINDS, TAGS, RISKY_PORTS, hashToken, newToken, cleanCommand, cleanStatus,
-    batteryOf, isOnline, lanKey, mergeLan, diffMovies, risksOf, presence, inWindow, okMac, normMac, slug
+    cleanHealth, batteryOf, isOnline, lanKey, mergeLan, diffMovies, risksOf, presence, inWindow, okMac, normMac, slug
 };

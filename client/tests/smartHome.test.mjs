@@ -95,3 +95,20 @@ test("battery is read from both shapes a phone can report", () => {
   assert.equal(batteryOf({}), null);
   assert.equal(batteryOf(null), null);
 });
+
+import { healthItems, healthReport } from "../src/lib/smartHome.js";
+test("health checklist: green, red with a fix, and unknown for an old app", () => {
+  const now = Date.now();
+  const tv = { name: "TV", kind: "tv", online: true, lastSeen: new Date(now).toISOString(), status: { health: { overlay: false, accessibility: true, usbStorage: true, appVersion: "1.3.0" } } };
+  const items = healthItems(tv, now);
+  assert.equal(items.find((i) => i.id === "overlay").state, "bad");
+  assert.match(items.find((i) => i.id === "overlay").fix, /Display over other apps/);
+  assert.equal(items.find((i) => i.id === "accessibility").state, "ok");
+  const phone = { name: "Papa", kind: "phone", online: true, lastSeen: new Date(now).toISOString(), status: { agent: "stashr-where", health: { location: "whileInUse", gpsEnabled: true, lastError: { at: now - 1000, where: "worker", text: "boom" } } } };
+  const p = healthItems(phone, now);
+  assert.equal(p.find((i) => i.id === "location").state, "bad");
+  assert.equal(p.find((i) => i.id === "lastError").fix, "boom");
+  const old = healthItems({ name: "Hub", kind: "hub", online: true, lastSeen: new Date(now).toISOString(), status: {} }, now);
+  assert.equal(old.find((i) => i.id === "health").state, "unknown");
+  assert.match(healthReport([tv, phone], now), /\[BAD\] Can show messages over a playing video/);
+});

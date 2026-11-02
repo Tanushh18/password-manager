@@ -155,3 +155,59 @@ export function batteryOf(status) {
   if (b && typeof b === "object") return Number.isFinite(Number(b.pct)) ? { pct: Math.round(Number(b.pct)), charging: Boolean(b.charging) } : null;
   return b !== null && b !== undefined && b !== "" && Number.isFinite(Number(b)) ? { pct: Math.round(Number(b)), charging: Boolean(status.charging) } : null;
 }
+
+/**
+ * The health checklist of one device, from what its app reports about itself (status.health).
+ * -> [{ id, label, state: "ok" | "bad" | "warn" | "unknown", fix }]. "bad" = something that stops a feature, "warn" = it works but worse.
+ * `now` is a parameter so it can be tested.
+ */
+export function healthItems(device, now = Date.now()) {
+  const st = device.status || {}, h = st.health;
+  const out = [];
+  const add = (id, label, state, fix = "") => out.push({ id, label, state, fix });
+  const kind = device.kind;
+  const phoneApp = kind === "phone" && st.agent === "stashr-where";
+  const online = Boolean(device.online);
+  const age = device.lastSeen ? now - new Date(device.lastSeen).getTime() : Infinity;
+  if (kind === "phone") add("online", "Reached Stashr recently", age < 3 * 3600 * 1000 ? "ok" : "bad", "The phone has not reported for hours: open Stashr Location once, check it has internet, and turn off battery restrictions for it.");
+  else add("online", "Online", online ? "ok" : "bad", kind === "tv" ? "Open Stashr TV (and check the TV is on the Wi-Fi). If it keeps going offline, set Stashr TV to 'unrestricted' battery use." : "Open Stashr Hub on the tablet and check its internet. Keep it on the charger.");
+  if (!h) {
+    add("health", "Reports its health", "unknown", kind === "tv" ? "Update Stashr TV to 1.3 or later (it updates itself when it is online)." : kind === "hub" ? "Update Stashr Hub to 1.9 or later." : phoneApp ? "Update Stashr Location to 1.5 or later." : "This app does not report its health.");
+    return out;
+  }
+  const flag = (id, label, value, badState, fix) => add(id, label, value === undefined ? "unknown" : value ? "ok" : badState, fix);
+  if (kind === "hub") {
+    flag("overlay", "Can show messages over other apps", h.overlay, "bad", "Tablet: Settings → Apps → Stashr Hub → Display over other apps → allow. Without it announcements show only as a notification.");
+    flag("notifications", "Notifications allowed", h.notifications, "warn", "Tablet: Settings → Apps → Stashr Hub → Notifications → allow.");
+    flag("camera", "Camera allowed", h.camera, "bad", "Tablet: Settings → Apps → Stashr Hub → Permissions → Camera → allow.");
+    flag("microphone", "Microphone allowed", h.microphone, "warn", "Tablet: Settings → Apps → Stashr Hub → Permissions → Microphone → allow (for Hey Stashr).");
+    flag("batteryUnrestricted", "Runs without battery limits", h.batteryUnrestricted, "warn", "Tablet: Settings → Apps → Stashr Hub → Battery → Unrestricted. Keep the tablet charging.");
+    flag("accessibility", "WhatsApp helper (Accessibility) on", h.accessibility, "warn", "Only for WhatsApp messages: Tablet: Settings → Accessibility → Stashr Hub → on (Android 13+: App info → ⋮ → Allow restricted settings first).");
+  } else if (kind === "tv") {
+    flag("overlay", "Can show messages over a playing video", h.overlay, "bad", "TV: Stashr TV → Settings → Display over other apps → allow (or Settings → Apps → Stashr TV → Display over other apps).");
+    flag("accessibility", "'Stashr TV remote' (Accessibility) on", h.accessibility, "bad", "TV: Stashr TV → Settings → Accessibility → Stashr TV remote → on. Home/Back commands and 'which app is playing' need it.");
+    flag("usbStorage", "USB drive for movies found", h.usbStorage, "warn", "TV: plug in the USB drive for movies (only needed for movie sync).");
+    flag("batteryUnrestricted", "Runs without battery limits", h.batteryUnrestricted, "warn", "TV: Settings → Apps → Stashr TV → Battery → Unrestricted.");
+  } else if (phoneApp) {
+    add("location", "Location: 'Allow all the time'", h.location === "always" ? "ok" : h.location === undefined ? "unknown" : "bad", "Phone: Settings → Apps → Stashr Location → Permissions → Location → Allow all the time (and Precise).");
+    flag("gpsEnabled", "Location services on", h.gpsEnabled, "bad", "Phone: turn on Location in the quick settings.");
+    flag("notifications", "Notifications allowed", h.notifications, "warn", "Phone: Settings → Apps → Stashr Location → Notifications → allow (to get 'X is arriving').");
+    flag("batteryUnrestricted", "Not stopped by battery saver", h.batteryUnrestricted, "warn", "Phone: Settings → Apps → Stashr Location → Battery → Unrestricted (Xiaomi/Oppo/Vivo: also allow autostart).");
+  }
+  if (h.lastError && now - h.lastError.at < 7 * 24 * 3600 * 1000) {
+    add("lastError", `Last error (${h.lastError.where || "app"}, ${new Date(h.lastError.at).toLocaleString()})`, "warn", h.lastError.text);
+  }
+  return out;
+}
+
+/** One text block with every problem found, to paste into a chat instead of copying logs. */
+export function healthReport(devices, now = Date.now()) {
+  const lines = [`Stashr health report · ${new Date(now).toLocaleString()}`];
+  for (const d of devices) {
+    const st = d.status || {}, h = st.health || {};
+    const items = healthItems(d, now);
+    lines.push("", `${d.name} (${d.kind}${st.agent ? ", " + st.agent : ""}) · app ${h.appVersion || "?"}${h.sdk ? ` · Android API ${h.sdk}` : ""}${h.model ? ` · ${h.model}` : ""} · ${d.online ? "online" : "offline"}`);
+    for (const i of items) lines.push(`  [${i.state.toUpperCase()}] ${i.label}${i.state === "ok" ? "" : " — " + i.fix}`);
+  }
+  return lines.join("\n");
+}
