@@ -504,3 +504,20 @@ export const linkHostSite = (projectId, body) => instance.post("/hosts/projects/
 export const unlinkHostSite = (projectId, linkId) => instance.delete("/hosts/projects/" + encodeURIComponent(projectId) + "/links/" + encodeURIComponent(linkId)).then((r) => r.data);
 export const getHostLinkBranches = (projectId, linkId) => instance.get("/hosts/projects/" + encodeURIComponent(projectId) + "/links/" + encodeURIComponent(linkId) + "/branches", { timeout: 30000 }).then((r) => r.data);
 export const redeployHostLink = (projectId, linkId, branch) => instance.post("/hosts/projects/" + encodeURIComponent(projectId) + "/links/" + encodeURIComponent(linkId) + "/redeploy", { branch }, { timeout: 60000 }).then((r) => r.data);
+
+/* ───────── money: UPI / bank messages and statements, kept only in the owner's Google Sheet ───────── */
+export const getExpenseSettings = () => instance.get("/expenses/settings").then((r) => r.data);
+export const saveExpenseSheet = (sheetUrl) => instance.put("/expenses/sheet", { sheetUrl }).then((r) => r.data);
+export const setExpenseStart = (date) => instance.post("/expenses/start", { date }).then((r) => r.data);
+export const postExpenseSms = (messages) => instance.post("/expenses/sms", { messages }).then((r) => r.data);
+export const getExpenses = (month) => instance.get("/expenses", { params: month ? { month } : {} }).then((r) => r.data);
+export const setExpenseCategory = (index, category, remember) => instance.put("/expenses/category", { index, category, remember }).then((r) => r.data);
+export const reviewExpense = (index, action) => instance.put("/expenses/review", { index, action }).then((r) => r.data);
+export const getExpenseRules = () => instance.get("/expenses/rules").then((r) => r.data);
+export const saveExpenseRules = (rules) => instance.put("/expenses/rules", { rules }).then((r) => r.data);
+export const uploadStatement = (file) => instance.post("/expenses/statement", file, {
+  params: { filename: file.name },
+  headers: { "Content-Type": "application/octet-stream" },
+  transformRequest: [(data) => data],
+  timeout: 120000
+}).then((r) => r.data);

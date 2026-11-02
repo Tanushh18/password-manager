@@ -368,6 +368,7 @@ router.use(require("./home"));
 router.use(require("./homeMore"));
 router.use(require("./homeWhere"));
 router.use(require("./homeInsights"));
+router.use(require("./expenses"));
 router.use(require("./mpin"));
 router.use(require("./photoCloud"));
 router.use(require("./photoUpload"));
