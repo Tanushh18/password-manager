@@ -33,7 +33,7 @@ const homeSettingsSchema = new mongoose.Schema({
     places: { type: [mongoose.Schema.Types.Mixed], default: [] },
     // Where home is, for "Papa is 10 minutes away" (the phones' location shared with Stashr Hub).
     homeSpot: { lat: Number, lon: Number, radius: { type: Number, default: 200 } },
-    eta: { enabled: { type: Boolean, default: true }, maxKm: { type: Number, default: 40 }, notifyMinutes: { type: Number, default: 15 }, toTablet: { type: Boolean, default: true }, toTv: { type: Boolean, default: true }, toPhones: { type: Boolean, default: true } },
+    eta: { enabled: { type: Boolean, default: true }, maxKm: { type: Number, default: 40 }, notifyMinutes: { type: Number, default: 15 }, routing: { type: Boolean, default: true }, toTablet: { type: Boolean, default: true }, toTv: { type: Boolean, default: true }, toPhones: { type: Boolean, default: true } },
     locationCode: { type: String, default: "", index: true },
     // The fixed code that links the home tablet (Stashr Hub). Separate from locationCode: a tablet can see the dashboard and photos.
     hubCode: { type: String, default: "", index: true },

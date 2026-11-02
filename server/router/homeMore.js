@@ -83,7 +83,7 @@ const publicSettings = (s) => ({
     timezone: s.timezone, alerts: s.alerts, weather: { city: (s.weather && s.weather.city) || "" }, brief: { enabled: s.brief.enabled, time: s.brief.time },
     weekly: { enabled: s.weekly.enabled }, tvLimit: { minutes: s.tvLimit.minutes, action: s.tvLimit.action, lateNight: s.tvLimit.lateNight !== false },
     schedules: s.schedules || [], scenes: (s.scenes && s.scenes.length ? s.scenes : automation.DEFAULT_SCENES),
-    slideshowFolder: s.slideshowFolder || "", places: s.places || [], homeSpot: s.homeSpot && Number.isFinite(s.homeSpot.lat) ? { lat: s.homeSpot.lat, lon: s.homeSpot.lon, radius: s.homeSpot.radius || 200 } : null, eta: { enabled: true, maxKm: 40, notifyMinutes: 15, ...(s.eta || {}) }, camera: { sensitivity: 5, video: true, auto: false, ...(s.camera || {}), autoState: undefined }
+    slideshowFolder: s.slideshowFolder || "", places: s.places || [], homeSpot: s.homeSpot && Number.isFinite(s.homeSpot.lat) ? { lat: s.homeSpot.lat, lon: s.homeSpot.lon, radius: s.homeSpot.radius || 200 } : null, eta: { enabled: true, maxKm: 40, notifyMinutes: 15, routing: true, ...(s.eta || {}) }, camera: { sensitivity: 5, video: true, auto: false, ...(s.camera || {}), autoState: undefined }
 });
 
 router.get("/home/settings", authenticate, async (req, res) => {
@@ -152,7 +152,7 @@ router.put("/home/settings", authenticate, writeLimiter, async (req, res) => {
             const e = b.eta, c = cur.eta || {};
             const maxKm = e.maxKm !== undefined ? Number(e.maxKm) : (c.maxKm || 40), mins = e.notifyMinutes !== undefined ? Number(e.notifyMinutes) : (c.notifyMinutes || 15);
             if (!(maxKm >= 5 && maxKm <= 300) || !(mins >= 1 && mins <= 120)) return res.status(400).json({ error: "Distance 5–300 km, minutes 1–120." });
-            set.eta = { enabled: bool(e.enabled, c.enabled !== false), maxKm, notifyMinutes: mins };
+            set.eta = { ...c, enabled: bool(e.enabled, c.enabled !== false), maxKm, notifyMinutes: mins, routing: bool(e.routing, c.routing !== false) };
         }
         if (b.camera && typeof b.camera === "object") {
             const sens = Number(b.camera.sensitivity);

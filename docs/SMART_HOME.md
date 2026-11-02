@@ -42,8 +42,8 @@ vault. The older TV/tablet sign-in (`POST /home/devices`, kinds `tv` and `hub`) 
   (Android 13+: App info → ⋮ → Allow restricted settings) and “Display over other apps”. Telegram gets a note each time.
 - **Who is on the way home**: set the home location (Places card). Each family phone that shares its location and is
   getting closer shows as “Papa 10 minute mein aa rahe hain” on the tablet, on the page's Home screen card, in today's
-  updates, to the assistant (“papa kab aayenge”) and once in Telegram when within the minutes you set. Straight line × 1.3
-  at the phone's speed (or 25 km/h): good to a few minutes. Phones run the separate **Stashr Location** app (see
+  updates, to the assistant (“papa kab aayenge”) and once in Telegram when within the minutes you set. By road (OSRM driving time, no live traffic; falls
+  back to straight line × 1.3 at the phone's speed): good to a few minutes. Phones run the separate **Stashr Location** app (see
   `docs/APPS.md`): fixed link code from *Devices → Family locations*, no notification, adaptive checking. The tablet reads out
   and shows “X is arriving in N mins” and “Open the door: X arrived home”; the TV, the other family phones and Telegram get it too.
 - **Telegram control**: write to your Stashr bot like the assistant (“pause the tv”, “camera photo”, “kaun ghar par hai”,

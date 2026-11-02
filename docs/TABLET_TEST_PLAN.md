@@ -93,6 +93,11 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] TV standby: the page shows it as off/standby quickly.
 - [ ] OTA: a change under `tv-app/` creates `stashr-tv-v…` (not "latest"); the TV offers the update.
 
+## 7e. Arrival time by road
+- [ ] Drive/ride home from ~5 km: the minutes on the page and tablet are close to what Google Maps says (without traffic); compare 3 times.
+- [ ] Switch "Use real roads" off on the website: the time becomes the straight-line one. On again: road time returns.
+- [ ] Airplane mode on the server side is hard to test: check that the page still shows an ETA if router.project-osrm.org is unreachable (set HOME_ROUTING=off locally).
+
 ## 8. Updates (OTA)
 - [ ] Push a change under `hub-app/` to `main`; the GitHub Release is created and is **not** "latest".
 - [ ] The app (or "check_update") finds it, verifies it and Android asks for one tap to install.

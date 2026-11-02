@@ -326,7 +326,7 @@ function HomeSpotBlock({ home }) {
   return (
     <div className="sh-editor">
       <b>Home location · arrival time</b>
-      <p className="sh-dim">With a home location, the tablet and this page show “Papa 10 minute mein aa rahe hain” for family phones that share their location and are heading home. It is a straight-line estimate, good to a few minutes.</p>
+      <p className="sh-dim">With a home location, the tablet and this page show “Papa 10 minute mein aa rahe hain” for family phones that share their location and are heading home. With “real roads” on, Stashr asks the free OpenStreetMap routing service (OSRM) for the driving time and sends it only two points: the phone’s position and your home. It is the normal driving time without live traffic. Off, or if the service does not answer, it falls back to a straight-line estimate, good to a few minutes.</p>
       <div className="sh-row">
         <input type="number" step="any" value={lat} onChange={(e) => setLat(e.target.value)} placeholder="Home latitude" aria-label="Home latitude" />
         <input type="number" step="any" value={lon} onChange={(e) => setLon(e.target.value)} placeholder="Home longitude" aria-label="Home longitude" />
@@ -335,6 +335,7 @@ function HomeSpotBlock({ home }) {
       </div>
       <div className="sh-row">
         <label className="sh-switch"><input type="checkbox" checked={eta.enabled !== false} onChange={(e) => save({ eta: { enabled: e.target.checked } })} />Show who is on the way home</label>
+        <label className="sh-switch"><input type="checkbox" checked={eta.routing !== false} onChange={(e) => save({ eta: { routing: e.target.checked } }, e.target.checked ? "Arrival times now follow real roads." : "Arrival times use the straight line.")} />Use real roads for the arrival time</label>
         <label className="sh-dim">Tell me when within <input type="number" min="1" max="120" value={eta.notifyMinutes || 15} onChange={(e) => save({ eta: { notifyMinutes: Number(e.target.value) } })} style={{ width: 64 }} aria-label="Minutes" /> min (Telegram)</label>
       </div>
     </div>

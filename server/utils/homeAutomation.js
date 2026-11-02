@@ -11,6 +11,7 @@ const HomeClaim = require("../models/homeClaim");
 const HomeSpeed = require("../models/homeSpeed");
 const home = require("./home");
 const weather = require("./homeWeather");
+const route = require("./homeRoute");
 const { record } = require("./homeEvents");
 
 const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
@@ -267,7 +268,18 @@ async function etaTick(owner, now, settings, devices) {
             let v = Number(loc.speed) > 2 ? Number(loc.speed) : (old.d !== undefined && dt > 20 && old.d - d > 0 ? (old.d - d) / dt : 0);
             if (!(v > 1.5)) v = 7;                                        // 25 km/h
             v = Math.min(Math.max(v, 4), 25);
-            next = { ...next, coming: coming && d <= (eta.maxKm || 40) * 1000, minutes: Math.max(1, Math.round((d * 1.3) / v / 60)), km: Math.round(d / 100) / 10, fired: coming ? (old.fired || []) : [] };
+            next = { ...next, coming: coming && d <= (eta.maxKm || 40) * 1000, minutes: Math.max(1, Math.round((d * 1.3) / v / 60)), km: Math.round(d / 100) / 10, road: false, fired: coming ? (old.fired || []) : [] };
+            // By road, when the phone is within reach and moving at driving speed: the OSRM driving time, asked again only
+            // after 400 m or 3 minutes. Walking pace (< 2.5 m/s) keeps the straight-line estimate.
+            if (eta.routing !== false && !atHome && d <= (eta.maxKm || 40) * 1000 && !(Number(loc.speed) >= 0 && Number(loc.speed) < 2.5 && d < 3000)) {
+                const r0 = old.route;
+                const reuse = r0 && Date.now() - r0.at < 3 * 60000 && distanceM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: r0.lat, lon: r0.lon }) < 400;
+                const got = reuse ? { seconds: Math.max(60, r0.seconds - Math.round((Date.now() - r0.at) / 1000)), meters: r0.meters } : await route.drivingRoute({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: spot.lat, lon: spot.lon });
+                if (got) {
+                    next.minutes = Math.max(1, Math.round(got.seconds / 60)); next.km = Math.round(got.meters / 100) / 10; next.road = true;
+                    next.route = reuse ? r0 : { at: Date.now(), lat: Number(loc.lat), lon: Number(loc.lon), seconds: got.seconds, meters: got.meters };
+                }
+            }
         }
         if (next.coming && fresh && !atHome) {
             const hit = milestones.filter((m) => next.minutes <= m && !(next.fired || []).includes(m));
@@ -293,7 +305,7 @@ function whereIs(settings, phone, now = Date.now()) {
     if (!loc || !loc.at) return { state: "unknown" };
     const e = (settings.etaState || {})[String(phone._id)] || {};
     const d = distanceM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: spot.lat, lon: spot.lon });
-    const km = Math.round(d / 100) / 10;
+    const km = e.road && e.km ? e.km : Math.round(d / 100) / 10;
     if (e.atHome || d <= (spot.radius || 200)) return { state: "home", distanceKm: km, fixAt: Number(loc.at) };
     return { state: e.coming ? "coming" : "away", distanceKm: km, etaMinutes: e.minutes || null, fixAt: Number(loc.at) };
 }

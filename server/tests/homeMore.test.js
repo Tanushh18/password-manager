@@ -9,6 +9,7 @@ process.env.CRYPTO_SECRET_KEY = "test-crypto-secret";
 process.env.RATE_LIMIT_MAX = "1000";
 process.env.ALLOW_SIGNUP = "true";
 delete process.env.YOUTUBE_API_KEY;
+process.env.HOME_ROUTING = "off";      // no calls to the public routing server from tests
 
 const app = require("../app");
 const User = require("../models/schema");
@@ -523,6 +524,39 @@ describe("linking the tablet with a fixed code", () => {
         expect((await devices(auth)).devices.some((d) => d.kind === "tv" && d.name === "Living room TV" && d.online)).toBe(true);
         const fresh = (await request(app).post("/home/hub-code/rotate").set(auth)).body.code;
         expect(fresh === hubCode).toBe(false);
+    });
+});
+
+describe("arrival time by road", () => {
+    const routeMod = require("../utils/homeRoute");
+    test("the road time and distance replace the straight line, asked again only after 3 minutes or 400 m", async () => {
+        const auth = await signUp();
+        const code = (await request(app).get("/home/location-code").set(auth)).body.code;
+        const t = (await request(app).post("/home/agent/link").send({ code, name: "Papa" })).body.token;
+        await request(app).put("/home/settings").set(auth).send({ homeSpot: { lat: 28.6139, lon: 77.209, radius: 200 } });
+        let calls = 0;
+        routeMod.use(async () => { calls++; return { seconds: 1500, meters: 18000 }; });
+        try {
+            const loc = (lat, at, speed = 10) => request(app).post("/home/agent/location").set(bearer(t)).send({ lat, lon: 77.209, acc: 20, at, speed });
+            const t0 = Date.now();
+            await loc(28.70, t0);                                    // first sighting
+            const r = await loc(28.68, t0 + 1000);                   // ~7 km straight, heading home
+            expect(r.body.state).toBe("coming");
+            expect(r.body.etaMinutes).toBe(25);                      // from the road, not 16 from the straight line
+            expect(r.body.distanceKm).toBe(18);
+            const callsBefore = calls;
+            await loc(28.679, t0 + 2000);                            // 110 m on, seconds later: reuses the last route
+            expect(calls).toBe(callsBefore);
+            // the service is down: back to the straight-line estimate
+            routeMod.use(async () => null);
+            const f = await loc(28.64, t0 + 400_000);
+            expect(f.body.etaMinutes < 12).toBe(true);
+            // walking pace near home keeps the straight line (no road call)
+            routeMod.use(async () => { calls += 100; return { seconds: 60, meters: 100 }; });
+            const before = calls;
+            await loc(28.6350, t0 + 800_000, 1);
+            expect(calls).toBe(before);
+        } finally { routeMod.use(null); }
     });
 });
 
