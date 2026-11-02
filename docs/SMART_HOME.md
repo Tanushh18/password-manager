@@ -31,6 +31,20 @@ says so when it does not. A movie is only removed when the TV reports a complete
 
 The tablet app and the TV app live in a separate repository (`tv-movie-sync`, kept on the laptop).
 
+## To do: real device names on the Wi-Fi list
+Today the Wi-Fi list shows only IP addresses, because the tablet app sends no names. IPs change when a phone
+reconnects, so a name you give a device is lost with its old IP. To fix this:
+
+- **Tablet app (`tv-movie-sync`, separate repository):** look up a name for every device it finds and send it as `name`
+  in the scan. Ways to get one: reverse DNS against the router (`192.168.1.1`), mDNS / Bonjour (Android `NsdManager`)
+  for iPhones, Macs and Chromecasts, and NetBIOS for Windows PCs. Android 10+ hides other devices' MAC addresses, so do
+  not rely on a MAC. Some phones share no name at all and will still show an IP.
+- **Server (`utils/home.js`):** the server already accepts `name`, `mac` and `vendor` per device (`mergeLan`), but
+  `lanKey` keys the book and your labels by MAC, else IP. Make it fall back to the device name before the IP, so a
+  label follows a phone when its IP changes.
+- **Page (`SmartHome.jsx`):** show the reported name as the default title of each row, instead of repeating the IP.
+- **Until then:** reserve a fixed IP for each phone in the router (DHCP reservation) so labels stay put.
+
 ## MPIN sign-in
 After one email-and-password sign-in, a device can turn on a 4-digit MPIN in Settings. The server gives the device a
 long random secret once, and an MPIN sign-in needs the secret and the MPIN, so guessing four digits gets nowhere
