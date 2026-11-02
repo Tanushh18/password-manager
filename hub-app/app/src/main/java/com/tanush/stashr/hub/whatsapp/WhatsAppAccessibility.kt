@@ -1,6 +1,10 @@
 package com.tanush.stashr.hub.whatsapp
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
+import android.graphics.Path
+import android.graphics.Rect
+import android.util.Log
 import android.os.Handler
 import android.os.Looper
 import android.os.Bundle
@@ -41,7 +45,7 @@ class WhatsAppAccessibility : AccessibilityService() {
 
     private fun pickGroup(root: AccessibilityNodeInfo, job: WhatsAppSender.Job) {
         val hit = root.findAccessibilityNodeInfosByText(job.group).orEmpty().firstOrNull { !it.isEditable && it.className?.toString()?.contains("EditText") != true }
-        if (hit != null && clickUp(hit)) { job.picked = true; return }
+        if (hit != null && clickUp(hit)) { Log.d(TAG, "group row pressed"); job.picked = true; job.pickedAt = System.currentTimeMillis(); return }
         // Not visible: scroll a few times, then use the search box.
         if (job.scrolls < 5) {
             job.scrolls++
@@ -76,7 +80,11 @@ class WhatsAppAccessibility : AccessibilityService() {
             return
         }
         if (job.clicks > 0) { if (now - job.lastClick > 2_500) job.done = true }
-        else if (++job.misses > 40) job.error = "Could not find WhatsApp's Send button"
+        else if (now - job.pickedAt > 4_000) {
+            // The group press did not lead to a Send button: choose the group again, a few times at most.
+            if (++job.repicks > 3) job.error = "Could not select the group in WhatsApp"
+            else { job.picked = false; job.pickedAt = 0 }
+        }
     }
 
     private fun findSendButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
@@ -90,6 +98,7 @@ class WhatsAppAccessibility : AccessibilityService() {
         return null
     }
 
+    /** Presses the nearest clickable parent; when none is exposed (WhatsApp's newer lists), taps the middle of the view itself. */
     private fun clickUp(n: AccessibilityNodeInfo): Boolean {
         var cur: AccessibilityNodeInfo? = n
         var hops = 0
@@ -97,7 +106,16 @@ class WhatsAppAccessibility : AccessibilityService() {
             if (cur.isClickable && cur.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
             cur = cur.parent; hops++
         }
-        return false
+        return tap(n)
+    }
+
+    private fun tap(n: AccessibilityNodeInfo): Boolean {
+        val r = Rect(); n.getBoundsInScreen(r)
+        if (r.isEmpty) return false
+        val path = Path().apply { moveTo(r.exactCenterX(), r.exactCenterY()) }
+        val ok = dispatchGesture(GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, 80)).build(), null, null)
+        Log.d(TAG, "tap at ${r.centerX()},${r.centerY()} dispatched=$ok")
+        return ok
     }
 
     private fun firstScrollable(n: AccessibilityNodeInfo): AccessibilityNodeInfo? {
@@ -114,6 +132,7 @@ class WhatsAppAccessibility : AccessibilityService() {
 
     companion object {
         @Volatile var instance: WhatsAppAccessibility? = null
+        private const val TAG = "StashrWA"
         private val SEND = listOf("Send", "भेजें", "Enviar", "Envoyer")
         private val SEND_IDS = listOf("com.whatsapp:id/send", "com.whatsapp.w4b:id/send")
     }

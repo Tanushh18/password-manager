@@ -20,6 +20,8 @@ object WhatsAppSender {
         var typed = false
         var misses = 0
         @Volatile var clicks = 0
+        @Volatile var pickedAt = 0L
+        @Volatile var repicks = 0
         @Volatile var lastClick = 0L
     }
 
