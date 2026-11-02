@@ -10,7 +10,6 @@ import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
 import androidx.core.content.ContextCompat
 import com.tanush.stashr.hub.core.Api
 import com.tanush.stashr.hub.core.Prefs
@@ -30,7 +29,6 @@ object VoiceListener {
     private val main = Handler(Looper.getMainLooper())
     private var app: Context? = null
     private var recognizer: SpeechRecognizer? = null
-    private var tts: TextToSpeech? = null
     @Volatile private var active = false
     private var awaitingCommand = false
     private var failures = 0
@@ -46,7 +44,6 @@ object VoiceListener {
             if (active) return@post
             active = true
             lastStatus = "on"
-            if (tts == null) tts = TextToSpeech(c) { ok -> if (ok == TextToSpeech.SUCCESS) pickVoice() }
             listen()
         }
     }
@@ -63,12 +60,6 @@ object VoiceListener {
 
     /** "on", "off", "no microphone permission", "not available" */
     fun status(): String = lastStatus
-
-    private fun pickVoice() {
-        val t = tts ?: return
-        val hi = Locale("hi", "IN")
-        if (t.isLanguageAvailable(hi) >= TextToSpeech.LANG_AVAILABLE) t.language = hi else t.language = Locale.ENGLISH
-    }
 
     private fun intent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -135,7 +126,7 @@ object VoiceListener {
                 val command = afterWake(h) ?: continue
                 if (command.isEmpty()) {
                     awaitingCommand = true
-                    speak("Haan?")
+                    app?.sendBroadcast(Intent(ACTION_VOICE).setPackage(app!!.packageName).putExtra("heard", "").putExtra("reply", "Listening…"))
                     retry(900)
                 } else {
                     send(command)
@@ -170,11 +161,6 @@ object VoiceListener {
                 r.optString("reply", "Done.")
             } catch (e: Exception) { e.message ?: "Could not reach Stashr." }
             c.sendBroadcast(Intent(ACTION_VOICE).setPackage(c.packageName).putExtra("heard", text).putExtra("reply", reply))
-            main.post { speak(reply) }
         }
-    }
-
-    private fun speak(s: String) {
-        try { tts?.speak(s, TextToSpeech.QUEUE_FLUSH, null, "stashr-" + System.currentTimeMillis()) } catch (e: Exception) { }
     }
 }

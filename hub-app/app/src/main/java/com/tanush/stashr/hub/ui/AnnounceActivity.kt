@@ -11,7 +11,6 @@ import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.WindowManager
 import android.widget.LinearLayout
@@ -32,9 +31,6 @@ class AnnounceActivity : Activity() {
     private val main = Handler(Looper.getMainLooper())
     private lateinit var ui: Ui
     private lateinit var list: LinearLayout
-    private var tts: TextToSpeech? = null
-    private var ttsReady = false
-    private val pendingSpeech = ArrayDeque<String>()
     private val close = Runnable { finish() }
     private val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
 
@@ -54,10 +50,6 @@ class AnnounceActivity : Activity() {
         root.addView(list)
         root.addView(ui.dim("Tap anywhere to close"))
         setContentView(root)
-        tts = TextToSpeech(applicationContext) { status ->
-            ttsReady = status == TextToSpeech.SUCCESS
-            if (ttsReady) while (pendingSpeech.isNotEmpty()) speak(pendingSpeech.removeFirst())
-        }
         handle(intent)
     }
 
@@ -73,7 +65,6 @@ class AnnounceActivity : Activity() {
         recent.add(0, text to now)
         while (recent.size > 6) recent.removeAt(recent.size - 1)
         render()
-        if (i.getBooleanExtra(EXTRA_SPEAK, true)) speak(text)
         main.removeCallbacks(close)
         main.postDelayed(close, if (urgent) 60_000L else 30_000L)
     }
@@ -92,17 +83,8 @@ class AnnounceActivity : Activity() {
         }
     }
 
-    private fun speak(text: String) {
-        if (!ttsReady) { pendingSpeech.addLast(text); return }
-        val hindi = Regex("[\\u0900-\\u097F]").containsMatchIn(text) || Regex("aa rahe|aa raha|minute mein|pahunch|ghar aa|darwaza", RegexOption.IGNORE_CASE).containsMatchIn(text)
-        val t = tts ?: return
-        t.language = if (hindi) Locale("hi", "IN") else Locale("en", "IN")
-        t.speak(text, TextToSpeech.QUEUE_ADD, null, "announce-" + System.nanoTime())
-    }
-
     override fun onDestroy() {
         main.removeCallbacksAndMessages(null)
-        tts?.stop(); tts?.shutdown(); tts = null
         super.onDestroy()
     }
 

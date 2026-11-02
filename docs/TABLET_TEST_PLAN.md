@@ -35,7 +35,7 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] **Auto camera** (Camera card, switch on, needs a person set): everyone out for 2 min → camera starts and Telegram says so; someone back → camera stops. A camera you started by hand is not stopped.
 
 ## 4. Tablet: voice and music
-- [ ] "Hey Stashr, tv ki awaaz kam karo" does it and speaks the reply (Hindi and English).
+- [ ] "Hey Stashr, tv ki awaaz kam karo" does it and shows the reply on the dashboard (Hindi and English); the tablet makes no sound.
 - [ ] "Arijit ke gaane chalao" plays in YouTube Music on the tablet.
 - [ ] "Stashr today updates" / "aaj ke updates" (voice, page and Telegram) opens **Today at home** on the tablet by itself, even from another app. If not: "Display over other apps" permission.
 - [ ] Mic button on the website works in Chrome.
@@ -73,7 +73,7 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] Phone: install from /apps, type code + name → the phone appears with its name; wrong code and a duplicate name are refused with a clear message.
 - [ ] Home location set on the website (Places → Home location). Phone far away: card shows km and minutes; after it starts heading home the state becomes "heading home".
 - [ ] Check how often it uploads: far away and leaving ≈ 30 min; heading home and close ≈ 1–2 min (see `adb logcat` / the "updated … ago" text).
-- [ ] Tablet: announcement screen with big text + voice "… is arriving in 15 mins" (and 5), then "Open the door: … arrived home". Without "Display over other apps" you only get the heads-up notification.
+- [ ] Tablet: announcement screen with big text, no voice "… is arriving in 15 mins" (and 5), then "Open the door: … arrived home". Without "Display over other apps" you only get the heads-up notification.
 - [ ] Arrival by Wi-Fi: phone joins home Wi-Fi (tablet sees it, person set) within 2 km → "Open the door" fires even before the GPS circle.
 - [ ] TV on: does the TV show the message? (needs the TV app to support `notify`; note the result in "Found").
 - [ ] Second phone gets the same message as a notification when someone else is arriving.

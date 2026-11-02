@@ -230,7 +230,7 @@ async function announce(owner, text, { settings, devices, exceptDevice, urgent =
     const eta = (settings && settings.eta) || {};
     const list = devices || await HomeDevice.find({ owner }).lean();
     await record({ owner, kind, notify: true, text });
-    if (eta.toTablet !== false) for (const hub of list.filter((d) => d.kind === "hub" && (d.status || {}).agent === "stashr-hub" && Boolean(d.online) && home.isOnline(d, now))) await queue(hub, "announce", { text, speak: true, urgent });
+    if (eta.toTablet !== false) for (const hub of list.filter((d) => d.kind === "hub" && (d.status || {}).agent === "stashr-hub" && Boolean(d.online) && home.isOnline(d, now))) await queue(hub, "announce", { text, speak: false, urgent });
     if (eta.toTv !== false) for (const tv of list.filter((d) => d.kind === "tv" && Boolean(d.online) && home.isOnline(d, now) && (d.status || {}).screen !== "off")) await queue(tv, "notify", { text });
     if (eta.toPhones !== false) for (const ph of list.filter((d) => d.kind === "phone" && (d.status || {}).agent === "stashr-where" && String(d._id) !== String(exceptDevice) && d.lastSeen && now - new Date(d.lastSeen).getTime() < 3 * 3600 * 1000)) await queue(ph, "notice", { text });
 }

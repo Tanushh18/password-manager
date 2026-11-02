@@ -38,7 +38,7 @@ All are listed with download buttons on the website's **/apps** page.
   (`nextCheckSec`): every 30 min when far away and not heading home, every 15 min when away but near, every 20 min at home, and
   every 10 → 5 → 2 → 1 min as someone heading home gets closer (>20 km, >10 km, >3 km, closer). Heading home is detected from two
   fixes getting closer. Plus a free source: passive fixes other apps cause (uploaded only after moving 300 m).
-- **What the family sees:** the tablet shows a banner "Parveen 10 minute mein aa rahe hain", reads out "Parveen Chawla is arriving in
+- **What the family sees:** the tablet shows a banner "Parveen 10 minute mein aa rahe hain", shows on a big full-screen card (the tablet never speaks) "Parveen Chawla is arriving in
   15 mins" (also at 5 mins) and "Open the door: Parveen Chawla arrived home"; the TV gets the same text (`notify`, only when the TV is
   on); other linked phones get it as a normal notification; Telegram gets it too. Arrival counts when the phone is inside the home
   circle, or the tablet sees the phone on the Wi-Fi and it is within 2 km: whichever happens first.
