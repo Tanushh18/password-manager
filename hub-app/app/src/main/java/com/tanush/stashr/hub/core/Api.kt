@@ -17,7 +17,21 @@ class ApiError(val status: Int, message: String) : IOException(message)
 
 class Api(ctx: Context) {
     private val prefs = Prefs(ctx)
-    val base get() = prefs.server
+    /** The server this call is going to; Api tries the other one when it cannot be reached (see failover). */
+    @Volatile var base: String = prefs.servers.firstOrNull() ?: prefs.server
+        private set
+
+    /** Tries each server in turn: the one that worked last, then the other. Only a missing connection or a 502-504 moves on. */
+    private fun <T> failover(block: () -> T): T {
+        var last: IOException? = null
+        for (s in prefs.servers.ifEmpty { listOf(prefs.server) }) {
+            base = s
+            try { val r = block(); prefs.serverWorked(s); return r }
+            catch (e: ApiError) { if (e.status !in 502..504) throw e; last = e }
+            catch (e: IOException) { last = e }
+        }
+        throw last ?: IOException("No server to reach.")
+    }
 
     private fun open(path: String, method: String, auth: Boolean = true, timeoutMs: Int = 20000): HttpURLConnection {
         val c = URL(base + path).openConnection() as HttpURLConnection
@@ -39,18 +53,18 @@ class Api(ctx: Context) {
         return json
     }
 
-    fun get(path: String, auth: Boolean = true): JSONObject {
+    fun get(path: String, auth: Boolean = true): JSONObject = failover {
         val c = open(path, "GET", auth)
-        try { return read(c) } finally { c.disconnect() }
+        try { read(c) } finally { c.disconnect() }
     }
 
-    fun post(path: String, body: JSONObject, auth: Boolean = true, timeoutMs: Int = 20000): JSONObject {
+    fun post(path: String, body: JSONObject, auth: Boolean = true, timeoutMs: Int = 20000): JSONObject = failover {
         val c = open(path, "POST", auth, timeoutMs)
         try {
             c.doOutput = true
             c.setRequestProperty("Content-Type", "application/json")
             c.outputStream.use { it.write(body.toString().toByteArray()) }
-            return read(c)
+            read(c)
         } finally { c.disconnect() }
     }
 
@@ -67,35 +81,35 @@ class Api(ctx: Context) {
     fun slideshow(): JSONObject = get("/home/agent/slideshow")
 
     /** A slideshow photo's bytes. */
-    fun slideshowFile(id: String): ByteArray {
+    fun slideshowFile(id: String): ByteArray = failover {
         val c = open("/home/agent/slideshow/file?id=" + URLEncoder.encode(id, "UTF-8"), "GET", timeoutMs = 60000)
         try {
             if (c.responseCode !in 200..299) throw ApiError(c.responseCode, "Photo not available")
-            return c.inputStream.use { it.readBytes() }
+            c.inputStream.use { it.readBytes() }
         } finally { c.disconnect() }
     }
 
     /** POST /home/agent/media: a JPEG photo or an MP4 clip from the camera. reason: motion | snapshot | clip. */
-    fun uploadMedia(kind: String, reason: String, bytes: ByteArray): JSONObject {
+    fun uploadMedia(kind: String, reason: String, bytes: ByteArray): JSONObject = failover {
         val c = open("/home/agent/media?kind=$kind&reason=$reason", "POST", timeoutMs = 120000)
         try {
             c.doOutput = true
             c.setRequestProperty("Content-Type", if (kind == "video") "video/mp4" else "image/jpeg")
             c.setFixedLengthStreamingMode(bytes.size)
             c.outputStream.use { it.write(bytes) }
-            return read(c)
+            read(c)
         } finally { c.disconnect() }
     }
 
     /** POST /home/agent/live: one small JPEG frame of the live view. */
-    fun uploadLive(bytes: ByteArray): JSONObject {
+    fun uploadLive(bytes: ByteArray): JSONObject = failover {
         val c = open("/home/agent/live", "POST", timeoutMs = 15000)
         try {
             c.doOutput = true
             c.setRequestProperty("Content-Type", "image/jpeg")
             c.setFixedLengthStreamingMode(bytes.size)
             c.outputStream.use { it.write(bytes) }
-            return read(c)
+            read(c)
         } finally { c.disconnect() }
     }
 

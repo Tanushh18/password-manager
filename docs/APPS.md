@@ -28,6 +28,11 @@ All are listed with download buttons on the website's **/apps** page.
   Linking is rate-limited and capped by the device limit. Replace the code any time; linked phones stay linked.
 - **ETA:** straight line × 1.3 at the phone's speed (or 25 km/h); good to a few minutes, no traffic data.
 
+## Two servers
+Stashr runs on two servers that share one database (`password-manager-server-g305` and `password-manager-server-xxdr`, the same list
+the main app uses). Stashr Hub and Stashr Location keep both addresses (Setup → Advanced → server and backup server), try the one
+that worked last, and move to the other when it is asleep or down (no connection, or HTTP 502–504). A device token works on either.
+
 ## Updates
 Stashr Hub and Stashr Location are built by GitHub Actions (`hub-apk.yml`, `where-apk.yml`) on every change under their folder,
 signed with the same keystore secrets, and published as GitHub Releases (`stashr-hub-v…`, `stashr-where-v…`) that are never marked

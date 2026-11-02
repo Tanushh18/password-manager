@@ -489,6 +489,8 @@ describe("Stashr Location: the location-only app", () => {
         // Mom's app is told when she reports; Parveen is not told about himself
         const mom = await loc(b.token, 28.6139, Date.now() + 2000);
         expect(mom.body.notices.some((n) => /Parveen Chawla is arriving/.test(n.text))).toBe(true);
+        const own = await loc(a.token, 28.64, t0 + 90_000);
+        expect(own.body.notices.some((n) => /Parveen Chawla/.test(n.text))).toBe(false);   // never told about himself
         await loc(a.token, 28.6140, t0 + 120_000);                         // inside the circle: arrived
         expect((await hub()).some((x) => /Open the door: Parveen Chawla arrived home/.test(x))).toBe(true);
     });

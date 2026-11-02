@@ -40,7 +40,8 @@ class SetupActivity : Activity() {
         val name = ui.input("Your name, e.g. Parveen Chawla", type = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS)
         name.imeOptions = EditorInfo.IME_ACTION_DONE
         val server = ui.input("Server address", prefs.server, InputType.TYPE_TEXT_VARIATION_URI)
-        val advanced = ui.column(8).apply { visibility = View.GONE; addView(ui.dim("Only change this if your family runs Stashr somewhere else.")); addView(server) }
+        val server2 = ui.input("Backup server address", prefs.server2, InputType.TYPE_TEXT_VARIATION_URI)
+        val advanced = ui.column(8).apply { visibility = View.GONE; addView(ui.dim("Stashr has two servers. The app uses the second one when the first is asleep or down. Only change these if your family runs Stashr somewhere else.")); addView(server); addView(server2) }
         val toggle = ui.dim("Advanced ▸").apply { setPadding(0, ui.dp(4), 0, ui.dp(4)); setOnClickListener { advanced.visibility = if (advanced.visibility == View.GONE) View.VISIBLE else View.GONE } }
         val error: TextView = ui.text("", 13f, ui.c.danger)
         val connect = ui.primary("Connect") {}
@@ -55,6 +56,9 @@ class SetupActivity : Activity() {
             if (!s.startsWith("https://")) { error.text = "The server address must start with https://"; return@setOnClickListener }
             error.text = ""; connect.isEnabled = false; connect.text = "Connecting…"
             prefs.server = s
+            val s2 = server2.text.toString().trim()
+            if (s2.isNotEmpty() && !s2.startsWith("https://")) { error.text = "The backup address must start with https://"; connect.isEnabled = true; connect.text = "Connect"; return@setOnClickListener }
+            if (s2.isNotEmpty()) prefs.server2 = s2
             thread {
                 try {
                     val r = Api(this).link(c, n)

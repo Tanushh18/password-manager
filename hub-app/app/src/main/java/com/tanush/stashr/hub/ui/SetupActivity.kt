@@ -34,8 +34,10 @@ class SetupActivity : Activity() {
 
         val advanced = ui.column(8).apply { visibility = View.GONE }
         val server = ui.input("Server address", prefs.server, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
-        advanced.addView(ui.dim("Only change this if your Stashr runs on another server."))
+        val server2 = ui.input("Backup server address", prefs.server2, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
+        advanced.addView(ui.dim("Stashr has two servers. The app uses the second one when the first is asleep or down. Only change these if your Stashr runs elsewhere."))
         advanced.addView(server)
+        advanced.addView(server2)
 
         val go = ui.primary("Join") {}
         go.setOnClickListener {
@@ -43,6 +45,7 @@ class SetupActivity : Activity() {
             if (typed.replace("-", "").length != 8) { error.text = "Type all 8 letters of the code."; error.visibility = View.VISIBLE; return@setOnClickListener }
             go.isEnabled = false; go.text = "Joining…"; error.visibility = View.GONE
             prefs.server = server.text.toString().ifBlank { prefs.server }
+            prefs.server2 = server2.text.toString().ifBlank { prefs.server2 }
             thread {
                 try {
                     val r = Api(this).pair(typed, android.os.Build.MODEL)

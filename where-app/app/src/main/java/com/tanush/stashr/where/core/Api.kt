@@ -13,7 +13,21 @@ class ApiError(val status: Int, message: String) : IOException(message)
 /** Talks to the Stashr server. Blocking: call from a background thread or Dispatchers.IO. */
 class Api(ctx: Context) {
     private val prefs = Prefs(ctx)
-    val base get() = prefs.server
+    /** The server this call is going to; Api tries the other one when it cannot be reached (see failover). */
+    @Volatile var base: String = prefs.servers.firstOrNull() ?: prefs.server
+        private set
+
+    /** Tries each server in turn: the one that worked last, then the other. Only a missing connection or a 502-504 moves on. */
+    private fun <T> failover(block: () -> T): T {
+        var last: IOException? = null
+        for (s in prefs.servers.ifEmpty { listOf(prefs.server) }) {
+            base = s
+            try { val r = block(); prefs.serverWorked(s); return r }
+            catch (e: ApiError) { if (e.status !in 502..504) throw e; last = e }
+            catch (e: IOException) { last = e }
+        }
+        throw last ?: IOException("No server to reach.")
+    }
 
     private fun open(path: String, method: String, auth: Boolean, timeoutMs: Int): HttpURLConnection {
         val c = URL(base + path).openConnection() as HttpURLConnection
@@ -33,18 +47,18 @@ class Api(ctx: Context) {
         return json
     }
 
-    private fun get(path: String, auth: Boolean): JSONObject {
+    private fun get(path: String, auth: Boolean): JSONObject = failover {
         val c = open(path, "GET", auth, 20000)
-        try { return read(c) } finally { c.disconnect() }
+        try { read(c) } finally { c.disconnect() }
     }
 
-    private fun post(path: String, body: JSONObject, auth: Boolean, timeoutMs: Int = 20000): JSONObject {
+    private fun post(path: String, body: JSONObject, auth: Boolean, timeoutMs: Int = 20000): JSONObject = failover {
         val c = open(path, "POST", auth, timeoutMs)
         try {
             c.doOutput = true
             c.setRequestProperty("Content-Type", "application/json")
             c.outputStream.use { it.write(body.toString().toByteArray()) }
-            return read(c)
+            read(c)
         } finally { c.disconnect() }
     }
 
