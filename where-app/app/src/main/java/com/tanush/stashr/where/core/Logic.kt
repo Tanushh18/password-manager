@@ -80,6 +80,32 @@ object Logic {
     fun passiveWorthUploading(movedM: Double?, sinceLastUploadMs: Long): Boolean =
         sinceLastUploadMs > 2 * 60_000 && (movedM == null || movedM > 300)
 
+    const val SAME_MAX_AGE_MS = 6 * 3600_000L          // the same access point counts as "has not moved" for 6 hours
+    const val SAME_NEAR_M = 40.0                      // a new fix this close to the last uploaded one is the same place
+    const val SAME_NEAR_MAX_AGE_MS = 20 * 60_000L     // ... if the last upload is not older than this
+    const val CALL_MAX_AGE_MS = 25 * 60_000L          // at least one real fix every 25 minutes while only "near" decides
+    const val REUSE_FIX_MS = 4 * 60_000L              // a fix younger than this is reused instead of asking again
+
+    /**
+     * True when the phone can say "I am still where I was" (the small `same` call) instead of taking and sending a new location.
+     * Never in live mode. Same Wi-Fi access point as at the last upload (and that upload under 6 h old) is enough; otherwise the new
+     * fix must be within 40 m of the last upload, which must be under 20 minutes old, and a full fix must have gone out in the last 25 minutes.
+     */
+    fun shouldSendSame(sameBssid: Boolean, lastUploadAgeMs: Long, distanceM: Double?, live: Boolean, lastCallAgeMs: Long): Boolean {
+        if (live || lastUploadAgeMs <= 0) return false
+        if (sameBssid && lastUploadAgeMs < SAME_MAX_AGE_MS) return true
+        return distanceM != null && distanceM <= SAME_NEAR_M && lastUploadAgeMs < SAME_NEAR_MAX_AGE_MS && lastCallAgeMs < CALL_MAX_AGE_MS
+    }
+
+    /** Battery 15% or less and not charging (not live): look half as often, at most every 30 minutes. */
+    fun lowBattery(pct: Int, charging: Boolean, live: Boolean) = !live && !charging && pct in 0..15
+    fun batteryDelay(pct: Int, charging: Boolean, live: Boolean, delaySec: Int): Int =
+        if (lowBattery(pct, charging, live)) (delaySec * 2).coerceAtMost(MAX_DELAY_SEC) else delaySec
+
+    /** A Wi-Fi BSSID that identifies an access point (not empty, not the placeholder Android returns without permission). */
+    fun usableBssid(b: String?): String =
+        b?.trim()?.lowercase()?.takeIf { it.isNotEmpty() && it != "02:00:00:00:00:00" && it != "00:00:00:00:00:00" && it != "<unknown ssid>" } ?: ""
+
     fun cleanCode(raw: String): String = raw.uppercase().filter { it.isLetterOrDigit() }.take(8)
 
     fun ago(ms: Long, now: Long = System.currentTimeMillis()): String {

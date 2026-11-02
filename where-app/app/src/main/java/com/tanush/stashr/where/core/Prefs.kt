@@ -56,6 +56,12 @@ class Prefs(ctx: Context) {
     var upLon: Double get() = Double.fromBits(p.getLong("upLon", Double.NaN.toRawBits())); set(v) = p.edit().putLong("upLon", v.toRawBits()).apply()
     var upAt: Long get() = p.getLong("upAt", 0L); set(v) = p.edit().putLong("upAt", v).apply()
 
+    /** Wi-Fi access point at the last coordinate upload ("" if not on Wi-Fi), and when the last call of any kind reached the server. */
+    var upBssid: String get() = p.getString("upBssid", "") ?: ""; set(v) = p.edit().putString("upBssid", v).apply()
+    var callAt: Long get() = p.getLong("callAt", 0L); set(v) = p.edit().putLong("callAt", v).apply()
+    /** The last call was the small "still here" one. */
+    var lastWasSame: Boolean get() = p.getBoolean("lastWasSame", false); set(v) = p.edit().putBoolean("lastWasSame", v).apply()
+
     var state: String get() = p.getString("state", "") ?: ""; set(v) = p.edit().putString("state", v).apply()
     var distanceKm: Float get() = p.getFloat("distanceKm", -1f); set(v) = p.edit().putFloat("distanceKm", v).apply()
     var etaMinutes: Int get() = p.getInt("etaMinutes", -1); set(v) = p.edit().putInt("etaMinutes", v).apply()
