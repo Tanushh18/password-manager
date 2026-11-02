@@ -18,6 +18,7 @@ import com.tanush.stashr.tv.service.NowPlaying
 import com.tanush.stashr.tv.sync.MovieStore
 
 /** Plays a movie from the storage with Media3. Remembers where you stopped. OK shows the controls; Back leaves. */
+@androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
 class PlayerActivity : AppCompatActivity() {
     private var player: ExoPlayer? = null
     private val main = Handler(Looper.getMainLooper())

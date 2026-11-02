@@ -30,7 +30,7 @@ object Updater {
             val info = Api(app).latest(BuildConfig.VERSION_CODE)
             if (!info.optBoolean("updateAvailable")) { waiting = false; return@withContext done("Up to date (${BuildConfig.VERSION_NAME})") }
             val version = info.optString("version")
-            if (!app.packageManager.canRequestPackageInstalls()) {
+            if (Build.VERSION.SDK_INT >= 26 && !app.packageManager.canRequestPackageInstalls()) {
                 waiting = true
                 if (manual) app.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + app.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 return@withContext done("Update $version ready: allow installs from Stashr TV")
@@ -46,6 +46,11 @@ object Updater {
             }
             install(app, apk)
             done("Installing $version…")
+        } catch (e: com.tanush.stashr.tv.core.ApiError) {
+            // No release published (404) is normal when the TV app is installed by hand: not an error.
+            if (e.status == 404) { waiting = false; return@withContext done("No update published (${BuildConfig.VERSION_NAME})") }
+            lastError = e.message ?: "Update check failed"
+            done(lastError)
         } catch (e: Exception) {
             lastError = e.message ?: "Update check failed"
             done(lastError)

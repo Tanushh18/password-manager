@@ -38,7 +38,8 @@ class LogicTest {
     }
 
     @Test fun volumeCommands() {
-        assertEquals(10, Logic.volumeTarget(JSONObject("""{"action":"up"}"""), 8, 15))
+        assertEquals(9, Logic.volumeTarget(JSONObject("""{"action":"up"}"""), 8, 15))
+        assertEquals(56, Logic.volumeTarget(JSONObject("""{"action":"up"}"""), 50, 100))
         assertEquals(15, Logic.volumeTarget(JSONObject("""{"action":"up"}"""), 15, 15))
         assertEquals(0, Logic.volumeTarget(JSONObject("""{"action":"down"}"""), 0, 15))
         assertEquals(8, Logic.volumeTarget(JSONObject("""{"level":50}"""), 3, 15))

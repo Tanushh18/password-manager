@@ -95,7 +95,7 @@ class Ui(val ctx: Context) {
     }
 
     fun input(hint: String, value: String = "", type: Int = InputType.TYPE_CLASS_TEXT) = EditText(ctx).apply {
-        this.hint = hint; setText(value); inputType = type; setTextColor(text); setHintTextColor(faint)
+        this.hint = hint; setText(value); inputType = type; setTextColor(this@Ui.text); setHintTextColor(faint)
         background = focusable(surface, 12); setPadding(dp(20), dp(16), dp(20), dp(16)); setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
         isSingleLine = true
     }
