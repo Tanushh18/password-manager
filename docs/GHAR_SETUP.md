@@ -9,6 +9,16 @@ Time: lagbhag 45 minute. Kuch bhi galat lage to aakhir mein "Agar kuch na chale"
 - [ ] Stashr website kholo: **Settings → Telegram** mein bot jura hai (nahi to alerts Telegram par nahi aayenge, sirf website par).
 - [ ] (Chahiye to) Photo Cloud mein Google account jura hai (movies aur photo frame ke liye Drive chahiye).
 
+## Shortcut: ek command se tablet aur TV (computer se)
+Computer, tablet aur TV ek Wi-Fi par. Dono par Developer options → USB debugging (aur Network/Wireless debugging) on. Phir repo ke andar:
+```bash
+scripts/install-home-devices.sh --tablet <TABLET-IP> --tv <TV-IP>
+```
+Ye GitHub se sabse naye Hub aur TV APK utarta hai, `adb install` karta hai, aur jo permissions adb de sakta hai wo deta hai (camera, mic,
+notifications, "Display over other apps", battery, TV ka accessibility, Stashr TV ko home app). Family phones ke liye `--phone-apk` APK
+download kar deta hai. Uske baad bas Step 2.2/2.3 aur 4.4 ke codes tablet/TV par daalne hain. Baaki neeche ke steps tab dekho jab script kuch
+na kar paye.
+
 ## Step 1 · Website par ghar ki location (2 minute) — ghar par khade hokar
 1. Phone se Stashr website kholo: **Smart home → Automations → Places → Home location**.
 2. "Use this device's location" dabao → **Save home**. (Sirf ek baar; saare phones ke liye wahi chalti hai.)
