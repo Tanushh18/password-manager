@@ -5,6 +5,7 @@ import axios from "axios";
 // xxdr is the fixed address apps use to find the current server list (see "Server registry" below).
 // The main server. Other servers come from the Stashr server list (the Servers page), never from here.
 const DEFAULT_SERVERS = [
+    "https://password-manager-server-g305.onrender.com",
     "https://password-manager-server-xxdr.onrender.com"
 ];
 

@@ -45,6 +45,13 @@ class Ui(val ctx: Context) {
         addState(intArrayOf(), rounded(fill, line, radius, 1))
     }
 
+    /** Frosted-glass card for the launcher: see-through white on the colour wash, a bright ring when focused. */
+    fun glass(radius: Number = 16): StateListDrawable = StateListDrawable().apply {
+        addState(intArrayOf(android.R.attr.state_focused), rounded(Color.argb(70, 255, 255, 255), Color.WHITE, radius, 4))
+        addState(intArrayOf(android.R.attr.state_pressed), rounded(Color.argb(70, 255, 255, 255), Color.WHITE, radius, 4))
+        addState(intArrayOf(), rounded(Color.argb(38, 255, 255, 255), Color.argb(60, 255, 255, 255), radius, 1))
+    }
+
     fun page(): Pair<ScrollView, LinearLayout> {
         val col = column().apply { setPadding(dp(48), dp(32), dp(48), dp(40)) }
         val scroll = ScrollView(ctx).apply { setBackgroundColor(bg); isFillViewport = true; addView(col) }

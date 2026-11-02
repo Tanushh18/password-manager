@@ -16,11 +16,14 @@ android {
         targetSdk = 35
         versionCode = tvVersionCode
         versionName = tvVersionName
-        buildConfigField("String", "DEFAULT_SERVER", "\"https://password-manager-server-xxdr.onrender.com\"")
-        buildConfigField("String", "DEFAULT_SERVER2", "\"https://password-manager-server-g305.onrender.com\"")
+        buildConfigField("String", "DEFAULT_SERVER", "\"https://password-manager-server-g305.onrender.com\"")
+        buildConfigField("String", "DEFAULT_SERVER2", "\"https://password-manager-server-xxdr.onrender.com\"")
     }
     buildFeatures { buildConfig = true }
     buildTypes {
+        debug {
+            applicationIdSuffix = ".dev"   // installs next to the signed app, so trying a build never touches the linked one
+        }
         release {
             isMinifyEnabled = false
         }

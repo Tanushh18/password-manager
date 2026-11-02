@@ -16,8 +16,8 @@ android {
         targetSdk = 35
         versionCode = whereVersionCode
         versionName = whereVersionName
-        buildConfigField("String", "DEFAULT_SERVER", "\"https://password-manager-server-xxdr.onrender.com\"")
-        buildConfigField("String", "DEFAULT_SERVER2", "\"https://password-manager-server-g305.onrender.com\"")
+        buildConfigField("String", "DEFAULT_SERVER", "\"https://password-manager-server-g305.onrender.com\"")
+        buildConfigField("String", "DEFAULT_SERVER2", "\"https://password-manager-server-xxdr.onrender.com\"")
     }
     buildFeatures { buildConfig = true }
     buildTypes {

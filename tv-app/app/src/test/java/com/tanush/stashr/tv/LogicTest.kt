@@ -49,6 +49,20 @@ class LogicTest {
         assertEquals(true, Logic.isMute(JSONObject("""{"action":"mute"}""")))
     }
 
+    @Test fun familyChips() {
+        fun dev(state: String, eta: Int?) = Logic.LiveDevice("1", "Parveen Chawla", 0.0, 0.0, 0, null, 0, state, eta, null, false, true, emptyList())
+        assertEquals("📍  Parveen · home", Logic.familyLine(dev("home", null)))
+        assertEquals("📍  Parveen · 12 min away", Logic.familyLine(dev("coming", 12)))
+        assertEquals("📍  Parveen · away", Logic.familyLine(dev("away", null)))
+    }
+
+    @Test fun launcherShowsOnlyGroupedApps() {
+        assertEquals(Logic.AppGroup.ENTERTAINMENT, Logic.appGroup("com.netflix.ninja"))
+        assertEquals(Logic.AppGroup.NEWS, Logic.appGroup("com.july.ndtv"))
+        assertEquals(Logic.AppGroup.ENTERTAINMENT, Logic.appGroup("com.google.android.youtube.tvmusic")); assertEquals(null, Logic.appGroup("com.android.vending"))
+        assertEquals(null, Logic.appGroup("com.mstar.android.tv.disclaimercustomization"))
+    }
+
     @Test fun titlesSizesAndOrder() {
         assertEquals("The Movie 2024", Logic.title("The_Movie.2024.mkv"))
         assertEquals("1.5 GB", Logic.size(1_610_612_736L))

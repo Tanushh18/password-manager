@@ -70,11 +70,17 @@ class LiveMapActivity : Activity() {
             show(null, "Live location needs the internet", offline = true)
             main.postDelayed(tick, 5000); return
         }
+        if (!com.tanush.stashr.tv.core.Prefs(this).linked) {
+            show(null, "This TV is not linked yet.\nOpen Stashr TV settings and type the home-device code from the website.")
+            main.postDelayed(tick, 5000); return
+        }
         thread {
-            val result = try { Logic.parseLive(Api(this).tvLive()) } catch (e: Exception) { null }
+            var unlinked = false
+            val result = try { Logic.parseLive(Api(this).tvLive()) } catch (e: com.tanush.stashr.tv.core.ApiError) { if (e.status == 401 || e.status == 403) unlinked = true; null } catch (e: Exception) { null }
             main.post {
                 if (!alive) return@post
-                if (result != null) { last = result; show(result, null) } else show(last, null, noConnection = true)
+                if (unlinked) show(null, "This TV needs to be linked again.\nOpen Stashr TV settings and type a new home-device code.")
+                else if (result != null) { last = result; show(result, null) } else show(last, null, noConnection = true)
                 main.removeCallbacks(tick); main.postDelayed(tick, 5000)
             }
         }

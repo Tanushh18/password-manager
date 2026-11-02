@@ -439,7 +439,7 @@ export default function SmartHome() {
         <LocationsCard />
         <LiveMapCard />
         <PhonesCard phones={phones} onChanged={load} />
-        <PairCard />
+        <PairCard devices={list} />
       </></CardBoundary>) : null}
       {tab === "security" ? (<CardBoundary key="security"><>
         <CameraCard hub={smartHub} send={send} home={home} />

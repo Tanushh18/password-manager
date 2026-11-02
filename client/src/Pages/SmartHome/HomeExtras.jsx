@@ -26,10 +26,13 @@ export function useHomeSettings() {
 
 /* ───────── add a tablet or a family phone ───────── */
 
-export function PairCard() {
+const KIND_LABEL = { hub: "Home tablet", tv: "TV", phone: "Family phone" };
+
+export function PairCard({ devices = [] }) {
   const [code, setCode] = useState("");
   const [old, setOld] = useState({ kind: "hub", name: "", code: null });
   const { ask, dialog } = useConfirm();
+  const linked = devices.filter((d) => d.kind === "hub" || d.kind === "tv" || d.kind === "phone");
   useEffect(() => { getHubCode().then((r) => setCode(r.code)).catch(() => {}); }, []);
   const copy = async () => { try { await navigator.clipboard.writeText(code); toast.success("Code copied."); } catch { toast.error("Could not copy. Select the code and copy it."); } };
   const renew = async () => {
@@ -47,6 +50,17 @@ export function PairCard() {
         <b>Home-device code (Stashr Hub and Stashr TV)</b>
         <div className="sh-row"><code className="sh-code" aria-label="Home-device code">{code || "…"}</code><button className="rd-btn rd-btn--quiet" onClick={copy} disabled={!code}>Copy</button><button className="rd-btn rd-btn--quiet" onClick={renew}>New code</button></div>
         <p className="sh-dim">The same code every time, until you make a new one. A tablet or TV can see the home dashboard and your slideshow photos, so keep this code to yourself. It is not the code for family phones (that is under Family locations).</p>
+      </div>
+      <div className="sh-editor">
+        <b>Linked now</b>
+        {linked.length ? (
+          <ul className="sh-people">{linked.map((d) => (
+            <li key={d._id || d.name} className={d.online ? "is-home" : ""}>
+              <span className="sh-avatar" aria-hidden="true">{d.kind === "tv" ? "TV" : d.kind === "phone" ? "PH" : "TB"}</span>
+              <div><b>{d.name || "Unnamed"}</b><span>{KIND_LABEL[d.kind] || d.kind} · {d.online ? "online" : "offline"}{d.lastSeen ? ` · seen ${ago(d.lastSeen)}` : ""}</span></div>
+            </li>
+          ))}</ul>
+        ) : <p className="sh-dim">Nothing is linked yet. Type the code above on the tablet or TV.</p>}
       </div>
       <details className="sh-table"><summary>One-time code instead (15 minutes, works once)</summary>
         <form className="sh-row" onSubmit={make}>

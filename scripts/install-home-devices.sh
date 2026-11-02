@@ -149,6 +149,7 @@ setup_tv() {
   adb -s "$SERIAL" install -r "$OUT/stashr-tv.apk"
   dsh pm grant "$pkg" android.permission.POST_NOTIFICATIONS 2>/dev/null || true
   dsh appops set "$pkg" SYSTEM_ALERT_WINDOW allow 2>/dev/null || true       # banners over a playing video
+  dsh appops set "$pkg" REQUEST_INSTALL_PACKAGES allow 2>/dev/null || true  # updates from the server install themselves
   dsh dumpsys deviceidle whitelist "+$pkg" >/dev/null 2>&1 || true
   # the "Stashr TV remote" accessibility service (Home/Back commands, which app is on screen)
   local svc="$pkg/$pkg.access.RemoteAccessibilityService" cur

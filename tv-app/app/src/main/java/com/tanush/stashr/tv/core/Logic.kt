@@ -58,6 +58,19 @@ object Logic {
     fun <T> sortApps(apps: List<T>, pkg: (T) -> String, label: (T) -> String): List<T> =
         apps.sortedWith(compareBy<T>({ val i = FAVOURITES.indexOf(pkg(it)); if (i < 0) FAVOURITES.size else i }, { label(it).lowercase() }))
 
+    /** The launcher shows only these apps, in three rows. Anything not listed here stays out of the way. */
+    enum class AppGroup(val title: String) { ENTERTAINMENT("Entertainment"), NEWS("News"), OTHER("Stashr TV") }
+
+    private val GROUPS: Map<String, AppGroup> = linkedMapOf(
+        "com.netflix.ninja" to AppGroup.ENTERTAINMENT, "com.amazon.amazonvideo.livingroom" to AppGroup.ENTERTAINMENT,
+        "in.startv.hotstar" to AppGroup.ENTERTAINMENT, "com.google.android.youtube.tv" to AppGroup.ENTERTAINMENT,
+        "com.google.android.youtube.tvmusic" to AppGroup.ENTERTAINMENT,
+        "com.july.ndtv" to AppGroup.NEWS, "com.abpnewslive" to AppGroup.NEWS, "com.news18.atv" to AppGroup.NEWS, "com.cnbc.client" to AppGroup.NEWS,
+    )
+
+    /** The row an app belongs in, or null when the launcher should not show it. */
+    fun appGroup(pkg: String): AppGroup? = GROUPS[pkg]
+
     /** Where a YouTube link should open on a TV: the music app for music.youtube.com, else the YouTube TV app. */
     fun youtubePackage(url: String): String = if (url.contains("music.youtube.com")) "com.google.android.youtube.tvmusic" else "com.google.android.youtube.tv"
 
@@ -115,6 +128,16 @@ object Logic {
             }
         } ?: emptyList()
         return LiveMap(j.optBoolean("ok", true), j.optString("error"), h, list)
+    }
+
+    /** One chip for the home screen: "📍 Parveen · home", "📍 Papa · 12 min away" or "📍 Mummy · away". */
+    fun familyLine(d: LiveDevice): String {
+        val where = when {
+            d.state == "home" -> "home"
+            d.etaMinutes != null && d.state == "coming" -> "${d.etaMinutes} min away"
+            else -> "away"
+        }
+        return "📍  ${firstName(d.name)} · $where"
     }
 
     fun firstName(name: String) = name.trim().substringBefore(' ').ifEmpty { name }

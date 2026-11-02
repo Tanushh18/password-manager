@@ -2,7 +2,7 @@ const express = require("express");
 const { Readable } = require("node:stream");
 
 const router = express.Router();
-const GITHUB_REPOSITORY = process.env.STASHR_UPDATE_REPOSITORY || "Tanushh18/password-manager";
+const GITHUB_REPOSITORY = process.env.STASHR_UPDATE_REPOSITORY || "Tanushh18/stashr-Home-Automation";
 const EXPECTED_PACKAGE = "com.tanush.stashr.com";
 const CACHE_MS = 60_000;
 let cachedRelease = null;
@@ -163,7 +163,14 @@ async function latestSideRelease(key) {
   const app = SIDE_APPS[key];
   const hit = sideCache[key];
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.value;
-  const releases = await githubJson(`https://api.github.com/repos/${GITHUB_REPOSITORY}/releases?per_page=40`);
+  let releases;
+  try { releases = await githubJson(`https://api.github.com/repos/${GITHUB_REPOSITORY}/releases?per_page=40`); }
+  catch (error) {
+    // GitHub is rate limiting this server or is down: keep serving the last good answer instead of failing every update check.
+    console.error(`[mobile-updates] ${app.label}: ${error.message}`);
+    if (hit) return hit.value;
+    throw error;
+  }
   const release = (Array.isArray(releases) ? releases : []).find((r) => !r.draft && !r.prerelease && String(r.tag_name || "").startsWith(app.prefix));
   const apk = release && (release.assets || []).find((a) => a.name === app.apk);
   const manifestAsset = release && (release.assets || []).find((a) => a.name === app.manifest);
