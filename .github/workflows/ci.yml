@@ -74,5 +74,4 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
-      - uses: android-actions/setup-android@v3
       - run: ./gradlew testDebugUnitTest assembleDebug --no-daemon

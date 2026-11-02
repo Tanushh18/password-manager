@@ -42,7 +42,6 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      - uses: android-actions/setup-android@v3
 
       - name: Verify persistent Android signing key
         shell: bash
