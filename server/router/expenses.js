@@ -29,7 +29,8 @@ async function settingsOf(owner) {
 }
 const need = (s) => { if (!s.sheetId) throw Object.assign(new Error("Add your Google Sheet link first."), { status: 400 }); };
 const userRules = (s) => (s.rules || []).filter((r) => r && r.match && r.category);
-const allCategories = (s) => [...new Set([...ex.DEFAULT_CATEGORIES, ...(s.categories || []), ...userRules(s).map((r) => r.category)])];
+// The full list for the pickers: the defaults and the owner's own, no repeats, "Uncategorized" always last.
+const allCategories = (s) => [...new Set([...ex.DEFAULT_CATEGORIES, ...(s.categories || []), ...userRules(s).map((r) => r.category)])].filter((c) => c !== "Uncategorized").concat(["Uncategorized"]);
 
 const publicSettings = (s) => ({
     ready: sheets.ready(), serviceAccountEmail: sheets.serviceEmail(), configured: Boolean(s.sheetId), sheetUrl: s.sheetUrl || "", sheetId: s.sheetId || "",
@@ -103,10 +104,11 @@ router.post("/expenses/sms", authenticate, smsLimiter, async (req, res) => {
             const p = ex.parseSms(body);
             if (!p) { if (/federal/i.test(body) && !/\botp\b/i.test(body) && unparsed.length < 5) unparsed.push({ body: body.slice(0, 120) }); else ignored++; continue; }
             const when = Number.isFinite(received) && received > 0 && received <= now + 60000 ? received : now;
-            if (!p.date) p.date = ex.ist(when);
+            const hadDate = Boolean(p.date);
+            if (!hadDate) p.date = ex.ist(when);
             if (p.date < s.startDate) { ignored++; continue; }
             newest = Math.max(newest, when);
-            parsed.push({ p, sender: m.address, received: when, noDate: !ex.parseDate(body.match(/\bon\s+(\S+)/i) ? (body.match(/\bon\s+(\S+)/i) || [])[1] : "") && false });
+            parsed.push({ p, sender: m.address, received: when, hadDate });
         }
         parsed.sort((a, b) => key(a.p).localeCompare(key(b.p)));
         const existing = await readTx(s.sheetId);
@@ -115,12 +117,13 @@ router.post("/expenses/sms", authenticate, smsLimiter, async (req, res) => {
         const known = [...existing, ...archived];
         let accounts = [...(s.knownAccounts || [])];
         const toTx = [], toArchive = [];
-        for (const { p, sender, received } of parsed) {
+        for (const { p, sender, received, hadDate } of parsed) {
             const same = known.find((t) => ex.sameTx(t, { ...p, merchant: p.counterparty }));
             if (same) { duplicates++; continue; }
             const clash = p.ref ? known.find((t) => t.ref && t.ref === p.ref) : null;
             const before = known.filter((t) => t.balance != null && key(t) <= key(p)).sort((a, b) => key(a).localeCompare(key(b))).pop();
             const reasons = ex.assess(p, { sender, receivedAt: received, knownAccounts: accounts, lastBalance: before ? before.balance : null, now });
+            if (!hadDate) reasons.unshift("No date in the message (the time it arrived was used)");
             if (clash) reasons.push(`Same reference ${p.ref} as another entry but a different amount (${clash.amount})`);
             if (!accounts.length && !reasons.length && p.account && /^\d{12}$/.test(p.ref || "")) accounts = [p.account];
             else if (accounts.length && !reasons.length && p.account && !accounts.includes(p.account)) reasons.push(`Account ${p.account} is new`);

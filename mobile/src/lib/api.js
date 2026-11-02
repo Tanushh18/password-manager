@@ -144,6 +144,41 @@ export async function request(path, options = {}) {
   );
 }
 
+async function onceBytes(base, path, bytes, timeout) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const headers = { Accept: "application/json", "X-Client": "mobile", "Content-Type": "application/octet-stream" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`${base}${path}`, { method: "POST", headers, body: bytes, credentials: "include", signal: controller.signal });
+    const text = await res.text();
+    let data = text;
+    try { data = text ? JSON.parse(text) : null; } catch (e) { /* plain text answer */ }
+    return { status: res.status, data };
+  } catch (e) {
+    return { status: 0, data: null, error: e };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** POST raw bytes (a bank statement) with the same server fail-over as request(). */
+export async function requestBytes(path, bytes, { timeout = 90000 } = {}) {
+  let last = null;
+  for (let tries = 0; tries < SERVERS.length; tries += 1) {
+    const index = (active + tries) % SERVERS.length;
+    const res = await onceBytes(SERVERS[index], path, bytes, timeout);
+    last = res;
+    if (!isDown(res.status)) {
+      active = index;
+      if (res.status >= 200 && res.status < 300) return res.data;
+      const message = (res.data && typeof res.data === "object" && res.data.error) || (typeof res.data === "string" && res.data) || `Request failed (${res.status})`;
+      throw new ApiError(message, res.status, res.data);
+    }
+  }
+  throw new ApiError("Can't reach the server right now. It may be waking up — try again in a moment.", last?.status || 0);
+}
+
 export const api = {
   health: () => request("/health", { auth: false, timeout: 15000 }),
   login: (body) => request("/login", { method: "POST", body: { ...body, client: "mobile" }, auth: false }),
