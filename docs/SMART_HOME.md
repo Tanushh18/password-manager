@@ -23,6 +23,9 @@ vault. The older TV/tablet sign-in (`POST /home/devices`, kinds `tv` and `hub`) 
   "speed test", "wake <computer>", "photos dikhao". Rules in `utils/homeAssistant.js`; routing in `runSentence`
   (`router/home.js`), which is shared with the tablet's microphone (`POST /home/agent/assistant`).
 - **Scenes**: one tap runs several commands ("Movie night", "Quiet", "Good night" by default; editable).
+- **Today's updates**: say “stashr today updates” / “aaj ke updates” (page, Telegram or the tablet's mic) and the tablet opens a
+  list of today (weather, who is home, TV, Wi-Fi, events, speed) by itself (`GET /home/agent/today`, command `show_today`).
+  The tablet needs “display over other apps” (asked once) to open its screens while another app is showing.
 - **Who is home**: a person is home when a Wi-Fi device you gave that person answers, or their paired phone's own
   address answers on the tablet's scan (`home.presence`).
 - **TV**: status, remote, USB movies, as before.
@@ -32,7 +35,8 @@ vault. The older TV/tablet sign-in (`POST /home/devices`, kinds `tv` and `hub`) 
   day fold away. A family phone's battery and storage show on its Wi-Fi row.
 - **Family phones**: model, Android version, battery (level, charging, temperature, health), storage, memory, uptime,
   network.
-- **Camera**: watch for movement, take a photo, record a 10 s clip; sensitivity; gallery (14 days, 300 items max).
+- **Camera**: turn on by itself when everyone is out (after 2 minutes of nobody home) and off when someone is back —
+  an option, off by default; it never turns off a camera you armed yourself. Also: watch for movement, take a photo, record a 10 s clip; sensitivity; gallery (14 days, 300 items max).
 - **TV time**: minutes per day by app (chart + table), a daily limit (pause / home screen / just tell me, repeated
   every 15 minutes past the limit), a late-night warning.
 - **Internet speed**: hourly tests from the tablet, chart over 1–90 days, "Test now".

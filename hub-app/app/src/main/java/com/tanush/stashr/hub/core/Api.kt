@@ -63,6 +63,7 @@ class Api(ctx: Context) {
     fun dashboard(): JSONObject = get("/home/agent/dashboard")
     fun assistant(text: String): JSONObject = post("/home/agent/assistant", JSONObject().put("text", text))
     fun runScene(id: String): JSONObject = post("/home/agent/scene/" + URLEncoder.encode(id, "UTF-8"), JSONObject())
+    fun today(): JSONObject = get("/home/agent/today")
     fun slideshow(): JSONObject = get("/home/agent/slideshow")
 
     /** A slideshow photo's bytes. */

@@ -399,6 +399,7 @@ export function CameraCard({ hub, send, home }) {
               <span className="sh-dim">Sensitivity</span>
               <input type="range" min="1" max="10" value={s.camera.sensitivity} onChange={(e) => save({ camera: { sensitivity: Number(e.target.value) } }, "Sensitivity saved.")} aria-label="Camera sensitivity" />
               <label className="sh-switch"><input type="checkbox" checked={s.camera.video} onChange={(e) => save({ camera: { video: e.target.checked } })} />Record clips on movement</label>
+              <label className="sh-switch"><input type="checkbox" checked={Boolean(s.camera.auto)} onChange={(e) => save({ camera: { auto: e.target.checked } }, e.target.checked ? "The camera will turn on when everyone is out and off when someone is back." : "Automatic camera is off.")} />Turn on by itself when everyone is out, off when someone is home</label>
             </> : null}
           </div>
           {live ? <LiveView hub={hub} send={send} onClose={() => setLive(false)} /> : null}

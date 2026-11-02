@@ -115,6 +115,62 @@ async function briefText(owner, settings, now = Date.now()) {
     return lines.join("\n");
 }
 
+/**
+ * "Today" for the tablet's screen: plain lines, newest facts first. Same sources as the morning brief.
+ * Returns { title, lines: [{ icon, text }] }.
+ */
+async function todayLines(owner, settings, now = Date.now()) {
+    const tz = settings.timezone || "Asia/Kolkata";
+    const local = localParts(now, tz);
+    const lines = [];
+    try { const f = await weather.forecast(settings.weather, tz); if (f) lines.push({ icon: "🌤", text: weather.line(f) }); } catch (e) { /* no weather */ }
+    const s = await houseSummary(owner, now);
+    if (s.people.length) lines.push({ icon: "👪", text: s.people.map((p) => `${p.person} ${p.home ? "is home" : "is out"}`).join(", ") + "." });
+    for (const tv of s.devices.filter((d) => d.kind === "tv")) lines.push({ icon: "📺", text: `${tv.name}: ${tv.online ? (tv.status && tv.status.screen === "off" ? "standby" : "on") : "off"}.` });
+    const used = (((settings.usage || {})[local.date]) || {}).minutes || 0;
+    if (used) lines.push({ icon: "⏱", text: `TV today: ${fmtMin(used)}${settings.tvLimit && settings.tvLimit.minutes ? " of " + fmtMin(settings.tvLimit.minutes) : ""}.` });
+    lines.push({ icon: "📶", text: `${s.wifiUp} devices on the Wi-Fi.` });
+    const since = new Date(now - local.minutes * 60000);
+    const events = await HomeEvent.find({ owner, at: { $gte: since }, kind: { $nin: ["automation"] } }).sort({ at: -1 }).limit(8).lean();
+    for (const e of events) lines.push({ icon: "•", text: `${localParts(new Date(e.at).getTime(), tz).hhmm}  ${e.text}` });
+    if (!events.length) lines.push({ icon: "✓", text: "Nothing else happened at home today." });
+    const speed = await HomeSpeed.findOne({ owner }).sort({ at: -1 }).lean();
+    if (speed) lines.push({ icon: "🚀", text: `Internet: ${speed.down} Mbit/s down, ${speed.up} up, ${speed.ping} ms.` });
+    return { title: "Today at home", lines };
+}
+
+/**
+ * Camera on when everyone is out, off when someone is back. Only on a change: it never turns off a camera you armed
+ * yourself, and never arms one while somebody is home. Needs at least one person set up, and waits two minutes of
+ * "nobody home" so a phone's Wi-Fi blip does not arm it.
+ */
+async function autoCamera(owner, settings, devices, now) {
+    const hubs = devices.filter((d) => d.kind === "hub");
+    const people = home.presence(hubs, devices.filter((d) => d.kind === "phone"), now);
+    if (!people.length) return;
+    const anyoneHome = people.some((p) => p.home);
+    const hub = hubs.find((d) => (d.status || {}).agent === "stashr-hub" && Boolean(d.online) && home.isOnline(d, now));
+    if (!hub) return;
+    const st = settings.camera.autoState || {};
+    if (!anyoneHome) {
+        if (st.armedByAuto) return;
+        if (!st.awaySince) { await HomeSettings.updateOne({ owner }, { $set: { "camera.autoState": { awaySince: new Date(now) } } }); return; }
+        if (now - new Date(st.awaySince).getTime() < 2 * 60000) return;
+        if (((hub.status || {}).camera || {}).armed) return;      // already watching (you armed it)
+        if (!await claim(`autocam:${owner}:${Math.floor(now / 60000)}`)) return;
+        await queue(hub, "camera", { action: "arm" });
+        await HomeSettings.updateOne({ owner }, { $set: { "camera.autoState": { armedByAuto: true } } });
+        await record({ owner, device: hub._id, deviceName: hub.name, kind: "camera_auto", notify: true, text: "Everyone is out: the tablet camera is now watching the house." });
+    } else if (st.armedByAuto) {
+        if (!await claim(`autocam:${owner}:${Math.floor(now / 60000)}`)) return;
+        await queue(hub, "camera", { action: "disarm" });
+        await HomeSettings.updateOne({ owner }, { $set: { "camera.autoState": {} } });
+        await record({ owner, device: hub._id, deviceName: hub.name, kind: "camera_auto", notify: true, text: "Someone is home: the tablet camera is off." });
+    } else if (st.awaySince) {
+        await HomeSettings.updateOne({ owner }, { $set: { "camera.autoState": {} } });
+    }
+}
+
 /** The weekly report: TV time per day, new devices, speed, camera alerts. */
 async function weeklyText(owner, settings, now = Date.now()) {
     const tz = settings.timezone || "Asia/Kolkata";
@@ -212,6 +268,9 @@ async function tickOwner(owner, now = Date.now()) {
         }
     }
 
+    // 5b. The camera follows the house: on when the last person leaves, off when the first one is back.
+    if (settings.camera && settings.camera.auto) await autoCamera(owner, settings, devices, now);
+
     // 6. The morning brief and the weekly report.
     if (settings.brief && settings.brief.enabled && settings.brief.time === local.hhmm && settings.brief.lastSent !== local.date && await claim(`brief:${owner}:${local.date}`)) {
         await HomeSettings.updateOne({ owner }, { $set: { "brief.lastSent": local.date } });
@@ -261,4 +320,4 @@ const DEFAULT_SCENES = [
     { id: "goodnight", name: "Good night", steps: [{ kind: "tv", type: "media", args: { action: "play_pause" } }, { kind: "tv", type: "key", args: { key: "HOME" } }] }
 ];
 
-module.exports = { localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, sendTelegram, DEFAULT_SCENES, fmtMin };
+module.exports = { localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, autoCamera, sendTelegram, DEFAULT_SCENES, fmtMin };

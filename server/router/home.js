@@ -195,7 +195,7 @@ function hubsFor(owned, type) {
 }
 
 /** One sentence, from the page, the tablet's microphone or Telegram, to commands. Shared by the routes. */
-async function runSentence(owner, sentence) {
+async function runSentence(owner, sentence, opts = {}) {
     const owned = await HomeDevice.find({ owner }).lean();
     const settings = await automation.settingsOf(owner);
     const scenes = (settings.scenes && settings.scenes.length ? settings.scenes : automation.DEFAULT_SCENES);
@@ -203,6 +203,12 @@ async function runSentence(owner, sentence) {
     const out = assistant.parse(sentence, devices, scenes);
     if (out.status) return { reply: assistant.statusLine(devices), sent: [] };
     if (out.presence) return { reply: assistant.presenceLine(home.presence(owned.filter((d) => d.kind === "hub"), owned.filter((d) => d.kind === "phone"))), sent: [] };
+    if (out.today) {
+        if (opts.fromHub) return { reply: out.reply, open: "today", sent: [] };
+        const target = hubsFor(owned, "show_today")[0];
+        const entry = target && await automation.queue(target, "show_today", {});
+        return entry ? { reply: out.reply, sent: [{ device: target.name, id: entry.id, type: "show_today" }] } : { error: "The tablet is not added to Stashr Home yet.", status: 400 };
+    }
     if (out.scene) {
         const scene = scenes.find((s) => s.id === out.scene);
         const n = await automation.runSteps(owner, owned, scene.steps, `Scene “${scene.name}”`);

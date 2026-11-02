@@ -169,6 +169,10 @@ class HubService : LifecycleService() {
                         else startActivity(Intent(this@HubService, SlideshowActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         "Slideshow ${args.optString("action")}"
                     }
+                    "show_today" -> {
+                        startActivity(Intent(this@HubService, com.tanush.stashr.hub.ui.TodayActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                        "Showing today's updates"
+                    }
                     else -> throw IllegalArgumentException("This app version does not know “${c.optString("type")}”")
                 }
                 ack(id, true, msg)

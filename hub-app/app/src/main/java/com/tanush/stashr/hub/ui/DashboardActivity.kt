@@ -416,11 +416,20 @@ class DashboardActivity : Activity() {
     @SuppressLint("BatteryLife")
     private fun askBattery() {
         val pm = getSystemService(PowerManager::class.java) ?: return
-        if (pm.isIgnoringBatteryOptimizations(packageName)) return
+        if (pm.isIgnoringBatteryOptimizations(packageName)) { askOverlay(); return }
         val p = getSharedPreferences("dashboard", MODE_PRIVATE)
         if (p.getBoolean("askedBattery", false)) return
         p.edit().putBoolean("askedBattery", true).apply()
         try { startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))) } catch (e: Exception) { }
+    }
+
+    /** Lets the app open its screens (today's updates, the slideshow) when Stashr asks, while another app is showing. */
+    private fun askOverlay() {
+        if (Settings.canDrawOverlays(this)) return
+        val p = getSharedPreferences("dashboard", MODE_PRIVATE)
+        if (p.getBoolean("askedOverlay", false)) return
+        p.edit().putBoolean("askedOverlay", true).apply()
+        try { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) } catch (e: Exception) { }
     }
 
     /* ───────── lifecycle ───────── */

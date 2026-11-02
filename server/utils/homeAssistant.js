@@ -54,6 +54,9 @@ function parse(sentence, devices, scenes = []) {
     // Who is home
     if (has(text, ["kaun ghar", "kon ghar", "who is home", "whos home", "ghar pe kaun", "ghar par kaun", "ghar me kaun", "ghar mein kaun", "anyone home"])) return { reply: "presence", presence: true };
 
+    // "Stashr today updates": open the list of today's news on the tablet
+    if (has(text, ["updates", "update", "khabar", "khabrein", "news"]) && has(text, ["today", "aaj", "aaj ke", "aaj ki", "aaj ka", "stashr", "ghar"]) && !has(text, ["sync", "download", "movies", "movie", "tv"])) return { reply: "Showing today’s updates on the tablet.", today: true };
+
     // A saved scene by its name: "movie night", "good night"
     const scene = (scenes || []).slice().sort((a, b) => String(b.name).length - String(a.name).length).find((sc) => sc && sc.name && text.includes(norm(sc.name)));
     if (scene) return { reply: `Running “${scene.name}”.`, scene: scene.id };

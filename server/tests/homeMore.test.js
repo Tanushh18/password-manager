@@ -293,3 +293,64 @@ describe("camera", () => {
         expect(dash.body.scenes.length > 0).toBe(true);
     });
 });
+
+describe("camera follows the house, and today's updates", () => {
+    test("auto camera arms two minutes after everyone left and disarms when someone is back", async () => {
+        const auth = await signUp();
+        const t = await pair(auth, "hub");
+        const hubId = (await devices(auth)).devices.find((d) => d.kind === "hub").id;
+        const owner = (await HomeDevice.findById(hubId)).owner;
+        await request(app).put("/home/settings").set(auth).send({ camera: { auto: true } });
+        const now = Date.now();
+        const setMom = (up) => HomeDevice.updateOne({ _id: hubId }, { $set: { lanBook: { "n-mom": { ip: "192.168.1.9", up, lastSeen: up ? now : now - 3600_000 } }, lanLabels: { "n-mom": { person: "Mom", label: "Mom's phone" } } } });
+        const cmds = async () => (await HomeDevice.findById(hubId).lean()).commands.filter((c) => c.type === "camera").map((c) => c.args.action);
+        await report(t.token, { status: { agent: "stashr-hub", camera: { armed: false } } });
+        await setMom(true);
+        await automation.tickOwner(owner, now);
+        expect(await cmds()).toEqual([]);                       // someone home: nothing
+        await setMom(false);
+        await automation.tickOwner(owner, now + 1000);          // starts the away timer
+        expect(await cmds()).toEqual([]);
+        await report(t.token, { status: { agent: "stashr-hub", camera: { armed: false } } });
+        await automation.tickOwner(owner, now + 125_000);
+        expect(await cmds()).toEqual(["arm"]);
+        await automation.tickOwner(owner, now + 126_000);
+        expect(await cmds()).toEqual(["arm"]);                  // not again
+        await setMom(true);
+        await HomeDevice.updateOne({ _id: hubId }, { $set: { "lanBook.n-mom.lastSeen": now + 130_000 } });
+        await automation.tickOwner(owner, now + 130_000);
+        expect(await cmds()).toEqual(["arm", "disarm"]);
+    });
+
+    test("auto camera does not turn off a camera you armed yourself", async () => {
+        const auth = await signUp();
+        const t = await pair(auth, "hub");
+        const hubId = (await devices(auth)).devices.find((d) => d.kind === "hub").id;
+        const owner = (await HomeDevice.findById(hubId)).owner;
+        await request(app).put("/home/settings").set(auth).send({ camera: { auto: true } });
+        const now = Date.now();
+        await report(t.token, { status: { agent: "stashr-hub", camera: { armed: true } } });
+        await HomeDevice.updateOne({ _id: hubId }, { $set: { lanBook: { "n-mom": { ip: "192.168.1.9", up: true, lastSeen: now } }, lanLabels: { "n-mom": { person: "Mom" } } } });
+        await automation.tickOwner(owner, now);
+        await automation.tickOwner(owner, now + 60_000);
+        const c = (await HomeDevice.findById(hubId).lean()).commands.filter((x) => x.type === "camera");
+        expect(c).toEqual([]);
+    });
+
+    test("saying 'stashr today updates' opens the list on the tablet", async () => {
+        const auth = await signUp();
+        const t = await pair(auth, "hub");
+        await report(t.token, { status: { agent: "stashr-hub" } });
+        for (const say of ["stashr today updates", "aaj ke updates", "Stashr aaj ka update"]) {
+            const r = await request(app).post("/home/assistant").set(auth).send({ text: say });
+            expect(r.status).toBe(200);
+            expect(r.body.sent[0].type).toBe("show_today");
+        }
+        const spoken = await request(app).post("/home/agent/assistant").set(bearer(t.token)).send({ text: "today updates" });
+        expect(spoken.body.open).toBe("today");
+        const list = await request(app).get("/home/agent/today").set(bearer(t.token));
+        expect(list.status).toBe(200);
+        expect(list.body.title).toBe("Today at home");
+        expect(Array.isArray(list.body.lines)).toBe(true);
+    });
+});

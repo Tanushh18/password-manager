@@ -83,7 +83,7 @@ const publicSettings = (s) => ({
     timezone: s.timezone, alerts: s.alerts, weather: { city: (s.weather && s.weather.city) || "" }, brief: { enabled: s.brief.enabled, time: s.brief.time },
     weekly: { enabled: s.weekly.enabled }, tvLimit: { minutes: s.tvLimit.minutes, action: s.tvLimit.action, lateNight: s.tvLimit.lateNight !== false },
     schedules: s.schedules || [], scenes: (s.scenes && s.scenes.length ? s.scenes : automation.DEFAULT_SCENES),
-    slideshowFolder: s.slideshowFolder || "", camera: s.camera || { sensitivity: 5, video: true }
+    slideshowFolder: s.slideshowFolder || "", camera: { sensitivity: 5, video: true, auto: false, ...(s.camera || {}), autoState: undefined }
 });
 
 router.get("/home/settings", authenticate, async (req, res) => {
@@ -144,6 +144,7 @@ router.put("/home/settings", authenticate, writeLimiter, async (req, res) => {
             if (b.camera.sensitivity !== undefined && (!Number.isInteger(sens) || sens < 1 || sens > 10)) return res.status(400).json({ error: "Sensitivity is 1 to 10." });
             if (b.camera.sensitivity !== undefined) set["camera.sensitivity"] = sens;
             if (typeof b.camera.video === "boolean") set["camera.video"] = b.camera.video;
+            if (typeof b.camera.auto === "boolean") { set["camera.auto"] = b.camera.auto; set["camera.autoState"] = {}; }
         }
         await HomeSettings.updateOne({ owner: req.rootUser._id }, { $set: set });
         return res.json(publicSettings(await automation.settingsOf(req.rootUser._id)));
@@ -332,6 +333,14 @@ router.get("/home/agent/dashboard", agentLimiter, agentAuth, async (req, res) =>
     } catch (e) { return fail(res, e, "Could not load the dashboard."); }
 });
 
+router.get("/home/agent/today", agentLimiter, agentAuth, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const s = await automation.settingsOf(req.device.owner);
+        return res.json(await automation.todayLines(req.device.owner, s));
+    } catch (e) { return fail(res, e, "Could not load today's updates."); }
+});
+
 router.post("/home/agent/scene/:id", agentLimiter, agentAuth, async (req, res) => {
     try {
         const s = await automation.settingsOf(req.device.owner);
@@ -345,7 +354,7 @@ router.post("/home/agent/scene/:id", agentLimiter, agentAuth, async (req, res) =
 router.post("/home/agent/assistant", agentLimiter, agentAuth, async (req, res) => {
     try {
         if (req.device.kind !== "hub") return res.status(403).json({ error: "Only the tablet can do that." });
-        const out = await homeRouter.runSentence(req.device.owner, String((req.body && req.body.text) || "").slice(0, 200));
+        const out = await homeRouter.runSentence(req.device.owner, String((req.body && req.body.text) || "").slice(0, 200), { fromHub: true });
         if (out.error) return res.status(out.status || 400).json({ error: out.error });
         return res.json(out);
     } catch (e) { return fail(res, e, "Could not do that."); }

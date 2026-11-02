@@ -13,6 +13,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
@@ -48,6 +49,7 @@
         <activity android:name=".ui.SlideshowActivity" android:exported="false" android:theme="@style/Theme.StashrHub.Fullscreen"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
         <activity android:name=".ui.PhoneActivity" android:exported="false" />
+        <activity android:name=".ui.TodayActivity" android:exported="false" android:launchMode="singleTop" />
 
         <service android:name=".core.HubService" android:exported="false"
             android:foregroundServiceType="dataSync|camera|microphone" />
