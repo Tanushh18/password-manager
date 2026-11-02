@@ -71,6 +71,9 @@ class Api(ctx: Context) {
     /** POST /home/agent/pair: the 8-letter code in, the device token out. */
     fun pair(code: String, name: String): JSONObject = post("/home/agent/pair", JSONObject().put("code", code).put("name", name), auth = false)
 
+    /** POST /home/agent/link: the tablet's fixed code from the Stashr website and a name in; { token, device } out. */
+    fun linkTablet(code: String, name: String): JSONObject = post("/home/agent/link", JSONObject().put("code", code).put("name", name).put("kind", "hub"), auth = false)
+
     /** POST /home/agent/report: status in, { commands: [{ id, type, args }], childCommands } out. */
     fun report(body: JSONObject): JSONObject = post("/home/agent/report", body, timeoutMs = 45000)
 

@@ -16,7 +16,8 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 
 ## 1. Install and pair
 - [ ] APK installs; app opens in the Stashr look (light and dark).
-- [ ] Smart home → "Add a tablet or a family phone" makes a code; typing it in the app pairs it (tablet).
+- [ ] Smart home → Devices → "Link the home tablet" shows a fixed code; typing it + a tablet name in Stashr Hub links the tablet (the code stays the same on reload; "New code" changes it, linked tablets stay linked).
+- [ ] The tablet code does not link a family phone in Stashr Location, and the phone code does not link a tablet.
 - [ ] The tablet shows on the Smart home page as online within a minute; the same for a family phone (second code).
 - [ ] A used or expired code is refused.
 

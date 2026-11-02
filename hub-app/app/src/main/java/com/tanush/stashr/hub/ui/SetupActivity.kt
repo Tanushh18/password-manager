@@ -7,6 +7,7 @@ import android.text.InputType
 import android.view.View
 import android.widget.LinearLayout
 import com.tanush.stashr.hub.core.Api
+import com.tanush.stashr.hub.core.ApiError
 import com.tanush.stashr.hub.core.Prefs
 import com.tanush.stashr.hub.core.Ui
 import kotlin.concurrent.thread
@@ -23,12 +24,14 @@ class SetupActivity : Activity() {
         val (root, col) = ui.page()
         col.addView(ui.eyebrow("Stashr Hub"))
         col.addView(ui.h1("Join your Stashr home"))
-        col.addView(ui.dim("On stashr, open Smart home → “Add a tablet or a family phone”, choose what this device is, and tap “Make a code”. Then type the code here."))
+        col.addView(ui.dim("On Stashr open Smart home → Devices → “Link the home tablet”. Type the tablet code shown there and give this tablet a name. Family phones use the separate Stashr Location app instead."))
 
-        val card = ui.card("Pairing code", "8 letters, works once for 15 minutes")
+        val card = ui.card("Tablet code", "8 letters, the same until you make a new one on the website")
         val code = ui.input("ABCD-2345", type = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
         code.textSize = 22f; code.letterSpacing = 0.12f
         card.addView(code)
+        val tabletName = ui.input("Tablet name, e.g. Hall tablet", "Home tablet", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS)
+        card.addView(tabletName)
         val error = ui.text("", 13f, ui.c.danger).apply { visibility = View.GONE }
         card.addView(error)
 
@@ -48,7 +51,9 @@ class SetupActivity : Activity() {
             prefs.server2 = server2.text.toString().ifBlank { prefs.server2 }
             thread {
                 try {
-                    val r = Api(this).pair(typed, android.os.Build.MODEL)
+                    val nm = tabletName.text.toString().trim().ifEmpty { "Home tablet" }
+                    // The fixed tablet code first; a one-time code from the old "Add a tablet or phone" form still works.
+                    val r = try { Api(this).linkTablet(typed, nm) } catch (e: ApiError) { if (e.status == 400) Api(this).pair(typed, nm) else throw e }
                     val device = r.getJSONObject("device")
                     prefs.token = r.getString("token")
                     prefs.role = device.optString("kind", "hub")
@@ -62,9 +67,9 @@ class SetupActivity : Activity() {
         card.addView(go, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         col.addView(card)
 
-        val what = ui.card("One app, two jobs")
+        val what = ui.card("What this app is for")
         what.addView(ui.body("🏠  On the always-on home tablet: it watches the Wi-Fi and finds device names, tests the internet, runs the camera, listens for “Hey Stashr”, shows a home dashboard and a photo slideshow."))
-        what.addView(ui.body("📱  On a family phone: it sends battery, storage and memory to Stashr, and tells Stashr when the phone is home on the Wi-Fi."))
+        what.addView(ui.body("📱  Family phones: use the Stashr Location app (location only). Hub on a phone only reports battery and storage, with an old one-time code."))
         col.addView(what)
         col.addView(ui.quiet("Server address…") { advanced.visibility = if (advanced.visibility == View.GONE) View.VISIBLE else View.GONE })
         col.addView(advanced)

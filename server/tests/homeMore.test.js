@@ -496,3 +496,27 @@ describe("Stashr Location: the location-only app", () => {
     });
 });
 
+describe("linking the tablet with a fixed code", () => {
+    test("the tablet code is separate from the family-phone code", async () => {
+        const auth = await signUp();
+        const hubCode = (await request(app).get("/home/hub-code").set(auth)).body.code;
+        const phoneCode = (await request(app).get("/home/location-code").set(auth)).body.code;
+        expect(hubCode).toMatch(/^[A-Z0-9]{8}$/);
+        expect(hubCode === phoneCode).toBe(false);
+        expect((await request(app).get("/home/hub-code").set(auth)).body.code).toBe(hubCode);
+        // the family-phone code cannot link a tablet, and the tablet code cannot link a family phone
+        expect((await request(app).post("/home/agent/link").send({ code: phoneCode, name: "Hall tablet", kind: "hub" })).status).toBe(400);
+        expect((await request(app).post("/home/agent/link").send({ code: hubCode, name: "Papa" })).status).toBe(400);
+        const ok = await request(app).post("/home/agent/link").send({ code: hubCode, name: "Hall tablet", kind: "hub" });
+        expect(ok.status).toBe(201);
+        expect(ok.body.device.kind).toBe("hub");
+        const list = (await devices(auth)).devices;
+        expect(list.some((d) => d.kind === "hub" && d.name === "Hall tablet")).toBe(true);
+        const rep = await report(ok.body.token, { status: { agent: "stashr-hub" } });
+        expect(rep.status).toBe(200);
+        expect((await request(app).post("/home/agent/link").send({ code: hubCode, name: "hall TABLET", kind: "hub" })).status).toBe(409);
+        const fresh = (await request(app).post("/home/hub-code/rotate").set(auth)).body.code;
+        expect(fresh === hubCode).toBe(false);
+    });
+});
+

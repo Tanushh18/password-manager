@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, getLocationCode, rotateLocationCode, getHomeWhere, saveHomeScenes, runHomeScene,
+  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, getLocationCode, rotateLocationCode, getHubCode, rotateHubCode, getHomeWhere, saveHomeScenes, runHomeScene,
   getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, getHomeLiveFrame, testHomeBrief, setHomePhonePerson, removeHomeDevice
 } from "../../api/client";
 import { Section, useConfirm } from "../Render/RenderUi";
@@ -25,32 +25,39 @@ export function useHomeSettings() {
 /* ───────── add a tablet or a family phone ───────── */
 
 export function PairCard() {
-  const [kind, setKind] = useState("phone");
-  const [name, setName] = useState("");
-  const [code, setCode] = useState(null);
+  const [code, setCode] = useState("");
+  const [old, setOld] = useState({ kind: "hub", name: "", code: null });
+  const { ask, dialog } = useConfirm();
+  useEffect(() => { getHubCode().then((r) => setCode(r.code)).catch(() => {}); }, []);
+  const copy = async () => { try { await navigator.clipboard.writeText(code); toast.success("Code copied."); } catch { toast.error("Could not copy. Select the code and copy it."); } };
+  const renew = async () => {
+    if (!(await ask({ title: "Make a new tablet code?", message: "A tablet that is already linked stays linked. Only a new tablet needs the new code.", confirmLabel: "New code" }))) return;
+    try { setCode((await rotateHubCode()).code); toast.success("New code ready."); } catch (e) { toast.error(errorMessage(e, "Could not make a new code.")); }
+  };
   const make = async (e) => {
     e.preventDefault();
-    try { setCode(await makeHomePairCode(kind, name.trim())); }
+    try { setOld({ ...old, code: await makeHomePairCode(old.kind, old.name.trim()) }); }
     catch (err) { toast.error(errorMessage(err, "Could not make a code.")); }
   };
   return (
-    <Section title="Pair a tablet or family phone" subtitle="Install Stashr Hub from /apps, then type the code. No password is needed on that device.">
-      <form className="sh-row" onSubmit={make}>
-        <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="What are you adding">
-          <option value="phone">A family phone (battery, storage, who is home)</option>
-          <option value="hub">The home tablet (Wi-Fi, camera, voice, dashboard)</option>
-        </select>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === "phone" ? "Whose phone? e.g. Mom" : "Name, e.g. Hall tablet"} maxLength={60} aria-label="Name" />
-        <button className="rd-btn rd-btn--primary" type="submit">Make a code</button>
-      </form>
-      {code ? (
-        <div className="sh-token" role="status">
-          <span>Type this in Stashr Hub on the {code.kind === "phone" ? "phone" : "tablet"}:</span>
-          <code className="sh-code">{code.code}</code>
-          <span className="sh-dim">Works once, for 15 minutes.</span>
-        </div>
-      ) : null}
-      <p className="sh-dim">Download Stashr Hub: <a href="/apps">stashr /apps</a>. One app does both jobs; you pick tablet or phone when it opens.</p>
+    <Section title="Link the home tablet" subtitle="Install Stashr Hub from the Apps page on the always-on tablet, then type this code and a name for the tablet. No password is needed on it.">
+      <div className="sh-editor">
+        <b>Tablet code for Stashr Hub</b>
+        <div className="sh-row"><code className="sh-code" aria-label="Tablet code">{code || "…"}</code><button className="rd-btn rd-btn--quiet" onClick={copy} disabled={!code}>Copy</button><button className="rd-btn rd-btn--quiet" onClick={renew}>New code</button></div>
+        <p className="sh-dim">The same code every time, until you make a new one. A tablet can see the home dashboard and your slideshow photos, so keep this code to yourself. It is not the code for family phones (that is under Family locations).</p>
+      </div>
+      <details className="sh-table"><summary>One-time code instead (15 minutes, works once)</summary>
+        <form className="sh-row" onSubmit={make}>
+          <select value={old.kind} onChange={(e) => setOld({ ...old, kind: e.target.value })} aria-label="What are you adding">
+            <option value="hub">The home tablet</option>
+            <option value="phone">A family phone running Stashr Hub (battery and storage only)</option>
+          </select>
+          <input value={old.name} onChange={(e) => setOld({ ...old, name: e.target.value })} placeholder="Name" maxLength={60} aria-label="Name" />
+          <button className="rd-btn rd-btn--primary" type="submit">Make a code</button>
+        </form>
+        {old.code ? <div className="sh-token" role="status"><span>Type this in Stashr Hub:</span><code className="sh-code">{old.code.code}</code></div> : null}
+      </details>
+      {dialog}
     </Section>
   );
 }

@@ -4,7 +4,7 @@
  * Stashr password on it, and the phone never sees anything of the vault.
  *
  *   Signed-in user                                  Phone (token in "Authorization: Bearer sh_...")
- *   GET  /home/location-code   the code              POST /home/agent/link       code + name in, token out
+ *   GET  /home/location-code   the code (also /home/hub-code for the tablet)              POST /home/agent/link       code + name in, token out
  *   POST /home/location-code/rotate  a new one       POST /home/agent/location   a fix in; where it is, the next check, notices out
  *   GET  /home/where           everyone's whereabouts POST /home/agent/unlink      the phone disconnects itself
  */
@@ -29,12 +29,13 @@ const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const newCode = () => Array.from(crypto.randomBytes(8), (b) => ALPHABET[b % ALPHABET.length]).join("");
 const normCode = (c) => String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
-async function codeOf(owner) {
+// Two fixed codes: one links family phones (Stashr Location), the other links the home tablet (Stashr Hub). A tablet
+// can see the dashboard and the slideshow photos, so its code is never the one that is handed to the family.
+async function codeOf(owner, field = "locationCode") {
     const s = await automation.settingsOf(owner);
-    if (s.locationCode) return s.locationCode;
-    const code = newCode();
-    await HomeSettings.updateOne({ owner, $or: [{ locationCode: "" }, { locationCode: { $exists: false } }] }, { $set: { locationCode: code } });
-    return (await automation.settingsOf(owner)).locationCode;
+    if (s[field]) return s[field];
+    await HomeSettings.updateOne({ owner, $or: [{ [field]: "" }, { [field]: { $exists: false } }] }, { $set: { [field]: newCode() } });
+    return (await automation.settingsOf(owner))[field];
 }
 
 router.get("/home/location-code", authenticate, async (req, res) => {
@@ -51,23 +52,40 @@ router.post("/home/location-code/rotate", authenticate, writeLimiter, async (req
     } catch (e) { return fail(res, e, "Could not make a new code."); }
 });
 
+router.get("/home/hub-code", authenticate, async (req, res) => {
+    try { res.set("Cache-Control", "no-store"); return res.json({ code: await codeOf(req.rootUser._id, "hubCode") }); }
+    catch (e) { return fail(res, e, "Could not load the code."); }
+});
+
+router.post("/home/hub-code/rotate", authenticate, writeLimiter, async (req, res) => {
+    try {
+        await codeOf(req.rootUser._id, "hubCode");
+        const code = newCode();
+        await HomeSettings.updateOne({ owner: req.rootUser._id }, { $set: { hubCode: code } });
+        return res.json({ code });
+    } catch (e) { return fail(res, e, "Could not make a new code."); }
+});
+
 // The phone types the fixed code and its owner's name: it gets its own token, which can only send its location.
 router.post("/home/agent/link", linkLimiter, async (req, res) => {
     try {
         const b = req.body || {};
         const code = normCode(b.code);
         if (code.length !== 8) return res.status(400).json({ error: "Type the 8-letter code shown on the Stashr Smart home page." });
-        const s = await HomeSettings.findOne({ locationCode: code }).lean();
+        const tablet = b.kind === "hub";
+        const s = await HomeSettings.findOne(tablet ? { hubCode: code } : { locationCode: code }).lean();
         if (!s) return res.status(400).json({ error: "That code is not right. Check it on the Stashr Smart home page." });
         const name = String(b.name || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 60);
-        if (name.length < 2) return res.status(400).json({ error: "Type your name (at least 2 letters)." });
+        if (name.length < 2) return res.status(400).json({ error: tablet ? "Give the tablet a name (at least 2 letters)." : "Type your name (at least 2 letters)." });
         const owner = s.owner;
         if (await HomeDevice.countDocuments({ owner, parent: { $exists: false } }) >= 20) return res.status(400).json({ error: "This Stashr home already has the most devices it can hold." });
-        if (await HomeDevice.exists({ owner, kind: "phone", name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") })) return res.status(409).json({ error: "Someone with that name is already linked. Add your surname or pick another name." });
+        if (await HomeDevice.exists({ owner, kind: tablet ? "hub" : "phone", name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") })) return res.status(409).json({ error: tablet ? "A tablet with that name is already linked. Pick another name." : "Someone with that name is already linked. Add your surname or pick another name." });
         const token = home.newToken();
-        const device = await HomeDevice.create({ owner, name, kind: "phone", person: name, tokenHash: home.hashToken(token), tokenHint: token.slice(-4), status: { agent: "stashr-where" } });
-        await record({ owner, device: device._id, deviceName: name, kind: "paired", text: `${name} linked their phone (Stashr Location)` });
-        return res.status(201).json({ token, deviceId: String(device._id), name });
+        const device = await HomeDevice.create(tablet
+            ? { owner, name, kind: "hub", tokenHash: home.hashToken(token), tokenHint: token.slice(-4) }
+            : { owner, name, kind: "phone", person: name, tokenHash: home.hashToken(token), tokenHint: token.slice(-4), status: { agent: "stashr-where" } });
+        await record({ owner, device: device._id, deviceName: name, kind: "paired", text: tablet ? `${name} joined Stashr Home (tablet)` : `${name} linked their phone (Stashr Location)` });
+        return res.status(201).json({ token, deviceId: String(device._id), name, device: { id: String(device._id), name, kind: tablet ? "hub" : "phone" } });
     } catch (e) { return fail(res, e, "Could not link."); }
 });
 

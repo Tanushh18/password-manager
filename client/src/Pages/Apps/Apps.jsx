@@ -69,7 +69,7 @@ export default function Apps() {
         <ul>{HUB_PHONE.map((f) => <li key={f}>{f}</li>)}</ul>
         <ol>
           <li>Install the APK on the tablet or phone. If Android asks, allow installs from your browser.</li>
-          <li>On the website open <strong>Smart home → Devices → Pair a tablet or family phone</strong>, pick which one it is and tap <strong>Make a code</strong>.</li>
+          <li>On the website open <strong>Smart home → Devices → Link the home tablet</strong>, pick which one it is and tap <strong>Make a code</strong>.</li>
           <li>Type the 8-letter code in Stashr Hub. The tablet asks for camera, microphone and notification permission once.</li>
         </ol>
         <p className="apps__note">Stashr Hub updates itself from new GitHub releases. Android asks for one tap to install each update.</p>

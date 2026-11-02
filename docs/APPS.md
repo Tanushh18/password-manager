@@ -9,6 +9,12 @@ All are listed with download buttons on the website's **/apps** page.
 | **Stashr Location** (`where-app/`, `com.tanush.stashr.where`) | Each family member's phone | Shares only location, battery and "on Wi-Fi yes/no" | Nothing of the vault. Joins with the fixed code + the person's name |
 | **Browser extension** (`extension/`) | You | Autofill | Your vault |
 
+## Stashr Hub (the home tablet)
+- **Link:** website → Smart home → Devices → *Link the home tablet* shows one fixed 8-letter **tablet code** (copy / "New code"). In
+  Stashr Hub type the code and a name for the tablet. A one-time 15-minute code still works as an alternative.
+- The tablet code is separate from the family-phone code: a tablet can see the home dashboard and your slideshow photos, so only you
+  should have it.
+
 ## Stashr Location (family phones)
 - **Link:** website → Smart home → Devices → *Family locations* shows one fixed 8-letter code (copy / "New code"). In the app type the code,
   the person's name and press Connect. The phone then appears in that card. It stays linked until you press Disconnect there, or the

@@ -35,6 +35,8 @@ const homeSettingsSchema = new mongoose.Schema({
     homeSpot: { lat: Number, lon: Number, radius: { type: Number, default: 200 } },
     eta: { enabled: { type: Boolean, default: true }, maxKm: { type: Number, default: 40 }, notifyMinutes: { type: Number, default: 15 }, toTablet: { type: Boolean, default: true }, toTv: { type: Boolean, default: true }, toPhones: { type: Boolean, default: true } },
     locationCode: { type: String, default: "", index: true },
+    // The fixed code that links the home tablet (Stashr Hub). Separate from locationCode: a tablet can see the dashboard and photos.
+    hubCode: { type: String, default: "", index: true },
     etaState: { type: mongoose.Schema.Types.Mixed, default: {} },
     emptyHomeNotifiedAt: { type: Date },
     presenceState: { type: mongoose.Schema.Types.Mixed, default: {} }

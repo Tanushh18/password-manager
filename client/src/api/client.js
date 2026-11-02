@@ -445,6 +445,8 @@ export const saveHomeSettings = (body) => instance.put("/home/settings", body).t
 export const getHomeDashboard = () => instance.get("/home/dashboard").then((r) => r.data);
 export const getLocationCode = () => instance.get("/home/location-code").then((r) => r.data);
 export const rotateLocationCode = () => instance.post("/home/location-code/rotate").then((r) => r.data);
+export const getHubCode = () => instance.get("/home/hub-code").then((r) => r.data);
+export const rotateHubCode = () => instance.post("/home/hub-code/rotate").then((r) => r.data);
 export const getHomeWhere = () => instance.get("/home/where").then((r) => r.data);
 export const saveHomePlaces = (places) => instance.put("/home/places", { places }).then((r) => r.data);
 export const testHomePlace = (id, text) => instance.post(`/home/places/${id}/test`, { text }).then((r) => r.data);
