@@ -23,6 +23,16 @@ const HUB_PHONE = [
   "No location and no passwords: for the location use the separate Stashr Location app below",
 ];
 
+// Stashr TV: the Android TV launcher and movie sync (built by tv-apk.yml, served like Stashr Hub).
+const TV_APK = `${publicApiBase}/api/mobile-updates/tv/download`;
+const TV = [
+  "A simple home screen for the TV: all your apps in one row (Netflix, Prime, JioHotstar, YouTube…) and your movies in another",
+  "Movie sync: movies you put in your Google Drive folder download to the TV’s USB drive by themselves, with resume, and play in a built-in player that remembers where you stopped",
+  "Control from anywhere: volume, play/pause, open an app or a YouTube link from the Stashr website, Telegram or by voice through the tablet",
+  "Shows short messages on top of whatever is playing, such as “Parveen is arriving in 15 mins” and “Open the door”",
+  "Tells Stashr when the TV is on, what is playing, and how long the TV has been watched today",
+];
+
 // Stashr Location: location only, for family phones (built by where-apk.yml, served like Stashr Hub).
 const WHERE_APK = `${publicApiBase}/api/mobile-updates/where/download`;
 const WHERE = [
@@ -73,6 +83,17 @@ export default function Apps() {
           <li>Type the 8-letter code in Stashr Hub. The tablet asks for camera, microphone and notification permission once.</li>
         </ol>
         <p className="apps__note">Stashr Hub updates itself from new GitHub releases. Android asks for one tap to install each update.</p>
+        <h2>Stashr TV for Android TV</h2>
+        <p>The launcher for the living-room TV. It replaces the old TV app: home screen, movie sync from Google Drive to a USB drive, a player, remote control from Stashr and on-screen messages.</p>
+        <a className="btn btn--primary apps__download" href={TV_APK} download="stashr-tv.apk">Download Stashr TV</a>
+        <ul>{TV.map((f) => <li key={f}>{f}</li>)}</ul>
+        <ol>
+          <li>Install the APK on the TV (a USB drive or “Send files to TV” works). Allow installs from unknown sources when asked.</li>
+          <li>On the website open <strong>Smart home → Devices → Link the home tablet or TV</strong> and copy the code.</li>
+          <li>Open Stashr TV, type the code and a name for the TV, and choose it as the home app when Android asks.</li>
+          <li>In Stashr TV’s settings turn on the “Stashr TV remote” accessibility service and “Display over other apps”, so Home/Back commands and on-screen messages work.</li>
+        </ol>
+        <p className="apps__note">Plug in a USB drive for movies. Stashr TV updates itself from GitHub releases; Android asks for one tap.</p>
         <h2>Stashr Location for Android</h2>
         <p>A tiny app for the phones of people at home. It only shares where the phone is, so the family never gets near your passwords. Install it on each family phone.</p>
         <a className="btn btn--primary apps__download" href={WHERE_APK} download="stashr-location.apk">Download Stashr Location</a>

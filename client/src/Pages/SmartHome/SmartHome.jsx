@@ -419,7 +419,7 @@ export default function SmartHome() {
       {tab === "devices" ? (<>
         <PeopleCard people={people} />
         {devices === null ? <Skeleton lines={5} /> : list.length === 0 ? (
-          <Empty icon="📺" title="Nothing connected yet">Install Stashr Hub from /apps on the always-on tablet and type a code from “Link the home tablet” below. Your TV joins by itself once its Stashr app is open.</Empty>
+          <Empty icon="📺" title="Nothing connected yet">Install Stashr Hub from /apps on the always-on tablet and type a code from “Link the home tablet or TV” below. Your TV joins by itself once its Stashr app is open.</Empty>
         ) : list.filter((d) => d.kind !== "phone").map((d) => d.kind === "tv"
           ? <TvCard key={d.id} device={d} send={send} onChanged={load} />
           : <HubCard key={d.id} device={d} send={send} onChanged={load} />)}

@@ -40,11 +40,11 @@ export function PairCard() {
     catch (err) { toast.error(errorMessage(err, "Could not make a code.")); }
   };
   return (
-    <Section title="Link the home tablet" subtitle="Install Stashr Hub from the Apps page on the always-on tablet, then type this code and a name for the tablet. No password is needed on it.">
+    <Section title="Link the home tablet or TV" subtitle="Install Stashr Hub on the always-on tablet, or Stashr TV on the TV (Apps page), then type this code and a name. No password is needed on them.">
       <div className="sh-editor">
-        <b>Tablet code for Stashr Hub</b>
-        <div className="sh-row"><code className="sh-code" aria-label="Tablet code">{code || "…"}</code><button className="rd-btn rd-btn--quiet" onClick={copy} disabled={!code}>Copy</button><button className="rd-btn rd-btn--quiet" onClick={renew}>New code</button></div>
-        <p className="sh-dim">The same code every time, until you make a new one. A tablet can see the home dashboard and your slideshow photos, so keep this code to yourself. It is not the code for family phones (that is under Family locations).</p>
+        <b>Home-device code (Stashr Hub and Stashr TV)</b>
+        <div className="sh-row"><code className="sh-code" aria-label="Home-device code">{code || "…"}</code><button className="rd-btn rd-btn--quiet" onClick={copy} disabled={!code}>Copy</button><button className="rd-btn rd-btn--quiet" onClick={renew}>New code</button></div>
+        <p className="sh-dim">The same code every time, until you make a new one. A tablet or TV can see the home dashboard and your slideshow photos, so keep this code to yourself. It is not the code for family phones (that is under Family locations).</p>
       </div>
       <details className="sh-table"><summary>One-time code instead (15 minutes, works once)</summary>
         <form className="sh-row" onSubmit={make}>

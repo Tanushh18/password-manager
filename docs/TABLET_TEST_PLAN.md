@@ -81,6 +81,18 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] Battery use of Stashr Location after a day (Settings → Battery).
 - [ ] OTA: new `where-app/` change → release `stashr-where-v…` is created, not "latest"; `/api/mobile-updates/where/latest` finds it; the app offers the update.
 
+## 7d. Stashr TV (launcher and movies)
+- [ ] Install the APK on the TV; the home-device code + a name links it (appears as a TV on the page, online within ~30 s). Choose Stashr TV as the home app.
+- [ ] Home screen: apps row (favourites first), launching Netflix/YouTube works with the remote; Back/Home behave.
+- [ ] Settings: turn on the "Stashr TV remote" accessibility service and "Display over other apps".
+- [ ] Page → TV card: volume up/down/mute, play/pause, open an app, "tv par … songs" / YouTube link, HOME/BACK all reach the TV.
+- [ ] The page shows the app that is on the TV (needs the accessibility service) and TV time counts up.
+- [ ] Movies: put a movie in the Drive folder (Movies from Google Drive set up) → it downloads to the USB drive (progress shown), resumes after unplugging Wi-Fi, size matches; it appears in the Movies row and plays; position is remembered.
+- [ ] "move" mode: the Drive file is removed once the TV has it. "mirror" mode: a file removed from Drive disappears from the TV; files the app did not download are never deleted.
+- [ ] `notify`: "Parveen is arriving in 15 mins" appears over a playing video for ~12 s; without the overlay permission only a Toast shows.
+- [ ] TV standby: the page shows it as off/standby quickly.
+- [ ] OTA: a change under `tv-app/` creates `stashr-tv-v…` (not "latest"); the TV offers the update.
+
 ## 8. Updates (OTA)
 - [ ] Push a change under `hub-app/` to `main`; the GitHub Release is created and is **not** "latest".
 - [ ] The app (or "check_update") finds it, verifies it and Android asks for one tap to install.

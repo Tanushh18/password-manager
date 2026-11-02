@@ -6,6 +6,7 @@ All are listed with download buttons on the website's **/apps** page.
 |---|---|---|---|
 | **Stashr for Android** (`mobile/`) | You | Vault, 2FA, photo backup, servers | Everything of yours |
 | **Stashr Hub** (`hub-app/`, `com.tanush.stashr.hub`) | The always-on home tablet (and optionally a phone to report its health) | Wi-Fi scan with names, security camera, "Hey Stashr" voice, dashboard, slideshow, speed tests, WhatsApp sender, announcements | Home data only. Joins with a pairing code, never your password |
+| **Stashr TV** (`tv-app/`, `com.tanush.stashr.tv`) | The living-room Android TV | Launcher (apps + movies), Drive → USB movie sync, built-in player, remote control, on-screen messages | Home data only. Joins with the home-device code |
 | **Stashr Location** (`where-app/`, `com.tanush.stashr.where`) | Each family member's phone | Shares only location, battery and "on Wi-Fi yes/no" | Nothing of the vault. Joins with the fixed code + the person's name |
 | **Browser extension** (`extension/`) | You | Autofill | Your vault |
 
@@ -14,6 +15,17 @@ All are listed with download buttons on the website's **/apps** page.
   Stashr Hub type the code and a name for the tablet. A one-time 15-minute code still works as an alternative.
 - The tablet code is separate from the family-phone code: a tablet can see the home dashboard and your slideshow photos, so only you
   should have it.
+
+## Stashr TV (the TV)
+- Rebuilt in this repository after the old TV app (a separate local repository) was lost. It is both the **launcher** (apps row, movies row,
+  settings) and the **movie pipeline client**: Google Drive folder → Stashr server (`/home/movies/manifest`, `/home/movies/file` with
+  Range) → the TV's USB drive, resumable, size-checked; "mirror" mode removes files that left Drive, "move" mode keeps them
+  (server setting); the server removes a Drive file once the TV reports a complete copy (`status.movies`).
+- **Link:** the same fixed *home-device code* as the tablet (Smart home → Devices → Link the home tablet or TV). The TV reports to the
+  server directly with its own token (no tablet relay needed; the old relay through the tablet still works if present).
+- **Commands it understands:** launch_app, volume, media, key (HOME/BACK through its accessibility service), open_url (YouTube),
+  sync_now, remove_movie, play_movie, notify (banner over whatever is playing; needs "Display over other apps").
+- **Limits:** a TV can't be powered off by an app (limits pause and go home); foreground-app detection needs the accessibility service.
 
 ## Stashr Location (family phones)
 - **Link:** website → Smart home → Devices → *Family locations* shows one fixed 8-letter code (copy / "New code"). In the app type the code,

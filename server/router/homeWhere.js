@@ -72,20 +72,21 @@ router.post("/home/agent/link", linkLimiter, async (req, res) => {
         const b = req.body || {};
         const code = normCode(b.code);
         if (code.length !== 8) return res.status(400).json({ error: "Type the 8-letter code shown on the Stashr Smart home page." });
-        const tablet = b.kind === "hub";
+        const kindWanted = b.kind === "tv" ? "tv" : b.kind === "hub" ? "hub" : "phone";
+        const tablet = kindWanted !== "phone";   // a tablet or a TV: both use the home-device code
         const s = await HomeSettings.findOne(tablet ? { hubCode: code } : { locationCode: code }).lean();
         if (!s) return res.status(400).json({ error: "That code is not right. Check it on the Stashr Smart home page." });
         const name = String(b.name || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 60);
         if (name.length < 2) return res.status(400).json({ error: tablet ? "Give the tablet a name (at least 2 letters)." : "Type your name (at least 2 letters)." });
         const owner = s.owner;
         if (await HomeDevice.countDocuments({ owner, parent: { $exists: false } }) >= 20) return res.status(400).json({ error: "This Stashr home already has the most devices it can hold." });
-        if (await HomeDevice.exists({ owner, kind: tablet ? "hub" : "phone", name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") })) return res.status(409).json({ error: tablet ? "A tablet with that name is already linked. Pick another name." : "Someone with that name is already linked. Add your surname or pick another name." });
+        if (await HomeDevice.exists({ owner, kind: kindWanted, name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") })) return res.status(409).json({ error: tablet ? "A tablet or TV with that name is already linked. Pick another name." : "Someone with that name is already linked. Add your surname or pick another name." });
         const token = home.newToken();
         const device = await HomeDevice.create(tablet
-            ? { owner, name, kind: "hub", tokenHash: home.hashToken(token), tokenHint: token.slice(-4) }
+            ? { owner, name, kind: kindWanted, tokenHash: home.hashToken(token), tokenHint: token.slice(-4) }
             : { owner, name, kind: "phone", person: name, tokenHash: home.hashToken(token), tokenHint: token.slice(-4), status: { agent: "stashr-where" } });
-        await record({ owner, device: device._id, deviceName: name, kind: "paired", text: tablet ? `${name} joined Stashr Home (tablet)` : `${name} linked their phone (Stashr Location)` });
-        return res.status(201).json({ token, deviceId: String(device._id), name, device: { id: String(device._id), name, kind: tablet ? "hub" : "phone" } });
+        await record({ owner, device: device._id, deviceName: name, kind: "paired", text: tablet ? `${name} joined Stashr Home (${kindWanted === "tv" ? "TV" : "tablet"})` : `${name} linked their phone (Stashr Location)` });
+        return res.status(201).json({ token, deviceId: String(device._id), name, device: { id: String(device._id), name, kind: kindWanted } });
     } catch (e) { return fail(res, e, "Could not link."); }
 });
 

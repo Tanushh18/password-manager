@@ -515,6 +515,12 @@ describe("linking the tablet with a fixed code", () => {
         const rep = await report(ok.body.token, { status: { agent: "stashr-hub" } });
         expect(rep.status).toBe(200);
         expect((await request(app).post("/home/agent/link").send({ code: hubCode, name: "hall TABLET", kind: "hub" })).status).toBe(409);
+        // the same code links a TV, which then reports on its own
+        const tv = await request(app).post("/home/agent/link").send({ code: hubCode, name: "Living room TV", kind: "tv" });
+        expect(tv.status).toBe(201);
+        expect(tv.body.device.kind).toBe("tv");
+        expect((await report(tv.body.token, { status: { screen: "on", app: { label: "Netflix" }, agent: "stashr-tv" } })).status).toBe(200);
+        expect((await devices(auth)).devices.some((d) => d.kind === "tv" && d.name === "Living room TV" && d.online)).toBe(true);
         const fresh = (await request(app).post("/home/hub-code/rotate").set(auth)).body.code;
         expect(fresh === hubCode).toBe(false);
     });
