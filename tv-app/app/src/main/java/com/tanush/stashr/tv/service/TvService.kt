@@ -30,6 +30,7 @@ import com.tanush.stashr.tv.sync.MovieStore
 import com.tanush.stashr.tv.sync.MovieSync
 import com.tanush.stashr.tv.sync.movieJson
 import com.tanush.stashr.tv.ui.HomeActivity
+import com.tanush.stashr.tv.ui.LiveMapActivity
 import com.tanush.stashr.tv.ui.PlayerActivity
 import com.tanush.stashr.tv.update.Updater
 import kotlinx.coroutines.CoroutineScope
@@ -266,6 +267,7 @@ class TvService : Service() {
                 startOnTv(Intent(this, PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_NAME, m.name)); "Playing ${m.name}"
             }
             "notify" -> NoticeOverlay.show(this, a.optString("text"))
+            "live_location" -> { startOnTv(Intent(this, LiveMapActivity::class.java)); "Shown" }
             else -> throw IllegalArgumentException("This app version does not know “$type”")
         }
     }

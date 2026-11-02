@@ -283,6 +283,7 @@ class HomeActivity : Activity() {
                     val t = tile(220, 124, a.label, null, a.image, { launch(a.pkg) })
                     appsRow.addView(t)
                 }
+                appsRow.addView(tile(220, 124, "Live location", "Who is out", null, { startActivity(Intent(this, LiveMapActivity::class.java)) }))
                 appsRow.addView(tile(220, 124, "Stashr", "Settings", null, { startActivity(Intent(this, SettingsActivity::class.java)) }))
                 if (!hadFocus) (appsRow.getChildAt(0)?.tag as? View)?.requestFocus()
             }
