@@ -125,6 +125,7 @@ async function todayLines(owner, settings, now = Date.now()) {
     const lines = [];
     try { const f = await weather.forecast(settings.weather, tz); if (f) lines.push({ icon: "🌤", text: weather.line(f) }); } catch (e) { /* no weather */ }
     const s = await houseSummary(owner, now);
+    for (const c of comingList(settings, now)) lines.unshift({ icon: "🚗", text: comingLine(c) + "." });
     if (s.people.length) lines.push({ icon: "👪", text: s.people.map((p) => `${p.person} ${p.home ? "is home" : "is out"}`).join(", ") + "." });
     for (const tv of s.devices.filter((d) => d.kind === "tv")) lines.push({ icon: "📺", text: `${tv.name}: ${tv.online ? (tv.status && tv.status.screen === "off" ? "standby" : "on") : "off"}.` });
     const used = (((settings.usage || {})[local.date]) || {}).minutes || 0;
@@ -219,6 +220,52 @@ async function geoTick(owner, now, settings, devices) {
         await record({ owner, device: tablet._id, deviceName: tablet.name, kind: "place", notify: true, text: `${who} ${arrive ? "reached" : "left"} ${p.name}: sending “${text}” to ${p.group} on WhatsApp.` });
     }
 }
+
+/**
+ * "Papa is 10 minutes away": for every family phone sharing its location, work out whether it is heading home, and how
+ * long it will take. There is no routing service: the distance is a straight line times 1.3 (roads wind), at the phone's
+ * own speed, or the speed it just covered, or 25 km/h. Good to a few minutes, not to the minute. Tells you once per trip
+ * (Telegram) when it is within notifyMinutes.
+ */
+async function etaTick(owner, now, settings, devices) {
+    const spot = settings.homeSpot, eta = settings.eta || {};
+    if (!spot || !Number.isFinite(spot.lat) || !Number.isFinite(spot.lon) || eta.enabled === false) return;
+    const radius = spot.radius || 200, state = { ...(settings.etaState || {}) };
+    let changed = false;
+    for (const ph of (devices || []).filter((d) => d.kind === "phone")) {
+        const loc = ph.status && ph.status.location;
+        if (!loc || !Number.isFinite(Number(loc.lat)) || !Number.isFinite(Number(loc.lon)) || !loc.at) continue;
+        const key = String(ph._id), old = state[key] || {};
+        if (old.locAt === Number(loc.at)) continue;
+        const d = distanceM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: spot.lat, lon: spot.lon });
+        const dt = old.locAt ? (Number(loc.at) - old.locAt) / 1000 : 0;
+        let coming = Boolean(old.coming);
+        if (d <= radius) coming = false;
+        else if (old.d !== undefined && d < old.d - 30) coming = true;
+        else if (old.d !== undefined && d > old.d + 100) coming = false;
+        let v = Number(loc.speed) > 2 ? Number(loc.speed) : (old.d !== undefined && dt > 20 && old.d - d > 0 ? (old.d - d) / dt : 0);
+        if (!(v > 1.5)) v = 7;                                            // 25 km/h
+        v = Math.min(Math.max(v, 4), 25);
+        const minutes = Math.max(1, Math.round((d * 1.3) / v / 60));
+        const person = ph.person || ph.name;
+        const next = { d, locAt: Number(loc.at), coming: coming && d <= (eta.maxKm || 40) * 1000, minutes, km: Math.round(d / 100) / 10, person, notified: coming ? old.notified : false };
+        if (next.coming && !next.notified && minutes <= (eta.notifyMinutes || 15)) {
+            next.notified = true;
+            await record({ owner, kind: "eta", notify: true, text: minutes <= 1 ? `${person} is almost home.` : `${person} will be home in about ${minutes} minutes.` });
+        }
+        state[key] = next; changed = true;
+    }
+    if (changed) await HomeSettings.updateOne({ owner }, { $set: { etaState: state } });
+}
+
+/** Who is on the way home right now: [{ person, minutes, km }]. */
+function comingList(settings, now = Date.now()) {
+    return Object.values(settings.etaState || {})
+        .filter((e) => e && e.coming && now - e.locAt < 40 * 60 * 1000)
+        .map((e) => ({ person: e.person, minutes: Math.max(1, e.minutes - Math.floor((now - e.locAt) / 60000)), km: e.km }))
+        .sort((a, b) => a.minutes - b.minutes);
+}
+const comingLine = (c) => (c.minutes <= 1 ? `${c.person} bas pahunchne wale hain` : `${c.person} ${c.minutes} minute mein aa rahe hain`);
 
 /** The weekly report: TV time per day, new devices, speed, camera alerts. */
 async function weeklyText(owner, settings, now = Date.now()) {
@@ -321,6 +368,7 @@ async function tickOwner(owner, now = Date.now()) {
     if (settings.camera && settings.camera.auto) await autoCamera(owner, settings, devices, now);
 
     await geoTick(owner, now, settings, devices);
+    await etaTick(owner, now, settings, devices);
 
     // 6. The morning brief and the weekly report.
     if (settings.brief && settings.brief.enabled && settings.brief.time === local.hhmm && settings.brief.lastSent !== local.date && await claim(`brief:${owner}:${local.date}`)) {
@@ -371,4 +419,4 @@ const DEFAULT_SCENES = [
     { id: "goodnight", name: "Good night", steps: [{ kind: "tv", type: "media", args: { action: "play_pause" } }, { kind: "tv", type: "key", args: { key: "HOME" } }] }
 ];
 
-module.exports = { localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, autoCamera, geoTick, distanceM, sendTelegram, DEFAULT_SCENES, fmtMin };
+module.exports = { localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, autoCamera, geoTick, distanceM, etaTick, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };

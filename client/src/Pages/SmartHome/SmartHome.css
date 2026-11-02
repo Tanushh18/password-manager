@@ -129,3 +129,14 @@
 .sh-live img, .sh-live__wait { width: 100%; max-height: 70vh; aspect-ratio: 4 / 3; object-fit: contain; background: #000; border-radius: var(--r-md); }
 .sh-live__wait { display: grid; place-items: center; color: #ccc; font-size: .85rem; }
 .sh-live__badge { color: var(--danger); font-weight: 700; font-size: .78rem; }
+
+/* section tabs, status chips, the "what is on" list */
+.sh-tabs { display: flex; gap: .4rem; overflow-x: auto; padding-bottom: .25rem; margin: .25rem 0 .5rem; scrollbar-width: none; }
+.sh-tabs::-webkit-scrollbar { display: none; }
+.sh-tab { flex: 0 0 auto; padding: .45rem .9rem; border-radius: 999px; border: 1px solid var(--line-strong, var(--line, #d0d5dd)); background: var(--surface, transparent); color: var(--text, inherit); font: inherit; font-size: .85rem; cursor: pointer; }
+.sh-tab.is-on { background: var(--primary, #2a78d6); border-color: var(--primary, #2a78d6); color: #fff; }
+.sh-tab:focus-visible { outline: 2px solid var(--primary, #2a78d6); outline-offset: 2px; }
+.sh-chip { display: inline-block; font-size: .75rem; padding: .15rem .6rem; border-radius: 999px; background: rgba(127, 127, 127, .14); white-space: nowrap; }
+.sh-chip.is-on { background: color-mix(in srgb, var(--ok, #1a8f4d) 20%, transparent); color: var(--ok, #1a8f4d); font-weight: 600; }
+.sh-ok { margin: 0; padding: .55rem .8rem; border-radius: 10px; background: color-mix(in srgb, var(--ok, #1a8f4d) 14%, transparent); }
+.sh-feat h3 { margin: .9rem 0 .25rem; font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; color: var(--text-faint, #667085); }

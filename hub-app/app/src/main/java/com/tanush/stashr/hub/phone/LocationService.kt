@@ -23,8 +23,8 @@ import org.json.JSONObject
 import kotlin.concurrent.thread
 
 /** One position fix, as the server wants it: { lat, lon, acc (meters), at (epoch ms) }. */
-data class Fix(val lat: Double, val lon: Double, val acc: Int, val at: Long) {
-    fun toJson(): JSONObject = JSONObject().put("lat", lat).put("lon", lon).put("acc", acc).put("at", at)
+data class Fix(val lat: Double, val lon: Double, val acc: Int, val at: Long, val speed: Float = -1f) {
+    fun toJson(): JSONObject = JSONObject().put("lat", lat).put("lon", lon).put("acc", acc).put("at", at).apply { if (speed >= 0f) put("speed", speed.toDouble()) }
 }
 
 /**
@@ -46,13 +46,15 @@ class LocationService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel("location", "Location sharing", NotificationManager.IMPORTANCE_MIN))
+        nm.createNotificationChannel(NotificationChannel("location", "Location sharing (precise mode)", NotificationManager.IMPORTANCE_MIN).apply {
+            setShowBadge(false); enableVibration(false); setSound(null, null); lockscreenVisibility = Notification.VISIBILITY_SECRET
+        })
         val n = Notification.Builder(this, "location").setSmallIcon(R.drawable.ic_stat)
             .setContentTitle("Sharing your location with Stashr").setOngoing(true).build()
         try {
             if (Build.VERSION.SDK_INT >= 29) startForeground(3, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION) else startForeground(3, n)
         } catch (e: Exception) { stopSelf(); return START_NOT_STICKY }
-        if (!Prefs(this).shareLocation || !hasPermission(this)) { stopSelf(); return START_NOT_STICKY }
+        if (!Prefs(this).shareLocation || !Prefs(this).preciseLocation || !hasPermission(this)) { stopSelf(); return START_NOT_STICKY }
         listen()
         return START_STICKY
     }
@@ -68,8 +70,8 @@ class LocationService : Service() {
     }
 
     private fun onFix(l: Location) {
-        val fix = Fix(l.latitude, l.longitude, l.accuracy.toInt(), System.currentTimeMillis())
-        last = fix
+        val fix = Fix(l.latitude, l.longitude, l.accuracy.toInt(), System.currentTimeMillis(), if (l.hasSpeed()) l.speed else -1f)
+        LocationShare.record(applicationContext, fix)
         val now = fix.at
         val moved = lastSent?.let { FloatArray(1).also { r -> Location.distanceBetween(it.lat, it.lon, fix.lat, fix.lon, r) }[0] } ?: Float.MAX_VALUE
         if (now - lastSentAt < 45_000 && moved <= 100f) return
@@ -88,7 +90,7 @@ class LocationService : Service() {
             ContextCompat.checkSelfPermission(c, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
         fun hasBackground(c: Context) = Build.VERSION.SDK_INT < 29 ||
             ContextCompat.checkSelfPermission(c, android.Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
-        fun start(c: Context) = ContextCompat.startForegroundService(c, Intent(c, LocationService::class.java))
+        fun start(c: Context) { try { ContextCompat.startForegroundService(c, Intent(c, LocationService::class.java)) } catch (e: Exception) { /* not allowed from the background */ } }
         fun stop(c: Context) { c.stopService(Intent(c, LocationService::class.java)) }
     }
 }

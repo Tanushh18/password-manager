@@ -203,6 +203,10 @@ async function runSentence(owner, sentence, opts = {}) {
     const out = assistant.parse(sentence, devices, scenes);
     if (out.status) return { reply: assistant.statusLine(devices), sent: [] };
     if (out.presence) return { reply: assistant.presenceLine(home.presence(owned.filter((d) => d.kind === "hub"), owned.filter((d) => d.kind === "phone"))), sent: [] };
+    if (out.coming) {
+        const list = automation.comingList(settings);
+        return { reply: list.length ? list.map(automation.comingLine).join(". ") + "." : "Nobody is on the way home right now (or no phone is sharing its location).", sent: [] };
+    }
     if (out.today) {
         if (opts.fromHub) return { reply: out.reply, open: "today", sent: [] };
         const target = hubsFor(owned, "show_today")[0];
@@ -322,7 +326,7 @@ async function ingest(d, body, seenAt = new Date()) {
     // The TV's USB drive lists what it holds; complete copies of Drive movies can be cleared from Drive.
     if (d.kind === "tv") void movies.settle(d.owner, status.movies);
 
-    if (d.kind === "phone" && status.location) void automation.settingsOf(d.owner).then(async (st) => { if ((st.places || []).length) await automation.geoTick(d.owner, Date.now(), st, await HomeDevice.find({ owner: d.owner }).lean()); }).catch(() => {});
+    if (d.kind === "phone" && status.location) void automation.settingsOf(d.owner).then(async (st) => { const all = await HomeDevice.find({ owner: d.owner }).lean(); if ((st.places || []).length) await automation.geoTick(d.owner, Date.now(), st, all); await automation.etaTick(d.owner, Date.now(), st, all); }).catch(() => {});
 
     // Results of earlier commands.
     for (const a of (Array.isArray(body.acks) ? body.acks.slice(0, 20) : [])) {

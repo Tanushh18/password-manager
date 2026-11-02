@@ -384,3 +384,49 @@ describe("places and WhatsApp", () => {
     });
 });
 
+describe("on the way home, and Telegram control", () => {
+    test("a phone heading home gets an ETA, announced once, and the assistant answers", async () => {
+        const auth = await signUp();
+        const tab = await pair(auth, "hub");
+        await pair(auth, "phone", "Papa phone");
+        await report(tab.token, { status: { agent: "stashr-hub" } });
+        const all = (await devices(auth)).devices;
+        const phoneId = all.find((d) => d.kind === "phone").id;
+        const owner = (await HomeDevice.findById(phoneId)).owner;
+        expect((await request(app).put("/home/settings").set(auth).send({ homeSpot: { lat: 91, lon: 77 } })).status).toBe(400);
+        expect((await request(app).put("/home/settings").set(auth).send({ homeSpot: { lat: 28.6139, lon: 77.209, radius: 200 } })).status).toBe(200);
+        const t0 = Date.now();
+        const fix = async (lat, when) => { await HomeDevice.updateOne({ _id: phoneId }, { $set: { "status.location": { lat, lon: 77.209, acc: 20, at: when, speed: 10 } } }); await automation.tickOwner(owner, when); };
+        await fix(28.70, t0);                        // ~9.6 km north: first sighting, direction unknown
+        expect(automation.comingList(await automation.settingsOf(owner), t0)).toEqual([]);
+        await fix(28.68, t0 + 120_000);              // closer: heading home (~7.4 km, 10 m/s)
+        const list = automation.comingList(await automation.settingsOf(owner), t0 + 120_000);
+        expect(list.length).toBe(1);
+        expect(list[0].minutes > 10).toBe(true);
+        expect(list[0].minutes < 25).toBe(true);
+        await fix(28.63, t0 + 240_000);              // ~2 km: inside the notify window
+        const ev = await HomeEvent.find({ kind: "eta" }).lean();
+        expect(ev.length).toBe(1);
+        await fix(28.625, t0 + 300_000);
+        expect((await HomeEvent.find({ kind: "eta" }).lean()).length).toBe(1);
+        const r = await request(app).post("/home/assistant").set(auth).send({ text: "papa kab aayenge" });
+        expect(r.body.reply).toMatch(/minute mein aa rahe hain/);
+        const dash = await request(app).get("/home/agent/dashboard").set(bearer(tab.token));
+        expect(dash.body.coming.length).toBe(1);
+        await fix(28.6139, t0 + 360_000);            // home
+        expect(automation.comingList(await automation.settingsOf(owner), t0 + 360_000)).toEqual([]);
+    });
+
+    test("Telegram sentences go to the same assistant", async () => {
+        const auth = await signUp();
+        const user = await User.findOne({ email: "ana@example.com" });
+        const bot = require("../utils/telegramBot");
+        expect(await bot.homeSay(user, "pause the tv")).toBe(null);   // no devices yet
+        await request(app).post("/home/devices").set(auth).send({ name: "TV", kind: "tv" });
+        const reply = await bot.homeSay(user, "pause the tv");
+        expect(reply).toMatch(/Pausing/);
+        expect(await bot.homeSay(user, "blah blah")).toBe(null);
+        expect(await bot.homeSay(user, "today")).toMatch(/Today at home/);
+    });
+});
+

@@ -72,6 +72,7 @@ class DashboardActivity : Activity() {
     private lateinit var cameraSwitch: Switch
     private lateinit var voiceSwitch: Switch
     private lateinit var micButton: TextView
+    private lateinit var coming: LinearLayout
     private lateinit var waState: TextView
     private lateinit var waResult: TextView
 
@@ -118,6 +119,9 @@ class DashboardActivity : Activity() {
         head.addView(ui.fill(titles))
         col.addView(head)
 
+        coming = ui.card().apply { visibility = View.GONE }
+        col.addView(coming)
+
         val left = ui.column(12)
         val right = ui.column(12)
 
@@ -163,7 +167,7 @@ class DashboardActivity : Activity() {
         right.addView(tvCard)
 
         // Today
-        val todayCard = ui.card("Today")
+        val todayCard = ui.card("TV time and internet")
         today = ui.column(6)
         todayCard.addView(today)
         right.addView(todayCard)
@@ -175,7 +179,7 @@ class DashboardActivity : Activity() {
         right.addView(evCard)
 
         // This tablet
-        val ctl = ui.card("This tablet")
+        val ctl = ui.card("This tablet (Stashr Hub)")
         statusLine = ui.dim("")
         ctl.addView(statusLine)
         cameraSwitch = switch("Camera alerts: send a photo when someone comes into view", prefs.cameraArmed) { on ->
@@ -273,6 +277,15 @@ class DashboardActivity : Activity() {
     }
 
     private fun render(d: JSONObject) {
+        val soon = d.optJSONArray("coming") ?: JSONArray()
+        coming.removeAllViews()
+        coming.visibility = if (soon.length() > 0) View.VISIBLE else View.GONE
+        for (i in 0 until soon.length()) {
+            val c = soon.getJSONObject(i)
+            val m = c.optInt("minutes")
+            coming.addView(ui.text(if (m <= 1) "${c.optString("person")} bas pahunchne wale hain" else "${c.optString("person")} $m minute mein aa rahe hain", 22f, ui.c.text, bold = true))
+            coming.addView(ui.dim(String.format(Locale.US, "%.1f km door", c.optDouble("km"))))
+        }
         val w = d.optJSONObject("weather")
         weather.text = if (w != null) "${w.optString("city").substringBefore(",")}  ${w.optInt("temp")}°C · ${w.optString("text")} · ${w.optInt("min")}–${w.optInt("max")}°C" +
             (if (!w.isNull("rainChance")) " · ${w.optInt("rainChance")}% rain" else "") else "Set your city on the Smart home page for the weather."

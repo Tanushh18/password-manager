@@ -31,6 +31,10 @@ const homeSettingsSchema = new mongoose.Schema({
     camera: { sensitivity: { type: Number, default: 5 }, video: { type: Boolean, default: true }, auto: { type: Boolean, default: false }, autoState: { type: mongoose.Schema.Types.Mixed, default: {} } },
     // Places: a family phone arrives at / leaves a spot, and the tablet sends a WhatsApp message to a group.
     places: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    // Where home is, for "Papa is 10 minutes away" (the phones' location shared with Stashr Hub).
+    homeSpot: { lat: Number, lon: Number, radius: { type: Number, default: 200 } },
+    eta: { enabled: { type: Boolean, default: true }, maxKm: { type: Number, default: 40 }, notifyMinutes: { type: Number, default: 15 } },
+    etaState: { type: mongoose.Schema.Types.Mixed, default: {} },
     emptyHomeNotifiedAt: { type: Date },
     presenceState: { type: mongoose.Schema.Types.Mixed, default: {} }
 }, { minimize: false });

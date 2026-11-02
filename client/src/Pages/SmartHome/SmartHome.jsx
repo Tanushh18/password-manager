@@ -8,7 +8,7 @@ import { Section, Skeleton, Empty, useConfirm } from "../Render/RenderUi";
 import { usePolling } from "../Render/renderHooks";
 import { errorMessage } from "../Render/renderUtils";
 import { stateOf, STATE_LABEL, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName, splitStale, TAG_LABEL } from "../../lib/smartHome";
-import { PairCard, PeopleCard, PhonesCard, AlertsCard, TvTimeCard, ScenesCard, SchedulesCard, PlacesCard, SpeedCard, CameraCard, SlideshowCard, useHomeSettings } from "./HomeExtras";
+import { HomeScreenCard, FeaturesCard, PairCard, PeopleCard, PhonesCard, AlertsCard, TvTimeCard, ScenesCard, SchedulesCard, PlacesCard, SpeedCard, CameraCard, SlideshowCard, useHomeSettings } from "./HomeExtras";
 import "../Render/RenderDashboard.css";
 import "./SmartHome.css";
 
@@ -393,35 +393,54 @@ export default function SmartHome() {
   const smartHub = list.find((d) => d.kind === "hub" && d.status?.agent === "stashr-hub");
   const phones = list.filter((d) => d.kind === "phone");
 
+  const TABS = [["overview", "Overview"], ["devices", "Devices"], ["security", "Camera & alerts"], ["automations", "Automations"], ["media", "Media & network"]];
+  const [tab, setTabState] = useState(() => { try { const t = localStorage.getItem("smartHomeTab"); return TABS.some(([k]) => k === t) ? t : "overview"; } catch { return "overview"; } });
+  const goTo = (t) => { setTabState(t); try { localStorage.setItem("smartHomeTab", t); } catch { /* optional */ } window.scrollTo?.({ top: 0 }); };
+
   return (
     <main className="sh-page">
       <header className="sh-head">
         <div><h1>Smart home</h1><p className="sh-dim">Your TV, the Wi-Fi, the family's phones and the tablet camera, from anywhere.</p></div>
       </header>
       {error ? <p className="sh-bad" role="alert">{error}</p> : null}
-      <Assistant onDone={load} />
-      <ScenesCard home={home} />
-      <PeopleCard people={people} />
-      {devices === null ? <Skeleton lines={5} /> : list.length === 0 ? (
-        <Empty icon="📺" title="Nothing connected yet">Install Stashr Hub from /apps on the always-on tablet and type a code from “Add a tablet or a family phone” below. Your TV joins by itself once its Stashr app is open.</Empty>
-      ) : list.filter((d) => d.kind !== "phone").map((d) => d.kind === "tv"
-        ? <TvCard key={d.id} device={d} send={send} onChanged={load} />
-        : <HubCard key={d.id} device={d} send={send} onChanged={load} />)}
-      <PhonesCard phones={phones} onChanged={load} />
-      <CameraCard hub={smartHub} send={send} home={home} />
-      <TvTimeCard home={home} />
-      <SpeedCard hasSmartHub={Boolean(smartHub)} send={send} hubId={smartHub?.id} />
-      <SchedulesCard home={home} />
-      <PlacesCard home={home} phones={phones} hasSmartHub={Boolean(smartHub)} />
-      <AlertsCard home={home} />
-      <MoviesCard />
-      <SlideshowCard home={home} hub={smartHub} send={send} />
-      <PairCard />
-      <Section title="What happened" subtitle="The last 60 days are kept">
-        {events.length ? (
-          <ul className="sh-events">{events.map((e) => <li key={e.id}><span>{ago(e.at)}</span><b>{e.text}</b></li>)}</ul>
-        ) : <p className="sh-dim">Nothing yet.</p>}
-      </Section>
+      <nav className="sh-tabs" aria-label="Smart home sections">
+        {TABS.map(([k, label]) => <button key={k} type="button" className={"sh-tab" + (tab === k ? " is-on" : "")} aria-current={tab === k ? "page" : undefined} onClick={() => goTo(k)}>{label}</button>)}
+      </nav>
+      {tab === "overview" ? (<>
+        <Assistant onDone={load} />
+        <HomeScreenCard />
+        <FeaturesCard home={home} devices={list} goTo={goTo} />
+        <Section title="What happened" subtitle="The last 60 days are kept">
+          {events.length ? (
+            <ul className="sh-events">{events.map((e) => <li key={e.id}><span>{ago(e.at)}</span><b>{e.text}</b></li>)}</ul>
+          ) : <p className="sh-dim">Nothing yet.</p>}
+        </Section>
+      </>) : null}
+      {tab === "devices" ? (<>
+        <PeopleCard people={people} />
+        {devices === null ? <Skeleton lines={5} /> : list.length === 0 ? (
+          <Empty icon="📺" title="Nothing connected yet">Install Stashr Hub from /apps on the always-on tablet and type a code from “Pair a tablet or family phone” below. Your TV joins by itself once its Stashr app is open.</Empty>
+        ) : list.filter((d) => d.kind !== "phone").map((d) => d.kind === "tv"
+          ? <TvCard key={d.id} device={d} send={send} onChanged={load} />
+          : <HubCard key={d.id} device={d} send={send} onChanged={load} />)}
+        <PhonesCard phones={phones} onChanged={load} />
+        <PairCard />
+      </>) : null}
+      {tab === "security" ? (<>
+        <CameraCard hub={smartHub} send={send} home={home} />
+        <AlertsCard home={home} />
+      </>) : null}
+      {tab === "automations" ? (<>
+        <ScenesCard home={home} />
+        <SchedulesCard home={home} />
+        <PlacesCard home={home} phones={phones} hasSmartHub={Boolean(smartHub)} />
+        <TvTimeCard home={home} />
+      </>) : null}
+      {tab === "media" ? (<>
+        <SpeedCard hasSmartHub={Boolean(smartHub)} send={send} hubId={smartHub?.id} />
+        <MoviesCard />
+        <SlideshowCard home={home} hub={smartHub} send={send} />
+      </>) : null}
     </main>
   );
 }

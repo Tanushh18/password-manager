@@ -22,7 +22,7 @@ const DIGEST_CHOICES = [5, 10, 15, 30, 60];
 const MODES = ["ask", "alerts", "timer"];
 /* When the bot messages on its own. Timed updates are off unless chosen ("timer"); older settings count as "alerts". */
 const modeOf = (s) => (MODES.includes(s?.updates) ? s.updates : "alerts");
-const COMMANDS = [["status", "Everything in one message"], ["servers", "Every server and its health"], ["incidents", "Open incidents"], ["projects", "Your projects"], ["project", "One project: /project name"], ["updates", "When I message you on my own"], ["menu", "Show the buttons"], ["pass", "A password: /pass name PIN"], ["help", "What I can do"]];
+const COMMANDS = [["status", "Everything in one message"], ["servers", "Every server and its health"], ["incidents", "Open incidents"], ["projects", "Your projects"], ["project", "One project: /project name"], ["updates", "When I message you on my own"], ["home", "Control the house: /home pause the tv"], ["who", "Who is home"], ["camera", "/camera photo, on, off, clip, live"], ["today", "Today at home"], ["menu", "Show the buttons"], ["pass", "A password: /pass name PIN"], ["help", "What I can do"]];
 const setCommands = (token) => tg(token, "setMyCommands", { commands: COMMANDS.map(([command, description]) => ({ command, description })) });
 
 async function tg(token, method, body) {
@@ -295,7 +295,14 @@ async function handleUpdate(hookId, secret, update) {
     }
     if (!cmd && pend?.kind === "name") return void (await startPassword(user, state, text));
     if (cmd && cmd !== "pass" && pend) await setPending(user, state, null);
-    if (cmd === "start" || cmd === "help" || cmd === "menu" || !cmd) return void (await send(token, chatId, T.HELP, { reply_markup: T.MENU_KEYBOARD }));
+    if (cmd === "start" || cmd === "help" || cmd === "menu") return void (await send(token, chatId, T.HELP, { reply_markup: T.MENU_KEYBOARD }));
+    if (cmd === "home" || cmd === "who" || cmd === "camera" || cmd === "today" || cmd === "tv" || !cmd) {
+      const sentence = cmd === "who" ? "kaun ghar par hai" : cmd === "today" ? "today updates" : cmd === "camera" ? "camera " + args.join(" ") : cmd === "tv" ? args.join(" ") + " tv" : cmd ? args.join(" ") : text;
+      if (cmd && !sentence.trim()) return void (await send(token, chatId, "Say what to do, e.g. /home pause the tv, /camera photo, /who, /today."));
+      const said = await homeSay(user, sentence);
+      if (said) return void (await send(token, chatId, said));
+      if (!cmd) return void (await send(token, chatId, T.HELP, { reply_markup: T.MENU_KEYBOARD }));
+    }
     if (cmd === "updates") return void (await send(token, chatId, "", updatesMessage(state)));
     if (cmd === "status") { const s = await snapshot(user); return void (await send(token, chatId, T.digestText(T.summarize(s), { projects: s.projects.filter((p) => p.status !== "archived").length, lastTick: s.lastTick }))); }
     if (cmd === "servers") { const s = await snapshot(user); return void (await send(token, chatId, T.serversText(s.services, s.health, s.pings))); }
@@ -312,6 +319,25 @@ async function handleUpdate(hookId, secret, update) {
     if (cmd === "pass") return void (await handlePassword(user, state, msg, args));
     await send(token, chatId, "I don't know that command.\n\n" + T.HELP);
   } catch { await send(token, chatId, "Something went wrong reading your data. Try again in a minute."); }
+}
+
+/**
+ * Stashr Home from Telegram: the same assistant as the website and the tablet's microphone. Returns the reply text,
+ * or null when this account has no home devices or the sentence was not understood (the caller then shows the help).
+ */
+async function homeSay(user, sentence) {
+  const HomeDevice = require("../models/homeDevice");
+  if (!await HomeDevice.exists({ owner: user._id })) return null;
+  const homeRouter = require("../router/home");
+  const automation = require("./homeAutomation");
+  if (/^\s*(stashr\s+)?(today|aaj)\b/i.test(sentence) || /\btoday updates?\b/i.test(sentence)) {
+    const t = await automation.todayLines(user._id, await automation.settingsOf(user._id));
+    return "<b>" + T.esc(t.title) + "</b>\n" + t.lines.map((l) => T.esc(l.icon + " " + l.text)).join("\n");
+  }
+  const out = await homeRouter.runSentence(user._id, String(sentence).slice(0, 200));
+  if (out.error) return "⚠️ " + T.esc(out.error);
+  if (/^I did not understand/.test(out.reply || "")) return null;
+  return "🏠 " + T.esc(out.reply || "Done.") + (out.sent && out.sent.length ? "\nSent to " + T.esc(out.sent.map((x) => x.device).join(", ")) + "." : "");
 }
 
 /*
@@ -473,4 +499,4 @@ async function notifyUserMedia(user, { kind, buffer, filename, caption, contentT
   } catch { return false; }
 }
 
-module.exports = { notifyUser, notifyUserMedia, modeOf, MODES, connect, disconnect, updateSettings, readState, publicState, handleUpdate, runAllDigests, sendTest, DIGEST_CHOICES, isValidHookId: (id) => mongoose.isValidObjectId(id) || /^[a-f0-9]{32}$/.test(String(id)) };
+module.exports = { homeSay, notifyUser, notifyUserMedia, modeOf, MODES, connect, disconnect, updateSettings, readState, publicState, handleUpdate, runAllDigests, sendTest, DIGEST_CHOICES, isValidHookId: (id) => mongoose.isValidObjectId(id) || /^[a-f0-9]{32}$/.test(String(id)) };

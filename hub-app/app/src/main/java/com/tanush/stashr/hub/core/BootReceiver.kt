@@ -11,7 +11,7 @@ class BootReceiver : BroadcastReceiver() {
         val prefs = Prefs(ctx)
         if (!prefs.paired) return
         try {
-            if (prefs.role == "hub") HubService.start(ctx) else { PhoneReporter.schedule(ctx); if (prefs.shareLocation) com.tanush.stashr.hub.phone.LocationService.start(ctx) }
+            if (prefs.role == "hub") HubService.start(ctx) else { PhoneReporter.schedule(ctx); com.tanush.stashr.hub.phone.LocationShare.start(ctx) }
         } catch (e: Exception) { /* Android may refuse a start from the background; the app starts it when opened */ }
     }
 }

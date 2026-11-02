@@ -54,6 +54,9 @@ function parse(sentence, devices, scenes = []) {
     // Who is home
     if (has(text, ["kaun ghar", "kon ghar", "who is home", "whos home", "ghar pe kaun", "ghar par kaun", "ghar me kaun", "ghar mein kaun", "anyone home"])) return { reply: "presence", presence: true };
 
+    // Who is on the way home
+    if (has(text, ["kab aayenge", "kab aayega", "kab aayegi", "kab tak aayenge", "kab pahunchenge", "kab pahunchega", "kitni der mein", "aa rahe", "aa raha", "eta", "on the way", "when will"]) && !has(text, ["tv", "movie"])) return { reply: "coming", coming: true };
+
     // "Stashr today updates": open the list of today's news on the tablet
     if (has(text, ["updates", "update", "khabar", "khabrein", "news"]) && has(text, ["today", "aaj", "aaj ke", "aaj ki", "aaj ka", "stashr", "ghar"]) && !has(text, ["sync", "download", "movies", "movie", "tv"])) return { reply: "Showing today’s updates on the tablet.", today: true };
 

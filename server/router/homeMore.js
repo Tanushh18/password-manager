@@ -83,7 +83,7 @@ const publicSettings = (s) => ({
     timezone: s.timezone, alerts: s.alerts, weather: { city: (s.weather && s.weather.city) || "" }, brief: { enabled: s.brief.enabled, time: s.brief.time },
     weekly: { enabled: s.weekly.enabled }, tvLimit: { minutes: s.tvLimit.minutes, action: s.tvLimit.action, lateNight: s.tvLimit.lateNight !== false },
     schedules: s.schedules || [], scenes: (s.scenes && s.scenes.length ? s.scenes : automation.DEFAULT_SCENES),
-    slideshowFolder: s.slideshowFolder || "", places: s.places || [], camera: { sensitivity: 5, video: true, auto: false, ...(s.camera || {}), autoState: undefined }
+    slideshowFolder: s.slideshowFolder || "", places: s.places || [], homeSpot: s.homeSpot && Number.isFinite(s.homeSpot.lat) ? { lat: s.homeSpot.lat, lon: s.homeSpot.lon, radius: s.homeSpot.radius || 200 } : null, eta: { enabled: true, maxKm: 40, notifyMinutes: 15, ...(s.eta || {}) }, camera: { sensitivity: 5, video: true, auto: false, ...(s.camera || {}), autoState: undefined }
 });
 
 router.get("/home/settings", authenticate, async (req, res) => {
@@ -138,6 +138,21 @@ router.put("/home/settings", authenticate, writeLimiter, async (req, res) => {
             const id = raw ? movies.folderIdFrom(raw) : "";
             if (raw && !id) return res.status(400).json({ error: "Paste the Drive folder's link." });
             set.slideshowFolder = id;
+        }
+        if (b.homeSpot !== undefined) {
+            if (b.homeSpot === null) set.homeSpot = {};
+            else {
+                const lat = Number(b.homeSpot.lat), lon = Number(b.homeSpot.lon), radius = Math.round(Number(b.homeSpot.radius || 200));
+                if (!(lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) || b.homeSpot.lat === "" || b.homeSpot.lon === "") return res.status(400).json({ error: "Home needs a latitude and a longitude." });
+                if (!(radius >= 50 && radius <= 1000)) return res.status(400).json({ error: "Home radius is 50 to 1000 metres." });
+                set.homeSpot = { lat, lon, radius };
+            }
+        }
+        if (b.eta && typeof b.eta === "object") {
+            const e = b.eta, c = cur.eta || {};
+            const maxKm = e.maxKm !== undefined ? Number(e.maxKm) : (c.maxKm || 40), mins = e.notifyMinutes !== undefined ? Number(e.notifyMinutes) : (c.notifyMinutes || 15);
+            if (!(maxKm >= 5 && maxKm <= 300) || !(mins >= 1 && mins <= 120)) return res.status(400).json({ error: "Distance 5–300 km, minutes 1–120." });
+            set.eta = { enabled: bool(e.enabled, c.enabled !== false), maxKm, notifyMinutes: mins };
         }
         if (b.camera && typeof b.camera === "object") {
             const sens = Number(b.camera.sensitivity);
@@ -345,32 +360,40 @@ router.get("/home/camera/live", authenticate, async (req, res) => {
 
 const weatherCache = new Map(); // owner -> { at, value }
 
+/** What the tablet's home screen shows; the website shows the same (GET /home/dashboard). */
+async function buildDashboard(owner) {
+    const s = await automation.settingsOf(owner);
+    const devices = await HomeDevice.find({ owner }).lean();
+    let w = weatherCache.get(String(owner));
+    if (!w || Date.now() - w.at > 15 * 60 * 1000) {
+        w = { at: Date.now(), value: await weather.forecast(s.weather, s.timezone).catch(() => null) };
+        weatherCache.set(String(owner), w);
+    }
+    const today = ((s.usage || {})[automation.localParts(Date.now(), s.timezone).date] || {}).minutes || 0;
+    const events = await HomeEvent.find({ owner }).sort({ at: -1 }).limit(8).lean();
+    const speed = await HomeSpeed.findOne({ owner }).sort({ at: -1 }).lean();
+    const tvs = devices.filter((d) => d.kind === "tv").map((d) => {
+        const p = homeRouter.publicDevice(d);
+        return { name: p.name, online: p.online, screen: (p.status || {}).screen || "", app: ((p.status || {}).app || {}).label || "", title: ((p.status || {}).media || {}).title || "" };
+    });
+    return {
+        time: new Date().toISOString(), timezone: s.timezone, weather: w.value, tvs, tvMinutesToday: today,
+        people: home.presence(devices.filter((d) => d.kind === "hub"), devices.filter((d) => d.kind === "phone")),
+        coming: automation.comingList(s),
+        events: events.map((e) => ({ text: e.text, at: e.at })), speed: speed ? { down: speed.down, up: speed.up, ping: speed.ping, at: speed.at } : null,
+        scenes: (s.scenes && s.scenes.length ? s.scenes : automation.DEFAULT_SCENES).map((x) => ({ id: x.id, name: x.name })),
+        config: { camera: { sensitivity: (s.camera && s.camera.sensitivity) || 5, video: !(s.camera && s.camera.video === false), alerts: s.alerts.camera !== false }, slideshow: Boolean(s.slideshowFolder) }
+    };
+}
+
 router.get("/home/agent/dashboard", agentLimiter, agentAuth, async (req, res) => {
-    try {
-        res.set("Cache-Control", "no-store");
-        const owner = req.device.owner;
-        const s = await automation.settingsOf(owner);
-        const devices = await HomeDevice.find({ owner }).lean();
-        let w = weatherCache.get(String(owner));
-        if (!w || Date.now() - w.at > 15 * 60 * 1000) {
-            w = { at: Date.now(), value: await weather.forecast(s.weather, s.timezone).catch(() => null) };
-            weatherCache.set(String(owner), w);
-        }
-        const today = ((s.usage || {})[automation.localParts(Date.now(), s.timezone).date] || {}).minutes || 0;
-        const events = await HomeEvent.find({ owner }).sort({ at: -1 }).limit(8).lean();
-        const speed = await HomeSpeed.findOne({ owner }).sort({ at: -1 }).lean();
-        const tvs = devices.filter((d) => d.kind === "tv").map((d) => {
-            const p = homeRouter.publicDevice(d);
-            return { name: p.name, online: p.online, screen: (p.status || {}).screen || "", app: ((p.status || {}).app || {}).label || "", title: ((p.status || {}).media || {}).title || "" };
-        });
-        return res.json({
-            time: new Date().toISOString(), timezone: s.timezone, weather: w.value, tvs, tvMinutesToday: today,
-            people: home.presence(devices.filter((d) => d.kind === "hub"), devices.filter((d) => d.kind === "phone")),
-            events: events.map((e) => ({ text: e.text, at: e.at })), speed: speed ? { down: speed.down, up: speed.up, ping: speed.ping, at: speed.at } : null,
-            scenes: (s.scenes && s.scenes.length ? s.scenes : automation.DEFAULT_SCENES).map((x) => ({ id: x.id, name: x.name })),
-            config: { camera: { sensitivity: (s.camera && s.camera.sensitivity) || 5, video: !(s.camera && s.camera.video === false), alerts: s.alerts.camera !== false }, slideshow: Boolean(s.slideshowFolder) }
-        });
-    } catch (e) { return fail(res, e, "Could not load the dashboard."); }
+    try { res.set("Cache-Control", "no-store"); return res.json(await buildDashboard(req.device.owner)); }
+    catch (e) { return fail(res, e, "Could not load the dashboard."); }
+});
+
+router.get("/home/dashboard", authenticate, async (req, res) => {
+    try { res.set("Cache-Control", "no-store"); return res.json(await buildDashboard(req.rootUser._id)); }
+    catch (e) { return fail(res, e, "Could not load the dashboard."); }
 });
 
 router.get("/home/agent/today", agentLimiter, agentAuth, async (req, res) => {

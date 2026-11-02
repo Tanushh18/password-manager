@@ -16,6 +16,13 @@ stored in `HomePairCode`). The device sends it to `POST /home/agent/pair` and ge
 only call `/home/agent/*` (report, media, dashboard, slideshow, assistant, scene) and the movie endpoints, never the
 vault. The older TV/tablet sign-in (`POST /home/devices`, kinds `tv` and `hub`) still works.
 
+## The page, in five tabs
+**Overview** (Ask Stashr, *Home screen* = a live copy of the tablet's screen, *What is switched on*, What happened) ·
+**Devices** (who is home, TV, tablet and Wi-Fi, family phones, pair a tablet or phone) ·
+**Camera & alerts** (security camera, alerts and daily briefs) ·
+**Automations** (scenes, schedules, places and WhatsApp, TV time and daily limit) ·
+**Media & network** (internet speed, movies from Drive, photo frame). The tab is remembered in the browser.
+
 ## What the page shows
 - **Ask Stashr**: typed or spoken (mic button, Chrome/Edge speech recognition in `hi-IN` or `en-IN`). Understands
   volume, play/pause, apps, YouTube links, songs ("arijit ke gaane chalao" plays on the tablet with YouTube Music;
@@ -33,6 +40,13 @@ vault. The older TV/tablet sign-in (`POST /home/devices`, kinds `tv` and `hub`) 
   Send. The first sighting sends nothing; a place is only “left” when the phone is clearly outside (radius + accuracy).
   Fragile by nature: it depends on WhatsApp's screens, needs the tablet to have no PIN lock, the Accessibility switch on
   (Android 13+: App info → ⋮ → Allow restricted settings) and “Display over other apps”. Telegram gets a note each time.
+- **Who is on the way home**: set the home location (Places card). Each family phone that shares its location and is
+  getting closer shows as “Papa 10 minute mein aa rahe hain” on the tablet, on the page's Home screen card, in today's
+  updates, to the assistant (“papa kab aayenge”) and once in Telegram when within the minutes you set. Straight line × 1.3
+  at the phone's speed (or 25 km/h): good to a few minutes. Phones send location with no notification (battery saver:
+  passive updates + one fix every 15 min); “Precise mode” is optional.
+- **Telegram control**: write to your Stashr bot like the assistant (“pause the tv”, “camera photo”, “kaun ghar par hai”,
+  “papa kab aayenge”, “today”), or /home, /who, /camera, /today, /tv. Only your linked chat is answered.
 - **Who is home**: a person is home when a Wi-Fi device you gave that person answers, or their paired phone's own
   address answers on the tablet's scan (`home.presence`).
 - **TV**: status, remote, USB movies, as before.

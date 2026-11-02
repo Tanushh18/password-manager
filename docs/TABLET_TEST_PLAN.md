@@ -59,6 +59,14 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] Tablet offline: Telegram says the message was not sent.
 - [ ] Group with a long name or similar names: the right one is picked.
 
+## 7b. Arrival time and Telegram control
+- [ ] Page → Automations → Places → Home location saved (use your phone's browser at home).
+- [ ] Phone: location sharing on (battery saver, no notification in the drawer). Go out ~5 km and come back: the tablet banner and the page's Home screen card show “… minute mein aa rahe hain”; Telegram says it once when within 15 min.
+- [ ] Check battery use of Stashr Hub on the phone after a day (Settings → Battery); try Precise mode only if the ETA is too slow.
+- [ ] Phone with an aggressive battery saver (Xiaomi/Oppo/Vivo): does the ETA still update? (turn battery optimisation off for the app)
+- [ ] Telegram: “pause the tv”, “volume up”, “camera photo” (photo comes back), “kaun ghar par hai”, “papa kab aayenge”, “today”, /who, /camera on.
+- [ ] Page → Overview → “What is switched on” matches reality; “Open” jumps to the right tab.
+
 ## 8. Updates (OTA)
 - [ ] Push a change under `hub-app/` to `main`; the GitHub Release is created and is **not** "latest".
 - [ ] The app (or "check_update") finds it, verifies it and Android asks for one tap to install.

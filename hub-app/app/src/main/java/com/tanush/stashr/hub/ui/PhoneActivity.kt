@@ -13,6 +13,7 @@ import com.tanush.stashr.hub.core.DeviceInfo
 import com.tanush.stashr.hub.core.Prefs
 import com.tanush.stashr.hub.core.Ui
 import com.tanush.stashr.hub.phone.LocationService
+import com.tanush.stashr.hub.phone.LocationShare
 import com.tanush.stashr.hub.phone.PhoneReporter
 import com.tanush.stashr.hub.update.Updater
 import kotlinx.coroutines.CoroutineScope
@@ -65,10 +66,19 @@ class PhoneActivity : Activity() {
 
         val loc = ui.card("Location", "For arrive / leave messages you set up on the Smart home page")
         locSwitch = android.widget.Switch(this).apply {
-            text = "Share my location with Stashr (for arrive/leave messages)"; setTextColor(ui.c.text); isChecked = prefs.shareLocation
-            setOnCheckedChangeListener { _, on -> if (on) startSharing() else { prefs.shareLocation = false; LocationService.stop(this@PhoneActivity); refresh() } }
+            text = "Share my location (battery saver, no notification)"; setTextColor(ui.c.text); isChecked = prefs.shareLocation
+            setOnCheckedChangeListener { _, on -> if (on) startSharing() else { prefs.shareLocation = false; LocationShare.stop(this@PhoneActivity); refresh() } }
         }
         loc.addView(locSwitch)
+        loc.addView(ui.dim("Battery saver sends your position about every 15 minutes (faster while a maps app is in use), only after you have moved, and shows no notification."))
+        val precise = android.widget.Switch(this).apply {
+            text = "Precise mode (updates every minute, shows a small silent notification, uses more battery)"; setTextColor(ui.c.text); isChecked = prefs.preciseLocation
+            setOnCheckedChangeListener { b, on ->
+                if (on && !prefs.shareLocation) { b.isChecked = false; android.widget.Toast.makeText(this@PhoneActivity, "Turn on location sharing first.", android.widget.Toast.LENGTH_SHORT).show() }
+                else { prefs.preciseLocation = on; LocationShare.start(this@PhoneActivity); refresh() }
+            }
+        }
+        loc.addView(precise)
         locInfo = ui.dim("")
         loc.addView(locInfo)
         loc.addView(ui.dim("Your location goes only to your own Stashr server, and only while this switch is on."))
@@ -88,7 +98,7 @@ class PhoneActivity : Activity() {
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         setContentView(root)
         PhoneReporter.schedule(this)
-        if (prefs.shareLocation && LocationService.hasPermission(this)) LocationService.start(this)
+        LocationShare.start(this)
     }
 
     override fun onResume() { super.onResume(); continueSharing(); tick() }
@@ -129,7 +139,7 @@ class PhoneActivity : Activity() {
     private fun enable() {
         Prefs(this).shareLocation = true
         if (!locSwitch.isChecked) locSwitch.isChecked = true
-        LocationService.start(this); refresh()
+        LocationShare.start(this); refresh()
     }
     override fun onPause() { handler.removeCallbacksAndMessages(null); super.onPause() }
     override fun onDestroy() { scope.cancel(); super.onDestroy() }
@@ -147,7 +157,7 @@ class PhoneActivity : Activity() {
             append("🧠 Memory: ${used(r)}% used\n")
             append("📶 Network: ${DeviceInfo.networkName(this@PhoneActivity)}${if (DeviceInfo.onWifi(this@PhoneActivity)) " · " + DeviceInfo.localIp() else ""}")
         }
-        val fix = LocationService.last
+        val fix = LocationShare.lastFix(this)
         locInfo.text = if (!Prefs(this).shareLocation) "Off" else if (fix == null) "On · waiting for the first fix" else "Last fix: " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(fix.at)) + " · ±${fix.acc} m"
         sent.text = if (PhoneReporter.lastSentAt > 0) "Last sent: " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(PhoneReporter.lastSentAt)) else "Last sent: not yet from this screen"
     }

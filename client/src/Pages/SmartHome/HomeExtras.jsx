@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, saveHomeScenes, runHomeScene,
+  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, saveHomeScenes, runHomeScene,
   getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, getHomeLiveFrame, testHomeBrief, setHomePhonePerson, removeHomeDevice
 } from "../../api/client";
 import { Section, useConfirm } from "../Render/RenderUi";
@@ -34,7 +34,7 @@ export function PairCard() {
     catch (err) { toast.error(errorMessage(err, "Could not make a code.")); }
   };
   return (
-    <Section title="Add a tablet or a family phone" subtitle="Install Stashr Hub from /apps, then type the code. No password is needed on that device.">
+    <Section title="Pair a tablet or family phone" subtitle="Install Stashr Hub from /apps, then type the code. No password is needed on that device.">
       <form className="sh-row" onSubmit={make}>
         <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="What are you adding">
           <option value="phone">A family phone (battery, storage, who is home)</option>
@@ -137,7 +137,7 @@ export function AlertsCard({ home }) {
     catch (e) { toast.error(errorMessage(e, "Could not make it.")); } finally { setBusy(false); }
   };
   return (
-    <Section title="Alerts and briefs" subtitle="Sent to your Telegram bot (connect it in Settings). Everything is also in “What happened”.">
+    <Section title="Alerts and daily briefs" subtitle="Sent to your Telegram bot (connect it in Settings). Everything is also in “What happened”.">
       <div className="sh-grid2">
         <div className="sh-controls">
           <h4 className="sh-h">Tell me when</h4>
@@ -188,7 +188,7 @@ export function TvTimeCard({ home }) {
   const today = data.days[data.days.length - 1];
   const week = data.days.slice(-7).reduce((a, d) => a + d.minutes, 0);
   return (
-    <Section title="TV time" subtitle={`Today ${fmtMinutes(today.minutes)} · this week ${fmtMinutes(week)} (${fmtMinutes(week / 7)} a day)`}>
+    <Section title="TV time and daily limit" subtitle={`Today ${fmtMinutes(today.minutes)} · this week ${fmtMinutes(week)} (${fmtMinutes(week / 7)} a day)`}>
       <TvTimeChart days={data.days} limit={s.tvLimit.minutes} />
       <form className="sh-row" onSubmit={(e) => { e.preventDefault(); save({ tvLimit: { minutes: Number(mins) || 0 } }, Number(mins) ? "Daily TV limit saved." : "No TV limit."); }}>
         <span className="sh-dim">Daily limit</span>
@@ -299,6 +299,41 @@ export function SchedulesCard({ home }) {
   );
 }
 
+/* ───────── home location + arrival time ───────── */
+
+function HomeSpotBlock({ home }) {
+  const { settings: s, save } = home;
+  const spot = s.homeSpot, eta = s.eta || {};
+  const [lat, setLat] = useState(spot ? String(spot.lat) : "");
+  const [lon, setLon] = useState(spot ? String(spot.lon) : "");
+  const [busy, setBusy] = useState(false);
+  const here = () => {
+    if (!navigator.geolocation) { toast.error("This browser cannot give your location."); return; }
+    setBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { setLat(String(Number(pos.coords.latitude.toFixed(6)))); setLon(String(Number(pos.coords.longitude.toFixed(6)))); setBusy(false); },
+      () => { toast.error("Could not get this device’s location. Allow it, or type the numbers."); setBusy(false); },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  };
+  return (
+    <div className="sh-editor">
+      <b>Home location · arrival time</b>
+      <p className="sh-dim">With a home location, the tablet and this page show “Papa 10 minute mein aa rahe hain” for family phones that share their location and are heading home. It is a straight-line estimate, good to a few minutes.</p>
+      <div className="sh-row">
+        <input type="number" step="any" value={lat} onChange={(e) => setLat(e.target.value)} placeholder="Home latitude" aria-label="Home latitude" />
+        <input type="number" step="any" value={lon} onChange={(e) => setLon(e.target.value)} placeholder="Home longitude" aria-label="Home longitude" />
+        <button type="button" className="rd-btn rd-btn--quiet" onClick={here} disabled={busy}>{busy ? "Locating…" : "Use this device’s location"}</button>
+        <button type="button" className="rd-btn rd-btn--primary" disabled={!lat || !lon} onClick={() => save({ homeSpot: { lat, lon, radius: spot?.radius || 200 } }, "Home location saved.")}>Save home</button>
+      </div>
+      <div className="sh-row">
+        <label className="sh-switch"><input type="checkbox" checked={eta.enabled !== false} onChange={(e) => save({ eta: { enabled: e.target.checked } })} />Show who is on the way home</label>
+        <label className="sh-dim">Tell me when within <input type="number" min="1" max="120" value={eta.notifyMinutes || 15} onChange={(e) => save({ eta: { notifyMinutes: Number(e.target.value) } })} style={{ width: 64 }} aria-label="Minutes" /> min (Telegram)</label>
+      </div>
+    </div>
+  );
+}
+
 /* ───────── places: arrive / leave messages on WhatsApp ───────── */
 
 export function PlacesCard({ home, phones, hasSmartHub }) {
@@ -328,7 +363,8 @@ export function PlacesCard({ home, phones, hasSmartHub }) {
   };
   const phoneName = (id) => phones.find((p) => p.id === id)?.name || "phone";
   return (
-    <Section title="Places · WhatsApp messages" subtitle="When a family phone reaches or leaves a place (and the time fits), the tablet opens WhatsApp and sends your message to a group.">
+    <Section title="Places and WhatsApp messages" subtitle="When a family phone reaches or leaves a place (and the time fits), the tablet opens WhatsApp and sends your message to a group.">
+      <HomeSpotBlock home={home} />
       {!phones.length ? <p className="sh-dim">Pair a family phone first (Stashr Hub in phone mode, with “Share my location” on).</p> : null}
       {!hasSmartHub ? <p className="sh-dim">The tablet needs Stashr Hub, with its Accessibility switch on (the WhatsApp card on the tablet’s dashboard).</p> : null}
       {places.length ? (
@@ -491,13 +527,101 @@ export function SlideshowCard({ home, hub, send }) {
   useEffect(() => { if (s) setFolder(s.slideshowFolder ? "https://drive.google.com/drive/folders/" + s.slideshowFolder : ""); }, [s]);
   if (!s || !hub) return null;
   return (
-    <Section title="Photo slideshow on the tablet" subtitle="Photos from a Google Drive folder, through the Google account connected in Photo Cloud.">
+    <Section title="Photo frame (tablet slideshow)" subtitle="Photos from a Google Drive folder, through the Google account connected in Photo Cloud.">
       <form className="sh-row" onSubmit={(e) => { e.preventDefault(); save({ slideshowFolder: folder }, "Slideshow folder saved."); }}>
         <input value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="Paste the Drive folder link" aria-label="Slideshow folder" style={{ flex: "1 1 18rem" }} />
         <button className="rd-btn rd-btn--quiet" type="submit">Save</button>
         <button type="button" className="rd-btn rd-btn--primary" disabled={!s.slideshowFolder} onClick={() => send(hub.id, "slideshow", { action: "start" }, "Slideshow starting on the tablet.")}>Start on the tablet</button>
       </form>
       <p className="sh-dim">The tablet also starts the slideshow by itself after 10 idle minutes on its dashboard, when a folder is set.</p>
+    </Section>
+  );
+}
+
+
+/* ───────── a copy of the tablet's home screen ───────── */
+
+export function HomeScreenCard() {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState("");
+  const load = useCallback(async () => { try { setD(await getHomeDashboard()); setErr(""); } catch (e) { setErr(errorMessage(e, "Could not load.")); } }, []);
+  useEffect(() => { load(); }, [load]);
+  usePolling(load, 15000);
+  if (!d) return err ? <p className="sh-bad" role="alert">{err}</p> : null;
+  const w = d.weather;
+  const comingText = (c) => (c.minutes <= 1 ? `${c.person} bas pahunchne wale hain` : `${c.person} ${c.minutes} minute mein aa rahe hain`);
+  return (
+    <Section title="Home screen" subtitle="The same things the tablet shows, live.">
+      {(d.coming || []).map((c) => <p key={c.person} className="sh-ok" role="status">🚗 <b>{comingText(c)}</b> <span className="sh-dim">· {c.km} km door</span></p>)}
+      <p><b>{new Date(d.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</b> · {w ? `${String(w.city || "").split(",")[0]} ${w.temp}°C · ${w.text} · ${w.min}–${w.max}°C${w.rainChance != null ? ` · ${w.rainChance}% rain` : ""}` : <span className="sh-dim">Set your city under Alerts and daily briefs to see the weather.</span>}</p>
+      <div className="sh-row" role="list" aria-label="Who is home">
+        {d.people.length ? d.people.map((p) => <span key={p.person} role="listitem" className={"sh-chip" + (p.home ? " is-on" : "")}>{p.home ? "● " : "○ "}{p.person} · {p.home ? "home" : "out"}</span>) : <span className="sh-dim">Give a Wi-Fi device a person, or pair a family phone.</span>}
+      </div>
+      <ul className="sh-lan">
+        {d.tvs.map((t) => <li key={t.name}><div className="sh-lan__main"><b>📺 {t.name}</b><span>{!t.online ? "off or not connected" : t.screen === "off" ? "standby" : `on${t.app ? ` · ${t.app}` : ""}${t.title ? ` · ${t.title}` : ""}`}</span></div></li>)}
+        <li><div className="sh-lan__main"><b>⏱ TV today</b><span>{fmtMinutes(d.tvMinutesToday || 0)}</span></div></li>
+        {d.speed ? <li><div className="sh-lan__main"><b>🚀 Internet</b><span>{d.speed.down} Mbit/s down · {d.speed.up} up · {d.speed.ping} ms · {ago(d.speed.at)}</span></div></li> : null}
+      </ul>
+      {d.events.length ? <ul className="sh-events">{d.events.slice(0, 6).map((e, i) => <li key={i}><span>{ago(e.at)}</span><b>{e.text}</b></li>)}</ul> : null}
+    </Section>
+  );
+}
+
+/* ───────── what is switched on ───────── */
+
+export function FeaturesCard({ home, devices, goTo }) {
+  const s = home.settings;
+  if (!s) return null;
+  const hub = devices.find((d) => d.kind === "hub" && d.status?.agent === "stashr-hub");
+  const phones = devices.filter((d) => d.kind === "phone");
+  const sharing = phones.filter((p) => p.status?.location && Date.now() - Number(p.status.location.at) < 45 * 60 * 1000);
+  const a = s.alerts || {};
+  const rows = [
+    ["Devices", [
+      ["Home tablet (Stashr Hub)", hub ? (hub.online ? "on" : "offline") : "off", hub ? "" : "Pair it under Devices", "devices"],
+      ["Family phones", phones.length ? "on" : "off", phones.length ? `${phones.length} paired` : "None paired yet", "devices"],
+      ["Phone location sharing", sharing.length ? "on" : "off", sharing.length ? `${sharing.length} sharing` : "Switch it on in the Hub app on each phone", "devices"],
+      ["Voice “Hey Stashr”", hub?.status?.voice?.listening ? "on" : "off", hub ? "Turn on in the tablet app" : "", "devices"]
+    ]],
+    ["Camera and alerts", [
+      ["Security camera", hub?.status?.camera?.armed ? "on" : "off", "Start it on the Camera & alerts tab", "security"],
+      ["Camera on when everyone is out", s.camera?.auto ? "on" : "off", "", "security"],
+      ["Movement alerts (photo and clip)", a.camera !== false ? "on" : "off", "", "security"],
+      ["New device on the Wi-Fi", a.newDevice !== false ? "on" : "off", "", "security"],
+      ["Unknown device at night", a.night !== false ? "on" : "off", `${a.nightFrom || "00:00"}–${a.nightTo || "05:00"}`, "security"],
+      ["Someone came home or left", a.presence ? "on" : "off", "", "security"],
+      ["Nobody home but the TV is on", a.emptyHomeTv !== false ? "on" : "off", "", "security"],
+      ["Morning brief", s.brief?.enabled ? "on" : "off", s.brief?.enabled ? `at ${s.brief.time}` : "", "security"],
+      ["Weekly report", s.weekly?.enabled ? "on" : "off", "Sunday 20:00", "security"]
+    ]],
+    ["Automations", [
+      ["Scenes", (s.scenes || []).length ? "on" : "off", `${(s.scenes || []).length} ready`, "automations"],
+      ["Schedules", (s.schedules || []).some((x) => x.enabled !== false) ? "on" : "off", `${(s.schedules || []).filter((x) => x.enabled !== false).length} running`, "automations"],
+      ["Daily TV limit", s.tvLimit?.minutes ? "on" : "off", s.tvLimit?.minutes ? `${fmtMinutes(s.tvLimit.minutes)}, then ${s.tvLimit.action}` : "", "automations"],
+      ["Late-night TV warning", s.tvLimit?.lateNight !== false ? "on" : "off", "", "automations"],
+      ["Places and WhatsApp messages", (s.places || []).some((x) => x.enabled !== false) ? "on" : "off", `${(s.places || []).length} places`, "automations"],
+      ["Who is on the way home", s.homeSpot && s.eta?.enabled !== false ? "on" : "off", s.homeSpot ? "" : "Set your home location under Places", "automations"]
+    ]],
+    ["Media and network", [
+      ["Weather", s.weather?.city ? "on" : "off", s.weather?.city || "Set a city under Alerts and daily briefs", "security"],
+      ["Internet speed tests", hub?.status?.speed ? "on" : "off", "Every hour from the tablet", "media"],
+      ["Photo frame (slideshow)", s.slideshowFolder ? "on" : "off", "", "media"]
+    ]]
+  ];
+  return (
+    <Section title="What is switched on" subtitle="Everything you can turn on, and whether it is on right now.">
+      {rows.map(([group, items]) => (
+        <div key={group} className="sh-feat">
+          <h3>{group}</h3>
+          <ul className="sh-lan">{items.map(([name, state, note, tab]) => (
+            <li key={name}>
+              <div className="sh-lan__main"><b>{name}</b>{note ? <span>{note}</span> : null}</div>
+              <span className={"sh-chip" + (state === "on" ? " is-on" : "")}>{state === "on" ? "On" : state === "offline" ? "Offline" : "Off"}</span>
+              <button className="rd-btn rd-btn--quiet" onClick={() => goTo(tab)}>Open</button>
+            </li>
+          ))}</ul>
+        </div>
+      ))}
     </Section>
   );
 }
