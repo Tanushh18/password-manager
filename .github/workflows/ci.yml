@@ -75,3 +75,17 @@ jobs:
           java-version: "17"
           cache: gradle
       - run: ./gradlew testDebugUnitTest assembleDebug --no-daemon
+
+  where-app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: where-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - run: ./gradlew testDebugUnitTest assembleDebug --no-daemon

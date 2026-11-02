@@ -25,7 +25,9 @@ const COMMANDS = {
         key: (a) => (["HOME", "BACK"].includes(a.key) ? { key: a.key } : null),
         // Opens a YouTube or YouTube Music link in the TV's own YouTube app, where your Premium account already works.
         open_url: (a) => (okYoutube(a.url) ? { url: a.url } : null),
-        sync_now: () => ({})
+        sync_now: () => ({}),
+        // A short message on the TV screen (needs a TV app that understands it).
+        notify: (a) => (okText(a.text, 200) ? { text: a.text.trim() } : null)
     },
     hub: {
         scan_now: () => ({}),
@@ -38,10 +40,12 @@ const COMMANDS = {
         camera: (a) => (["arm", "disarm", "snapshot", "clip", "live"].includes(a.action) ? { action: a.action } : null),
         slideshow: (a) => (["start", "stop"].includes(a.action) ? { action: a.action } : null),
         show_today: () => ({}),
+        announce: (a) => (okText(a.text, 200) ? { text: a.text.trim(), speak: a.speak !== false, urgent: a.urgent === true } : null),
         send_whatsapp: (a) => (okText(a.group, 80) && okText(a.text, 500) ? { group: a.group.trim(), text: a.text.trim() } : null)
     },
     phone: {
-        report_now: () => ({})
+        report_now: () => ({}),
+        notice: (a) => (okText(a.text, 200) ? { text: a.text.trim() } : null)
     }
 };
 

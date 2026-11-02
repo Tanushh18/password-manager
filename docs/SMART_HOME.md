@@ -43,8 +43,9 @@ vault. The older TV/tablet sign-in (`POST /home/devices`, kinds `tv` and `hub`) 
 - **Who is on the way home**: set the home location (Places card). Each family phone that shares its location and is
   getting closer shows as “Papa 10 minute mein aa rahe hain” on the tablet, on the page's Home screen card, in today's
   updates, to the assistant (“papa kab aayenge”) and once in Telegram when within the minutes you set. Straight line × 1.3
-  at the phone's speed (or 25 km/h): good to a few minutes. Phones send location with no notification (battery saver:
-  passive updates + one fix every 15 min); “Precise mode” is optional.
+  at the phone's speed (or 25 km/h): good to a few minutes. Phones run the separate **Stashr Location** app (see
+  `docs/APPS.md`): fixed link code from *Devices → Family locations*, no notification, adaptive checking. The tablet reads out
+  and shows “X is arriving in N mins” and “Open the door: X arrived home”; the TV, the other family phones and Telegram get it too.
 - **Telegram control**: write to your Stashr bot like the assistant (“pause the tv”, “camera photo”, “kaun ghar par hai”,
   “papa kab aayenge”, “today”), or /home, /who, /camera, /today, /tv. Only your linked chat is answered.
 - **Who is home**: a person is home when a Wi-Fi device you gave that person answers, or their paired phone's own
@@ -88,7 +89,7 @@ code decides which. Its screens use the website's colours and card style (`core/
   `GET /home/camera/live`. "Hey Stashr" (`voice/`)
   listens with Android speech recognition and sends the sentence to the assistant; songs play through YouTube Music.
   The dashboard and slideshow are in `ui/`.
-- **Family phone** (`phone/`): WorkManager reports battery, storage, memory, model, network and Wi-Fi address about
+- **Family phone** (`phone/`, health only, no location): WorkManager reports battery, storage, memory, model, network and Wi-Fi address about
   every 15 minutes (Android's minimum for background work) and when the phone joins a network.
 - **Updates**: `.github/workflows/hub-apk.yml` builds a signed APK on every change to `hub-app/` (same signing secrets
   as the main app, versionCode 100000 + run number, version from `hub-app/version.txt`) and publishes a GitHub Release

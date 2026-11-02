@@ -430,3 +430,67 @@ describe("on the way home, and Telegram control", () => {
     });
 });
 
+describe("Stashr Location: the location-only app", () => {
+    const loc = (token, lat, at, extra = {}) => request(app).post("/home/agent/location").set(bearer(token)).send({ lat, lon: 77.209, acc: 25, at, speed: 10, battery: { pct: 80, charging: false }, wifi: { connected: false, ip: "" }, ...extra });
+
+    test("link with the fixed code, name it, report, and be told when to look again", async () => {
+        const auth = await signUp();
+        const code = (await request(app).get("/home/location-code").set(auth)).body.code;
+        expect(code).toMatch(/^[A-Z0-9]{8}$/);
+        expect((await request(app).get("/home/location-code").set(auth)).body.code).toBe(code);   // fixed
+        expect((await request(app).post("/home/agent/link").send({ code: "WRONGCODE", name: "Parveen" })).status).toBe(400);
+        expect((await request(app).post("/home/agent/link").send({ code, name: "P" })).status).toBe(400);
+        const link = await request(app).post("/home/agent/link").send({ code: code.toLowerCase(), name: "Parveen Chawla" });
+        expect(link.status).toBe(201);
+        expect((await request(app).post("/home/agent/link").send({ code, name: "parveen chawla" })).status).toBe(409);
+        const t = link.body.token;
+        // no home yet
+        const first = await loc(t, 28.70, Date.now());
+        expect(first.body.state).toBe("unset");
+        expect(first.body.nextCheckSec).toBe(900);
+        await request(app).put("/home/settings").set(auth).send({ homeSpot: { lat: 28.6139, lon: 77.209, radius: 200 } });
+        const far = await loc(t, 28.9, Date.now());                        // ~32 km, first sighting with a home set
+        expect(far.body.state).toBe("away");
+        expect(far.body.nextCheckSec).toBe(1800);                          // far and not heading home: rarely
+        const near = await loc(t, 28.75, Date.now() + 1000);               // closer: heading home
+        expect(near.body.state).toBe("coming");
+        expect(near.body.nextCheckSec).toBe(300);                          // ~15 km: every 5 minutes
+        const where = (await request(app).get("/home/where").set(auth)).body;
+        expect(where.homeSet).toBe(true);
+        expect(where.people[0].name).toBe("Parveen Chawla");
+        expect(where.people[0].state).toBe("coming");
+        // disconnect itself
+        expect((await request(app).post("/home/agent/unlink").set(bearer(t))).status).toBe(200);
+        expect((await loc(t, 28.8, Date.now())).status).toBe(401);
+        // a new code replaces the old one
+        const fresh = (await request(app).post("/home/location-code/rotate").set(auth)).body.code;
+        expect(fresh === code).toBe(false);
+        expect((await request(app).post("/home/agent/link").send({ code, name: "Other Person" })).status).toBe(400);
+    });
+
+    test("arriving in N mins and 'open the door' go to the tablet, the TV and the other phones", async () => {
+        const auth = await signUp();
+        const tab = await pair(auth, "hub");
+        await report(tab.token, { status: { agent: "stashr-hub" } });
+        const tv = (await request(app).post("/home/devices").set(auth).send({ name: "TV", kind: "tv" })).body;
+        await report(tv.token, { status: { screen: "on" } });
+        const code = (await request(app).get("/home/location-code").set(auth)).body.code;
+        const a = (await request(app).post("/home/agent/link").send({ code, name: "Parveen Chawla" })).body;
+        const b = (await request(app).post("/home/agent/link").send({ code, name: "Mom" })).body;
+        await loc(b.token, 28.6139, Date.now());                           // Mom keeps her app alive so she gets notices
+        await request(app).put("/home/settings").set(auth).send({ homeSpot: { lat: 28.6139, lon: 77.209, radius: 200 } });
+        const t0 = Date.now();
+        await loc(a.token, 28.66, t0);                                     // ~5 km, first sighting
+        await loc(a.token, 28.64, t0 + 60_000);                            // ~3 km closer: coming, about 10 min
+        const hub = async () => (await HomeDevice.findOne({ kind: "hub" }).lean()).commands.filter((c) => c.type === "announce").map((c) => c.args.text);
+        expect((await hub()).some((x) => /Parveen Chawla is arriving in \d+ mins/.test(x))).toBe(true);
+        const tvCmds = (await HomeDevice.findOne({ kind: "tv" }).lean()).commands.filter((c) => c.type === "notify");
+        expect(tvCmds.length > 0).toBe(true);
+        // Mom's app is told when she reports; Parveen is not told about himself
+        const mom = await loc(b.token, 28.6139, Date.now() + 2000);
+        expect(mom.body.notices.some((n) => /Parveen Chawla is arriving/.test(n.text))).toBe(true);
+        await loc(a.token, 28.6140, t0 + 120_000);                         // inside the circle: arrived
+        expect((await hub()).some((x) => /Open the door: Parveen Chawla arrived home/.test(x))).toBe(true);
+    });
+});
+

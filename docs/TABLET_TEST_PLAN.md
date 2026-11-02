@@ -50,7 +50,7 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] Low battery shows correctly; charging shows.
 
 ## 7. Places and WhatsApp (the fragile one)
-- [ ] Phone: "Share my location" on; permissions "while using" then "Allow all the time"; "last fix" updates.
+- [ ] Phone: install **Stashr Location**, link with the code + name (it appears in Devices → Family locations); permissions "while using" then "Allow all the time".
 - [ ] Tablet: Accessibility switch on (Android 13+: App info → ⋮ → Allow restricted settings); lock screen is None/Swipe.
 - [ ] Tablet dashboard "WhatsApp messages" → send a test to a small test group: WhatsApp opens, group chosen, message sent, app returns to the dashboard.
 - [ ] Page → Places → "Send test" does the same.
@@ -61,11 +61,24 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 
 ## 7b. Arrival time and Telegram control
 - [ ] Page → Automations → Places → Home location saved (use your phone's browser at home).
-- [ ] Phone: location sharing on (battery saver, no notification in the drawer). Go out ~5 km and come back: the tablet banner and the page's Home screen card show “… minute mein aa rahe hain”; Telegram says it once when within 15 min.
+- [ ] Phone (Stashr Location): no notification in the drawer. Go out ~5 km and come back: the tablet banner and the page's Home screen card show “… minute mein aa rahe hain”; Telegram says it once when within 15 min.
 - [ ] Check battery use of Stashr Hub on the phone after a day (Settings → Battery); try Precise mode only if the ETA is too slow.
 - [ ] Phone with an aggressive battery saver (Xiaomi/Oppo/Vivo): does the ETA still update? (turn battery optimisation off for the app)
 - [ ] Telegram: “pause the tv”, “volume up”, “camera photo” (photo comes back), “kaun ghar par hai”, “papa kab aayenge”, “today”, /who, /camera on.
 - [ ] Page → Overview → “What is switched on” matches reality; “Open” jumps to the right tab.
+
+## 7c. Stashr Location app and announcements
+- [ ] Page → Devices → Family locations shows a fixed 8-letter code; it does not change on reload; "New code" changes it and linked phones stay linked.
+- [ ] Phone: install from /apps, type code + name → the phone appears with its name; wrong code and a duplicate name are refused with a clear message.
+- [ ] Home location set on the website (Places → Home location). Phone far away: card shows km and minutes; after it starts heading home the state becomes "heading home".
+- [ ] Check how often it uploads: far away and leaving ≈ 30 min; heading home and close ≈ 1–2 min (see `adb logcat` / the "updated … ago" text).
+- [ ] Tablet: announcement screen with big text + voice "… is arriving in 15 mins" (and 5), then "Open the door: … arrived home". Without "Display over other apps" you only get the heads-up notification.
+- [ ] Arrival by Wi-Fi: phone joins home Wi-Fi (tablet sees it, person set) within 2 km → "Open the door" fires even before the GPS circle.
+- [ ] TV on: does the TV show the message? (needs the TV app to support `notify`; note the result in "Found").
+- [ ] Second phone gets the same message as a notification when someone else is arriving.
+- [ ] Disconnect in the app → disappears from the page; Disconnect on the page → the app returns to Setup with a message.
+- [ ] Battery use of Stashr Location after a day (Settings → Battery).
+- [ ] OTA: new `where-app/` change → release `stashr-where-v…` is created, not "latest"; `/api/mobile-updates/where/latest` finds it; the app offers the update.
 
 ## 8. Updates (OTA)
 - [ ] Push a change under `hub-app/` to `main`; the GitHub Release is created and is **not** "latest".

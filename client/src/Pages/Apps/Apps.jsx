@@ -20,6 +20,17 @@ const HUB_TABLET = [
 const HUB_PHONE = [
   "Battery, charging, storage and memory, sent to Stashr about every 15 minutes",
   "Shows who is home when the phone is on the home Wi-Fi",
+  "No location and no passwords: for the location use the separate Stashr Location app below",
+];
+
+// Stashr Location: location only, for family phones (built by where-apk.yml, served like Stashr Hub).
+const WHERE_APK = `${publicApiBase}/api/mobile-updates/where/download`;
+const WHERE = [
+  "Shares only the phone’s location, battery level and whether it is on Wi-Fi, and nothing else. It cannot see your vault, passwords or photos",
+  "Joins with one fixed code from the Smart home page plus the person’s name, and stays linked until you disconnect it, on the website or in the app",
+  "No permanent notification and very little battery: it looks rarely when someone is far away or leaving, and often only when they are heading home",
+  "Stashr works out who is on the way and how long they will take. The tablet and the TV show “Parveen is arriving in 15 mins”, then “Open the door: Parveen arrived home”",
+  "Also sends you the same messages as a normal notification when someone else is arriving",
 ];
 
 const FEATURES = [
@@ -50,7 +61,7 @@ export default function Apps() {
         </ol>
         <p className="apps__note">Updates install over the old app and keep your data. If a previous build refuses to update, uninstall it first.</p>
         <h2>Stashr Hub for Android</h2>
-        <p>One app for the always-on home tablet and for family phones. It joins with a code, so nobody types your Stashr password on it.</p>
+        <p>The app for the always-on home tablet (and, in phone mode, a phone that reports its health). It joins with a code, so nobody types your Stashr password on it.</p>
         <a className="btn btn--primary apps__download" href={HUB_APK} download="stashr-hub.apk">Download Stashr Hub</a>
         <h3>On the home tablet</h3>
         <ul>{HUB_TABLET.map((f) => <li key={f}>{f}</li>)}</ul>
@@ -58,10 +69,21 @@ export default function Apps() {
         <ul>{HUB_PHONE.map((f) => <li key={f}>{f}</li>)}</ul>
         <ol>
           <li>Install the APK on the tablet or phone. If Android asks, allow installs from your browser.</li>
-          <li>On the website open <strong>Smart home → Add a tablet or a family phone</strong>, pick which one it is and tap <strong>Make a code</strong>.</li>
+          <li>On the website open <strong>Smart home → Devices → Pair a tablet or family phone</strong>, pick which one it is and tap <strong>Make a code</strong>.</li>
           <li>Type the 8-letter code in Stashr Hub. The tablet asks for camera, microphone and notification permission once.</li>
         </ol>
         <p className="apps__note">Stashr Hub updates itself from new GitHub releases. Android asks for one tap to install each update.</p>
+        <h2>Stashr Location for Android</h2>
+        <p>A tiny app for the phones of people at home. It only shares where the phone is, so the family never gets near your passwords. Install it on each family phone.</p>
+        <a className="btn btn--primary apps__download" href={WHERE_APK} download="stashr-location.apk">Download Stashr Location</a>
+        <ul>{WHERE.map((f) => <li key={f}>{f}</li>)}</ul>
+        <ol>
+          <li>On the website open <strong>Smart home → Devices → Family locations</strong>. The link code is there, and it stays the same until you make a new one.</li>
+          <li>Install the APK on the family phone. If Android asks, allow installs from your browser.</li>
+          <li>Open Stashr Location, type the code and the person’s name, and tap <strong>Connect</strong>. Allow location “all the time” when it asks.</li>
+          <li>Set the home location once on the website (Smart home → Automations → Places). It applies to every phone.</li>
+        </ol>
+        <p className="apps__note">On some phones (Xiaomi, Oppo, Vivo) battery savers pause background apps. If updates stop, the app has a button for its battery settings. It updates itself from GitHub releases; Android asks for one tap.</p>
         <h2>Browser extension</h2>
         <p>Autofill from your vault in Chrome, Edge and Brave. Version {EXT.version}.</p>
         <a className="btn btn--primary apps__download" href={EXT.file} download="stashr-extension.zip">Download extension</a>

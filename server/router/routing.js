@@ -366,6 +366,7 @@ router.use(require("./extension"));
 router.use(require("./telegram"));
 router.use(require("./home"));
 router.use(require("./homeMore"));
+router.use(require("./homeWhere"));
 router.use(require("./mpin"));
 router.use(require("./photoCloud"));
 router.use(require("./photoUpload"));

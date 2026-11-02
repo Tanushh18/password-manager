@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, saveHomeScenes, runHomeScene,
+  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, getLocationCode, rotateLocationCode, getHomeWhere, saveHomeScenes, runHomeScene,
   getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, getHomeLiveFrame, testHomeBrief, setHomePhonePerson, removeHomeDevice
 } from "../../api/client";
 import { Section, useConfirm } from "../Render/RenderUi";
@@ -365,7 +365,7 @@ export function PlacesCard({ home, phones, hasSmartHub }) {
   return (
     <Section title="Places and WhatsApp messages" subtitle="When a family phone reaches or leaves a place (and the time fits), the tablet opens WhatsApp and sends your message to a group.">
       <HomeSpotBlock home={home} />
-      {!phones.length ? <p className="sh-dim">Pair a family phone first (Stashr Hub in phone mode, with “Share my location” on).</p> : null}
+      {!phones.length ? <p className="sh-dim">Link a family phone first (Family locations card on the Devices tab).</p> : null}
       {!hasSmartHub ? <p className="sh-dim">The tablet needs Stashr Hub, with its Accessibility switch on (the WhatsApp card on the tablet’s dashboard).</p> : null}
       {places.length ? (
         <ul className="sh-lan">{places.map((pl, i) => (
@@ -580,7 +580,7 @@ export function FeaturesCard({ home, devices, goTo }) {
     ["Devices", [
       ["Home tablet (Stashr Hub)", hub ? (hub.online ? "on" : "offline") : "off", hub ? "" : "Pair it under Devices", "devices"],
       ["Family phones", phones.length ? "on" : "off", phones.length ? `${phones.length} paired` : "None paired yet", "devices"],
-      ["Phone location sharing", sharing.length ? "on" : "off", sharing.length ? `${sharing.length} sharing` : "Switch it on in the Hub app on each phone", "devices"],
+      ["Phone locations (Stashr Location)", sharing.length ? "on" : "off", sharing.length ? `${sharing.length} sharing` : "Link phones with the Stashr Location app (Devices tab)", "devices"],
       ["Voice “Hey Stashr”", hub?.status?.voice?.listening ? "on" : "off", hub ? "Turn on in the tablet app" : "", "devices"]
     ]],
     ["Camera and alerts", [
@@ -622,6 +622,54 @@ export function FeaturesCard({ home, devices, goTo }) {
           ))}</ul>
         </div>
       ))}
+    </Section>
+  );
+}
+
+
+/* ───────── family locations: Stashr Location app ───────── */
+
+const whereText = (p) => {
+  if (p.state === "home") return "At home";
+  if (p.state === "coming") return `${p.etaMinutes <= 1 ? "Almost home" : `About ${p.etaMinutes} min away`} · ${p.distanceKm} km · heading home`;
+  if (p.state === "away") return `${p.distanceKm} km from home${p.etaMinutes ? ` · about ${p.etaMinutes} min if they head home now` : ""}`;
+  if (p.state === "unset") return "Set your home location (Automations → Places) to see the distance";
+  return "Waiting for the first location";
+};
+
+export function LocationsCard() {
+  const [code, setCode] = useState("");
+  const [data, setData] = useState(null);
+  const confirm = useConfirm();
+  const load = useCallback(async () => { try { setData(await getHomeWhere()); } catch { /* keeps the last list */ } }, []);
+  useEffect(() => { load(); getLocationCode().then((r) => setCode(r.code)).catch(() => {}); }, [load]);
+  usePolling(load, 20000);
+  const copy = async () => { try { await navigator.clipboard.writeText(code); toast.success("Code copied."); } catch { toast.error("Could not copy. Select the code and copy it."); } };
+  const renew = async () => {
+    if (!(await confirm.ask({ title: "Make a new link code?", message: "Phones that are already linked stay linked. Only new phones need the new code.", confirmLabel: "New code" }))) return;
+    try { setCode((await rotateLocationCode()).code); toast.success("New code ready."); } catch (e) { toast.error(errorMessage(e, "Could not make a new code.")); }
+  };
+  const drop = async (p) => {
+    if (!(await confirm.ask({ title: `Disconnect ${p.name}?`, message: "Their phone stops being tracked here. They can link again with the code.", confirmLabel: "Disconnect", danger: true }))) return;
+    try { await removeHomeDevice(p.id); load(); } catch (e) { toast.error(errorMessage(e, "Could not disconnect.")); }
+  };
+  return (
+    <Section title="Family locations" subtitle="Who is where, how far from home and when they will arrive. Phones run the separate Stashr Location app (it never sees your passwords).">
+      <div className="sh-editor">
+        <b>Link code for Stashr Location</b>
+        <div className="sh-row"><code className="sh-code" aria-label="Link code">{code || "…"}</code><button className="rd-btn rd-btn--quiet" onClick={copy} disabled={!code}>Copy</button><button className="rd-btn rd-btn--quiet" onClick={renew}>New code</button></div>
+        <p className="sh-dim">Install Stashr Location from the Apps page on the family phone, type this code and the person’s name. It stays linked until you disconnect it here or they press Disconnect in the app.</p>
+      </div>
+      {data && !data.homeSet ? <p className="sh-bad">Home location is not set yet. Set it under Automations → Places so distances and arrival times can be worked out.</p> : null}
+      {data && data.people.length ? (
+        <ul className="sh-lan">{data.people.map((p) => (
+          <li key={p.id}>
+            <div className="sh-lan__main"><b>{p.state === "coming" ? "🚗" : p.state === "home" ? "🏠" : "📍"} {p.name}</b><span>{whereText(p)}{p.battery?.pct != null ? ` · battery ${p.battery.pct}%${p.battery.charging ? " (charging)" : ""}` : ""}{p.lastSeen ? ` · updated ${ago(p.lastSeen)}` : ""}{p.app === "Stashr Hub" ? " · via Stashr Hub" : ""}</span></div>
+            <button className="rd-btn rd-btn--danger-quiet" onClick={() => drop(p)}>Disconnect</button>
+          </li>
+        ))}</ul>
+      ) : <p className="sh-dim">No phone is linked yet.</p>}
+      {confirm.dialog}
     </Section>
   );
 }

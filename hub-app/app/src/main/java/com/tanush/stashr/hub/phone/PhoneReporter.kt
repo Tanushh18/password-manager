@@ -90,7 +90,6 @@ object PhoneReporter {
             .put("android", Build.VERSION.RELEASE)
             .put("uptimeH", DeviceInfo.uptimeHours())
             .put("appVersion", BuildConfig.VERSION_NAME)
-        if (Prefs(ctx).shareLocation) LocationShare.lastFix(ctx)?.let { out.put("location", it.toJson()) }
         return out
     }
 

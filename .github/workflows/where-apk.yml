@@ -1,0 +1,160 @@
+name: Stashr Location Android Release
+
+# Every change to where-app/ builds a signed Stashr Location APK and publishes it as its own GitHub Release
+# (tag stashr-where-v<version>-build-<code>). The Stashr server serves it at /api/mobile-updates/where/*, and the app
+# installed on family phones updates itself from there. These releases are never marked "latest":
+# the main Stashr app's update check reads releases/latest.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "where-app/**"
+      - ".github/workflows/where-apk.yml"
+  workflow_dispatch:
+    inputs:
+      releaseNotes:
+        description: "Notes for this Stashr Location update"
+        type: string
+        default: "Stashr Location update"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stashr-where-release
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    name: Build, sign and publish Stashr Location APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: where-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+
+      - name: Verify persistent Android signing key
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Add all four secrets: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD. The same key must be used for every update."
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/stashr-upload.jks"
+          keytool -list -keystore "$RUNNER_TEMP/stashr-upload.jks" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+
+      - name: Stamp version
+        id: release
+        shell: bash
+        env:
+          RELEASE_NOTES_INPUT: ${{ inputs.releaseNotes }}
+        run: |
+          APP_VERSION=$(tr -d '[:space:]' < version.txt)
+          echo "$APP_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::where-app/version.txt must look like 1.2.3"; exit 1; }
+          VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))
+          NOTES="${RELEASE_NOTES_INPUT:-Stashr Location update}"
+          {
+            echo "app_version=$APP_VERSION"
+            echo "version_code=$VERSION_CODE"
+            echo "tag=stashr-where-v$APP_VERSION-build-$VERSION_CODE"
+            echo "release_notes<<EOF"
+            printf '%s\n' "$NOTES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "Building Stashr Location $APP_VERSION (versionCode $VERSION_CODE)"
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Build signed release APK
+        shell: bash
+        env:
+          APP_VERSION: ${{ steps.release.outputs.app_version }}
+          VERSION_CODE: ${{ steps.release.outputs.version_code }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease --no-daemon \
+            -PwhereVersionName="$APP_VERSION" -PwhereVersionCode="$VERSION_CODE" \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/stashr-upload.jks" \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+
+      - name: Create update manifest and verify APK
+        id: manifest
+        shell: bash
+        env:
+          APP_VERSION: ${{ steps.release.outputs.app_version }}
+          VERSION_CODE: ${{ steps.release.outputs.version_code }}
+          RELEASE_NOTES: ${{ steps.release.outputs.release_notes }}
+        run: |
+          APK=$(find app/build/outputs/apk/release -name '*.apk' -type f | head -n 1)
+          test -n "$APK" || { echo "::error::Gradle did not produce an APK"; exit 1; }
+          cp "$APK" stashr-where.apk
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          test -n "$APKSIGNER" || { echo "::error::Android apksigner was not found"; exit 1; }
+          "$APKSIGNER" verify --verbose stashr-where.apk
+          SHA256=$(sha256sum stashr-where.apk | cut -d ' ' -f 1)
+          SIZE=$(stat -c '%s' stashr-where.apk)
+          export SHA256 SIZE
+          node - <<'NODE'
+          const fs = require("fs");
+          fs.writeFileSync("stashr-where-update.json", JSON.stringify({
+            packageName: "com.tanush.stashr.where",
+            version: process.env.APP_VERSION,
+            versionCode: Number(process.env.VERSION_CODE),
+            sha256: process.env.SHA256,
+            sizeBytes: Number(process.env.SIZE),
+            releaseNotes: process.env.RELEASE_NOTES,
+            builtAt: new Date().toISOString(),
+            commit: process.env.GITHUB_SHA
+          }, null, 2) + "\n");
+          NODE
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stashr-where-v${{ steps.release.outputs.version_code }}
+          path: |
+            where-app/stashr-where.apk
+            where-app/stashr-where-update.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish as a GitHub Release (not "latest")
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: Stashr Location ${{ steps.release.outputs.app_version }} (build ${{ steps.release.outputs.version_code }})
+          body: |
+            ${{ steps.release.outputs.release_notes }}
+
+            - Package: `com.tanush.stashr.where`
+            - Android versionCode: ${{ steps.release.outputs.version_code }}
+            - SHA-256: ${{ steps.manifest.outputs.sha256 }}
+            - Published by GitHub Actions from commit ${{ github.sha }}
+
+            Installed copies offer the update on the main screen (Android asks for one tap).
+          files: |
+            where-app/stashr-where.apk
+            where-app/stashr-where-update.json
+          make_latest: "false"
+          fail_on_unmatched_files: true

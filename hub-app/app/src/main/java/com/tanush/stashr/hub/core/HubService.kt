@@ -170,6 +170,12 @@ class HubService : LifecycleService() {
                         "Slideshow ${args.optString("action")}"
                     }
                     "send_whatsapp" -> com.tanush.stashr.hub.whatsapp.WhatsAppSender.send(this@HubService, args.optString("group"), args.optString("text"))
+                    "announce" -> {
+                        val text = args.optString("text").trim().take(200)
+                        if (text.isEmpty()) throw IllegalArgumentException("Nothing to show")
+                        com.tanush.stashr.hub.ui.AnnounceActivity.show(this@HubService, text, args.optBoolean("speak", true), args.optBoolean("urgent", false))
+                        "Shown"
+                    }
                     "show_today" -> {
                         startActivity(Intent(this@HubService, com.tanush.stashr.hub.ui.TodayActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
                         "Showing today's updates"

@@ -222,40 +222,88 @@ async function geoTick(owner, now, settings, devices) {
 }
 
 /**
- * "Papa is 10 minutes away": for every family phone sharing its location, work out whether it is heading home, and how
- * long it will take. There is no routing service: the distance is a straight line times 1.3 (roads wind), at the phone's
- * own speed, or the speed it just covered, or 25 km/h. Good to a few minutes, not to the minute. Tells you once per trip
- * (Telegram) when it is within notifyMinutes.
+ * Tells the family something: Telegram, the tablet (big text and a voice), the TV if it is on, and the other family
+ * phones running Stashr Location. Each place can be switched off under settings.eta (toTablet, toTv, toPhones).
+ */
+async function announce(owner, text, { settings, devices, exceptDevice, urgent = false, kind = "eta", now = Date.now() } = {}) {
+    const eta = (settings && settings.eta) || {};
+    const list = devices || await HomeDevice.find({ owner }).lean();
+    await record({ owner, kind, notify: true, text });
+    if (eta.toTablet !== false) for (const hub of list.filter((d) => d.kind === "hub" && (d.status || {}).agent === "stashr-hub" && Boolean(d.online) && home.isOnline(d, now))) await queue(hub, "announce", { text, speak: true, urgent });
+    if (eta.toTv !== false) for (const tv of list.filter((d) => d.kind === "tv" && Boolean(d.online) && home.isOnline(d, now) && (d.status || {}).screen !== "off")) await queue(tv, "notify", { text });
+    if (eta.toPhones !== false) for (const ph of list.filter((d) => d.kind === "phone" && (d.status || {}).agent === "stashr-where" && String(d._id) !== String(exceptDevice) && d.lastSeen && now - new Date(d.lastSeen).getTime() < 3 * 3600 * 1000)) await queue(ph, "notice", { text });
+}
+
+/**
+ * Where each family phone running Stashr Location is: at home, on the way (and in how long), or just away.
+ * "Papa is 10 minutes away": there is no routing service, so the distance is a straight line times 1.3 (roads wind), at
+ * the phone's own speed, or the speed it just covered, or 25 km/h: good to a few minutes. A person is "home" when they are
+ * inside the home circle, or when the tablet sees their phone on the Wi-Fi and they are within 2 km: whichever comes
+ * first. Announces "arriving in N mins" at notifyMinutes and at 5, and "Open the door" on arrival, once each.
  */
 async function etaTick(owner, now, settings, devices) {
     const spot = settings.homeSpot, eta = settings.eta || {};
     if (!spot || !Number.isFinite(spot.lat) || !Number.isFinite(spot.lon) || eta.enabled === false) return;
     const radius = spot.radius || 200, state = { ...(settings.etaState || {}) };
+    const people = home.presence((devices || []).filter((d) => d.kind === "hub"), (devices || []).filter((d) => d.kind === "phone"), now);
+    const wifiHome = new Set(people.filter((p) => p.home).map((p) => p.person));
+    const milestones = [...new Set([Number(eta.notifyMinutes) || 15, 5])].sort((x, y) => y - x);
     let changed = false;
     for (const ph of (devices || []).filter((d) => d.kind === "phone")) {
         const loc = ph.status && ph.status.location;
         if (!loc || !Number.isFinite(Number(loc.lat)) || !Number.isFinite(Number(loc.lon)) || !loc.at) continue;
-        const key = String(ph._id), old = state[key] || {};
-        if (old.locAt === Number(loc.at)) continue;
+        const key = String(ph._id), old = state[key] || {}, person = ph.person || ph.name;
         const d = distanceM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: spot.lat, lon: spot.lon });
-        const dt = old.locAt ? (Number(loc.at) - old.locAt) / 1000 : 0;
-        let coming = Boolean(old.coming);
-        if (d <= radius) coming = false;
-        else if (old.d !== undefined && d < old.d - 30) coming = true;
-        else if (old.d !== undefined && d > old.d + 100) coming = false;
-        let v = Number(loc.speed) > 2 ? Number(loc.speed) : (old.d !== undefined && dt > 20 && old.d - d > 0 ? (old.d - d) / dt : 0);
-        if (!(v > 1.5)) v = 7;                                            // 25 km/h
-        v = Math.min(Math.max(v, 4), 25);
-        const minutes = Math.max(1, Math.round((d * 1.3) / v / 60));
-        const person = ph.person || ph.name;
-        const next = { d, locAt: Number(loc.at), coming: coming && d <= (eta.maxKm || 40) * 1000, minutes, km: Math.round(d / 100) / 10, person, notified: coming ? old.notified : false };
-        if (next.coming && !next.notified && minutes <= (eta.notifyMinutes || 15)) {
-            next.notified = true;
-            await record({ owner, kind: "eta", notify: true, text: minutes <= 1 ? `${person} is almost home.` : `${person} will be home in about ${minutes} minutes.` });
+        const fresh = now - Number(loc.at) < 90 * 60 * 1000;
+        const atHome = d <= radius || (wifiHome.has(person) && d <= 2000);
+        const newFix = old.locAt !== Number(loc.at);
+        let next = { ...old, person, atHome, d, locAt: Number(loc.at) };
+        if (newFix) {
+            const dt = old.locAt ? (Number(loc.at) - old.locAt) / 1000 : 0;
+            let coming = Boolean(old.coming);
+            if (atHome) coming = false;
+            else if (old.d !== undefined && d < old.d - 30) coming = true;
+            else if (old.d !== undefined && d > old.d + 100) coming = false;
+            let v = Number(loc.speed) > 2 ? Number(loc.speed) : (old.d !== undefined && dt > 20 && old.d - d > 0 ? (old.d - d) / dt : 0);
+            if (!(v > 1.5)) v = 7;                                        // 25 km/h
+            v = Math.min(Math.max(v, 4), 25);
+            next = { ...next, coming: coming && d <= (eta.maxKm || 40) * 1000, minutes: Math.max(1, Math.round((d * 1.3) / v / 60)), km: Math.round(d / 100) / 10, fired: coming ? (old.fired || []) : [] };
         }
-        state[key] = next; changed = true;
+        if (next.coming && fresh && !atHome) {
+            const hit = milestones.filter((m) => next.minutes <= m && !(next.fired || []).includes(m));
+            if (hit.length && await claim(`eta:${owner}:${key}:${Math.min(...hit)}:${Math.floor(now / (20 * 60000))}`)) {
+                next.fired = [...new Set([...(next.fired || []), ...hit])];
+                const text = next.minutes <= 1 ? `${person} is about to arrive` : `${person} is arriving in ${next.minutes} mins`;
+                await announce(owner, text, { settings, devices, exceptDevice: ph._id, now });
+            }
+        }
+        if (atHome && old.atHome === false && fresh && await claim(`arrived:${owner}:${key}:${Math.floor(now / (20 * 60000))}`)) {
+            next.coming = false; next.fired = [];
+            await announce(owner, `Open the door: ${person} arrived home`, { settings, devices, exceptDevice: ph._id, urgent: true, kind: "arrived", now });
+        }
+        if (JSON.stringify(next) !== JSON.stringify(old)) { state[key] = next; changed = true; }
     }
     if (changed) await HomeSettings.updateOne({ owner }, { $set: { etaState: state } });
+}
+
+/** Where one phone is for the page and for the app: { state: unset|home|coming|away, distanceKm, etaMinutes }. */
+function whereIs(settings, phone, now = Date.now()) {
+    const spot = settings.homeSpot, loc = phone.status && phone.status.location;
+    if (!spot || !Number.isFinite(spot.lat)) return { state: "unset" };
+    if (!loc || !loc.at) return { state: "unknown" };
+    const e = (settings.etaState || {})[String(phone._id)] || {};
+    const d = distanceM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: spot.lat, lon: spot.lon });
+    const km = Math.round(d / 100) / 10;
+    if (e.atHome || d <= (spot.radius || 200)) return { state: "home", distanceKm: km, fixAt: Number(loc.at) };
+    return { state: e.coming ? "coming" : "away", distanceKm: km, etaMinutes: e.minutes || null, fixAt: Number(loc.at) };
+}
+
+/** How long the Stashr Location app should wait before it looks again: often when heading home, rarely when far away. */
+function checkInterval(where) {
+    if (where.state === "coming") { const k = where.distanceKm; return k > 20 ? 600 : k > 10 ? 300 : k > 3 ? 120 : 60; }
+    if (where.state === "away") return where.distanceKm < 10 ? 900 : 1800;
+    if (where.state === "home") return 1200;
+    return 900;
 }
 
 /** Who is on the way home right now: [{ person, minutes, km }]. */
@@ -419,4 +467,4 @@ const DEFAULT_SCENES = [
     { id: "goodnight", name: "Good night", steps: [{ kind: "tv", type: "media", args: { action: "play_pause" } }, { kind: "tv", type: "key", args: { key: "HOME" } }] }
 ];
 
-module.exports = { localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, autoCamera, geoTick, distanceM, etaTick, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };
+module.exports = { localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, autoCamera, geoTick, distanceM, etaTick, announce, whereIs, checkInterval, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };
