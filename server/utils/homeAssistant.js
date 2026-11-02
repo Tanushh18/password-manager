@@ -62,6 +62,7 @@ function parse(sentence, devices, scenes = []) {
     if (has(text, ["speed test", "internet speed", "net speed", "speed check", "speedtest"])) return toHub("speed_test", {}, "Running an internet speed test on the tablet. The result shows up in a minute.");
     if (has(text, ["camera"])) {
         if (has(text, ["off", "band", "disarm", "stop", "bandh"])) return toHub("camera", { action: "disarm" }, "Turning the tablet camera alerts off.");
+        if (has(text, ["live", "dikhao live"])) return toHub("camera", { action: "live" }, "Live view is on for 2 minutes. Open Smart home → Camera to watch.");
         if (has(text, ["video", "clip", "recording"])) return toHub("camera", { action: "clip" }, "Recording a short clip on the tablet camera.");
         if (has(text, ["photo", "pic", "picture", "snapshot", "dikhao", "dekho"])) return toHub("camera", { action: "snapshot" }, "Taking a photo with the tablet camera.");
         if (has(text, ["on", "chalu", "start", "arm", "shuru"])) return toHub("camera", { action: "arm" }, "Camera alerts are on: you get a photo when someone comes into view.");

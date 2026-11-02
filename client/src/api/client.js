@@ -449,6 +449,7 @@ export const getHomeUsage = (days = 14) => instance.get("/home/usage", { params:
 export const getHomeSpeed = (days = 7) => instance.get("/home/speed", { params: { days } }).then((r) => r.data);
 export const getHomeMedia = () => instance.get("/home/media").then((r) => r.data);
 export const getHomeMediaBlob = (id) => instance.get(`/home/media/${id}`, { responseType: "blob" }).then((r) => r.data);
+export const getHomeLiveFrame = () => instance.get("/home/camera/live", { responseType: "blob", validateStatus: (s) => s === 200 || s === 204 }).then((r) => (r.status === 200 ? r.data : null));
 export const deleteHomeMedia = (id) => instance.delete(`/home/media/${id}`).then((r) => r.data);
 export const testHomeBrief = (which = "brief") => instance.post("/home/brief/test", { which }).then((r) => r.data);
 export const disconnectTelegram = () => instance.post("/telegram/disconnect").then((r) => r.data);

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
   makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomeScenes, runHomeScene,
-  getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, testHomeBrief, setHomePhonePerson, removeHomeDevice
+  getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, getHomeLiveFrame, testHomeBrief, setHomePhonePerson, removeHomeDevice
 } from "../../api/client";
 import { Section, useConfirm } from "../Render/RenderUi";
 import { usePolling } from "../Render/renderHooks";
@@ -346,8 +346,36 @@ function MediaThumb({ item, onDelete }) {
   );
 }
 
+/** The live view: asks the tablet for 2 minutes of frames and shows the newest one about every 1.5 s. */
+function LiveView({ hub, send, onClose }) {
+  const [url, setUrl] = useState("");
+  const [waiting, setWaiting] = useState(true);
+  useEffect(() => {
+    let alive = true, last = "", timer = null, ask = null;
+    const start = () => send(hub.id, "camera", { action: "live" }, "Live view starting… the first picture takes a few seconds.");
+    start();
+    ask = window.setInterval(start, 110 * 1000); // keep it going while the page is open
+    const tick = async () => {
+      try {
+        const b = await getHomeLiveFrame();
+        if (alive && b) { const u = URL.createObjectURL(b); setUrl(u); setWaiting(false); if (last) URL.revokeObjectURL(last); last = u; }
+      } catch { /* try again */ }
+      if (alive) timer = window.setTimeout(tick, 1500);
+    };
+    tick();
+    return () => { alive = false; window.clearTimeout(timer); window.clearInterval(ask); if (last) URL.revokeObjectURL(last); };
+  }, [hub.id, send]);
+  return (
+    <div className="sh-live">
+      {url ? <img src={url} alt="Live view from the tablet camera" /> : <div className="sh-live__wait">{waiting ? "Connecting to the tablet camera…" : "No picture"}</div>}
+      <div className="sh-row"><span className="sh-live__badge">● LIVE</span><span className="sh-dim">About one picture every 1–2 seconds. Stops 2 minutes after you close it.</span><button className="rd-btn rd-btn--quiet" onClick={onClose}>Close live view</button></div>
+    </div>
+  );
+}
+
 export function CameraCard({ hub, send, home }) {
   const [list, setList] = useState(null);
+  const [live, setLive] = useState(false);
   const load = useCallback(async () => { try { setList((await getHomeMedia()).media); } catch { /* hidden */ } }, []);
   useEffect(() => { load(); }, [load]);
   usePolling(load, 30000);
@@ -356,23 +384,29 @@ export function CameraCard({ hub, send, home }) {
   const cam = (hub && hub.status && hub.status.camera) || {};
   const remove = async (item) => { try { await deleteHomeMedia(item.id); load(); } catch (e) { toast.error(errorMessage(e, "Could not delete.")); } };
   return (
-    <Section title="Camera" subtitle={hub ? `${hub.name} camera · ${cam.armed ? "watching for movement" : "alerts off"}${cam.lastMotion ? ` · last movement ${ago(cam.lastMotion)}` : ""}` : "Photos and clips from the tablet"}>
+    <Section title="Security camera" subtitle={hub ? `${hub.name} · ${cam.armed ? "🔴 guarding: records and alerts on movement" : "off: the camera is closed"}${cam.lastMotion ? ` · last movement ${ago(cam.lastMotion)}` : ""}` : "Photos and clips from the tablet"}
+      actions={hub ? (cam.armed
+        ? <button className="rd-btn rd-btn--danger-quiet" onClick={() => send(hub.id, "camera", { action: "disarm" }, "Security camera stopped.")}>Stop security camera</button>
+        : <button className="rd-btn rd-btn--primary" onClick={() => send(hub.id, "camera", { action: "arm" }, "Security camera started. You get a photo and a clip on Telegram when someone moves in view.")}>Start security camera</button>) : null}>
       {hub ? (
-        <div className="sh-row">
-          {cam.armed
-            ? <button className="rd-btn rd-btn--quiet" onClick={() => send(hub.id, "camera", { action: "disarm" }, "Camera alerts off.")}>Turn alerts off</button>
-            : <button className="rd-btn rd-btn--primary" onClick={() => send(hub.id, "camera", { action: "arm" }, "Camera alerts on.")}>Watch for movement</button>}
-          <button className="rd-btn rd-btn--quiet" onClick={() => send(hub.id, "camera", { action: "snapshot" }, "Taking a photo…")}>Take a photo</button>
-          <button className="rd-btn rd-btn--quiet" onClick={() => send(hub.id, "camera", { action: "clip" }, "Recording 10 seconds…")}>Record a clip</button>
-          {s ? <>
-            <span className="sh-dim">Sensitivity</span>
-            <input type="range" min="1" max="10" value={s.camera.sensitivity} onChange={(e) => save({ camera: { sensitivity: Number(e.target.value) } }, "Sensitivity saved.")} aria-label="Camera sensitivity" />
-            <label className="sh-switch"><input type="checkbox" checked={s.camera.video} onChange={(e) => save({ camera: { video: e.target.checked } })} />Also send a 10 s clip</label>
-          </> : null}
-        </div>
+        <>
+          <p className="sh-dim">While it is on, the tablet watches its camera. When someone moves in view it sends a photo at once, then records while the movement lasts (up to a minute) and sends the clip. Everything is kept here for 14 days. The camera stays closed while it is off.</p>
+          <div className="sh-row">
+            <button className="rd-btn rd-btn--quiet" onClick={() => setLive(!live)} aria-pressed={live}>{live ? "Hide live view" : "👁 Live view"}</button>
+            <button className="rd-btn rd-btn--quiet" onClick={() => send(hub.id, "camera", { action: "snapshot" }, "Taking a photo…")}>Take a photo</button>
+            <button className="rd-btn rd-btn--quiet" onClick={() => send(hub.id, "camera", { action: "clip" }, "Recording 10 seconds…")}>Record a clip</button>
+            {s ? <>
+              <span className="sh-dim">Sensitivity</span>
+              <input type="range" min="1" max="10" value={s.camera.sensitivity} onChange={(e) => save({ camera: { sensitivity: Number(e.target.value) } }, "Sensitivity saved.")} aria-label="Camera sensitivity" />
+              <label className="sh-switch"><input type="checkbox" checked={s.camera.video} onChange={(e) => save({ camera: { video: e.target.checked } })} />Record clips on movement</label>
+            </> : null}
+          </div>
+          {live ? <LiveView hub={hub} send={send} onClose={() => setLive(false)} /> : null}
+        </>
       ) : null}
       {cam.error ? <p className="sh-bad">{cam.error}</p> : null}
-      {list && list.length ? <ul className="sh-gallery">{list.map((m) => <MediaThumb key={m.id} item={m} onDelete={remove} />)}</ul> : <p className="sh-dim">No photos yet. Turn on “Watch for movement” and the tablet sends a photo (and a short clip) when someone comes into view. Kept for 14 days.</p>}
+      {list && list.length ? <ul className="sh-gallery">{list.map((m) => <MediaThumb key={m.id} item={m} onDelete={remove} />)}</ul> : <p className="sh-dim">No recordings yet.</p>}
+      {s ? <p className="sh-dim">Tip: add “Tablet: security camera on” to a schedule (e.g. 23:00) or to an “Away” scene to start guarding automatically.</p> : null}
     </Section>
   );
 }

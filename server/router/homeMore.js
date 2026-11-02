@@ -24,6 +24,7 @@ const HomeEvent = require("../models/homeEvent");
 const HomeSettings = require("../models/homeSettings");
 const HomePairCode = require("../models/homePairCode");
 const HomeSpeed = require("../models/homeSpeed");
+const HomeLiveFrame = require("../models/homeLiveFrame");
 const home = require("../utils/home");
 const automation = require("../utils/homeAutomation");
 const media = require("../utils/homeMedia");
@@ -35,6 +36,9 @@ const homeRouter = require("./home");
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: "Too many changes. Slow down." });
 const agentLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, message: "Too many requests." });
 const pairLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: "Too many tries. Wait a few minutes." });
+// Live frames come about once a second, so they get their own, larger allowance.
+const liveLimiter = rateLimit({ windowMs: 60 * 1000, max: 90, message: "Too many frames." });
+const agentLimiterLive = () => liveLimiter;
 const agentAuth = (req, res, next) => homeRouter.agentAuth(req, res, next);
 const fail = (res, error, fallback) => res.status(Number.isInteger(error.status) ? error.status : 500).json({ error: Number.isInteger(error.status) ? error.message : fallback });
 const validId = (id) => mongoose.isValidObjectId(id);
@@ -274,6 +278,26 @@ router.delete("/home/media/:id", authenticate, writeLimiter, async (req, res) =>
         await media.remove(file);
         return res.json({ ok: true });
     } catch (e) { return fail(res, e, "Could not delete that."); }
+});
+
+// Live view: the tablet sends a small JPEG every second or two while someone is watching (2 minutes per request).
+router.post("/home/agent/live", agentLimiterLive(), agentAuth, express.raw({ type: ["image/jpeg"], limit: 512 * 1024 }), async (req, res) => {
+    try {
+        if (req.device.kind !== "hub") return res.status(403).json({ error: "Only the tablet can send camera pictures." });
+        if (!media.looksLike("photo", req.body)) return res.status(400).json({ error: "Send a JPEG photo." });
+        await HomeLiveFrame.updateOne({ _id: req.device._id }, { $set: { owner: req.device.owner, at: new Date(), data: req.body } }, { upsert: true });
+        return res.json({ ok: true });
+    } catch (e) { return fail(res, e, "Could not save the frame."); }
+});
+
+router.get("/home/camera/live", authenticate, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const frame = await HomeLiveFrame.findOne({ owner: req.rootUser._id }).sort({ at: -1 }).lean();
+        if (!frame || Date.now() - new Date(frame.at).getTime() > 20 * 1000) return res.status(204).end();
+        res.set({ "Content-Type": "image/jpeg", "X-Frame-At": new Date(frame.at).toISOString(), "Access-Control-Expose-Headers": "X-Frame-At" });
+        return res.send(Buffer.from(frame.data.buffer || frame.data));
+    } catch (e) { return fail(res, e, "Could not load the live view."); }
 });
 
 /* ───────── the tablet's screen ───────── */

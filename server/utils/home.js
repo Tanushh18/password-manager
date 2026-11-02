@@ -35,7 +35,7 @@ const COMMANDS = {
         wake: (a) => (okMac(a.mac) ? { mac: normMac(a.mac) } : null),
         // Plays songs on the tablet through YouTube Music (where the Premium account is signed in).
         play_music: (a) => (okText(a.query, 120) ? { query: a.query.trim() } : null),
-        camera: (a) => (["arm", "disarm", "snapshot", "clip"].includes(a.action) ? { action: a.action } : null),
+        camera: (a) => (["arm", "disarm", "snapshot", "clip", "live"].includes(a.action) ? { action: a.action } : null),
         slideshow: (a) => (["start", "stop"].includes(a.action) ? { action: a.action } : null)
     },
     phone: {

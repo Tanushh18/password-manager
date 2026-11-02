@@ -269,6 +269,19 @@ describe("camera", () => {
         expect((await HomeEvent.find({ kind: "camera" })).length).toBe(1);
     });
 
+    test("live view: the tablet sends frames, the owner sees the newest", async () => {
+        const auth = await signUp();
+        const hub = await pair(auth);
+        expect((await request(app).get("/home/camera/live").set(auth)).status).toBe(204);
+        expect((await request(app).post("/home/agent/live").set(bearer(hub.token)).set("Content-Type", "image/jpeg").send(jpeg)).status).toBe(200);
+        const live = await request(app).get("/home/camera/live").set(auth).buffer(true).parse((res, cb) => { const c = []; res.on("data", (d) => c.push(d)); res.on("end", () => cb(null, Buffer.concat(c))); });
+        expect(live.status).toBe(200);
+        expect(live.body.length).toBe(jpeg.length);
+        const bob = await signUp("bob@example.com");
+        expect((await request(app).get("/home/camera/live").set(bob)).status).toBe(204);
+        expect(home.cleanCommand("hub", "camera", { action: "live" })).toEqual({ type: "camera", args: { action: "live" } });
+    });
+
     test("a phone cannot send camera pictures, and the dashboard answers the tablet", async () => {
         const auth = await signUp();
         const phone = await pair(auth, "phone", "Mom");

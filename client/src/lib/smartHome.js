@@ -99,7 +99,7 @@ export function stepLabel(s) {
   if (s.type === "launch_app") return "Open " + (APP_NAMES[a.package] || a.package);
   if (s.type === "open_url") return "Open YouTube link";
   if (s.type === "play_music") return `Play “${a.query}” on the tablet`;
-  if (s.type === "camera") return { arm: "Camera alerts on", disarm: "Camera alerts off", snapshot: "Camera photo", clip: "Camera clip" }[a.action];
+  if (s.type === "camera") return { arm: "Security camera on", disarm: "Security camera off", snapshot: "Camera photo", clip: "Camera clip", live: "Camera live view" }[a.action];
   if (s.type === "slideshow") return a.action === "start" ? "Photo slideshow on the tablet" : "Stop the slideshow";
   if (s.type === "scan_now") return "Scan the Wi-Fi";
   if (s.type === "speed_test") return "Internet speed test";
@@ -120,8 +120,8 @@ export const STEP_CHOICES = [
   { label: "TV: volume 10", step: { kind: "tv", type: "volume", args: { level: 10 } } },
   { label: "TV: volume 30", step: { kind: "tv", type: "volume", args: { level: 30 } } },
   ...Object.entries(APP_NAMES).map(([pkg, name]) => ({ label: `TV: open ${name}`, step: { kind: "tv", type: "launch_app", args: { package: pkg } } })),
-  { label: "Tablet: camera alerts on", step: { kind: "hub", type: "camera", args: { action: "arm" } } },
-  { label: "Tablet: camera alerts off", step: { kind: "hub", type: "camera", args: { action: "disarm" } } },
+  { label: "Tablet: security camera on", step: { kind: "hub", type: "camera", args: { action: "arm" } } },
+  { label: "Tablet: security camera off", step: { kind: "hub", type: "camera", args: { action: "disarm" } } },
   { label: "Tablet: photo slideshow", step: { kind: "hub", type: "slideshow", args: { action: "start" } } },
   { label: "Tablet: speed test", step: { kind: "hub", type: "speed_test", args: {} } },
   { label: "Tablet: scan the Wi-Fi", step: { kind: "hub", type: "scan_now", args: {} } }
