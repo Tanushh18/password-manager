@@ -16,6 +16,8 @@ process.env.GOOGLE_SHEETS_SA_JSON = Buffer.from(JSON.stringify({ client_email: "
 const app = require("../app");
 const User = require("../models/schema");
 const ExpenseSettings = require("../models/expenseSettings");
+const ExpenseTx = require("../models/expenseTx");
+const expenseRouter = require("../router/expenses");
 const ex = require("../utils/expenses");
 const sheets = require("../utils/sheets");
 
@@ -148,6 +150,8 @@ function fakeGoogle() {
             for (const d of body.data) { const r = rangeOf(d.range); const t = tab(r.tab); while (t.rows.length < r.row) t.rows.push([]); t.rows[r.row - 1][r.col] = d.values[0][0]; }
             return json({});
         }
+        const clr = /^[^/]+\/values\/(.+?):clear$/.exec(rest);
+        if (clr) { const r = rangeOf(clr[1]); tab(r.tab).rows.splice(Math.max(r.row - 1, 1)); return json({}); }
         const m = /^[^/]+\/values\/(.+?)(:append)?$/.exec(rest);
         if (m) {
             const r = rangeOf(m[1].replace(/:append$/, "")), t = tab(r.tab);
@@ -165,7 +169,7 @@ let mongo, realFetch, G;
 const SHEET = "https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcdef/edit";
 beforeAll(async () => { mongo = await MongoMemoryServer.create(); await mongoose.connect(mongo.getUri()); realFetch = global.fetch; });
 afterAll(async () => { global.fetch = realFetch; await mongoose.disconnect(); await mongo.stop(); });
-beforeEach(async () => { await User.deleteMany({}); await ExpenseSettings.deleteMany({}); G = fakeGoogle(); global.fetch = (u, o) => G.fetchFake(u, o); sheets.forget("1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcdef"); });
+beforeEach(async () => { await expenseRouter.idle(); await User.deleteMany({}); await ExpenseSettings.deleteMany({}); await ExpenseTx.deleteMany({}); G = fakeGoogle(); global.fetch = (u, o) => G.fetchFake(u, o); sheets.forget("1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcdef"); });
 
 const signUp = async () => {
     await request(app).post("/register").send({ name: "Ana", email: "ana@example.com", password: "master-pass", cpassword: "master-pass" });
@@ -176,28 +180,34 @@ const ms = (iso) => Date.parse(iso);
 const sms = (auth, messages) => request(app).post("/expenses/sms").set(auth).send({ messages });
 const ready = async (auth, start = "2026-06-01") => {
     await request(app).put("/expenses/sheet").set(auth).send({ sheetUrl: SHEET });
+    await request(app).put("/expenses/storage").set(auth).send({ mode: "sheet" });          // these tests are about the sheet-only mode
     if (start) await request(app).post("/expenses/start").set(auth).send({ date: start });
 };
 
-describe("the money API", () => {
+describe("the money API (Google Sheet only mode)", () => {
     test("setting up the sheet creates the tabs and headers; a sheet that is not shared is explained", async () => {
         const auth = await signUp();
         const before = (await request(app).get("/expenses/settings").set(auth)).body;
-        expect(before.ready).toBe(true);
+        expect(before.storage).toBe("db");                                         // Stashr storage is the default
+        expect(before.sheetReady).toBe(true);
         expect(before.serviceAccountEmail).toBe("stashr@money-test.iam.gserviceaccount.com");
-        expect(before.configured).toBe(false);
+        expect(before.configured).toBe(true); expect(before.sheetCopy).toBe(false);
+        expect((await request(app).put("/expenses/storage").set(auth).send({ mode: "sheet" })).body.error).toMatch(/Google Sheet link/);
         expect((await request(app).put("/expenses/sheet").set(auth).send({ sheetUrl: "nonsense" })).status).toBe(400);
         const bad = await request(app).put("/expenses/sheet").set(auth).send({ sheetUrl: "https://docs.google.com/spreadsheets/d/nopermission_nopermission_nopermission/edit" });
         expect(bad.status).toBe(400);
         expect(bad.body.error).toMatch(/Share the sheet with stashr@money-test/);
         const ok = await request(app).put("/expenses/sheet").set(auth).send({ sheetUrl: SHEET });
         expect(ok.status).toBe(200);
-        expect(ok.body.configured).toBe(true);
+        expect(ok.body.sheetCopy).toBe(true);
         expect(ok.body.needsStartDate).toBe(true);
         expect(Object.keys(G.book.tabs).sort()).toEqual(["Archive", "Summary", "Transactions"]);
         expect(G.tab("Transactions").rows[0][0]).toBe("Date");
         expect(G.tab("Transactions").rows[0].length).toBe(16);
         expect(String(G.tab("Summary").rows[2][0])).toMatch(/^=QUERY\(Transactions/);
+        const sw = await request(app).put("/expenses/storage").set(auth).send({ mode: "sheet" });
+        expect(sw.body.storage).toBe("sheet"); expect(sw.body.retention).toMatch(/Archive/);
+        expect((await request(app).delete("/expenses/sheet").set(auth)).status).toBe(400);   // the sheet is the store now
     });
 
     test("the start date can be set once, and nothing is read before it", async () => {
@@ -333,5 +343,151 @@ describe("the money API", () => {
             expect(G.tab("Archive").rows.slice(1).map((x) => x[8])).toEqual(["777777777777", "999999999999"]);
             expect(G.tab("Transactions").rows.slice(1).map((x) => x[8])).toEqual(["888888888888"]);
         } finally { Date.now = realNow; }
+    });
+});
+
+/* ───────── Stashr storage (the default): encrypted in MongoDB, the sheet is an optional copy ───────── */
+
+describe("the money API (Stashr storage, the default)", () => {
+    const dbReady = async (auth, start = "2026-06-01") => { if (start) await request(app).post("/expenses/start").set(auth).send({ date: start }); };
+    const second = "Debited Rs 250.00 from a/c X9229 on 22Oct26 12:00 via UPI to SWIGGY. Ref 555555555555.Bal Rs 2257.75. Not you?Call 18004251199 -Federal Bank";
+    const msg = (body, iso, address = "VM-FEDBNK-S") => ({ address, body, date: ms(iso) });
+    const SA = process.env.GOOGLE_SHEETS_SA_JSON;
+    beforeEach(() => { process.env.GOOGLE_SHEETS_SA_JSON = SA; });
+
+    test("works with no Google credentials at all: start date once, ingest, flag, dedupe, list, totals", async () => {
+        delete process.env.GOOGLE_SHEETS_SA_JSON;
+        const auth = await signUp();
+        const s0 = (await request(app).get("/expenses/settings").set(auth)).body;
+        expect(s0.storage).toBe("db"); expect(s0.configured).toBe(true); expect(s0.ready).toBe(true); expect(s0.sheetReady).toBe(false);
+        expect(s0.needsStartDate).toBe(true); expect(s0.retention).toBe("Deleted after 4 months");
+        const early = await sms(auth, [msg(SAMPLE, "2026-10-21T14:12:00Z")]);
+        expect(early.body.needsStartDate).toBe(true);
+        expect(await ExpenseTx.countDocuments({})).toBe(0);
+        expect((await request(app).post("/expenses/start").set(auth).send({ date: "2026-10-01" })).status).toBe(200);
+        expect((await request(app).post("/expenses/start").set(auth).send({ date: "2026-09-01" })).body.error).toMatch(/already set/);
+        const fake = "Debited Rs 5000.00 from a/c X9229 on 22Oct26 13:00 via UPI to Lottery Win. Ref 111.Bal Rs 100.00. -Federal Bank";
+        const r = await sms(auth, [msg(second, "2026-10-22T06:30:00Z"), msg(SAMPLE, "2026-10-21T14:12:00Z"), msg(fake, "2026-10-22T07:30:00Z", "+919812345678"), msg("Your OTP is 123456 -Federal Bank", "2026-10-22T07:31:00Z")]);
+        expect(r.status).toBe(200); expect(r.body.added).toBe(3); expect(r.body.flagged).toBe(1); expect(r.body.ignored).toBe(1);
+        const again = await sms(auth, [msg(SAMPLE, "2026-10-21T14:12:00Z")]);
+        expect(again.body.duplicates).toBe(1); expect(again.body.added).toBe(0);
+        expect(await ExpenseTx.countDocuments({})).toBe(3);
+        const list = (await request(app).get("/expenses?month=2026-10").set(auth)).body;
+        expect(list.rows.length).toBe(3); expect(list.flagged.length).toBe(1);
+        expect(list.flagged[0].flags.join()).toMatch(/phone number/);
+        expect(list.totals.debit).toBe(350);                                    // 100 + 250; the flagged 5000 is not counted
+        expect(list.totals.byCategory.map((c) => c.category).sort()).toEqual(["Food", "Meta Ads"]);
+        expect(typeof list.rows[0].index).toBe("string");
+        expect(G.calls.length).toBe(0);                                         // nothing went to Google
+    });
+
+    test("what is stored is encrypted: no merchant, amount or reference in the document; 4-month expiry; keyed duplicate hash", async () => {
+        const auth = await signUp();
+        await dbReady(auth);
+        await sms(auth, [msg(SAMPLE, "2026-10-21T14:12:00Z")]);
+        const docs = await ExpenseTx.find({}).lean();
+        expect(docs.length).toBe(1);
+        const dump = JSON.stringify(docs);
+        expect(dump).not.toMatch(/Meta|629482059838|Verifie|2507|"amount"|UPI/);
+        expect(docs[0].date).toBe("2026-10-21"); expect(docs[0].month).toBe("2026-10"); expect(docs[0].status).toBe("Unverified");
+        expect(docs[0].enc).toMatch(/^gcm:/);
+        expect(docs[0].refHash).toMatch(/^[a-f0-9]{64}$/);
+        expect(dump).not.toContain(crypto.createHash("sha256").update("ref:629482059838|100").digest("hex"));   // a keyed hash, not a plain one
+        expect(Math.round((docs[0].expireAt - Date.parse("2026-10-21T00:00:00+05:30")) / 86400000)).toBe(120);
+        expect(JSON.stringify(await ExpenseSettings.find({}).lean())).not.toMatch(/629482059838|Meta Verifie/);
+        // the same account can read it back; the unique index also stops a duplicate that slips past the check
+        expect((await request(app).get("/expenses?month=2026-10").set(auth)).body.rows[0].merchant).toBe("Meta Verifie");
+        const dup = await ExpenseTx.create({ owner: docs[0].owner, month: "2026-10", date: "2026-10-21", refHash: "x", enc: "gcm:a:b:c", expireAt: new Date() });
+        expect(!!dup).toBe(true);
+        let blocked = false;
+        try { await ExpenseTx.create({ owner: docs[0].owner, month: "2026-10", date: "2026-10-21", refHash: docs[0].refHash, enc: "gcm:a:b:c", expireAt: new Date() }); } catch (e) { blocked = e.code === 11000; }
+        expect(blocked).toBe(true);
+    });
+
+    test("messages older than four months are not kept; category with remember; review; the statement", async () => {
+        const auth = await signUp();
+        await dbReady(auth, "2026-01-01");
+        const old = "Debited Rs 60.00 from a/c X9229 on 20May26 10:00 via UPI to Swiggy. Ref 777777777777.Bal Rs 940.00 -Federal Bank";
+        const person = "Debited Rs 300.00 from a/c X9229 on 22Oct26 12:00 via UPI to Rahul Sharma. Ref 222222222222.Bal Rs 2207.75 -Federal Bank";
+        const person2 = "Debited Rs 80.00 from a/c X9229 on 23Oct26 12:00 via UPI to Rahul Sharma. Ref 333333333333.Bal Rs 2127.75 -Federal Bank";
+        const odd = "Debited Rs 10.00 from a/c X9229 on 23Oct26 13:00 via UPI to Someone. Ref 444444444444.Bal Rs 5.00 -Federal Bank";
+        const realNow = Date.now;
+        Date.now = () => Date.parse("2026-10-24T06:00:00Z");
+        try {
+            const r = await sms(auth, [msg(old, "2026-05-20T04:30:00Z"), msg(SAMPLE, "2026-10-21T14:12:00Z"), msg(person, "2026-10-22T06:30:00Z"), msg(person2, "2026-10-23T06:30:00Z"), msg(odd, "2026-10-23T07:30:00Z")]);
+            expect(r.body.added).toBe(4); expect(r.body.ignored).toBe(1);                 // the May message is past the 4-month window
+            const list = (await request(app).get("/expenses?month=2026-10").set(auth)).body;
+            expect(list.flagged.length).toBe(1); expect(list.totals.debit).toBe(480); expect(list.uncategorized).toBe(2);
+            const first = list.rows.find((x) => x.ref === "222222222222");
+            const set = await request(app).put("/expenses/category").set(auth).send({ index: first.index, category: "Personal", remember: true });
+            expect(set.body.updated).toBe(2);
+            expect((await request(app).put("/expenses/category").set(auth).send({ index: 5, category: "X" })).status).toBe(400);
+            const after = (await request(app).get("/expenses?month=2026-10").set(auth)).body;
+            expect(after.uncategorized).toBe(0); expect(after.totals.byCategory.find((c) => c.category === "Personal").amount).toBe(380);
+            expect((await request(app).put("/expenses/review").set(auth).send({ index: after.flagged[0].index, action: "genuine" })).status).toBe(200);
+            const confirmed = (await request(app).get("/expenses?month=2026-10").set(auth)).body;
+            expect(confirmed.flagged.length).toBe(0); expect(confirmed.totals.debit).toBe(490);
+            const gone = confirmed.rows.find((x) => x.ref === "444444444444");
+            expect((await request(app).put("/expenses/review").set(auth).send({ index: gone.index, action: "delete" })).status).toBe(200);
+            expect((await request(app).get("/expenses?month=2026-10").set(auth)).body.rows.length).toBe(3);
+            // statement: confirms Meta, adds the Swiggy line the messages missed, and ignores a line older than the window
+            const csv = ["Date,Particulars,Withdrawals,Deposits,Balance", "20-05-2026,UPI/DR/777777777777/SWIGGY,60.00,,940.00", "21-10-2026,UPI/DR/629482059838/META VERIFIE,100.00,,2507.75", "24-10-2026,UPI/DR/555555555555/SWIGGY,250.00,,2257.75"].join("\n");
+            const st = await request(app).post("/expenses/statement?filename=s.csv").set(auth).set("Content-Type", "application/octet-stream").send(Buffer.from(csv));
+            expect(st.status).toBe(200); expect(st.body.report.verified).toBe(1); expect(st.body.report.added).toBe(1); expect(st.body.report.lines).toBe(2);
+            const l2 = (await request(app).get("/expenses?month=2026-10").set(auth)).body;
+            expect(l2.rows.find((x) => x.ref === "629482059838").status).toBe("Verified");
+            const added = l2.rows.find((x) => x.ref === "555555555555");
+            expect(added.source).toBe("Statement"); expect(added.category).toBe("Food");
+            expect((await ExpenseSettings.findOne({}).lean()).lastStatement.verified).toBe(1);
+        } finally { Date.now = realNow; }
+    });
+
+    test("an optional Google Sheet copy is written alongside; a Google failure never fails or loses the save", async () => {
+        const auth = await signUp();
+        await dbReady(auth);
+        expect((await request(app).put("/expenses/sheet").set(auth).send({ sheetUrl: SHEET })).body.sheetCopy).toBe(true);
+        await sms(auth, [msg(SAMPLE, "2026-10-21T14:12:00Z"), msg(second, "2026-10-22T06:30:00Z")]);
+        await expenseRouter.idle();
+        let rows = G.tab("Transactions").rows.slice(1);
+        expect(rows.map((r) => r[8])).toEqual(["629482059838", "555555555555"]);
+        expect(await ExpenseTx.countDocuments({})).toBe(2);
+        // a category change reaches the copy (looked up by reference)
+        const list = (await request(app).get("/expenses?month=2026-10").set(auth)).body;
+        const meta = list.rows.find((x) => x.ref === "629482059838");
+        await request(app).put("/expenses/category").set(auth).send({ index: meta.index, category: "Ads" });
+        await expenseRouter.idle();
+        expect(G.tab("Transactions").rows.slice(1).find((r) => r[8] === "629482059838")[5]).toBe("Ads");
+        expect((await ExpenseSettings.findOne({}).lean()).copyErrors).toBe(0);
+        // Google is down: the entry is still saved, the copy failure is counted and explained
+        global.fetch = async () => { throw new Error("network down"); };
+        const third = "Debited Rs 40.00 from a/c X9229 on 23Oct26 12:00 via UPI to Zomato. Ref 888888888888.Bal Rs 2217.75 -Federal Bank";
+        const r = await sms(auth, [msg(third, "2026-10-23T06:30:00Z")]);
+        await expenseRouter.idle();
+        expect(r.status).toBe(200); expect(r.body.added).toBe(1);
+        expect(await ExpenseTx.countDocuments({})).toBe(3);
+        const set = (await request(app).get("/expenses/settings").set(auth)).body;
+        expect(set.copyErrors).toBe(1); expect(set.lastCopyError).toMatch(/network down/);
+        // unlinking the copy leaves the entries alone
+        const gone = await request(app).delete("/expenses/sheet").set(auth);
+        expect(gone.body.sheetCopy).toBe(false); expect(await ExpenseTx.countDocuments({})).toBe(3);
+    });
+
+    test("export to the sheet, and switching between the two modes never moves anything by itself", async () => {
+        const auth = await signUp();
+        await dbReady(auth);
+        await sms(auth, [msg(SAMPLE, "2026-10-21T14:12:00Z"), msg(second, "2026-10-22T06:30:00Z")]);
+        expect((await request(app).post("/expenses/export-sheet").set(auth)).body.error).toMatch(/Google Sheet link/);
+        await request(app).put("/expenses/sheet").set(auth).send({ sheetUrl: SHEET });
+        G.tab("Transactions").rows.push(["old", "row"]);                         // something stale in the sheet
+        const ex1 = await request(app).post("/expenses/export-sheet").set(auth);
+        expect(ex1.body.exported).toBe(2);
+        expect(G.tab("Transactions").rows.slice(1).map((r) => r[8])).toEqual(["629482059838", "555555555555"]);
+        const sw = await request(app).put("/expenses/storage").set(auth).send({ mode: "sheet" });
+        expect(sw.body.storage).toBe("sheet"); expect(sw.body.message).toMatch(/stay there/);
+        expect((await request(app).post("/expenses/export-sheet").set(auth)).status).toBe(400);   // already the store
+        expect((await request(app).get("/expenses?month=2026-10").set(auth)).body.rows.length).toBe(2);   // read from the sheet now
+        const back = await request(app).put("/expenses/storage").set(auth).send({ mode: "db" });
+        expect(back.body.storage).toBe("db"); expect(await ExpenseTx.countDocuments({})).toBe(2);
+        expect((await request(app).put("/expenses/storage").set(auth).send({ mode: "nonsense" })).status).toBe(400);
     });
 });

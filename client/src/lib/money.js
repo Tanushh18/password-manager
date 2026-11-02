@@ -71,3 +71,12 @@ export function startDateChip(kind, now = new Date()) {
 export const STATUS_LABEL = { Verified: "Verified ✓", Unverified: "Unverified", Confirmed: "Confirmed", Mismatch: "Mismatch", "Not in statement": "Not in statement", Flagged: "Needs checking" };
 /** CSS modifier for a status badge. */
 export const statusTone = (s) => ({ Verified: "ok", Confirmed: "ok", Mismatch: "bad", Flagged: "bad", "Not in statement": "warn" }[s] || "mute");
+
+/** One plain sentence about where the entries are kept, from the server's settings. */
+export function storageNote(settings) {
+  if (!settings) return "";
+  if (settings.storage === "sheet") return "Your entries are kept only in your Google Sheet (older than 4 months they move to its Archive tab). Stashr's database holds none of them.";
+  return settings.sheetCopy
+    ? "Your entries are stored encrypted in Stashr for 4 months and also copied to your Google Sheet."
+    : "Your entries are stored encrypted in Stashr for 4 months. You can also keep a copy in your own Google Sheet.";
+}

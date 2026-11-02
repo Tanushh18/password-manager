@@ -508,6 +508,9 @@ export const redeployHostLink = (projectId, linkId, branch) => instance.post("/h
 /* ───────── money: UPI / bank messages and statements, kept only in the owner's Google Sheet ───────── */
 export const getExpenseSettings = () => instance.get("/expenses/settings").then((r) => r.data);
 export const saveExpenseSheet = (sheetUrl) => instance.put("/expenses/sheet", { sheetUrl }).then((r) => r.data);
+export const setExpenseStorage = (mode) => instance.put("/expenses/storage", { mode }).then((r) => r.data);
+export const unlinkExpenseSheet = () => instance.delete("/expenses/sheet").then((r) => r.data);
+export const exportExpenseSheet = () => instance.post("/expenses/export-sheet").then((r) => r.data);
 export const setExpenseStart = (date) => instance.post("/expenses/start", { date }).then((r) => r.data);
 export const postExpenseSms = (messages) => instance.post("/expenses/sms", { messages }).then((r) => r.data);
 export const getExpenses = (month) => instance.get("/expenses", { params: month ? { month } : {} }).then((r) => r.data);

@@ -76,3 +76,9 @@
 .mn-report { margin-top: .5rem; }
 .mn-warn { margin-top: .5rem; padding: .6rem .8rem; border-radius: var(--r-md); background: color-mix(in srgb, var(--rd-warn, #c49000) 14%, transparent); font-size: .85rem; }
 .mn-warn ul { margin: .35rem 0 0; padding-left: 1.1rem; }
+
+/* storage card */
+.mn-sub { margin: .9rem 0 .25rem; font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; color: var(--text-faint, #667085); }
+label.mn-chip { display: inline-flex; align-items: center; gap: .4rem; }
+label.mn-chip input { accent-color: var(--accent, #2a78d6); margin: 0; }
+label.mn-chip:has(input:disabled) { opacity: .55; cursor: not-allowed; }

@@ -117,6 +117,12 @@ async function updateCells(sheetId, updates) {
     forget(sheetId);
 }
 
+/** Empties every data row of a tab (the header row stays). */
+async function clearTab(sheetId, tab) {
+    await call(`/${sheetId}/values/${enc(`${tab}!A2:${LAST_COL}`)}:clear`, { method: "POST", body: {} });
+    forget(sheetId);
+}
+
 /** rowNumbers: sheet row numbers (>= 2) to remove from a tab. */
 async function deleteRows(sheetId, tab, rowNumbers) {
     if (!rowNumbers.length) return;
@@ -127,4 +133,4 @@ async function deleteRows(sheetId, tab, rowNumbers) {
     forget(sheetId);
 }
 
-module.exports = { ready, serviceEmail, parseSheetId, ensureLayout, readRows, appendRows, updateCells, deleteRows, forget, HEADERS, TABS };
+module.exports = { ready, serviceEmail, parseSheetId, ensureLayout, readRows, appendRows, updateCells, deleteRows, clearTab, forget, HEADERS, TABS };

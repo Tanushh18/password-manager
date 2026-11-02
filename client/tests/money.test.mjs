@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { inr, monthLabel, shiftMonth, dayLabel, groupByDay, withShares, startDateChip, statusTone } from "../src/lib/money.js";
+import { inr, monthLabel, shiftMonth, dayLabel, groupByDay, withShares, startDateChip, statusTone, storageNote } from "../src/lib/money.js";
 
 test("rupees use Indian grouping and keep paise only when there are any", () => {
   assert.equal(inr(100), "₹100");
@@ -47,4 +47,11 @@ test("quick start dates", () => {
   assert.equal(statusTone("Verified"), "ok");
   assert.equal(statusTone("Flagged"), "bad");
   assert.equal(statusTone("Unverified"), "mute");
+});
+
+test("the storage sentence follows the mode and the optional copy", () => {
+  assert.match(storageNote({ storage: "db", sheetCopy: false }), /encrypted in Stashr for 4 months\. You can also/);
+  assert.match(storageNote({ storage: "db", sheetCopy: true }), /also copied to your Google Sheet/);
+  assert.match(storageNote({ storage: "sheet" }), /only in your Google Sheet/);
+  assert.equal(storageNote(null), "");
 });

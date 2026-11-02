@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  getExpenseSettings, saveExpenseSheet, setExpenseStart, postExpenseSms, getExpenses, setExpenseCategory, reviewExpense, uploadStatement
+  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, postExpenseSms, getExpenses, setExpenseCategory, reviewExpense, uploadStatement
 } from "../../api/client";
 import { Section, Skeleton, useConfirm } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
-import { inr, monthLabel, shiftMonth, dayLabel, groupByDay, withShares, startDateChip, STATUS_LABEL, statusTone } from "../../lib/money";
+import { inr, monthLabel, shiftMonth, dayLabel, groupByDay, withShares, startDateChip, STATUS_LABEL, statusTone, storageNote } from "../../lib/money";
 import "../Render/RenderDashboard.css";
 import "./Money.css";
 
@@ -23,41 +23,79 @@ class CardBoundary extends React.Component {
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const monthNow = () => today().slice(0, 7);
 
-/* ───────── 1. connect the Google Sheet ───────── */
+/* ───────── 1. where the entries are kept ───────── */
 
-function SetupCard({ settings, onSaved }) {
+function StorageCard({ settings, onSaved }) {
+  const sheetOnly = settings.storage === "sheet";
   const [url, setUrl] = useState(settings.sheetUrl || "");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [changing, setChanging] = useState(false);
+  const { ask, dialog } = useConfirm();
   const email = settings.serviceAccountEmail || "";
-  const copy = async () => { try { await navigator.clipboard.writeText(email); toast.success("Email copied."); } catch { toast.error("Could not copy. Select the email and copy it."); } };
-  const save = async (e) => {
-    e.preventDefault();
-    setBusy(true); setError("");
-    try { const next = await saveExpenseSheet(url.trim()); toast.success("Sheet connected."); setChanging(false); onSaved(next); }
-    catch (err) { setError(errorMessage(err, "Could not use that sheet.")); }
-    finally { setBusy(false); }
+  const hasSheet = Boolean(settings.sheetId);
+  const copyEmail = async () => { try { await navigator.clipboard.writeText(email); toast.success("Email copied."); } catch { toast.error("Could not copy. Select the email and copy it."); } };
+  const run = async (what, fn, done) => {
+    setBusy(what); setError("");
+    try { const r = await fn(); if (done) toast.success(typeof done === "function" ? done(r) : done); return r; }
+    catch (err) { setError(errorMessage(err, "That did not work.")); return null; }
+    finally { setBusy(""); }
   };
-  if (settings.configured && !changing) {
-    return (
-      <p className="mn-line">Sheet: <a href={settings.sheetUrl} target="_blank" rel="noreferrer">Open ↗</a> · <button type="button" className="mn-link" onClick={() => setChanging(true)}>Change sheet</button></p>
-    );
-  }
-  return (
-    <Section title="Connect your Google Sheet" subtitle="Your transactions are kept only in your own sheet, never in Stashr's database.">
-      {!settings.ready ? <p className="mn-bad" role="alert">The server has no Google credentials yet: add <code>GOOGLE_SHEETS_SA_JSON</code> to its environment (a service-account key), then reload.</p> : null}
+  const saveSheet = async (e) => {
+    e.preventDefault();
+    const next = await run("save", () => saveExpenseSheet(url.trim()), sheetOnly ? "Sheet connected." : "Copy sheet connected.");
+    if (next) { setChanging(false); onSaved(next); }
+  };
+  const chooseMode = async (mode) => {
+    if (mode === settings.storage) return;
+    const msg = mode === "sheet"
+      ? "From now on new entries go only to your Google Sheet. Entries already in Stashr stay there until they are 4 months old but are no longer shown here."
+      : "From now on new entries are kept in Stashr (encrypted). What is in your sheet stays there but is no longer shown here.";
+    if (!(await ask({ title: mode === "sheet" ? "Keep entries only in your sheet?" : "Keep entries in Stashr?", message: msg, confirmLabel: "Switch" }))) return;
+    const next = await run("mode", () => setExpenseStorage(mode));
+    if (next) { toast.info(next.message || "Switched."); onSaved(next); }
+  };
+  const unlink = async () => {
+    if (!(await ask({ title: "Stop copying to the sheet?", message: "Your sheet and its rows stay as they are; Stashr just stops writing to it.", confirmLabel: "Stop copying" }))) return;
+    const next = await run("unlink", unlinkExpenseSheet, "Copy stopped.");
+    if (next) { setUrl(""); onSaved(next); }
+  };
+  const exportNow = async () => {
+    const r = await run("export", exportExpenseSheet, (x) => `Sent ${x.exported} entries to your sheet.`);
+    if (r) onSaved(await getExpenseSettings());
+  };
+  const sheetForm = (!hasSheet || changing) ? (
+    <>
+      {!settings.sheetReady ? <p className="mn-bad" role="alert">The server has no Google credentials yet: add <code>GOOGLE_SHEETS_SA_JSON</code> to its environment (a service-account key), then reload.</p> : null}
       <ol className="mn-steps">
         <li>Create a Google Sheet (any name).</li>
-        <li>Click <b>Share</b>, add <span className="mn-email"><code>{email || "the service account email"}</code>{email ? <button type="button" className="rd-btn rd-btn--quiet" onClick={copy}>Copy</button> : null}</span> as an <b>Editor</b>.</li>
+        <li>Click <b>Share</b>, add <span className="mn-email"><code>{email || "the service account email"}</code>{email ? <button type="button" className="rd-btn rd-btn--quiet" onClick={copyEmail}>Copy</button> : null}</span> as an <b>Editor</b>.</li>
         <li>Paste the sheet's link below and save.</li>
       </ol>
-      <form className="mn-row" onSubmit={save}>
+      <form className="mn-row" onSubmit={saveSheet}>
         <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…" aria-label="Google Sheet link" required />
-        <button className="rd-btn rd-btn--primary" type="submit" disabled={busy || !settings.ready || !url.trim()}>{busy ? "Checking…" : "Save"}</button>
+        <button className="rd-btn rd-btn--primary" type="submit" disabled={Boolean(busy) || !settings.sheetReady || !url.trim()}>{busy === "save" ? "Checking…" : "Save"}</button>
         {changing ? <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setChanging(false)}>Cancel</button> : null}
       </form>
+    </>
+  ) : (
+    <div className="mn-row">
+      <span className="mn-line">Sheet: <a href={settings.sheetUrl} target="_blank" rel="noreferrer">Open ↗</a> · <button type="button" className="mn-link" onClick={() => setChanging(true)}>Change sheet</button></span>
+      {!sheetOnly ? <button type="button" className="rd-btn rd-btn--quiet" onClick={exportNow} disabled={Boolean(busy) || !settings.sheetReady}>{busy === "export" ? "Sending…" : "Send the last 4 months to the sheet now"}</button> : null}
+      {!sheetOnly ? <button type="button" className="rd-btn rd-btn--quiet" onClick={unlink} disabled={Boolean(busy)}>Stop copying</button> : null}
+    </div>
+  );
+  return (
+    <Section title="Storage" subtitle={storageNote(settings)}>
+      <div className="mn-chips" role="radiogroup" aria-label="Where to keep the entries">
+        <label className={"mn-chip" + (!sheetOnly ? " is-on" : "")}><input type="radio" name="mn-storage" checked={!sheetOnly} onChange={() => chooseMode("db")} disabled={Boolean(busy)} /> Stashr (encrypted, kept 4 months)</label>
+        <label className={"mn-chip" + (sheetOnly ? " is-on" : "")}><input type="radio" name="mn-storage" checked={sheetOnly} onChange={() => chooseMode("sheet")} disabled={Boolean(busy) || !hasSheet} title={hasSheet ? "" : "Add your sheet link first"} /> My Google Sheet only</label>
+      </div>
+      <h4 className="mn-sub">{sheetOnly ? "Your Google Sheet" : "Also keep a copy in a Google Sheet (optional)"}</h4>
+      {sheetForm}
+      {settings.copyErrors ? <p className="mn-bad" role="alert">The last {settings.copyErrors} write{settings.copyErrors > 1 ? "s" : ""} to your sheet failed ({settings.lastCopyError || "unknown error"}). Nothing was lost: the entries are safe in Stashr. Use “Send the last 4 months to the sheet now” to catch up.</p> : null}
       {error ? <p className="mn-bad" role="alert">{error}</p> : null}
+      {dialog}
     </Section>
   );
 }
@@ -83,7 +121,7 @@ function StartDateCard({ onDone }) {
         <label className="mn-field">Pick a date <input type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value)} /></label>
         <button className="rd-btn rd-btn--primary" onClick={go} disabled={busy || !date}>{busy ? "Saving…" : "Confirm"}</button>
       </div>
-      <p className="mn-dim">After this, new messages are read automatically and sorted month by month; this question never comes back. The active list keeps the last 4 months; older entries move to the sheet's Archive tab (nothing is deleted).</p>
+      <p className="mn-dim">After this, new messages are read automatically and sorted month by month; this question never comes back. The active list keeps the last 4 months; after that Stashr deletes an entry (in “My Google Sheet only” mode older entries move to the sheet's Archive tab instead).</p>
     </Section>
   );
 }
@@ -149,9 +187,9 @@ function FlaggedCard({ rows, onChanged }) {
   const [busy, setBusy] = useState(null);
   if (!rows.length) return null;
   const act = async (r, action) => {
-    if (action === "delete" && !(await ask({ title: "Delete this entry?", message: `${inr(r.amount)} to ${r.merchant || "unknown"} on ${r.date} will be removed from your sheet.`, confirmLabel: "Delete (fake)", danger: true }))) return;
+    if (action === "delete" && !(await ask({ title: "Delete this entry?", message: `${inr(r.amount)} to ${r.merchant || "unknown"} on ${r.date} will be removed.`, confirmLabel: "Delete (fake)", danger: true }))) return;
     setBusy(r.index);
-    try { await reviewExpense(r.index, action); toast.success(action === "delete" ? "Removed from the sheet." : "Marked as genuine."); onChanged(); }
+    try { await reviewExpense(r.index, action); toast.success(action === "delete" ? "Removed." : "Marked as genuine."); onChanged(); }
     catch (err) { toast.error(errorMessage(err, "Could not do that.")); }
     finally { setBusy(null); }
   };
@@ -269,7 +307,7 @@ function StatementCard({ settings, onDone }) {
   };
   const r = report || last;
   return (
-    <Section title="Check against a bank statement" subtitle="Download your Federal Bank statement from net banking as Excel or CSV and upload it. Every line is matched with your sheet.">
+    <Section title="Check against a bank statement" subtitle="Download your Federal Bank statement from net banking as Excel or CSV and upload it. Every line is matched with your entries.">
       <div className="mn-row">
         <input ref={input} type="file" accept=".csv,.xlsx,.xls,text/csv" onChange={pick} hidden />
         <button className="rd-btn rd-btn--primary" onClick={() => input.current && input.current.click()} disabled={busy}>{busy ? "Checking…" : "Choose a statement (.csv or .xlsx)"}</button>
@@ -307,8 +345,8 @@ function PasteCard({ onDone }) {
       const r = await postExpenseSms([{ address: "MANUAL", body: text, date: Date.now() }]);
       if (r.needsStartDate) setResult("Choose the start date first.");
       else if (r.flagged) setResult("Added, but marked “Needs checking”: a message pasted by hand cannot be proven to come from the bank. Upload your statement to confirm it.");
-      else if (r.added) setResult("Added to your sheet.");
-      else if (r.duplicates) setResult("That payment is already in your sheet.");
+      else if (r.added) setResult("Added.");
+      else if (r.duplicates) setResult("That payment is already in your list.");
       else setResult("I did not understand that message" + (r.unparsed && r.unparsed.length ? ": it does not look like a Federal Bank debit or credit SMS." : "."));
       if (r.added || r.flagged) { setText(""); onDone(); }
     } catch (err) { setResult(errorMessage(err, "Could not add it.")); }
@@ -340,7 +378,7 @@ export default function Money() {
   const loadData = useCallback(async (m) => {
     setBusy(true);
     try { setData(await getExpenses(m)); setError(""); }
-    catch (e) { setError(errorMessage(e, "Could not read your sheet.")); }
+    catch (e) { setError(errorMessage(e, "Could not read your entries.")); }
     finally { setBusy(false); }
   }, []);
 
@@ -366,7 +404,7 @@ export default function Money() {
       {error ? <p className="mn-bad" role="alert">{error}</p> : null}
       {!settings ? <Skeleton lines={4} /> : (
         <>
-          <CardBoundary><SetupCard settings={settings} onSaved={(s) => { setSettings(s); }} /></CardBoundary>
+          <CardBoundary><StorageCard settings={settings} onSaved={(s) => { setSettings(s); }} /></CardBoundary>
           {settings.configured && settings.needsStartDate ? <CardBoundary><StartDateCard onDone={loadSettings} /></CardBoundary> : null}
           {settings.configured && !settings.needsStartDate ? (
             <>
@@ -384,7 +422,7 @@ export default function Money() {
               <CardBoundary><PasteCard onDone={reload} /></CardBoundary>
             </>
           ) : null}
-          <p className="mn-dim mn-note">Messages are read by the Stashr Android app (Settings → Money) and sent here; nothing is kept in Stashr's database, only in your sheet.</p>
+          <p className="mn-dim mn-note">Messages are read by the Stashr Android app (Settings → Money) and sent here. {settings.storage === "sheet" ? "They are written only to your Google Sheet; Stashr's database keeps none." : `Stored encrypted in Stashr for 4 months${settings.sheetCopy ? "; also copied to your sheet" : "; optionally copied to your sheet"}.`}</p>
         </>
       )}
     </main>

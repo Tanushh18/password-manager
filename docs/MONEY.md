@@ -1,18 +1,29 @@
-# Money: UPI and bank spending in a Google Sheet
+# Money: UPI and bank spending, sorted by category
 
-Stashr reads your Federal Bank messages (Android app), sorts every payment into a category (Meta Ads, Food, Groceries…), writes it
-**only into your own Google Sheet** and shows it month by month on the website (Money) and in the Android app (Settings → Money).
-**No transaction is stored in Stashr's database.** The database keeps only: the sheet link, the start date, your own category rules, your
-account's last digits, and when the last message was handled.
+Stashr reads your Federal Bank messages (Android app), sorts every payment into a category (Meta Ads, Food, Groceries…), keeps it, and
+shows it month by month on the website (Money) and in the Android app (Settings → Money).
 
-## One-time setup (about 10 minutes)
+## Where the entries are kept (you choose, on the Money page → Storage)
+| | **Stashr storage** (default) | **My Google Sheet only** |
+|---|---|---|
+| Where | Stashr's database, **each entry encrypted** with your account's own key (the same envelope encryption as the vault). The database can read only the month, the date, the status and a keyed hash of the reference (to skip duplicates). Merchant, amount, reference, balance and category are inside the encrypted part | Only your own Google Sheet. Stashr's database keeps none of the entries |
+| Google setup | **None needed.** A sheet is an optional copy | Needed (below) |
+| 4-month rule | Each entry is **deleted by the database 120 days after its date** | Rows older than 120 days are **moved** (not deleted) to the sheet's `Archive` tab |
+| Sheet | Optional **copy**: new entries, category changes and deletions are also written to your sheet in the background; if Google is down the entry is still saved and the page shows "last N writes to your sheet failed"; *Send the last 4 months to the sheet now* catches up | The sheet is the store |
+
+Switching never moves entries by itself; each place keeps what it has (the page explains this when you switch). In both modes the settings
+document holds no transaction data: it has the storage choice, the optional sheet link, your own category rules, the start date, your
+account's last digits and when the last message was handled.
+
+## Google Sheet (optional copy, or the only store) — one-time setup (about 10 minutes)
 1. **Google Cloud** (console.cloud.google.com): make a project (or use one), *APIs & Services → Library → Google Sheets API → Enable*.
 2. *IAM & Admin → Service Accounts → Create*. Name it e.g. `stashr-money`. Open it → *Keys → Add key → JSON* → a file downloads.
 3. Put that JSON on **both Render servers** (g305 and xxdr) as the environment variable `GOOGLE_SHEETS_SA_JSON` (paste the JSON, or its
    base64: `base64 -w0 key.json`). Redeploy. Never put this file in git.
 4. Make a new Google Sheet. **Share** it with the service account's e-mail (`…@….iam.gserviceaccount.com`) as **Editor**.
-5. Stashr website → **Money** (or app → Settings → Money): paste the sheet link, Save. Stashr creates the tabs `Transactions`, `Archive` and
-   `Summary` (a ready month × category table built with formulas).
+5. Stashr website → **Money → Storage**: paste the sheet link, Save (in Stashr-storage mode this is the optional copy; choose *My Google Sheet only* to make
+   it the store). Stashr creates the tabs `Transactions`, `Archive` and `Summary` (a ready month × category table built with formulas).
+   Without steps 1–5 everything else still works in Stashr storage.
 6. Choose **how far back to read your SMS — once**. After that the option disappears; new messages are read from then on.
 7. Android app: Money → allow SMS access. On a sideloaded app Android 13+ may first need *Settings → Apps → Stashr → ⋮ → Allow restricted
    settings*, then allow SMS. Tap *Sync now*. From then on the app syncs in the background (about every 15–30 minutes, and whenever you open it).
@@ -39,12 +50,14 @@ the statement's dates that the bank does not show are **Not in statement**, and 
 A flagged row that the statement confirms becomes Verified.
 
 ## Keeping 4 months
-Each entry stays in the active `Transactions` tab for 4 months (120 days). Older rows are **moved, not deleted,** to the `Archive` tab once
-a day, so the list stays quick and nothing is lost. Messages older than 4 months read during the first sync go straight to `Archive`.
+Each entry stays for 4 months (120 days after its date). In **Stashr storage** the database then deletes it (a message older than 4 months
+read during the first sync is not kept; the statement check also looks only at the last 4 months). In **sheet only** mode older rows are
+**moved, not deleted,** to the `Archive` tab once a day, and old messages from the first sync go straight there.
 
 ## Limits
 - Only Federal Bank message formats are known (debit and credit via UPI, plus common IMPS/NEFT/ATM wording). A message the parser can't read
   is counted as "not understood" with its first words shown — send an example and the parser gets extended.
 - The bank shortens names ("Meta Verifie"); person-to-person payments stay *Uncategorized* until you give them a category.
 - SMS reading works only on Android, and only while you allow it. Nothing is read before the start date.
-- Reading the sheet takes a moment; the list is cached for under a minute.
+- In sheet-only mode reading the sheet takes a moment; the list is cached for under a minute.
+- The app (2.5.0 and later) works with both modes unchanged: it only talks to the Stashr API, and an entry's `index` is just an opaque id.

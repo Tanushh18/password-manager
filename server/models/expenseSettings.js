@@ -1,9 +1,11 @@
 const mongoose = require("mongoose");
 
-// One per account: where the money sheet is and how things are sorted. NO transactions are kept here — they live only in the
-// owner's Google Sheet. What is stored: the sheet id, the owner's own category rules, and when the last SMS batch arrived.
+// One per account: how the money feature is set up. NO transactions are kept here: they are either in the encrypted collection
+// ExpenseTx (storage "db", the default) or only in the owner's Google Sheet (storage "sheet"). Stored here: which of the two, the
+// optional sheet link, the owner's own category rules, the start date and when the last SMS batch arrived.
 const expenseSettingsSchema = new mongoose.Schema({
     owner: { type: mongoose.Schema.Types.ObjectId, required: true, unique: true },
+    storage: { type: String, enum: ["db", "sheet"], default: "db" },
     sheetId: { type: String, default: "" },
     sheetUrl: { type: String, default: "" },
     tab: { type: String, default: "Transactions" },
@@ -15,6 +17,9 @@ const expenseSettingsSchema = new mongoose.Schema({
     retentionMonths: { type: Number, default: 4 },
     lastSmsAt: { type: Number, default: 0 },                          // newest SMS time already handled (ms)
     lastSyncAt: { type: Date },
+    copyErrors: { type: Number, default: 0 },                        // failed writes to the optional sheet copy since the last success
+    lastCopyError: { type: String, default: "" },
+    lastCopyAt: { type: Date },
     lastStatement: { type: mongoose.Schema.Types.Mixed, default: null } // summary numbers of the last reconcile (no rows)
 }, { minimize: false });
 

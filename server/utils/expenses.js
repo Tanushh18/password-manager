@@ -131,6 +131,14 @@ function rowFromTx(t, category, source = "SMS", status = "Unverified", note = ""
     return [t.date || "", t.time || "", t.amount, t.type, t.counterparty || "", category, t.account || "", t.method || "", t.ref || "", t.balance == null ? "" : t.balance, source, status, note, (t.date || "").slice(0, 7), receivedAt ? new Date(receivedAt).toISOString() : "", (flags || []).join(" | ")];
 }
 
+/** One transaction as a plain object (what the stores keep and the API returns): `p` is a parsed message or a statement line. */
+function makeTx(p, category, source = "SMS", status = "Unverified", note = "", receivedAt = 0, flags = []) {
+    return { date: p.date || "", time: p.time || "", amount: p.amount, type: p.type, merchant: p.counterparty !== undefined ? p.counterparty : (p.merchant || ""), category, account: p.account || "", method: p.method || "", ref: p.ref || "",
+        balance: p.balance == null ? null : p.balance, source, status, note, month: (p.date || "").slice(0, 7), received: receivedAt ? new Date(receivedAt).toISOString() : "", flags: [...flags] };
+}
+/** The sheet row for such an object. */
+const txToRow = (t) => rowFromTx({ ...t, counterparty: t.merchant }, t.category, t.source, t.status, t.note, t.received ? Date.parse(t.received) : 0, t.flags || []);
+
 function txFromRow(r, index) {
     return { index, date: String(r[0] || ""), time: String(r[1] || ""), amount: Number(r[2]) || 0, type: String(r[3] || ""), merchant: String(r[4] || ""), category: String(r[5] || "Uncategorized"),
         account: String(r[6] || ""), method: String(r[7] || ""), ref: String(r[8] || ""), balance: r[9] === "" || r[9] == null ? null : Number(r[9]), source: String(r[10] || ""), status: String(r[11] || ""), note: String(r[12] || ""), month: String(r[13] || String(r[0] || "").slice(0, 7)), received: String(r[14] || ""), flags: String(r[15] || "") ? String(r[15]).split(" | ") : [] };
@@ -273,4 +281,4 @@ function reconcile(sheetRows, stmt, userRules = []) {
     return { updates, additions, report: { from, to, lines: stmt.length, verified, mismatched, added: additions.length, notInStatement: missing.length, balanceBreaks: breaks.slice(0, 20), balanceBreakCount: breaks.length } };
 }
 
-module.exports = { assess, bankSender, ist, parseDate, parseSms, categorize, ruleKey, norm, DEFAULT_CATEGORIES, DEFAULT_RULES, HEADERS, rowFromTx, txFromRow, sameTx, summarize, parseCsv, parseXlsx, statementRows, reconcile, round2 };
+module.exports = { makeTx, txToRow, assess, bankSender, ist, parseDate, parseSms, categorize, ruleKey, norm, DEFAULT_CATEGORIES, DEFAULT_RULES, HEADERS, rowFromTx, txFromRow, sameTx, summarize, parseCsv, parseXlsx, statementRows, reconcile, round2 };
