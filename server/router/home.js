@@ -65,7 +65,7 @@ function linkPhones(devices) {
     for (const hub of devices.filter((d) => d.kind === "hub")) {
         for (const row of hub.lan || []) {
             const p = phones.find((x) => x.status.ip === row.ip && row.up);
-            if (p) row.phone = { id: p.id, name: p.name, person: p.person, battery: p.status.battery, charging: p.status.charging, storage: p.status.storage, online: p.online, lastSeen: p.lastSeen };
+            if (p) row.phone = { id: p.id, name: p.name, person: p.person, battery: (home.batteryOf(p.status) || {}).pct ?? null, charging: Boolean((home.batteryOf(p.status) || {}).charging), storage: p.status.storage, online: p.online, lastSeen: p.lastSeen };
         }
     }
     return devices;

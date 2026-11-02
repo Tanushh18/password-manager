@@ -148,3 +148,10 @@ export function parseCoords(text) {
   }
   return null;
 }
+
+/** Battery from either shape a device reports: a number (with `charging` beside it) or { pct, charging }. -> { pct, charging } or null. */
+export function batteryOf(status) {
+  const b = status && status.battery;
+  if (b && typeof b === "object") return Number.isFinite(Number(b.pct)) ? { pct: Math.round(Number(b.pct)), charging: Boolean(b.charging) } : null;
+  return b !== null && b !== undefined && b !== "" && Number.isFinite(Number(b)) ? { pct: Math.round(Number(b)), charging: Boolean(status.charging) } : null;
+}

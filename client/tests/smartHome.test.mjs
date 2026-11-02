@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { stateOf, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName, parseCoords } from "../src/lib/smartHome.js";
+import { stateOf, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName, parseCoords, batteryOf } from "../src/lib/smartHome.js";
 
 test("a TV is off, in standby or on", () => {
   assert.equal(stateOf({ kind: "tv", online: false }), "off");
@@ -86,4 +86,12 @@ test("coordinates are read from text and map links", () => {
   assert.deepEqual(parseCoords("https://www.openstreetmap.org/?mlat=28.6139&mlon=77.2090#map=17/28.6139/77.2090"), { lat: 28.6139, lon: 77.209 });
   assert.equal(parseCoords("hello"), null);
   assert.equal(parseCoords("123, 200"), null);
+});
+
+test("battery is read from both shapes a phone can report", () => {
+  assert.deepEqual(batteryOf({ battery: 80, charging: true }), { pct: 80, charging: true });
+  assert.deepEqual(batteryOf({ battery: { pct: 55.4, charging: false } }), { pct: 55, charging: false });
+  assert.equal(batteryOf({ battery: { charging: true } }), null);
+  assert.equal(batteryOf({}), null);
+  assert.equal(batteryOf(null), null);
 });

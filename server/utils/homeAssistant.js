@@ -138,8 +138,9 @@ function statusLine(devices) {
             lines.push(`${d.name} is on${s.app && s.app.label ? ", showing " + s.app.label : ""}${m}.`);
         } else if (d.kind === "hub") {
             lines.push(d.online ? `${d.name}: ${(d.lan || []).filter((x) => x.up).length} devices on the Wi-Fi.` : `${d.name} is not reporting.`);
-        } else if (d.kind === "phone" && d.status && d.status.battery != null) {
-            lines.push(`${d.name}: battery ${d.status.battery}%${d.status.charging ? " (charging)" : ""}.`);
+        } else if (d.kind === "phone" && require("./home").batteryOf(d.status)) {
+            const b = require("./home").batteryOf(d.status);
+            lines.push(`${d.name}: battery ${b.pct}%${b.charging ? " (charging)" : ""}.`);
         }
     }
     return lines.length ? lines.join(" ") : "No devices added yet.";

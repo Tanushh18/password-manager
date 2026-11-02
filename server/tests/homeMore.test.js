@@ -735,11 +735,17 @@ describe("live map on the TV", () => {
         const mom = (await request(app).post("/home/agent/link").send({ code, name: "Mom" })).body;
         const tv = (await request(app).post("/home/agent/link").send({ code: hubCode, name: "TV", kind: "tv" })).body;
         await request(app).put("/home/settings").set(auth).send({ homeSpot: { lat: 28.6139, lon: 77.209, radius: 200 } });
-        const loc = (t, lat, at) => request(app).post("/home/agent/location").set(bearer(t)).send({ lat, lon: 77.209, acc: 20, at, speed: 10 });
+        const loc = (t, lat, at) => request(app).post("/home/agent/location").set(bearer(t)).send({ lat, lon: 77.209, acc: 20, at, speed: 10, battery: { pct: 80, charging: false } });
         routeMod.use(async (from, to, o) => ({ seconds: 1200, meters: 9000, traffic: true, line: o && o.geometry ? [[from.lat, from.lon], [28.65, 77.209], [to.lat, to.lon]] : undefined }));
         try {
             const t0 = Date.now();
             const quiet = await loc(papa.token, 28.70, t0);
+            // the battery is stored as a number plus `charging`, like every other family phone, so no screen gets an object
+            const stored = await HomeDevice.findOne({ name: "Papa" }).lean();
+            expect(stored.status.battery).toBe(80);
+            expect(typeof stored.status.charging).toBe("boolean");
+            const row = (await request(app).get("/home/devices").set(auth)).body.devices.find((x) => x.name === "Papa");
+            expect(typeof row.status.battery).toBe("number");
             expect(quiet.body.live).toBe(false);
             await loc(mom.token, 28.6139, t0);                               // Mom is home
             await loc(papa.token, 28.68, t0 + 1000);                          // Papa is out and heading home

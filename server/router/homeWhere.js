@@ -107,7 +107,8 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
         const loc = { lat, lon, acc: Math.min(Math.max(num(b.acc) || 0, 0), 100000), at };
         if (Number.isFinite(num(b.speed)) && num(b.speed) >= 0) loc.speed = Math.min(num(b.speed), 100);
         const status = { agent: "stashr-where", location: loc };
-        if (b.battery && Number.isFinite(num(b.battery.pct))) status.battery = { pct: Math.min(Math.max(Math.round(num(b.battery.pct)), 0), 100), charging: b.battery.charging === true };
+        // Stored the way every family phone reports it: a number, plus `charging`.
+        if (b.battery && Number.isFinite(num(b.battery.pct))) { status.battery = Math.min(Math.max(Math.round(num(b.battery.pct)), 0), 100); status.charging = b.battery.charging === true; }
         status.wifi = Boolean(b.wifi && b.wifi.connected);
         status.ip = b.wifi && /^\d{1,3}(\.\d{1,3}){3}$/.test(String(b.wifi.ip || "")) ? String(b.wifi.ip) : "";
         const out = await homeRouter.ingest(d, { status });
@@ -218,7 +219,7 @@ router.get("/home/where", authenticate, async (req, res) => {
             people: phones.map((p) => {
                 const w = automation.whereIs(s, p, now), st = p.status || {};
                 return { id: String(p._id), name: p.person || p.name, app: st.agent === "stashr-where" ? "Stashr Location" : "Stashr Hub", ...w,
-                    battery: st.battery ? { pct: st.battery.pct ?? null, charging: Boolean(st.battery.charging) } : null, lastSeen: p.lastSeen || null,
+                    battery: home.batteryOf(st), lastSeen: p.lastSeen || null,
                     wifi: Boolean(st.wifi), accuracyM: st.location ? Math.round(st.location.acc || 0) : null };
             }).sort((a, b) => ({ coming: 0, away: 1, home: 2, unknown: 3, unset: 4 }[a.state] - { coming: 0, away: 1, home: 2, unknown: 3, unset: 4 }[b.state]) || a.name.localeCompare(b.name))
         });

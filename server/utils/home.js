@@ -110,6 +110,13 @@ function cleanStatus(status) {
     return JSON.stringify(clean).length > MAX_STATUS_BYTES ? null : clean;
 }
 
+/** Battery from either shape a device reports: a number with a separate `charging`, or `{ pct, charging }`. -> { pct, charging } or null. */
+function batteryOf(status) {
+    const b = status && status.battery;
+    if (b && typeof b === "object") return Number.isFinite(Number(b.pct)) ? { pct: Math.round(Number(b.pct)), charging: Boolean(b.charging) } : null;
+    return Number.isFinite(Number(b)) && b !== null ? { pct: Math.round(Number(b)), charging: Boolean(status.charging) } : null;
+}
+
 const isOnline = (device, now = Date.now()) => Boolean(device.lastSeen) && now - new Date(device.lastSeen).getTime() < ONLINE_MS;
 
 const slug = (v) => String(v || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
@@ -242,5 +249,5 @@ function inWindow(minutes, from, to) {
 
 module.exports = {
     ONLINE_MS, LAN_GONE_MS, MAX_COMMANDS, COMMANDS, KINDS, TAGS, RISKY_PORTS, hashToken, newToken, cleanCommand, cleanStatus,
-    isOnline, lanKey, mergeLan, diffMovies, risksOf, presence, inWindow, okMac, normMac, slug
+    batteryOf, isOnline, lanKey, mergeLan, diffMovies, risksOf, presence, inWindow, okMac, normMac, slug
 };

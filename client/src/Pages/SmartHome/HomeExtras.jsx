@@ -10,7 +10,7 @@ import { errorMessage } from "../Render/renderUtils";
 import { ago, fmtBytes, fmtMinutes, daysLabel, stepLabel, STEP_CHOICES } from "../../lib/smartHome";
 import { TvTimeChart, SpeedChart, CommuteChart } from "./HomeCharts";
 import { MapPicker } from "./HomeMap";
-import { parseCoords } from "../../lib/smartHome";
+import { parseCoords, batteryOf } from "../../lib/smartHome";
 
 /** The settings every card here edits, loaded once. */
 export function useHomeSettings() {
@@ -101,15 +101,15 @@ export function PhonesCard({ phones, onChanged }) {
     <Section title="Family phones" subtitle="Each phone with Stashr Hub reports its health about every 15 minutes, and when it joins the Wi-Fi.">
       {confirm.dialog}
       <ul className="sh-phones">{phones.map((p) => {
-        const s = p.status || {}, used = pct(s.storage);
+        const s = p.status || {}, used = pct(s.storage), bat = batteryOf(s);
         return (
           <li key={p.id}>
             <div className="sh-lan__main">
               <b>{p.name}{p.person && p.person !== p.name ? ` · ${p.person}` : ""}</b>
-              <span>{s.model || "Phone"}{s.android ? ` · Android ${s.android}` : ""} · {p.online ? `reported ${ago(p.lastSeen)}` : `last report ${ago(p.lastSeen)}`}{s.wifi ? ` · on Wi-Fi (${s.ip || "?"})` : s.network ? ` · on ${s.network}` : ""}</span>
+              <span>{s.agent === "stashr-where" ? "Stashr Location" : (s.model || "Phone")}{s.android ? ` · Android ${s.android}` : ""} · {p.online ? `reported ${ago(p.lastSeen)}` : `last report ${ago(p.lastSeen)}`}{s.wifi ? ` · on Wi-Fi (${s.ip || "?"})` : s.network ? ` · on ${s.network}` : ""}</span>
             </div>
             <div className="sh-chips">
-              {s.battery != null ? <span className={s.battery <= 15 && !s.charging ? "is-bad" : ""}>🔋 {s.battery}%{s.charging ? " charging" : ""}{s.batteryTemp ? ` · ${s.batteryTemp}°C` : ""}</span> : null}
+              {bat ? <span className={bat.pct <= 15 && !bat.charging ? "is-bad" : ""}>🔋 {bat.pct}%{bat.charging ? " charging" : ""}{s.batteryTemp ? ` · ${s.batteryTemp}°C` : ""}</span> : null}
               {used != null ? <span className={used >= 90 ? "is-bad" : ""}>💾 {used}% full · {fmtBytes(s.storage.free)} free</span> : null}
               {s.ram && s.ram.total ? <span>RAM {Math.round(100 * (1 - s.ram.free / s.ram.total))}% used</span> : null}
               {s.batteryHealth ? <span>Battery health: {s.batteryHealth}</span> : null}

@@ -7,7 +7,7 @@ import {
 import { Section, Skeleton, Empty, useConfirm } from "../Render/RenderUi";
 import { usePolling } from "../Render/renderHooks";
 import { errorMessage } from "../Render/renderUtils";
-import { stateOf, STATE_LABEL, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName, splitStale, TAG_LABEL } from "../../lib/smartHome";
+import { stateOf, STATE_LABEL, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName, splitStale, TAG_LABEL, batteryOf } from "../../lib/smartHome";
 import { LiveMapCard } from "./HomeMap";
 import { InsightsCard, LocationsCard, HomeScreenCard, FeaturesCard, PairCard, PeopleCard, PhonesCard, AlertsCard, TvTimeCard, ScenesCard, SchedulesCard, PlacesCard, SpeedCard, CameraCard, SlideshowCard, useHomeSettings } from "./HomeExtras";
 import "../Render/RenderDashboard.css";
@@ -211,7 +211,7 @@ function HubCard({ device, send, onChanged }) {
     <Section title={device.name} subtitle={`${STATE_LABEL[state]} · seen ${ago(device.lastSeen)} · ${up} of ${fresh.length} devices answering${unnamed ? ` · ${unnamed} not named yet` : ""}`}
       actions={<><Dot state={state} /><DeviceMenu device={device} onChanged={onChanged} /></>}>
       <div className="sh-chips">
-        {s.battery ? <span>Battery {s.battery.pct}%{s.battery.charging ? " · charging" : ""}</span> : null}
+        {batteryOf(s) ? <span>Battery {batteryOf(s).pct}%{batteryOf(s).charging ? " · charging" : ""}</span> : null}
         {s.wifi?.rssi ? <span>Wi-Fi {signalWord(s.wifi.rssi)} ({s.wifi.rssi} dBm)</span> : null}
         {s.scan?.at ? <span>Last scan {ago(s.scan.at)}{s.scan.ms ? ` (${Math.round(s.scan.ms / 1000)} s)` : ""}</span> : null}
         {s.scan?.subnet ? <span>{s.scan.subnet}</span> : null}
@@ -375,6 +375,17 @@ function Assistant({ onDone }) {
   );
 }
 
+/** One card that fails to draw must not take the whole page down: it shows a short note instead and the rest keeps working. */
+class CardBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { failed: false }; }
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(error) { console.error("Smart home card failed:", error); } // eslint-disable-line no-console
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return <p className="sh-bad" role="alert">One card on this tab could not be shown. The rest still works; reloading the page usually fixes it.</p>;
+  }
+}
+
 export default function SmartHome() {
   const [devices, setDevices] = useState(null);
   const [people, setPeople] = useState([]);
@@ -407,7 +418,7 @@ export default function SmartHome() {
       <nav className="sh-tabs" aria-label="Smart home sections">
         {TABS.map(([k, label]) => <button key={k} type="button" className={"sh-tab" + (tab === k ? " is-on" : "")} aria-current={tab === k ? "page" : undefined} onClick={() => goTo(k)}>{label}</button>)}
       </nav>
-      {tab === "overview" ? (<>
+      {tab === "overview" ? (<CardBoundary key="overview"><>
         <Assistant onDone={load} />
         <HomeScreenCard />
         <FeaturesCard home={home} devices={list} goTo={goTo} />
@@ -416,8 +427,8 @@ export default function SmartHome() {
             <ul className="sh-events">{events.map((e) => <li key={e.id}><span>{ago(e.at)}</span><b>{e.text}</b></li>)}</ul>
           ) : <p className="sh-dim">Nothing yet.</p>}
         </Section>
-      </>) : null}
-      {tab === "devices" ? (<>
+      </></CardBoundary>) : null}
+      {tab === "devices" ? (<CardBoundary key="devices"><>
         <PeopleCard people={people} />
         {devices === null ? <Skeleton lines={5} /> : list.length === 0 ? (
           <Empty icon="📺" title="Nothing connected yet">Install Stashr Hub from /apps on the always-on tablet and type a code from “Link the home tablet or TV” below. Your TV joins by itself once its Stashr app is open.</Empty>
@@ -428,25 +439,25 @@ export default function SmartHome() {
         <LiveMapCard />
         <PhonesCard phones={phones} onChanged={load} />
         <PairCard />
-      </>) : null}
-      {tab === "security" ? (<>
+      </></CardBoundary>) : null}
+      {tab === "security" ? (<CardBoundary key="security"><>
         <CameraCard hub={smartHub} send={send} home={home} />
         <AlertsCard home={home} />
-      </>) : null}
-      {tab === "automations" ? (<>
+      </></CardBoundary>) : null}
+      {tab === "automations" ? (<CardBoundary key="automations"><>
         <ScenesCard home={home} />
         <SchedulesCard home={home} />
         <PlacesCard home={home} phones={phones} hasSmartHub={Boolean(smartHub)} />
         <TvTimeCard home={home} />
-      </>) : null}
-      {tab === "insights" ? (<>
+      </></CardBoundary>) : null}
+      {tab === "insights" ? (<CardBoundary key="insights"><>
         <InsightsCard />
-      </>) : null}
-      {tab === "media" ? (<>
+      </></CardBoundary>) : null}
+      {tab === "media" ? (<CardBoundary key="media"><>
         <SpeedCard hasSmartHub={Boolean(smartHub)} send={send} hubId={smartHub?.id} />
         <MoviesCard />
         <SlideshowCard home={home} hub={smartHub} send={send} />
-      </>) : null}
+      </></CardBoundary>) : null}
     </main>
   );
 }
