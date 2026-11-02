@@ -141,7 +141,7 @@ object Logic {
     fun ringDistances(maxMetres: Double): List<Double> {
         if (maxMetres < 300) return listOf(maxMetres.coerceAtLeast(100.0).let { Math.floor(it / 100) * 100 }.coerceAtLeast(100.0))
         val steps = listOf(500.0, 1000.0, 2000.0, 5000.0, 10_000.0, 20_000.0, 50_000.0, 100_000.0, 200_000.0)
-        val step = steps.firstOrNull { maxMetres / it <= 3.0 } ?: steps.last()
+        val step = steps.firstOrNull { maxMetres / it <= 3.5 } ?: steps.last()
         return (1..3).map { it * step }.filter { it <= maxMetres * 1.02 }.ifEmpty { listOf(step) }
     }
 
