@@ -1,0 +1,264 @@
+/**
+ * Stashr Home automations: TV schedules, TV time and limits, "nobody is home but the TV is on", Wi-Fi alerts,
+ * the morning brief and the weekly report. Run once a minute by the Home sweep on every server; each job is claimed
+ * in the database first, so two servers sharing one database never run it twice.
+ */
+const mongoose = require("mongoose");
+const HomeDevice = require("../models/homeDevice");
+const HomeEvent = require("../models/homeEvent");
+const HomeSettings = require("../models/homeSettings");
+const HomeClaim = require("../models/homeClaim");
+const HomeSpeed = require("../models/homeSpeed");
+const home = require("./home");
+const weather = require("./homeWeather");
+const { record } = require("./homeEvents");
+
+const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+const USAGE_DAYS = 35;
+
+/** The date, the time and the weekday in the account's time zone. */
+function localParts(now = Date.now(), timeZone = "Asia/Kolkata") {
+    let parts;
+    try { parts = new Intl.DateTimeFormat("en-GB", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", weekday: "short", hourCycle: "h23" }).formatToParts(new Date(now)); }
+    catch (e) { return localParts(now, "Asia/Kolkata"); }
+    const get = (t) => (parts.find((p) => p.type === t) || {}).value || "";
+    const hh = get("hour") === "24" ? "00" : get("hour");
+    return { date: `${get("year")}-${get("month")}-${get("day")}`, hhmm: `${hh}:${get("minute")}`, minutes: Number(hh) * 60 + Number(get("minute")), weekday: DAYS.indexOf(get("weekday").toLowerCase().slice(0, 3)) };
+}
+
+const toMinutes = (hhmm) => { const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(hhmm || "")); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+const okTime = (hhmm) => toMinutes(hhmm) !== null;
+
+/** True for the one server that gets to run this job. */
+async function claim(id) {
+    try { await HomeClaim.create({ _id: String(id).slice(0, 200) }); return true; }
+    catch (e) { if (e && e.code === 11000) return false; throw e; }
+}
+
+async function settingsOf(owner) {
+    const found = await HomeSettings.findOne({ owner }).lean();
+    if (found) return found;
+    try { return (await HomeSettings.create({ owner })).toObject(); }
+    catch (e) { return HomeSettings.findOne({ owner }).lean(); }
+}
+
+/** Puts one checked command in a device's queue. Returns the queued entry, or null when it was refused. */
+async function queue(device, type, args, { note } = {}) {
+    const command = home.cleanCommand(device.kind, type, args);
+    if (!command) return null;
+    const waiting = (device.commands || []).filter((c) => c.status === "pending" || c.status === "sent").length;
+    if (waiting >= home.MAX_COMMANDS) return null;
+    const entry = { id: new mongoose.Types.ObjectId().toString(), ...command, status: "pending", result: "", createdAt: new Date() };
+    await HomeDevice.updateOne({ _id: device._id }, { $push: { commands: { $each: [entry], $slice: -50 } } });
+    if (note) await record({ owner: device.owner, device: device._id, deviceName: device.name, kind: "command", text: note });
+    return entry;
+}
+
+/**
+ * What to tell you about the Wi-Fi events of one scan. Pure, so it can be tested: adds notify to the events that
+ * should reach Telegram, and turns arrivals and departures of a person's device into "Mom came home".
+ */
+function lanAlerts(events, labels, settings, local) {
+    const a = (settings && settings.alerts) || {};
+    const night = home.inWindow(local.minutes, toMinutes(a.nightFrom || "00:00") ?? 0, toMinutes(a.nightTo || "05:00") ?? 300);
+    const out = [];
+    for (const e of events) {
+        const lbl = (e.key && labels[e.key]) || {};
+        const known = Boolean(lbl.tag && lbl.tag !== "unknown");
+        const next = { ...e };
+        if (e.kind === "lan_new") {
+            next.notify = a.newDevice !== false || (a.night !== false && night);
+            if (night) next.text = `🌙 At night: ${e.text}`;
+        } else if (e.kind === "lan_joined") {
+            next.notify = a.night !== false && night && !known;
+            if (night && !known) next.text = `🌙 At night: ${e.text}`;
+        }
+        out.push(next);
+        if (lbl.person && (e.kind === "lan_joined" || e.kind === "lan_left")) {
+            out.push({ kind: e.kind === "lan_joined" ? "home_arrived" : "home_left", text: e.kind === "lan_joined" ? `${lbl.person} came home` : `${lbl.person} left home`, notify: a.presence === true });
+        }
+    }
+    return out;
+}
+
+/** One line per TV, phone and person for the briefs. */
+async function houseSummary(owner, now = Date.now()) {
+    const devices = await HomeDevice.find({ owner }).lean();
+    const hubs = devices.filter((d) => d.kind === "hub"), phones = devices.filter((d) => d.kind === "phone");
+    const people = home.presence(hubs, phones, now);
+    const up = new Set();
+    for (const h of hubs) for (const [k, d] of Object.entries(h.lanBook || {})) if (d.up) up.add(h._id + k);
+    return { devices, hubs, phones, people, wifiUp: up.size };
+}
+
+const fmtMin = (m) => (m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`);
+const topApps = (apps) => Object.entries(apps || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n, m]) => `${n} ${fmtMin(m)}`).join(", ");
+
+/** The morning brief: weather, who is home, the TV yesterday, the Wi-Fi overnight, the internet speed. */
+async function briefText(owner, settings, now = Date.now()) {
+    const tz = settings.timezone || "Asia/Kolkata";
+    const lines = ["☀️ <b>Good morning! Your home today</b>"];
+    try { const f = await weather.forecast(settings.weather, tz); if (f) lines.push("🌤 " + weather.line(f)); } catch (e) { lines.push("🌤 Weather is not available right now."); }
+    const s = await houseSummary(owner, now);
+    if (s.people.length) lines.push("👪 " + s.people.map((p) => `${p.person} ${p.home ? "is home" : "is out"}`).join(", ") + ".");
+    for (const tv of s.devices.filter((d) => d.kind === "tv")) lines.push(`📺 ${tv.name}: ${tv.online ? (tv.status && tv.status.screen === "off" ? "standby" : "on") : "off"}.`);
+    const y = localParts(now - 24 * 3600 * 1000, tz).date;
+    const u = (settings.usage || {})[y];
+    if (u && u.minutes) lines.push(`⏱ TV yesterday: ${fmtMin(u.minutes)}${topApps(u.apps) ? " (" + topApps(u.apps) + ")" : ""}.`);
+    const since = new Date(now - 12 * 3600 * 1000);
+    const newDevices = await HomeEvent.countDocuments({ owner, kind: "lan_new", at: { $gte: since } });
+    lines.push(`📶 ${s.wifiUp} devices on the Wi-Fi${newDevices ? `, ${newDevices} new overnight` : ""}.`);
+    const camera = await HomeEvent.countDocuments({ owner, kind: "camera", at: { $gte: since } });
+    if (camera) lines.push(`📷 The camera saw movement ${camera} time${camera > 1 ? "s" : ""} overnight.`);
+    const speed = await HomeSpeed.findOne({ owner }).sort({ at: -1 }).lean();
+    if (speed) lines.push(`🚀 Internet: ${speed.down} Mbit/s down, ${speed.up} up, ${speed.ping} ms.`);
+    return lines.join("\n");
+}
+
+/** The weekly report: TV time per day, new devices, speed, camera alerts. */
+async function weeklyText(owner, settings, now = Date.now()) {
+    const tz = settings.timezone || "Asia/Kolkata";
+    const lines = ["📊 <b>Your home this week</b>"];
+    let total = 0; const apps = {};
+    for (let i = 0; i < 7; i++) {
+        const u = (settings.usage || {})[localParts(now - i * 24 * 3600 * 1000, tz).date];
+        if (!u) continue;
+        total += u.minutes || 0;
+        for (const [k, v] of Object.entries(u.apps || {})) apps[k] = (apps[k] || 0) + v;
+    }
+    lines.push(`📺 TV: ${fmtMin(total)} in 7 days (${fmtMin(Math.round(total / 7))} a day)${topApps(apps) ? ". Most: " + topApps(apps) : ""}.`);
+    const since = new Date(now - 7 * 24 * 3600 * 1000);
+    const news = await HomeEvent.find({ owner, kind: "lan_new", at: { $gte: since } }).sort({ at: -1 }).limit(10).lean();
+    lines.push(news.length ? `📶 ${news.length} new device${news.length > 1 ? "s" : ""} on the Wi-Fi: ${news.map((e) => e.text.replace(/^.*?: /, "")).join("; ")}.` : "📶 No new devices on the Wi-Fi.");
+    const speeds = await HomeSpeed.find({ owner, at: { $gte: since } }).lean();
+    if (speeds.length) {
+        const avg = (k) => Math.round(speeds.reduce((a, s) => a + (s[k] || 0), 0) / speeds.length);
+        const worst = speeds.reduce((a, s) => (s.down < a.down ? s : a), speeds[0]);
+        lines.push(`🚀 Internet: average ${avg("down")} Mbit/s down, ${avg("up")} up, ${avg("ping")} ms. Slowest ${worst.down} Mbit/s.`);
+    }
+    const camera = await HomeEvent.countDocuments({ owner, kind: "camera", at: { $gte: since } });
+    lines.push(`📷 Camera alerts: ${camera}.`);
+    return lines.join("\n");
+}
+
+async function sendTelegram(owner, text) {
+    const User = require("../models/schema");
+    const bot = require("./telegramBot");
+    const skip = Object.fromEntries([...User.HISTORY_FIELDS, ...User.PHOTO_FIELDS, "passwords"].map((f) => [f, 0]));
+    const user = await User.findById(owner, skip);
+    return user ? bot.notifyUser(user, text) : false;
+}
+
+const safeKey = (s) => String(s || "Other").replace(/[.$]/g, " ").trim().slice(0, 40) || "Other";
+
+/** Everything that runs once a minute for one account. */
+async function tickOwner(owner, now = Date.now()) {
+    const settings = await settingsOf(owner);
+    if (!settings) return;
+    const tz = settings.timezone || "Asia/Kolkata";
+    const local = localParts(now, tz);
+    const minuteKey = `${local.date}T${local.hhmm}`;
+    const devices = await HomeDevice.find({ owner }).lean();
+    const tvs = devices.filter((d) => d.kind === "tv");
+    const tvOn = (d) => Boolean(d.online) && home.isOnline(d, now) && (d.status || {}).screen !== "off";
+
+    // 1. TV time: a minute for every minute a TV screen is on, by app.
+    if (tvs.some(tvOn) && await claim(`usage:${owner}:${minuteKey}`)) {
+        const tv = tvs.find(tvOn);
+        const app = safeKey(((tv.status || {}).app || {}).label);
+        const inc = { [`usage.${local.date}.minutes`]: 1, [`usage.${local.date}.apps.${app}`]: 1 };
+        await HomeSettings.updateOne({ owner }, { $inc: inc });
+        const old = Object.keys(settings.usage || {}).sort().slice(0, Math.max(0, Object.keys(settings.usage || {}).length - USAGE_DAYS));
+        if (old.length) await HomeSettings.updateOne({ owner }, { $unset: Object.fromEntries(old.map((k) => [`usage.${k}`, ""])) });
+
+        // 2. The daily TV limit: past it, the TV is sent home (or paused) and you are told; again every 15 minutes.
+        const lim = settings.tvLimit || {};
+        const used = (((settings.usage || {})[local.date] || {}).minutes || 0) + 1;
+        if (lim.minutes > 0 && used >= lim.minutes) {
+            const [lastDate, lastMin] = String(lim.lastEnforced || "").split("@");
+            if (lastDate !== local.date || used - Number(lastMin || 0) >= 15) {
+                await HomeSettings.updateOne({ owner }, { $set: { "tvLimit.lastEnforced": `${local.date}@${used}` } });
+                if (lim.action === "pause") await queue(tv, "media", { action: "play_pause" });
+                if (lim.action === "home") { await queue(tv, "media", { action: "play_pause" }); await queue(tv, "key", { key: "HOME" }); }
+                await record({ owner, device: tv._id, deviceName: tv.name, kind: "tv_limit", notify: true, text: `TV time today is ${fmtMin(used)}, past the ${fmtMin(lim.minutes)} limit${lim.action === "notify" ? "" : lim.action === "pause" ? ". Paused it." : ". Sent the TV to its home screen."}` });
+            }
+        }
+        // 3. Still on late at night.
+        if (lim.lateNight !== false && local.minutes >= 60 && local.minutes < 300 && lim.lateNightNotified !== local.date) {
+            await HomeSettings.updateOne({ owner }, { $set: { "tvLimit.lateNightNotified": local.date } });
+            await record({ owner, device: tv._id, deviceName: tv.name, kind: "tv_late", notify: true, text: `${tv.name} is still on at ${local.hhmm}. Send it to standby from the remote, or pause it from Stashr.` });
+        }
+    }
+
+    // 4. Schedules: "every day at 23:00, pause the TV", "weekdays at 07:30, open the news".
+    for (const s of settings.schedules || []) {
+        if (!s || s.enabled === false || s.time !== local.hhmm) continue;
+        if (Array.isArray(s.days) && s.days.length && !s.days.includes(local.weekday)) continue;
+        if (!await claim(`schedule:${s.id}:${minuteKey}`)) continue;
+        await runSteps(owner, devices, s.steps || [], `Schedule “${s.name || s.time}”`);
+    }
+
+    // 5. Nobody is home, but the TV is on.
+    if (settings.alerts && settings.alerts.emptyHomeTv !== false) {
+        const people = home.presence(devices.filter((d) => d.kind === "hub"), devices.filter((d) => d.kind === "phone"), now);
+        const anyoneHome = people.some((p) => p.home);
+        if (people.length && !anyoneHome && tvs.some(tvOn) && !settings.emptyHomeNotifiedAt) {
+            if (await claim(`empty:${owner}:${local.date}:${Math.floor(local.minutes / 30)}`)) {
+                await HomeSettings.updateOne({ owner }, { $set: { emptyHomeNotifiedAt: new Date(now) } });
+                await record({ owner, kind: "empty_home", notify: true, text: "Nobody seems to be home, but the TV is on. Say “pause” or “tv home” in Stashr to stop it." });
+            }
+        } else if ((anyoneHome || !tvs.some(tvOn)) && settings.emptyHomeNotifiedAt) {
+            await HomeSettings.updateOne({ owner }, { $unset: { emptyHomeNotifiedAt: "" } });
+        }
+    }
+
+    // 6. The morning brief and the weekly report.
+    if (settings.brief && settings.brief.enabled && settings.brief.time === local.hhmm && settings.brief.lastSent !== local.date && await claim(`brief:${owner}:${local.date}`)) {
+        await HomeSettings.updateOne({ owner }, { $set: { "brief.lastSent": local.date } });
+        await sendTelegram(owner, await briefText(owner, settings, now));
+    }
+    if (settings.weekly && settings.weekly.enabled && local.weekday === 0 && local.hhmm === "20:00" && settings.weekly.lastSent !== local.date && await claim(`weekly:${owner}:${local.date}`)) {
+        await HomeSettings.updateOne({ owner }, { $set: { "weekly.lastSent": local.date } });
+        await sendTelegram(owner, await weeklyText(owner, settings, now));
+    }
+}
+
+/** Runs the steps of a scene or a schedule: each is { kind: "tv" | "hub", type, args }. Returns how many were sent. */
+async function runSteps(owner, devices, steps, why) {
+    let sent = 0;
+    for (const step of (steps || []).slice(0, 10)) {
+        const target = devices.find((d) => d.kind === step.kind && (!step.device || String(d._id) === String(step.device)));
+        if (!target) continue;
+        if (await queue(target, step.type, step.args || {})) sent++;
+    }
+    if (why && sent) await record({ owner, kind: "automation", text: `${why}: sent ${sent} command${sent > 1 ? "s" : ""}` });
+    return sent;
+}
+
+/** Checks one scene or schedule step list from the page; returns the clean list or null. */
+function cleanSteps(steps) {
+    if (!Array.isArray(steps) || !steps.length || steps.length > 10) return null;
+    const out = [];
+    for (const s of steps) {
+        if (!s || !home.KINDS.includes(s.kind)) return null;
+        const c = home.cleanCommand(s.kind, String(s.type || ""), s.args);
+        if (!c) return null;
+        out.push({ kind: s.kind, ...c });
+    }
+    return out;
+}
+
+async function tickAll(now = Date.now()) {
+    const owners = await HomeDevice.distinct("owner");
+    for (const owner of owners) {
+        try { await tickOwner(owner, now); } catch (e) { console.log("[home] automation failed:", e.message); }
+    }
+}
+
+const DEFAULT_SCENES = [
+    { id: "movie-night", name: "Movie night", steps: [{ kind: "tv", type: "volume", args: { level: 30 } }, { kind: "tv", type: "launch_app", args: { package: "com.netflix.ninja" } }] },
+    { id: "quiet", name: "Quiet", steps: [{ kind: "tv", type: "volume", args: { level: 10 } }] },
+    { id: "goodnight", name: "Good night", steps: [{ kind: "tv", type: "media", args: { action: "play_pause" } }, { kind: "tv", type: "key", args: { key: "HOME" } }] }
+];
+
+module.exports = { localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, sendTelegram, DEFAULT_SCENES, fmtMin };

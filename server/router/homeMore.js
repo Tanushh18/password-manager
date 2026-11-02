@@ -1,0 +1,406 @@
+/**
+ * Stashr Home, the rest: pairing a tablet or a family phone with a short code, the automations (alerts, TV schedules,
+ * scenes, the TV limit, briefs), TV time, internet speed history, the tablet camera's photos and videos, the tablet's
+ * dashboard and slideshow, and tidying the Wi-Fi list (merge two rows, forget a row).
+ *
+ *   Signed-in user                                    Device (token in "Authorization: Bearer sh_...")
+ *   POST   /home/pair-codes        a code to type      POST /home/agent/pair            code in, token out (no token yet)
+ *   GET    /home/settings          PUT /home/settings  POST /home/agent/media?kind=     a camera photo or clip
+ *   PUT    /home/schedules         PUT /home/scenes    GET  /home/agent/dashboard       what the tablet screen shows
+ *   POST   /home/scenes/:id/run                        GET  /home/agent/slideshow(/file)
+ *   GET    /home/usage             GET /home/speed     POST /home/agent/assistant       a spoken sentence
+ *   GET    /home/media(/:id)       DELETE /home/media/:id
+ *   POST   /home/devices/:id/lan/:key/merge   DELETE /home/devices/:id/lan/:key   PUT /home/devices/:id/person
+ *   POST   /home/brief/test
+ */
+const express = require("express");
+const crypto = require("crypto");
+const mongoose = require("mongoose");
+const router = express.Router();
+const authenticate = require("../middlewares/authenticate");
+const rateLimit = require("../middlewares/rateLimit");
+const HomeDevice = require("../models/homeDevice");
+const HomeEvent = require("../models/homeEvent");
+const HomeSettings = require("../models/homeSettings");
+const HomePairCode = require("../models/homePairCode");
+const HomeSpeed = require("../models/homeSpeed");
+const home = require("../utils/home");
+const automation = require("../utils/homeAutomation");
+const media = require("../utils/homeMedia");
+const weather = require("../utils/homeWeather");
+const movies = require("../utils/homeMovies");
+const { record } = require("../utils/homeEvents");
+const homeRouter = require("./home");
+
+const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: "Too many changes. Slow down." });
+const agentLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, message: "Too many requests." });
+const pairLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: "Too many tries. Wait a few minutes." });
+const agentAuth = (req, res, next) => homeRouter.agentAuth(req, res, next);
+const fail = (res, error, fallback) => res.status(Number.isInteger(error.status) ? error.status : 500).json({ error: Number.isInteger(error.status) ? error.message : fallback });
+const validId = (id) => mongoose.isValidObjectId(id);
+
+/* ───────── pairing ───────── */
+
+const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O, 1/I/L
+const normCode = (c) => String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+const hashCode = (c) => crypto.createHash("sha256").update("pair:" + normCode(c)).digest("hex");
+const PAIR_MS = 15 * 60 * 1000;
+
+router.post("/home/pair-codes", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const kind = req.body && req.body.kind === "phone" ? "phone" : "hub";
+        const name = String((req.body && req.body.name) || "").trim().slice(0, 60);
+        if (await HomeDevice.countDocuments({ owner: req.rootUser._id, parent: { $exists: false } }) >= 20) return res.status(400).json({ error: "You can add up to 20 devices." });
+        let code = "";
+        for (let i = 0; i < 8; i++) code += ALPHABET[crypto.randomInt(ALPHABET.length)];
+        await HomePairCode.create({ owner: req.rootUser._id, codeHash: hashCode(code), kind, name, expires: new Date(Date.now() + PAIR_MS) });
+        return res.status(201).json({ code: code.slice(0, 4) + "-" + code.slice(4), kind, expiresAt: new Date(Date.now() + PAIR_MS) });
+    } catch (e) { return fail(res, e, "Could not make a code."); }
+});
+
+// The tablet or phone types the code: it gets its own device token, which can only report and receive commands.
+router.post("/home/agent/pair", pairLimiter, async (req, res) => {
+    try {
+        const b = req.body || {};
+        if (normCode(b.code).length !== 8) return res.status(400).json({ error: "Type the 8-letter code from the Smart home page." });
+        const pc = await HomePairCode.findOneAndDelete({ codeHash: hashCode(b.code), expires: { $gt: new Date() } });
+        if (!pc) return res.status(400).json({ error: "That code is wrong or has expired. Make a new one on the Smart home page." });
+        const name = String(pc.name || b.name || (pc.kind === "phone" ? "Phone" : "Tablet")).trim().slice(0, 60) || "Device";
+        const token = home.newToken();
+        const device = await HomeDevice.create({ owner: pc.owner, name, kind: pc.kind, person: pc.kind === "phone" ? name : "", tokenHash: home.hashToken(token), tokenHint: token.slice(-4) });
+        await record({ owner: pc.owner, device: device._id, deviceName: name, kind: "paired", text: `${name} joined Stashr Home (${pc.kind === "phone" ? "family phone" : "tablet"})` });
+        return res.status(201).json({ token, device: { id: String(device._id), name, kind: pc.kind } });
+    } catch (e) { return fail(res, e, "Could not pair."); }
+});
+
+/* ───────── settings ───────── */
+
+const publicSettings = (s) => ({
+    timezone: s.timezone, alerts: s.alerts, weather: { city: (s.weather && s.weather.city) || "" }, brief: { enabled: s.brief.enabled, time: s.brief.time },
+    weekly: { enabled: s.weekly.enabled }, tvLimit: { minutes: s.tvLimit.minutes, action: s.tvLimit.action, lateNight: s.tvLimit.lateNight !== false },
+    schedules: s.schedules || [], scenes: (s.scenes && s.scenes.length ? s.scenes : automation.DEFAULT_SCENES),
+    slideshowFolder: s.slideshowFolder || "", camera: s.camera || { sensitivity: 5, video: true }
+});
+
+router.get("/home/settings", authenticate, async (req, res) => {
+    try { res.set("Cache-Control", "no-store"); return res.json(publicSettings(await automation.settingsOf(req.rootUser._id))); }
+    catch (e) { return fail(res, e, "Could not load the settings."); }
+});
+
+const bool = (v, d) => (typeof v === "boolean" ? v : d);
+
+router.put("/home/settings", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const b = req.body || {};
+        const cur = await automation.settingsOf(req.rootUser._id);
+        const set = {};
+        if (b.timezone !== undefined) {
+            try { new Intl.DateTimeFormat("en", { timeZone: String(b.timezone) }); set.timezone = String(b.timezone).slice(0, 60); }
+            catch (e) { return res.status(400).json({ error: "Unknown time zone." }); }
+        }
+        if (b.alerts && typeof b.alerts === "object") {
+            const a = b.alerts, c = cur.alerts || {};
+            for (const t of ["nightFrom", "nightTo"]) if (a[t] !== undefined && !automation.okTime(a[t])) return res.status(400).json({ error: "Times look like 23:30." });
+            set.alerts = {
+                newDevice: bool(a.newDevice, c.newDevice !== false), night: bool(a.night, c.night !== false), emptyHomeTv: bool(a.emptyHomeTv, c.emptyHomeTv !== false),
+                camera: bool(a.camera, c.camera !== false), presence: bool(a.presence, c.presence === true),
+                nightFrom: a.nightFrom || c.nightFrom || "00:00", nightTo: a.nightTo || c.nightTo || "05:00"
+            };
+        }
+        if (b.weatherCity !== undefined) {
+            const city = String(b.weatherCity || "").trim();
+            if (!city) set.weather = { city: "" };
+            else {
+                const g = await weather.geocode(city).catch(() => null);
+                if (!g) return res.status(400).json({ error: "Could not find that city. Try “Delhi” or “Gurugram, Haryana”." });
+                set.weather = g;
+            }
+        }
+        if (b.brief && typeof b.brief === "object") {
+            if (b.brief.time !== undefined && !automation.okTime(b.brief.time)) return res.status(400).json({ error: "Times look like 08:00." });
+            set["brief.enabled"] = bool(b.brief.enabled, cur.brief.enabled);
+            if (b.brief.time) set["brief.time"] = b.brief.time;
+        }
+        if (b.weekly && typeof b.weekly === "object") set["weekly.enabled"] = bool(b.weekly.enabled, cur.weekly.enabled);
+        if (b.tvLimit && typeof b.tvLimit === "object") {
+            const m = Number(b.tvLimit.minutes);
+            if (b.tvLimit.minutes !== undefined && (!Number.isInteger(m) || m < 0 || m > 24 * 60)) return res.status(400).json({ error: "The TV limit is minutes a day, 0 for none." });
+            if (b.tvLimit.minutes !== undefined) set["tvLimit.minutes"] = m;
+            if (["notify", "pause", "home"].includes(b.tvLimit.action)) set["tvLimit.action"] = b.tvLimit.action;
+            if (typeof b.tvLimit.lateNight === "boolean") set["tvLimit.lateNight"] = b.tvLimit.lateNight;
+        }
+        if (b.slideshowFolder !== undefined) {
+            const raw = String(b.slideshowFolder || "").trim();
+            const id = raw ? movies.folderIdFrom(raw) : "";
+            if (raw && !id) return res.status(400).json({ error: "Paste the Drive folder's link." });
+            set.slideshowFolder = id;
+        }
+        if (b.camera && typeof b.camera === "object") {
+            const sens = Number(b.camera.sensitivity);
+            if (b.camera.sensitivity !== undefined && (!Number.isInteger(sens) || sens < 1 || sens > 10)) return res.status(400).json({ error: "Sensitivity is 1 to 10." });
+            if (b.camera.sensitivity !== undefined) set["camera.sensitivity"] = sens;
+            if (typeof b.camera.video === "boolean") set["camera.video"] = b.camera.video;
+        }
+        await HomeSettings.updateOne({ owner: req.rootUser._id }, { $set: set });
+        return res.json(publicSettings(await automation.settingsOf(req.rootUser._id)));
+    } catch (e) { return fail(res, e, "Could not save the settings."); }
+});
+
+const newId = () => crypto.randomBytes(6).toString("hex");
+
+router.put("/home/schedules", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const list = Array.isArray(req.body && req.body.schedules) ? req.body.schedules : null;
+        if (!list || list.length > 20) return res.status(400).json({ error: "Up to 20 schedules." });
+        const clean = [];
+        for (const s of list) {
+            if (!s || !automation.okTime(s.time)) return res.status(400).json({ error: "Each schedule needs a time like 23:00." });
+            const steps = automation.cleanSteps(s.steps);
+            if (!steps) return res.status(400).json({ error: "Each schedule needs at least one allowed command." });
+            const days = Array.isArray(s.days) ? [...new Set(s.days.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))] : [];
+            clean.push({ id: /^[a-f0-9]{12}$/.test(s.id || "") ? s.id : newId(), name: String(s.name || "").trim().slice(0, 60) || s.time, time: s.time, days, steps, enabled: s.enabled !== false });
+        }
+        await automation.settingsOf(req.rootUser._id);
+        await HomeSettings.updateOne({ owner: req.rootUser._id }, { $set: { schedules: clean } });
+        return res.json({ schedules: clean });
+    } catch (e) { return fail(res, e, "Could not save the schedules."); }
+});
+
+router.put("/home/scenes", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const list = Array.isArray(req.body && req.body.scenes) ? req.body.scenes : null;
+        if (!list || list.length > 12) return res.status(400).json({ error: "Up to 12 scenes." });
+        const clean = [];
+        for (const s of list) {
+            const name = String((s && s.name) || "").trim().slice(0, 40);
+            const steps = automation.cleanSteps(s && s.steps);
+            if (!name || !steps) return res.status(400).json({ error: "Each scene needs a name and at least one allowed command." });
+            clean.push({ id: /^[a-z0-9-]{3,40}$/.test(s.id || "") ? s.id : newId(), name, steps });
+        }
+        await automation.settingsOf(req.rootUser._id);
+        await HomeSettings.updateOne({ owner: req.rootUser._id }, { $set: { scenes: clean } });
+        return res.json({ scenes: clean });
+    } catch (e) { return fail(res, e, "Could not save the scenes."); }
+});
+
+router.post("/home/scenes/:id/run", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const s = await automation.settingsOf(req.rootUser._id);
+        const scene = (s.scenes && s.scenes.length ? s.scenes : automation.DEFAULT_SCENES).find((x) => x.id === req.params.id);
+        if (!scene) return res.status(404).json({ error: "Scene not found." });
+        const devices = await HomeDevice.find({ owner: req.rootUser._id }).lean();
+        const sent = await automation.runSteps(req.rootUser._id, devices, scene.steps, `Scene “${scene.name}”`);
+        return res.json({ sent });
+    } catch (e) { return fail(res, e, "Could not run the scene."); }
+});
+
+/* ───────── TV time, internet speed ───────── */
+
+router.get("/home/usage", authenticate, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const s = await automation.settingsOf(req.rootUser._id);
+        const days = Math.min(Math.max(parseInt(req.query.days, 10) || 14, 1), 35);
+        const out = [];
+        for (let i = days - 1; i >= 0; i--) {
+            const date = automation.localParts(Date.now() - i * 24 * 3600 * 1000, s.timezone).date;
+            const u = (s.usage || {})[date] || {};
+            out.push({ date, minutes: u.minutes || 0, apps: u.apps || {} });
+        }
+        return res.json({ days: out, limit: s.tvLimit.minutes || 0 });
+    } catch (e) { return fail(res, e, "Could not load TV time."); }
+});
+
+router.get("/home/speed", authenticate, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const days = Math.min(Math.max(parseInt(req.query.days, 10) || 7, 1), 90);
+        const rows = await HomeSpeed.find({ owner: req.rootUser._id, at: { $gte: new Date(Date.now() - days * 24 * 3600 * 1000) } }).sort({ at: 1 }).limit(3000).lean();
+        return res.json({ samples: rows.map((r) => ({ at: r.at, down: r.down, up: r.up, ping: r.ping })) });
+    } catch (e) { return fail(res, e, "Could not load the speed history."); }
+});
+
+/* ───────── camera ───────── */
+
+const lastMotion = new Map(); // device -> time of the last motion alert sent to Telegram
+
+router.post("/home/agent/media", agentLimiter, agentAuth, (req, res, next) => {
+    const kind = req.query.kind === "video" ? "video" : "photo";
+    return express.raw({ type: media.TYPES[kind], limit: media.LIMITS[kind] })(req, res, next);
+}, async (req, res) => {
+    try {
+        const d = req.device;
+        if (d.kind !== "hub") return res.status(403).json({ error: "Only the tablet can send camera pictures." });
+        const kind = req.query.kind === "video" ? "video" : "photo";
+        const reason = ["motion", "snapshot", "clip"].includes(req.query.reason) ? req.query.reason : "snapshot";
+        if (!media.looksLike(kind, req.body)) return res.status(400).json({ error: kind === "video" ? "Send an MP4 video." : "Send a JPEG photo." });
+        const id = await media.save({ owner: d.owner, device: d._id, kind, reason, buffer: req.body });
+        const settings = await automation.settingsOf(d.owner);
+        const isMotion = reason === "motion";
+        const recent = Date.now() - (lastMotion.get(String(d._id)) || 0) < 60 * 1000;
+        const text = isMotion ? `📷 Someone came into the ${d.name} camera's view` : `📷 ${kind === "video" ? "Clip" : "Photo"} from the ${d.name} camera`;
+        if (kind === "photo" || !isMotion) await record({ owner: d.owner, device: d._id, deviceName: d.name, kind: isMotion ? "camera" : "camera_shot", text });
+        // Movement: the photo (and later the clip) goes to your Telegram chat, at most one alert a minute per tablet.
+        if ((isMotion && settings.alerts.camera !== false && (kind === "video" || !recent)) || reason !== "motion") {
+            if (isMotion && kind === "photo") lastMotion.set(String(d._id), Date.now());
+            const User = require("../models/schema");
+            const bot = require("../utils/telegramBot");
+            const skip = Object.fromEntries([...User.HISTORY_FIELDS, ...User.PHOTO_FIELDS, "passwords"].map((f) => [f, 0]));
+            const user = await User.findById(d.owner, skip);
+            if (user) void bot.notifyUserMedia(user, { kind, buffer: req.body, caption: text });
+        }
+        return res.status(201).json({ id: String(id) });
+    } catch (e) { return fail(res, e, "Could not save the picture."); }
+});
+
+router.get("/home/media", authenticate, async (req, res) => {
+    try { res.set("Cache-Control", "no-store"); return res.json({ media: await media.list(req.rootUser._id, 60) }); }
+    catch (e) { return fail(res, e, "Could not load the camera pictures."); }
+});
+
+router.get("/home/media/:id", authenticate, async (req, res) => {
+    try {
+        const file = await media.find(req.rootUser._id, req.params.id);
+        if (!file) return res.status(404).json({ error: "Not found." });
+        res.set({ "Content-Type": file.contentType || (file.metadata.kind === "video" ? "video/mp4" : "image/jpeg"), "Content-Length": String(file.length), "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff" });
+        media.stream(file).on("error", () => res.destroy()).pipe(res);
+    } catch (e) { return fail(res, e, "Could not load that."); }
+});
+
+router.delete("/home/media/:id", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const file = await media.find(req.rootUser._id, req.params.id);
+        if (!file) return res.status(404).json({ error: "Not found." });
+        await media.remove(file);
+        return res.json({ ok: true });
+    } catch (e) { return fail(res, e, "Could not delete that."); }
+});
+
+/* ───────── the tablet's screen ───────── */
+
+const weatherCache = new Map(); // owner -> { at, value }
+
+router.get("/home/agent/dashboard", agentLimiter, agentAuth, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const owner = req.device.owner;
+        const s = await automation.settingsOf(owner);
+        const devices = await HomeDevice.find({ owner }).lean();
+        let w = weatherCache.get(String(owner));
+        if (!w || Date.now() - w.at > 15 * 60 * 1000) {
+            w = { at: Date.now(), value: await weather.forecast(s.weather, s.timezone).catch(() => null) };
+            weatherCache.set(String(owner), w);
+        }
+        const today = ((s.usage || {})[automation.localParts(Date.now(), s.timezone).date] || {}).minutes || 0;
+        const events = await HomeEvent.find({ owner }).sort({ at: -1 }).limit(8).lean();
+        const speed = await HomeSpeed.findOne({ owner }).sort({ at: -1 }).lean();
+        const tvs = devices.filter((d) => d.kind === "tv").map((d) => {
+            const p = homeRouter.publicDevice(d);
+            return { name: p.name, online: p.online, screen: (p.status || {}).screen || "", app: ((p.status || {}).app || {}).label || "", title: ((p.status || {}).media || {}).title || "" };
+        });
+        return res.json({
+            time: new Date().toISOString(), timezone: s.timezone, weather: w.value, tvs, tvMinutesToday: today,
+            people: home.presence(devices.filter((d) => d.kind === "hub"), devices.filter((d) => d.kind === "phone")),
+            events: events.map((e) => ({ text: e.text, at: e.at })), speed: speed ? { down: speed.down, up: speed.up, ping: speed.ping, at: speed.at } : null,
+            scenes: (s.scenes && s.scenes.length ? s.scenes : automation.DEFAULT_SCENES).map((x) => ({ id: x.id, name: x.name })),
+            config: { camera: { sensitivity: (s.camera && s.camera.sensitivity) || 5, video: !(s.camera && s.camera.video === false), alerts: s.alerts.camera !== false }, slideshow: Boolean(s.slideshowFolder) }
+        });
+    } catch (e) { return fail(res, e, "Could not load the dashboard."); }
+});
+
+router.post("/home/agent/scene/:id", agentLimiter, agentAuth, async (req, res) => {
+    try {
+        const s = await automation.settingsOf(req.device.owner);
+        const scene = (s.scenes && s.scenes.length ? s.scenes : automation.DEFAULT_SCENES).find((x) => x.id === req.params.id);
+        if (!scene) return res.status(404).json({ error: "Scene not found." });
+        const devices = await HomeDevice.find({ owner: req.device.owner }).lean();
+        return res.json({ sent: await automation.runSteps(req.device.owner, devices, scene.steps, `Scene “${scene.name}” (from ${req.device.name})`) });
+    } catch (e) { return fail(res, e, "Could not run the scene."); }
+});
+
+router.post("/home/agent/assistant", agentLimiter, agentAuth, async (req, res) => {
+    try {
+        if (req.device.kind !== "hub") return res.status(403).json({ error: "Only the tablet can do that." });
+        const out = await homeRouter.runSentence(req.device.owner, String((req.body && req.body.text) || "").slice(0, 200));
+        if (out.error) return res.status(out.status || 400).json({ error: out.error });
+        return res.json(out);
+    } catch (e) { return fail(res, e, "Could not do that."); }
+});
+
+router.get("/home/agent/slideshow", agentLimiter, agentAuth, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const s = await automation.settingsOf(req.device.owner);
+        if (!s.slideshowFolder) return res.json({ photos: [], error: "Pick a Google Drive photo folder on the Smart home page." });
+        const { files } = await movies.listImages(req.device.owner, s.slideshowFolder);
+        return res.json({ photos: files.slice(0, 300) });
+    } catch (e) { return fail(res, e, "Could not list the photos."); }
+});
+
+router.get("/home/agent/slideshow/file", agentLimiter, agentAuth, async (req, res) => {
+    try {
+        const s = await automation.settingsOf(req.device.owner);
+        const id = String(req.query.id || "");
+        const { ctx, files } = await movies.listImages(req.device.owner, s.slideshowFolder);
+        if (!ctx || !files.some((f) => f.id === id)) return res.status(404).json({ error: "Not found." });
+        const up = await movies.openImage(ctx, id);
+        if (!up.ok || !up.body) return res.status(502).json({ error: `Google Drive answered HTTP ${up.status}` });
+        for (const h of ["content-length", "content-type"]) if (up.headers.get(h)) res.setHeader(h, up.headers.get(h));
+        const { Readable } = require("stream");
+        Readable.fromWeb(up.body).on("error", () => res.destroy()).pipe(res);
+    } catch (e) { return fail(res, e, "Could not send the photo."); }
+});
+
+/* ───────── tidying the Wi-Fi list, family phones ───────── */
+
+const okKey = (k) => /^[a-z0-9-]{1,60}$/.test(String(k || ""));
+
+// "These two rows are the same phone": the history and label go to one row, the other row is removed.
+router.post("/home/devices/:id/lan/:key/merge", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const into = String((req.body && req.body.into) || "");
+        if (!validId(req.params.id) || !okKey(req.params.key) || !okKey(into) || into === req.params.key) return res.status(400).json({ error: "Pick the row to merge into." });
+        const hub = await HomeDevice.findOne({ _id: req.params.id, owner: req.rootUser._id, kind: "hub" }).lean();
+        const book = { ...(hub && hub.lanBook) }, labels = { ...(hub && hub.lanLabels) };
+        if (!hub || !book[req.params.key] || !book[into]) return res.status(404).json({ error: "Device not found." });
+        const from = book[req.params.key], to = book[into];
+        const fresh = from.lastSeen > to.lastSeen ? from : to;
+        book[into] = { ...to, ip: fresh.ip, up: Boolean(from.up || to.up), lastSeen: Math.max(from.lastSeen, to.lastSeen), firstSeen: Math.min(from.firstSeen, to.firstSeen), name: to.name || from.name, ports: to.ports && to.ports.length ? to.ports : from.ports };
+        if (!labels[into] && labels[req.params.key]) labels[into] = labels[req.params.key];
+        delete book[req.params.key]; delete labels[req.params.key];
+        await HomeDevice.updateOne({ _id: hub._id }, { $set: { lanBook: book, lanLabels: labels } });
+        return res.json({ ok: true });
+    } catch (e) { return fail(res, e, "Could not merge."); }
+});
+
+router.delete("/home/devices/:id/lan/:key", authenticate, writeLimiter, async (req, res) => {
+    try {
+        if (!validId(req.params.id) || !okKey(req.params.key)) return res.status(404).json({ error: "Device not found." });
+        const r = await HomeDevice.updateOne({ _id: req.params.id, owner: req.rootUser._id, kind: "hub" }, { $unset: { ["lanBook." + req.params.key]: "", ["lanLabels." + req.params.key]: "" } });
+        if (!r.matchedCount) return res.status(404).json({ error: "Device not found." });
+        return res.json({ ok: true });
+    } catch (e) { return fail(res, e, "Could not remove it."); }
+});
+
+router.put("/home/devices/:id/person", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const person = String((req.body && req.body.person) || "").trim().slice(0, 40);
+        if (!validId(req.params.id)) return res.status(404).json({ error: "Device not found." });
+        const r = await HomeDevice.updateOne({ _id: req.params.id, owner: req.rootUser._id, kind: "phone" }, { $set: { person } });
+        if (!r.matchedCount) return res.status(404).json({ error: "Device not found." });
+        return res.json({ ok: true });
+    } catch (e) { return fail(res, e, "Could not save."); }
+});
+
+/* ───────── briefs ───────── */
+
+router.post("/home/brief/test", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const s = await automation.settingsOf(req.rootUser._id);
+        const text = req.body && req.body.which === "weekly" ? await automation.weeklyText(req.rootUser._id, s) : await automation.briefText(req.rootUser._id, s);
+        const sent = await automation.sendTelegram(req.rootUser._id, text);
+        return res.json({ sent, text });
+    } catch (e) { return fail(res, e, "Could not make the brief."); }
+});
+
+module.exports = router;

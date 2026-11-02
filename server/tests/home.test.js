@@ -64,10 +64,12 @@ describe("home: pure rules", () => {
         const blink = home.mergeLan(a.book, [], {}, t0 + 60_000);                       // missed one scan: still up
         expect(blink.events).toEqual([]);
         expect(Object.values(blink.book)[0].up).toBe(true);
-        const gone = home.mergeLan(a.book, [], {}, t0 + 6 * 60_000);                    // gone for 6 minutes
+        const doze = home.mergeLan(a.book, [], {}, t0 + 10 * 60_000);                   // a dozing phone: no "left"
+        expect(doze.events).toEqual([]);
+        const gone = home.mergeLan(a.book, [], {}, t0 + 16 * 60_000);                   // gone for 16 minutes
         expect(gone.events.map((e) => e.kind)).toEqual(["lan_left"]);
         expect(Object.values(gone.book)[0].up).toBe(false);
-        const back = home.mergeLan(gone.book, [{ ip: "192.168.1.20", up: true }], {}, t0 + 20 * 60_000);
+        const back = home.mergeLan(gone.book, [{ ip: "192.168.1.20", up: true }], {}, t0 + 40 * 60_000);
         expect(back.events.map((e) => e.kind)).toEqual(["lan_joined"]);
         expect(Object.values(back.book)[0].firstSeen).toBe(t0);                         // first seen is kept
         expect(Object.values(back.book)[0].name).toBe("phone");                         // so is the name
@@ -87,11 +89,11 @@ describe("home: devices", () => {
         expect(list.body.devices[0].online).toBe(false);
     });
 
-    test("only valid kinds and names, at most ten devices", async () => {
+    test("only valid kinds and names, at most twenty devices", async () => {
         const auth = await signUp();
         expect((await addDevice(auth, { name: "", kind: "tv" })).status).toBe(400);
         expect((await addDevice(auth, { name: "x", kind: "phone" })).status).toBe(400);
-        for (let i = 0; i < 10; i++) expect((await addDevice(auth, { name: "d" + i, kind: "hub" })).status).toBe(201);
+        for (let i = 0; i < 20; i++) expect((await addDevice(auth, { name: "d" + i, kind: "hub" })).status).toBe(201);
         expect((await addDevice(auth, { name: "one too many", kind: "hub" })).status).toBe(400);
     });
 
@@ -247,13 +249,13 @@ describe("home: the tablet hub and the Wi-Fi", () => {
         expect(again.name).toBe("pixel");
     });
 
-    test("a device that stops answering is marked down on the next scan after five minutes", async () => {
+    test("a device that stops answering is marked down on the next scan after fifteen minutes", async () => {
         const auth = await signUp();
         const { token, device } = (await addDevice(auth, { name: "Tablet", kind: "hub" })).body;
         await report(token, { status: { lan: [{ ip: "192.168.1.40", up: true }] } });
         const stored = await HomeDevice.findById(device.id);
         const book = JSON.parse(JSON.stringify(stored.lanBook));
-        Object.values(book)[0].lastSeen = Date.now() - 6 * 60 * 1000;
+        Object.values(book)[0].lastSeen = Date.now() - 16 * 60 * 1000;
         await HomeDevice.updateOne({ _id: device.id }, { $set: { lanBook: book } });
         await report(token, { status: { lan: [] } });
         const d = (await request(app).get("/home/devices").set(auth)).body.devices[0];
@@ -330,14 +332,14 @@ describe("home: a TV that reports through the tablet", () => {
         expect((await request(app).get("/home/devices").set(auth)).body.devices.filter((d) => d.viaHub).length).toBe(3);   // a, b, c; the fourth is not made
     });
 
-    test("a TV behind the tablet has no token to renew, does not count toward the ten, and goes when the tablet goes", async () => {
+    test("a TV behind the tablet has no token to renew, does not count toward the twenty, and goes when the tablet goes", async () => {
         const auth = await signUp();
         const { token, device } = (await addDevice(auth, { name: "Tablet", kind: "hub" })).body;
         await hubReport(token, { status: {}, children: [{ key: "tv", name: "TV", status: { screen: "on" } }] });
         const tv = (await request(app).get("/home/devices").set(auth)).body.devices.find((d) => d.viaHub);
         expect((await request(app).post(`/home/devices/${tv.id}/token`).set(auth)).status).toBe(404);
-        for (let i = 0; i < 9; i++) expect((await addDevice(auth, { name: "d" + i, kind: "hub" })).status).toBe(201);  // ten tablets in all
-        expect((await addDevice(auth, { name: "eleventh", kind: "hub" })).status).toBe(400);
+        for (let i = 0; i < 19; i++) expect((await addDevice(auth, { name: "d" + i, kind: "hub" })).status).toBe(201);  // twenty tablets in all
+        expect((await addDevice(auth, { name: "twenty-first", kind: "hub" })).status).toBe(400);
         expect((await request(app).delete(`/home/devices/${device.id}`).set(auth)).status).toBe(200);
         expect((await request(app).get("/home/devices").set(auth)).body.devices.some((d) => d.viaHub)).toBe(false);
     });

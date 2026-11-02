@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-// A device that reports to Stashr Home: the TV launcher ("tv") or the always-on tablet ("hub").
+// A device that reports to Stashr Home: the TV launcher ("tv"), the always-on tablet ("hub") or a family phone ("phone").
 // The device token is shown once when the device is added; only its SHA-256 is stored.
 const commandSchema = new mongoose.Schema({
     id: { type: String, required: true },
@@ -15,7 +15,9 @@ const commandSchema = new mongoose.Schema({
 const homeDeviceSchema = new mongoose.Schema({
     owner: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
     name: { type: String, required: true, trim: true, maxlength: 60 },
-    kind: { type: String, enum: ["tv", "hub"], required: true },
+    kind: { type: String, enum: ["tv", "hub", "phone"], required: true },
+    // Phone only: whose phone it is, for "who is home".
+    person: { type: String, default: "" },
     // A device with its own token (the tablet). A TV that reports through the tablet has no token of its own.
     tokenHash: { type: String, unique: true, sparse: true },
     // Set on a device that reports through another one (the TV through the tablet).

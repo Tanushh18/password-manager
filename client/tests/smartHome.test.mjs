@@ -46,3 +46,32 @@ test("devices group by room, with the unplaced ones last", () => {
   assert.equal(lanName({ ip: "192.168.1.9" }), "192.168.1.9");
   assert.equal(lanName({}), "Unknown device");
 });
+
+import { splitStale, fmtMinutes, niceMax, daysLabel, stepLabel, STEP_CHOICES } from "../src/lib/smartHome.js";
+
+test("old Wi-Fi rows fold away", () => {
+  const { fresh, old } = splitStale([{ key: "a", stale: false }, { key: "b", stale: true }]);
+  assert.deepEqual(fresh.map((d) => d.key), ["a"]);
+  assert.deepEqual(old.map((d) => d.key), ["b"]);
+});
+
+test("minutes, axis tops and schedule days read naturally", () => {
+  assert.equal(fmtMinutes(95), "1 h 35 min");
+  assert.equal(fmtMinutes(120), "2 h");
+  assert.equal(fmtMinutes(7.4), "7 min");
+  assert.equal(niceMax(0), 1);
+  assert.equal(niceMax(87), 100);
+  assert.equal(niceMax(130), 200);
+  assert.equal(niceMax(420), 500);
+  assert.equal(niceMax(210), 250);
+  assert.equal(daysLabel([]), "Every day");
+  assert.equal(daysLabel([1, 2, 3, 4, 5]), "Weekdays");
+  assert.equal(daysLabel([6, 0]), "Weekends");
+  assert.equal(daysLabel([1, 3]), "Mon, Wed");
+});
+
+test("every step a person can pick has words", () => {
+  for (const c of STEP_CHOICES) assert.ok(stepLabel(c.step) && !stepLabel(c.step).includes("_"), c.label);
+  assert.equal(stepLabel({ type: "launch_app", args: { package: "com.netflix.ninja" } }), "Open Netflix");
+  assert.equal(stepLabel({ type: "play_music", args: { query: "arijit" } }), "Play “arijit” on the tablet");
+});

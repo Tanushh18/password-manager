@@ -108,4 +108,37 @@ function settle(ownerId, usbMovies) {
     return next;
 }
 
-module.exports = { folderIdFrom, connectionsOf, context, list, open, settle, FULL_DRIVE };
+/**
+ * Photos for the tablet's slideshow, from another Drive folder, through the same Google account the movies use (or
+ * the only connected one). Returns { ctx, files: [{ id, name }] }; ctx is null when no Google account is connected.
+ */
+const imageCache = new Map();
+async function listImages(ownerId, folderId) {
+    const settings = await Settings.findOne({ owner: ownerId }).lean();
+    const user = await User.findById(ownerId, skip());
+    if (!user || !folderId) return { ctx: null, files: [] };
+    const key = await user.getDataKey();
+    const all = store.decode(user.photoConnections, key).filter((c) => c.accessToken || c.refreshToken);
+    const connection = all.find((c) => settings && c.id === settings.connectionId) || all[0];
+    if (!connection) return { ctx: null, files: [] };
+    const ctx = { user, key, connection };
+    const hit = imageCache.get(String(ownerId) + folderId);
+    if (hit && Date.now() - hit.at < 10 * 60 * 1000) return { ctx, files: hit.files };
+    const params = new URLSearchParams({
+        q: `'${folderId}' in parents and trashed = false and mimeType contains 'image/'`,
+        fields: "files(id,name,mimeType)", pageSize: "500", orderBy: "modifiedTime desc", supportsAllDrives: "true", includeItemsFromAllDrives: "true"
+    });
+    const r = await store.driveFetch(user, key, connection, `${api()}/drive/v3/files?${params}`);
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(`Google Drive answered HTTP ${r.status}${j.error && j.error.message ? ": " + j.error.message : ""}`), { status: 502 });
+    const files = (j.files || []).filter((f) => /^image\/(jpeg|png|webp|heic|heif)$/.test(f.mimeType || "")).map((f) => ({ id: f.id, name: f.name }));
+    imageCache.set(String(ownerId) + folderId, { at: Date.now(), files });
+    return { ctx, files };
+}
+
+/** A smaller copy of one image (Drive's thumbnail at about the tablet's screen size), or the file itself. */
+function openImage(ctx, id) {
+    return store.driveFetch(ctx.user, ctx.key, ctx.connection, `${api()}/drive/v3/files/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true`);
+}
+
+module.exports = { folderIdFrom, connectionsOf, context, list, open, settle, listImages, openImage, FULL_DRIVE };

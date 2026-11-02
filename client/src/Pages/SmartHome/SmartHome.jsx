@@ -1,13 +1,14 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  getHomeDevices, removeHomeDevice, renameHomeDevice, sendHomeCommand, labelHomeLanDevice,
+  getHomeDevices, removeHomeDevice, renameHomeDevice, sendHomeCommand, labelHomeLan, mergeHomeLan, forgetHomeLan,
   getHomeEvents, askHomeAssistant, getHomeMovies, saveHomeMovies
 } from "../../api/client";
 import { Section, Skeleton, Empty, useConfirm } from "../Render/RenderUi";
 import { usePolling } from "../Render/renderHooks";
 import { errorMessage } from "../Render/renderUtils";
-import { stateOf, STATE_LABEL, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName } from "../../lib/smartHome";
+import { stateOf, STATE_LABEL, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName, splitStale, TAG_LABEL } from "../../lib/smartHome";
+import { PairCard, PeopleCard, PhonesCard, AlertsCard, TvTimeCard, ScenesCard, SchedulesCard, SpeedCard, CameraCard, SlideshowCard, useHomeSettings } from "./HomeExtras";
 import "../Render/RenderDashboard.css";
 import "./SmartHome.css";
 
@@ -131,30 +132,66 @@ function TvCard({ device, send, onChanged }) {
   );
 }
 
-function LanRow({ device, row, onChanged }) {
+function LanRow({ device, row, rows, onChanged, send }) {
+  const confirm = useConfirm();
   const [edit, setEdit] = useState(false);
-  const [label, setLabel] = useState(row.label || "");
-  const [room, setRoom] = useState(row.room || "");
+  const [f, setF] = useState({ label: row.label || "", room: row.room || "", person: row.person || "", tag: row.tag || "", mac: row.wakeMac || "" });
+  const [into, setInto] = useState("");
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const save = async () => {
-    try { await labelHomeLanDevice(device.id, row.key, label, room); setEdit(false); onChanged(); }
+    try { await labelHomeLan(device.id, row.key, f); setEdit(false); onChanged(); }
     catch (e) { toast.error(errorMessage(e, "Could not save.")); }
   };
+  const merge = async () => {
+    if (!into) return;
+    try { await mergeHomeLan(device.id, row.key, into); setEdit(false); onChanged(); toast.success("Merged into one device."); }
+    catch (e) { toast.error(errorMessage(e, "Could not merge.")); }
+  };
+  const forget = async () => {
+    if (!(await confirm.ask({ title: `Forget ${lanName(row)}?`, message: "It disappears from the list and its name is deleted. If it comes back on the Wi-Fi, it shows up as a new device.", confirmLabel: "Forget", danger: true }))) return;
+    try { await forgetHomeLan(device.id, row.key); onChanged(); } catch (e) { toast.error(errorMessage(e, "Could not remove it.")); }
+  };
+  const ph = row.phone;
   return (
-    <li className={row.up ? "" : "is-down"}>
+    <li className={(row.up ? "" : "is-down") + (row.tag === "unknown" || (!row.tag && !row.label) ? " is-unknown" : "")}>
+      {confirm.dialog}
       <Dot state={row.up ? "on" : "off"} />
       <div className="sh-lan__main">
-        <b>{lanName(row)}</b>
-        <span>{row.ip}{row.mac ? " · " + row.mac : ""}{row.name && row.label ? " · " + row.name : ""}</span>
-        <span>{row.up ? (row.pingMs ? `answers in ${row.pingMs} ms` : "online") : `last seen ${ago(row.lastSeen)}`} · first seen {ago(row.firstSeen)}</span>
+        <b>{ph && !row.label ? ph.name : lanName(row)}{row.tag ? <em className={"sh-tag is-" + row.tag}>{TAG_LABEL[row.tag]}</em> : !row.label ? <em className="sh-tag is-new">Not named</em> : null}{row.person ? <em className="sh-tag">{row.person}</em> : null}</b>
+        <span>{row.ip}{row.name && row.name !== lanName(row) ? " · " + row.name : ""}{row.vendor ? " · " + row.vendor : ""}{row.wakeMac ? " · " + row.wakeMac : ""}</span>
+        <span>{row.up ? (row.pingMs ? `answers in ${row.pingMs} ms` : "online") : `last seen ${ago(row.lastSeen)}`} · first seen {ago(row.firstSeen)}{row.ports && row.ports.length ? ` · open ports ${row.ports.join(", ")}` : ""}</span>
+        {ph ? <span className="sh-health">📱 {ph.name}: 🔋 {ph.battery ?? "?"}%{ph.charging ? " charging" : ""}{ph.storage && ph.storage.total ? ` · 💾 ${Math.round(100 * (1 - ph.storage.free / ph.storage.total))}% full` : ""} · reported {ago(ph.lastSeen)}</span> : null}
+        {(row.risks || []).map((r) => <span key={r.port} className="sh-bad">⚠ Port {r.port} is open: {r.why}. Turn it off in that device's settings if you did not mean it.</span>)}
       </div>
       {edit ? (
-        <div className="sh-row">
-          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Name" maxLength={60} aria-label="Device name" />
-          <input value={room} onChange={(e) => setRoom(e.target.value)} placeholder="Room" maxLength={60} aria-label="Room" />
-          <button className="rd-btn rd-btn--primary" onClick={save}>Save</button>
-          <button className="rd-btn rd-btn--quiet" onClick={() => setEdit(false)}>Cancel</button>
+        <div className="sh-lan__edit">
+          <div className="sh-row">
+            <input value={f.label} onChange={set("label")} placeholder="Name" maxLength={60} aria-label="Device name" />
+            <input value={f.room} onChange={set("room")} placeholder="Room" maxLength={60} aria-label="Room" />
+            <input value={f.person} onChange={set("person")} placeholder="Whose? (for who is home)" maxLength={40} aria-label="Person" />
+            <select value={f.tag} onChange={set("tag")} aria-label="Kind of device">
+              <option value="">Not sorted</option><option value="mine">Mine</option><option value="family">Family</option><option value="guest">Guest</option><option value="unknown">Unknown</option>
+            </select>
+            <input value={f.mac} onChange={set("mac")} placeholder="MAC, for wake-up (optional)" maxLength={17} aria-label="MAC address" />
+          </div>
+          <div className="sh-row">
+            <button className="rd-btn rd-btn--primary" onClick={save}>Save</button>
+            <button className="rd-btn rd-btn--quiet" onClick={() => setEdit(false)}>Cancel</button>
+            <span className="sh-sep" />
+            <select value={into} onChange={(e) => setInto(e.target.value)} aria-label="Same device as">
+              <option value="">Same device as…</option>
+              {rows.filter((r) => r.key !== row.key).map((r) => <option key={r.key} value={r.key}>{lanName(r)} ({r.ip})</option>)}
+            </select>
+            <button className="rd-btn rd-btn--quiet" disabled={!into} onClick={merge}>Merge</button>
+            <button className="rd-btn rd-btn--danger-quiet" onClick={forget}>Forget</button>
+          </div>
         </div>
-      ) : <button className="rd-btn rd-btn--quiet" onClick={() => setEdit(true)}>Name / room</button>}
+      ) : (
+        <div className="sh-row">
+          {row.wakeMac && !row.up && send ? <button className="rd-btn rd-btn--quiet" onClick={() => send(device.id, "wake", { mac: row.wakeMac }, `Waking ${lanName(row)}…`)}>Wake</button> : null}
+          <button className="rd-btn rd-btn--quiet" onClick={() => setEdit(true)}>Name / room</button>
+        </div>
+      )}
     </li>
   );
 }
@@ -162,25 +199,43 @@ function LanRow({ device, row, onChanged }) {
 function HubCard({ device, send, onChanged }) {
   const s = device.status || {};
   const state = stateOf(device);
-  const groups = groupByRoom(device.lan);
+  const [showOld, setShowOld] = useState(false);
+  const smart = s.agent === "stashr-hub";
+  const { fresh, old } = splitStale(device.lan);
+  const groups = groupByRoom(fresh);
   const up = (device.lan || []).filter((d) => d.up).length;
+  const unnamed = fresh.filter((d) => !d.label && !d.tag).length;
+  const sendHub = smart ? send : null;
   return (
-    <Section title={device.name} subtitle={`${STATE_LABEL[state]} · seen ${ago(device.lastSeen)} · ${up} of ${(device.lan || []).length} devices answering`}
+    <Section title={device.name} subtitle={`${STATE_LABEL[state]} · seen ${ago(device.lastSeen)} · ${up} of ${fresh.length} devices answering${unnamed ? ` · ${unnamed} not named yet` : ""}`}
       actions={<><Dot state={state} /><DeviceMenu device={device} onChanged={onChanged} /></>}>
       <div className="sh-chips">
         {s.battery ? <span>Battery {s.battery.pct}%{s.battery.charging ? " · charging" : ""}</span> : null}
         {s.wifi?.rssi ? <span>Wi-Fi {signalWord(s.wifi.rssi)} ({s.wifi.rssi} dBm)</span> : null}
         {s.scan?.at ? <span>Last scan {ago(s.scan.at)}{s.scan.ms ? ` (${Math.round(s.scan.ms / 1000)} s)` : ""}</span> : null}
         {s.scan?.subnet ? <span>{s.scan.subnet}</span> : null}
+        {s.version ? <span>Stashr Hub {s.version}{s.updateWaiting ? " · update waiting for a tap on the tablet" : ""}</span> : null}
+        {s.voice ? <span>🎤 “Hey Stashr” {s.voice === "on" ? "listening" : s.voice}</span> : null}
       </div>
-      <p className="sh-dim">The tablet sees who is on the Wi-Fi and how fast each device answers. It cannot see inside a device, and it cannot tell which room a device is in, so name the room yourself.</p>
-      <div className="sh-row"><button className="rd-btn rd-btn--quiet" onClick={() => send(device.id, "scan_now", {}, "Scanning the Wi-Fi…")}>Scan now</button></div>
+      <p className="sh-dim">{smart
+        ? "The tablet finds each device's own name where the device shares it (router, Bonjour, Windows), so a phone keeps its row and your label when its IP changes. It cannot read battery or storage of a phone; pair that phone with Stashr Hub for those."
+        : "This tablet runs the older hub app, which only sees IP addresses. Install Stashr Hub from /apps for device names, the camera, voice and speed tests."}</p>
+      <div className="sh-row">
+        <button className="rd-btn rd-btn--quiet" onClick={() => send(device.id, "scan_now", {}, "Scanning the Wi-Fi…")}>Scan now</button>
+        {smart ? <button className="rd-btn rd-btn--quiet" onClick={() => send(device.id, "check_update", {}, "Checking for a Stashr Hub update…")}>Check for update</button> : null}
+      </div>
       {groups.length ? groups.map(([room, rows]) => (
         <div className="sh-block" key={room}>
           <h4>{room}</h4>
-          <ul className="sh-lan">{rows.map((r) => <LanRow key={r.key} device={device} row={r} onChanged={onChanged} />)}</ul>
+          <ul className="sh-lan">{rows.map((r) => <LanRow key={r.key} device={device} row={r} rows={device.lan} onChanged={onChanged} send={sendHub} />)}</ul>
         </div>
       )) : <p className="sh-dim">No devices seen yet. The first scan takes about a minute.</p>}
+      {old.length ? (
+        <div className="sh-block">
+          <button className="rd-btn rd-btn--quiet" onClick={() => setShowOld(!showOld)} aria-expanded={showOld}>{showOld ? "Hide" : "Show"} {old.length} device{old.length > 1 ? "s" : ""} not seen for a day</button>
+          {showOld ? <ul className="sh-lan">{old.map((r) => <LanRow key={r.key} device={device} row={r} rows={device.lan} onChanged={onChanged} send={sendHub} />)}</ul> : null}
+        </div>
+      ) : null}
       <Pending commands={device.commands} />
     </Section>
   );
@@ -268,10 +323,15 @@ function MoviesCard() {
   );
 }
 
+/** Speech to text in the browser (Chrome, Edge, Android): Hindi or English, then the sentence goes to Ask Stashr. */
+const Recognition = typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
+
 function Assistant({ onDone }) {
   const [text, setText] = useState("");
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [lang, setLang] = useState(() => { try { return localStorage.getItem("sh-voice-lang") || "hi-IN"; } catch { return "hi-IN"; } });
   const ask = async (sentence) => {
     const t = (sentence ?? text).trim();
     if (!t) return;
@@ -280,44 +340,82 @@ function Assistant({ onDone }) {
     catch (e) { setReply(errorMessage(e, "Could not do that.")); }
     finally { setBusy(false); }
   };
+  const listen = () => {
+    if (!Recognition || listening) return;
+    const rec = new Recognition();
+    rec.lang = lang;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    let finalText = "";
+    rec.onresult = (e) => {
+      const said = Array.from(e.results).map((r) => r[0].transcript).join(" ");
+      setText(said);
+      if (e.results[e.results.length - 1].isFinal) finalText = said;
+    };
+    rec.onerror = (e) => { setListening(false); if (e.error === "not-allowed") toast.error("Allow the microphone for this site to talk to Stashr."); };
+    rec.onend = () => { setListening(false); if (finalText.trim()) ask(finalText); };
+    setListening(true);
+    rec.start();
+  };
+  const pickLang = (v) => { setLang(v); try { localStorage.setItem("sh-voice-lang", v); } catch { /* remembered only for now */ } };
   return (
-    <Section title="Ask Stashr" subtitle="Try: “volume up”, “pause”, “open netflix”, “tv ki awaaz kam karo”, “status”">
+    <Section title="Ask Stashr" subtitle="Type or tap the mic: “volume up”, “tv ki awaaz kam karo”, “arijit ke gaane chalao”, “tv par news lagao”, “movie night”, “kaun ghar par hai”, “camera on”, “speed test”">
       <form className="sh-row sh-ask" onSubmit={(e) => { e.preventDefault(); ask(); }}>
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="What should I do?" maxLength={200} aria-label="Command" />
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder={listening ? "Listening…" : "What should I do?"} maxLength={200} aria-label="Command" />
+        {Recognition ? <>
+          <button type="button" className={"rd-btn sh-mic" + (listening ? " is-live" : "")} onClick={listen} aria-label={listening ? "Listening" : "Speak a command"} aria-pressed={listening}>{listening ? "● Listening" : "🎤 Speak"}</button>
+          <select value={lang} onChange={(e) => pickLang(e.target.value)} aria-label="Voice language"><option value="hi-IN">हिंदी / Hinglish</option><option value="en-IN">English</option></select>
+        </> : null}
         <button className="rd-btn rd-btn--primary" type="submit" disabled={busy}>Send</button>
       </form>
       {reply ? <p className="sh-reply" role="status">{reply}</p> : null}
+      {!Recognition ? <p className="sh-dim">This browser cannot listen. Chrome or Edge can, on a phone or a computer.</p> : null}
     </Section>
   );
 }
 
 export default function SmartHome() {
   const [devices, setDevices] = useState(null);
+  const [people, setPeople] = useState([]);
   const [events, setEvents] = useState([]);
   const [error, setError] = useState("");
+  const home = useHomeSettings();
   const load = useCallback(async () => {
     try {
       const [d, e] = await Promise.all([getHomeDevices(), getHomeEvents(30)]);
-      setDevices(d.devices); setEvents(e.events); setError("");
+      setDevices(d.devices); setPeople(d.people || []); setEvents(e.events); setError("");
     } catch (e) { setError(errorMessage(e, "Could not load your devices.")); }
   }, []);
   useEffect(() => { load(); }, [load]);
   usePolling(load, 8000);
   const send = useSend(load);
+  const list = devices || [];
+  const smartHub = list.find((d) => d.kind === "hub" && d.status?.agent === "stashr-hub");
+  const phones = list.filter((d) => d.kind === "phone");
 
   return (
     <main className="sh-page">
       <header className="sh-head">
-        <div><h1>Smart home</h1><p className="sh-dim">Your TV and the Wi-Fi at home, from anywhere.</p></div>
+        <div><h1>Smart home</h1><p className="sh-dim">Your TV, the Wi-Fi, the family's phones and the tablet camera, from anywhere.</p></div>
       </header>
       {error ? <p className="sh-bad" role="alert">{error}</p> : null}
       <Assistant onDone={load} />
-      <MoviesCard />
-      {devices === null ? <Skeleton lines={5} /> : devices.length === 0 ? (
-        <Empty icon="📺" title="Nothing connected yet">Open the Stashr Hub app on the always-on tablet and sign in with your Stashr account. The tablet appears here, and your TV joins by itself once its Stashr app is open.</Empty>
-      ) : devices.map((d) => d.kind === "tv"
+      <ScenesCard home={home} />
+      <PeopleCard people={people} />
+      {devices === null ? <Skeleton lines={5} /> : list.length === 0 ? (
+        <Empty icon="📺" title="Nothing connected yet">Install Stashr Hub from /apps on the always-on tablet and type a code from “Add a tablet or a family phone” below. Your TV joins by itself once its Stashr app is open.</Empty>
+      ) : list.filter((d) => d.kind !== "phone").map((d) => d.kind === "tv"
         ? <TvCard key={d.id} device={d} send={send} onChanged={load} />
         : <HubCard key={d.id} device={d} send={send} onChanged={load} />)}
+      <PhonesCard phones={phones} onChanged={load} />
+      <CameraCard hub={smartHub} send={send} home={home} />
+      <TvTimeCard home={home} />
+      <SpeedCard hasSmartHub={Boolean(smartHub)} send={send} hubId={smartHub?.id} />
+      <SchedulesCard home={home} />
+      <AlertsCard home={home} />
+      <MoviesCard />
+      <SlideshowCard home={home} hub={smartHub} send={send} />
+      <PairCard />
       <Section title="What happened" subtitle="The last 60 days are kept">
         {events.length ? (
           <ul className="sh-events">{events.map((e) => <li key={e.id}><span>{ago(e.at)}</span><b>{e.text}</b></li>)}</ul>

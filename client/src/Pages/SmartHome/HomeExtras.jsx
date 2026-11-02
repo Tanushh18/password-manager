@@ -1,0 +1,397 @@
+import React, { useCallback, useEffect, useState } from "react";
+import { toast } from "react-toastify";
+import {
+  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomeScenes, runHomeScene,
+  getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, testHomeBrief, setHomePhonePerson, removeHomeDevice
+} from "../../api/client";
+import { Section, useConfirm } from "../Render/RenderUi";
+import { usePolling } from "../Render/renderHooks";
+import { errorMessage } from "../Render/renderUtils";
+import { ago, fmtBytes, fmtMinutes, daysLabel, stepLabel, STEP_CHOICES } from "../../lib/smartHome";
+import { TvTimeChart, SpeedChart } from "./HomeCharts";
+
+/** The settings every card here edits, loaded once. */
+export function useHomeSettings() {
+  const [settings, setSettings] = useState(null);
+  const load = useCallback(async () => { try { setSettings(await getHomeSettings()); } catch { /* cards stay hidden */ } }, []);
+  useEffect(() => { load(); }, [load]);
+  const save = useCallback(async (body, done = "Saved.") => {
+    try { setSettings(await saveHomeSettings(body)); toast.success(done); return true; }
+    catch (e) { toast.error(errorMessage(e, "Could not save.")); return false; }
+  }, []);
+  return { settings, setSettings, save, reload: load };
+}
+
+/* ───────── add a tablet or a family phone ───────── */
+
+export function PairCard() {
+  const [kind, setKind] = useState("phone");
+  const [name, setName] = useState("");
+  const [code, setCode] = useState(null);
+  const make = async (e) => {
+    e.preventDefault();
+    try { setCode(await makeHomePairCode(kind, name.trim())); }
+    catch (err) { toast.error(errorMessage(err, "Could not make a code.")); }
+  };
+  return (
+    <Section title="Add a tablet or a family phone" subtitle="Install Stashr Hub from /apps, then type the code. No password is needed on that device.">
+      <form className="sh-row" onSubmit={make}>
+        <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="What are you adding">
+          <option value="phone">A family phone (battery, storage, who is home)</option>
+          <option value="hub">The home tablet (Wi-Fi, camera, voice, dashboard)</option>
+        </select>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === "phone" ? "Whose phone? e.g. Mom" : "Name, e.g. Hall tablet"} maxLength={60} aria-label="Name" />
+        <button className="rd-btn rd-btn--primary" type="submit">Make a code</button>
+      </form>
+      {code ? (
+        <div className="sh-token" role="status">
+          <span>Type this in Stashr Hub on the {code.kind === "phone" ? "phone" : "tablet"}:</span>
+          <code className="sh-code">{code.code}</code>
+          <span className="sh-dim">Works once, for 15 minutes.</span>
+        </div>
+      ) : null}
+      <p className="sh-dim">Download Stashr Hub: <a href="/apps">stashr /apps</a>. One app does both jobs; you pick tablet or phone when it opens.</p>
+    </Section>
+  );
+}
+
+/* ───────── who is home ───────── */
+
+export function PeopleCard({ people }) {
+  return (
+    <Section title="Who is home" subtitle="From the Wi-Fi: give a device a person in its Name / room, or pair that person's phone.">
+      {people && people.length ? (
+        <ul className="sh-people">{people.map((p) => (
+          <li key={p.person} className={p.home ? "is-home" : ""}>
+            <span className="sh-avatar" aria-hidden="true">{p.person.slice(0, 1).toUpperCase()}</span>
+            <div><b>{p.person}</b><span>{p.home ? "Home" : "Out"}{p.lastSeen ? ` · seen ${ago(p.lastSeen)}` : ""} · {p.devices.join(", ")}</span></div>
+          </li>
+        ))}</ul>
+      ) : <p className="sh-dim">Nobody is set up yet. Open a Wi-Fi device's Name / room and type whose it is.</p>}
+    </Section>
+  );
+}
+
+/* ───────── family phones ───────── */
+
+const pct = (s) => (s && s.total ? Math.round(100 * (1 - s.free / s.total)) : null);
+
+export function PhonesCard({ phones, onChanged }) {
+  const confirm = useConfirm();
+  if (!phones.length) return null;
+  const rename = async (p) => {
+    const who = window.prompt("Whose phone is this?", p.person || p.name);
+    if (who === null) return;
+    try { await setHomePhonePerson(p.id, who.trim()); onChanged(); } catch (e) { toast.error(errorMessage(e, "Could not save.")); }
+  };
+  const remove = async (p) => {
+    if (!(await confirm.ask({ title: `Remove ${p.name}?`, message: "The phone stops reporting. Pair it again with a new code to bring it back.", confirmLabel: "Remove", danger: true }))) return;
+    try { await removeHomeDevice(p.id); onChanged(); } catch (e) { toast.error(errorMessage(e, "Could not remove it.")); }
+  };
+  return (
+    <Section title="Family phones" subtitle="Each phone with Stashr Hub reports its health about every 15 minutes, and when it joins the Wi-Fi.">
+      {confirm.dialog}
+      <ul className="sh-phones">{phones.map((p) => {
+        const s = p.status || {}, used = pct(s.storage);
+        return (
+          <li key={p.id}>
+            <div className="sh-lan__main">
+              <b>{p.name}{p.person && p.person !== p.name ? ` · ${p.person}` : ""}</b>
+              <span>{s.model || "Phone"}{s.android ? ` · Android ${s.android}` : ""} · {p.online ? `reported ${ago(p.lastSeen)}` : `last report ${ago(p.lastSeen)}`}{s.wifi ? ` · on Wi-Fi (${s.ip || "?"})` : s.network ? ` · on ${s.network}` : ""}</span>
+            </div>
+            <div className="sh-chips">
+              {s.battery != null ? <span className={s.battery <= 15 && !s.charging ? "is-bad" : ""}>🔋 {s.battery}%{s.charging ? " charging" : ""}{s.batteryTemp ? ` · ${s.batteryTemp}°C` : ""}</span> : null}
+              {used != null ? <span className={used >= 90 ? "is-bad" : ""}>💾 {used}% full · {fmtBytes(s.storage.free)} free</span> : null}
+              {s.ram && s.ram.total ? <span>RAM {Math.round(100 * (1 - s.ram.free / s.ram.total))}% used</span> : null}
+              {s.batteryHealth ? <span>Battery health: {s.batteryHealth}</span> : null}
+              {s.uptimeH != null ? <span>Up {s.uptimeH} h</span> : null}
+            </div>
+            <div className="sh-row">
+              <button className="rd-btn rd-btn--quiet" onClick={() => rename(p)}>Person</button>
+              <button className="rd-btn rd-btn--danger-quiet" onClick={() => remove(p)}>Remove</button>
+            </div>
+          </li>
+        );
+      })}</ul>
+    </Section>
+  );
+}
+
+/* ───────── alerts, briefs, time zone ───────── */
+
+function Toggle({ checked, onChange, children }) {
+  return <label className="sh-switch"><input type="checkbox" checked={Boolean(checked)} onChange={(e) => onChange(e.target.checked)} />{children}</label>;
+}
+
+export function AlertsCard({ home }) {
+  const { settings: s, save } = home;
+  const [city, setCity] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (s) setCity(s.weather.city || ""); }, [s]);
+  if (!s) return null;
+  const a = s.alerts;
+  const setA = (k, v) => save({ alerts: { [k]: v } });
+  const test = async (which) => {
+    setBusy(true);
+    try { const r = await testHomeBrief(which); toast[r.sent ? "success" : "info"](r.sent ? "Sent to your Telegram." : "Connect Telegram in Settings to get it there. Here it is:\n" + r.text.replace(/<[^>]+>/g, "")); }
+    catch (e) { toast.error(errorMessage(e, "Could not make it.")); } finally { setBusy(false); }
+  };
+  return (
+    <Section title="Alerts and briefs" subtitle="Sent to your Telegram bot (connect it in Settings). Everything is also in “What happened”.">
+      <div className="sh-grid2">
+        <div className="sh-controls">
+          <h4 className="sh-h">Tell me when</h4>
+          <Toggle checked={a.newDevice} onChange={(v) => setA("newDevice", v)}>A new device joins the Wi-Fi</Toggle>
+          <Toggle checked={a.night} onChange={(v) => setA("night", v)}>An unknown device joins at night</Toggle>
+          <div className="sh-row sh-indent">
+            <span className="sh-dim">Night is</span>
+            <input type="time" value={a.nightFrom} onChange={(e) => setA("nightFrom", e.target.value)} aria-label="Night starts" />
+            <span className="sh-dim">to</span>
+            <input type="time" value={a.nightTo} onChange={(e) => setA("nightTo", e.target.value)} aria-label="Night ends" />
+          </div>
+          <Toggle checked={a.presence} onChange={(v) => setA("presence", v)}>Someone comes home or leaves</Toggle>
+          <Toggle checked={a.emptyHomeTv} onChange={(v) => setA("emptyHomeTv", v)}>Nobody is home but the TV is on</Toggle>
+          <Toggle checked={a.camera} onChange={(v) => setA("camera", v)}>The tablet camera sees someone (with the photo)</Toggle>
+        </div>
+        <div className="sh-controls">
+          <h4 className="sh-h">Briefs</h4>
+          <Toggle checked={s.brief.enabled} onChange={(v) => save({ brief: { enabled: v } })}>Morning brief: weather, who is home, TV, Wi-Fi, internet</Toggle>
+          <div className="sh-row sh-indent">
+            <span className="sh-dim">at</span>
+            <input type="time" value={s.brief.time} onChange={(e) => save({ brief: { time: e.target.value } })} aria-label="Brief time" />
+            <button className="rd-btn rd-btn--quiet" disabled={busy} onClick={() => test("brief")}>Send one now</button>
+          </div>
+          <Toggle checked={s.weekly.enabled} onChange={(v) => save({ weekly: { enabled: v } })}>Weekly report, Sundays at 20:00</Toggle>
+          <div className="sh-row sh-indent"><button className="rd-btn rd-btn--quiet" disabled={busy} onClick={() => test("weekly")}>Send one now</button></div>
+          <form className="sh-row" onSubmit={(e) => { e.preventDefault(); save({ weatherCity: city }, "Weather place saved."); }}>
+            <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Your city, for the weather" aria-label="City" maxLength={80} />
+            <button className="rd-btn rd-btn--quiet" type="submit">Save</button>
+          </form>
+          <p className="sh-dim">Times are in {s.timezone}.</p>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+/* ───────── TV time and the daily limit ───────── */
+
+export function TvTimeCard({ home }) {
+  const { settings: s, save } = home;
+  const [data, setData] = useState(null);
+  const [mins, setMins] = useState("");
+  const load = useCallback(async () => { try { setData(await getHomeUsage(14)); } catch { /* hidden */ } }, []);
+  useEffect(() => { load(); }, [load]);
+  usePolling(load, 60000);
+  useEffect(() => { if (s) setMins(String(s.tvLimit.minutes || "")); }, [s]);
+  if (!data || !s) return null;
+  const today = data.days[data.days.length - 1];
+  const week = data.days.slice(-7).reduce((a, d) => a + d.minutes, 0);
+  return (
+    <Section title="TV time" subtitle={`Today ${fmtMinutes(today.minutes)} · this week ${fmtMinutes(week)} (${fmtMinutes(week / 7)} a day)`}>
+      <TvTimeChart days={data.days} limit={s.tvLimit.minutes} />
+      <form className="sh-row" onSubmit={(e) => { e.preventDefault(); save({ tvLimit: { minutes: Number(mins) || 0 } }, Number(mins) ? "Daily TV limit saved." : "No TV limit."); }}>
+        <span className="sh-dim">Daily limit</span>
+        <input type="number" min="0" max="1440" step="15" value={mins} onChange={(e) => setMins(e.target.value)} placeholder="minutes, 0 = none" aria-label="Daily TV limit in minutes" style={{ width: "9rem" }} />
+        <select value={s.tvLimit.action} onChange={(e) => save({ tvLimit: { action: e.target.value } })} aria-label="When the limit is reached">
+          <option value="home">then pause and go to the home screen</option>
+          <option value="pause">then pause</option>
+          <option value="notify">just tell me</option>
+        </select>
+        <button className="rd-btn rd-btn--primary" type="submit">Save</button>
+      </form>
+      <Toggle checked={s.tvLimit.lateNight} onChange={(v) => save({ tvLimit: { lateNight: v } })}>Tell me when the TV is still on between 1 and 5 at night</Toggle>
+      <p className="sh-dim">The TV app cannot switch the TV off by itself yet, so the limit pauses it and sends it home, again every 15 minutes, and tells you.</p>
+    </Section>
+  );
+}
+
+/* ───────── scenes and schedules ───────── */
+
+function StepPicker({ steps, setSteps }) {
+  const [pick, setPick] = useState("0");
+  return (
+    <div className="sh-steps">
+      <ol>{steps.map((st, i) => <li key={i}>{stepLabel(st)} <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setSteps(steps.filter((_, j) => j !== i))} aria-label="Remove step">✕</button></li>)}</ol>
+      <div className="sh-row">
+        <select value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Add a step">{STEP_CHOICES.map((c, i) => <option key={c.label} value={i}>{c.label}</option>)}</select>
+        <button type="button" className="rd-btn rd-btn--quiet" disabled={steps.length >= 10} onClick={() => setSteps([...steps, STEP_CHOICES[Number(pick)].step])}>Add step</button>
+      </div>
+    </div>
+  );
+}
+
+export function ScenesCard({ home }) {
+  const { settings: s, setSettings } = home;
+  const [draft, setDraft] = useState(null);
+  if (!s) return null;
+  const run = async (sc) => { try { const r = await runHomeScene(sc.id); toast.success(r.sent ? `${sc.name}: sent ${r.sent} command${r.sent > 1 ? "s" : ""}.` : `${sc.name}: no device is ready for it.`); } catch (e) { toast.error(errorMessage(e, "Could not run it.")); } };
+  const store = async (scenes) => {
+    try { const r = await saveHomeScenes(scenes); setSettings({ ...s, scenes: r.scenes }); setDraft(null); toast.success("Scenes saved."); }
+    catch (e) { toast.error(errorMessage(e, "Could not save.")); }
+  };
+  return (
+    <Section title="Scenes" subtitle="One tap (or say its name to Ask Stashr or the tablet) runs several commands.">
+      <div className="sh-row">{s.scenes.map((sc) => <button key={sc.id} className="rd-btn rd-btn--primary" onClick={() => run(sc)} title={sc.steps.map(stepLabel).join(" → ")}>{sc.name}</button>)}</div>
+      {draft ? (
+        <form className="sh-editor" onSubmit={(e) => { e.preventDefault(); store(draft.index === -1 ? [...s.scenes, draft.scene] : s.scenes.map((x, i) => (i === draft.index ? draft.scene : x))); }}>
+          <input value={draft.scene.name} onChange={(e) => setDraft({ ...draft, scene: { ...draft.scene, name: e.target.value } })} placeholder="Scene name, e.g. Movie night" maxLength={40} aria-label="Scene name" />
+          <StepPicker steps={draft.scene.steps} setSteps={(steps) => setDraft({ ...draft, scene: { ...draft.scene, steps } })} />
+          <div className="sh-row">
+            <button className="rd-btn rd-btn--primary" type="submit" disabled={!draft.scene.name.trim() || !draft.scene.steps.length}>Save scene</button>
+            {draft.index >= 0 ? <button type="button" className="rd-btn rd-btn--danger-quiet" onClick={() => store(s.scenes.filter((_, i) => i !== draft.index))}>Delete</button> : null}
+            <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setDraft(null)}>Cancel</button>
+          </div>
+        </form>
+      ) : (
+        <div className="sh-row">
+          <select defaultValue="" onChange={(e) => { const i = Number(e.target.value); if (e.target.value !== "") setDraft({ index: i, scene: JSON.parse(JSON.stringify(s.scenes[i])) }); e.target.value = ""; }} aria-label="Edit a scene">
+            <option value="">Edit a scene…</option>{s.scenes.map((sc, i) => <option key={sc.id} value={i}>{sc.name}</option>)}
+          </select>
+          <button className="rd-btn rd-btn--quiet" disabled={s.scenes.length >= 12} onClick={() => setDraft({ index: -1, scene: { name: "", steps: [] } })}>New scene</button>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+const WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export function SchedulesCard({ home }) {
+  const { settings: s, setSettings } = home;
+  const [draft, setDraft] = useState(null);
+  if (!s) return null;
+  const store = async (schedules) => {
+    try { const r = await saveHomeSchedules(schedules); setSettings({ ...s, schedules: r.schedules }); setDraft(null); toast.success("Schedules saved."); }
+    catch (e) { toast.error(errorMessage(e, "Could not save.")); }
+  };
+  const blank = { name: "", time: "23:00", days: [], steps: [STEP_CHOICES[0].step, STEP_CHOICES[1].step], enabled: true };
+  return (
+    <Section title="Schedules" subtitle={`Commands at a time of day, in ${s.timezone}. E.g. 23:00 pause the TV, 07:30 open the news.`}>
+      {s.schedules.length ? (
+        <ul className="sh-lan">{s.schedules.map((sc, i) => (
+          <li key={sc.id}>
+            <div className="sh-lan__main"><b>{sc.time} · {sc.name}</b><span>{daysLabel(sc.days)} · {sc.steps.map(stepLabel).join(" → ")}</span></div>
+            <label className="sh-switch"><input type="checkbox" checked={sc.enabled !== false} onChange={(e) => store(s.schedules.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)))} />On</label>
+            <button className="rd-btn rd-btn--quiet" onClick={() => setDraft({ index: i, sc: JSON.parse(JSON.stringify(sc)) })}>Edit</button>
+          </li>
+        ))}</ul>
+      ) : <p className="sh-dim">No schedules yet.</p>}
+      {draft ? (
+        <form className="sh-editor" onSubmit={(e) => { e.preventDefault(); store(draft.index === -1 ? [...s.schedules, draft.sc] : s.schedules.map((x, i) => (i === draft.index ? draft.sc : x))); }}>
+          <div className="sh-row">
+            <input type="time" value={draft.sc.time} onChange={(e) => setDraft({ ...draft, sc: { ...draft.sc, time: e.target.value } })} aria-label="Time" required />
+            <input value={draft.sc.name} onChange={(e) => setDraft({ ...draft, sc: { ...draft.sc, name: e.target.value } })} placeholder="Name, e.g. Bedtime" maxLength={60} aria-label="Schedule name" />
+          </div>
+          <div className="sh-row sh-days" role="group" aria-label="Days">
+            {WEEK.map((d, i) => <label key={d} className={draft.sc.days.includes(i) ? "is-on" : ""}><input type="checkbox" checked={draft.sc.days.includes(i)} onChange={(e) => setDraft({ ...draft, sc: { ...draft.sc, days: e.target.checked ? [...draft.sc.days, i] : draft.sc.days.filter((x) => x !== i) } })} />{d}</label>)}
+            <span className="sh-dim">{daysLabel(draft.sc.days)}</span>
+          </div>
+          <StepPicker steps={draft.sc.steps} setSteps={(steps) => setDraft({ ...draft, sc: { ...draft.sc, steps } })} />
+          <div className="sh-row">
+            <button className="rd-btn rd-btn--primary" type="submit" disabled={!draft.sc.steps.length}>Save schedule</button>
+            {draft.index >= 0 ? <button type="button" className="rd-btn rd-btn--danger-quiet" onClick={() => store(s.schedules.filter((_, i) => i !== draft.index))}>Delete</button> : null}
+            <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setDraft(null)}>Cancel</button>
+          </div>
+        </form>
+      ) : <div className="sh-row"><button className="rd-btn rd-btn--quiet" disabled={s.schedules.length >= 20} onClick={() => setDraft({ index: -1, sc: blank })}>New schedule</button></div>}
+    </Section>
+  );
+}
+
+/* ───────── internet speed ───────── */
+
+export function SpeedCard({ hasSmartHub, send, hubId }) {
+  const [days, setDays] = useState(7);
+  const [data, setData] = useState(null);
+  const load = useCallback(async () => { try { setData(await getHomeSpeed(days)); } catch { /* hidden */ } }, [days]);
+  useEffect(() => { load(); }, [load]);
+  usePolling(load, 120000);
+  if (!hasSmartHub && !(data && data.samples.length)) return null;
+  const avg = data && data.samples.length ? Math.round(data.samples.reduce((a, x) => a + x.down, 0) / data.samples.length) : null;
+  return (
+    <Section title="Internet speed" subtitle={avg != null ? `Average ${avg} Mbit/s down over ${days} days. Useful proof when the connection is slow.` : "The tablet tests the internet every hour."}
+      actions={<div className="sh-row">
+        <select value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="Period"><option value={1}>Today</option><option value={7}>7 days</option><option value={30}>30 days</option><option value={90}>90 days</option></select>
+        {hubId ? <button className="rd-btn rd-btn--quiet" onClick={() => send(hubId, "speed_test", {}, "Speed test started. The result shows up in a minute.")}>Test now</button> : null}
+      </div>}>
+      {data ? <SpeedChart samples={data.samples} /> : null}
+    </Section>
+  );
+}
+
+/* ───────── the tablet camera ───────── */
+
+function MediaThumb({ item, onDelete }) {
+  const [url, setUrl] = useState("");
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    let alive = true, made = "";
+    getHomeMediaBlob(item.id).then((b) => { if (alive) { made = URL.createObjectURL(b); setUrl(made); } }).catch(() => {});
+    return () => { alive = false; if (made) URL.revokeObjectURL(made); };
+  }, [item.id]);
+  return (
+    <li>
+      <button className="sh-thumb" onClick={() => setOpen(!open)} aria-label={`Open ${item.kind} from ${ago(item.at)}`}>
+        {url ? (item.kind === "video" ? <video src={url} muted playsInline preload="metadata" /> : <img src={url} alt="" />) : <span className="sh-dim">…</span>}
+        <span className="sh-thumb__tag">{item.kind === "video" ? "▶ " : ""}{item.reason === "motion" ? "Movement" : item.kind === "video" ? "Clip" : "Photo"} · {ago(item.at)}</span>
+      </button>
+      {open && url ? (
+        <div className="sh-viewer">
+          {item.kind === "video" ? <video src={url} controls autoPlay playsInline /> : <img src={url} alt={`Camera photo from ${ago(item.at)}`} />}
+          <div className="sh-row"><a className="rd-btn rd-btn--quiet" href={url} download={`stashr-${item.kind}-${item.id}.${item.kind === "video" ? "mp4" : "jpg"}`}>Download</a><button className="rd-btn rd-btn--danger-quiet" onClick={() => onDelete(item)}>Delete</button><button className="rd-btn rd-btn--quiet" onClick={() => setOpen(false)}>Close</button></div>
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+export function CameraCard({ hub, send, home }) {
+  const [list, setList] = useState(null);
+  const load = useCallback(async () => { try { setList((await getHomeMedia()).media); } catch { /* hidden */ } }, []);
+  useEffect(() => { load(); }, [load]);
+  usePolling(load, 30000);
+  const { settings: s, save } = home;
+  if (!hub && !(list && list.length)) return null;
+  const cam = (hub && hub.status && hub.status.camera) || {};
+  const remove = async (item) => { try { await deleteHomeMedia(item.id); load(); } catch (e) { toast.error(errorMessage(e, "Could not delete.")); } };
+  return (
+    <Section title="Camera" subtitle={hub ? `${hub.name} camera · ${cam.armed ? "watching for movement" : "alerts off"}${cam.lastMotion ? ` · last movement ${ago(cam.lastMotion)}` : ""}` : "Photos and clips from the tablet"}>
+      {hub ? (
+        <div className="sh-row">
+          {cam.armed
+            ? <button className="rd-btn rd-btn--quiet" onClick={() => send(hub.id, "camera", { action: "disarm" }, "Camera alerts off.")}>Turn alerts off</button>
+            : <button className="rd-btn rd-btn--primary" onClick={() => send(hub.id, "camera", { action: "arm" }, "Camera alerts on.")}>Watch for movement</button>}
+          <button className="rd-btn rd-btn--quiet" onClick={() => send(hub.id, "camera", { action: "snapshot" }, "Taking a photo…")}>Take a photo</button>
+          <button className="rd-btn rd-btn--quiet" onClick={() => send(hub.id, "camera", { action: "clip" }, "Recording 10 seconds…")}>Record a clip</button>
+          {s ? <>
+            <span className="sh-dim">Sensitivity</span>
+            <input type="range" min="1" max="10" value={s.camera.sensitivity} onChange={(e) => save({ camera: { sensitivity: Number(e.target.value) } }, "Sensitivity saved.")} aria-label="Camera sensitivity" />
+            <label className="sh-switch"><input type="checkbox" checked={s.camera.video} onChange={(e) => save({ camera: { video: e.target.checked } })} />Also send a 10 s clip</label>
+          </> : null}
+        </div>
+      ) : null}
+      {cam.error ? <p className="sh-bad">{cam.error}</p> : null}
+      {list && list.length ? <ul className="sh-gallery">{list.map((m) => <MediaThumb key={m.id} item={m} onDelete={remove} />)}</ul> : <p className="sh-dim">No photos yet. Turn on “Watch for movement” and the tablet sends a photo (and a short clip) when someone comes into view. Kept for 14 days.</p>}
+    </Section>
+  );
+}
+
+/* ───────── slideshow ───────── */
+
+export function SlideshowCard({ home, hub, send }) {
+  const { settings: s, save } = home;
+  const [folder, setFolder] = useState("");
+  useEffect(() => { if (s) setFolder(s.slideshowFolder ? "https://drive.google.com/drive/folders/" + s.slideshowFolder : ""); }, [s]);
+  if (!s || !hub) return null;
+  return (
+    <Section title="Photo slideshow on the tablet" subtitle="Photos from a Google Drive folder, through the Google account connected in Photo Cloud.">
+      <form className="sh-row" onSubmit={(e) => { e.preventDefault(); save({ slideshowFolder: folder }, "Slideshow folder saved."); }}>
+        <input value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="Paste the Drive folder link" aria-label="Slideshow folder" style={{ flex: "1 1 18rem" }} />
+        <button className="rd-btn rd-btn--quiet" type="submit">Save</button>
+        <button type="button" className="rd-btn rd-btn--primary" disabled={!s.slideshowFolder} onClick={() => send(hub.id, "slideshow", { action: "start" }, "Slideshow starting on the tablet.")}>Start on the tablet</button>
+      </form>
+      <p className="sh-dim">The tablet also starts the slideshow by itself after 10 idle minutes on its dashboard, when a folder is set.</p>
+    </Section>
+  );
+}

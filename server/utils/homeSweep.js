@@ -1,12 +1,13 @@
 const HomeDevice = require("../models/homeDevice");
 const { ONLINE_MS } = require("./home");
 const { record } = require("./homeEvents");
+const automation = require("./homeAutomation");
 
 const COMMAND_WAIT_MS = 10 * 60 * 1000;
 
 /** Marks devices that stopped reporting as offline, and gives up on commands nobody answered. */
 async function sweepOnce(now = Date.now()) {
-    const stale = await HomeDevice.find({ online: true, lastSeen: { $lt: new Date(now - ONLINE_MS) } });
+    const stale = await HomeDevice.find({ online: true, kind: { $ne: "phone" }, lastSeen: { $lt: new Date(now - ONLINE_MS) } });
     for (const d of stale) {
         const res = await HomeDevice.updateOne({ _id: d._id, online: true }, { $set: { online: false } });
         if (res.modifiedCount) {
@@ -22,7 +23,10 @@ async function sweepOnce(now = Date.now()) {
 }
 
 function startHomeSweep() {
-    const timer = setInterval(() => { sweepOnce().catch((e) => console.log("[home] sweep failed:", e.message)); }, 60 * 1000);
+    const timer = setInterval(() => {
+        sweepOnce().catch((e) => console.log("[home] sweep failed:", e.message));
+        automation.tickAll().catch((e) => console.log("[home] automations failed:", e.message));
+    }, 60 * 1000);
     if (typeof timer.unref === "function") timer.unref();
 }
 

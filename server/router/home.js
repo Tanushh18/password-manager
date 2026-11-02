@@ -24,8 +24,12 @@ const assistant = require("../utils/homeAssistant");
 const movies = require("../utils/homeMovies");
 const MovieSettings = require("../models/homeMovieSettings");
 const { record } = require("../utils/homeEvents");
+const automation = require("../utils/homeAutomation");
+const HomeSpeed = require("../models/homeSpeed");
 
-const MAX_DEVICES = 10;
+const MAX_DEVICES = 20;
+// A family phone reports every 15 minutes (Android does not allow more often in the background).
+const PHONE_ONLINE_MS = 35 * 60 * 1000;
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: "Too many changes. Slow down." });
 const agentLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, message: "Too many reports." });
 
@@ -36,17 +40,35 @@ const validId = (id) => mongoose.isValidObjectId(id);
 function publicDevice(d, now = Date.now()) {
     const out = {
         id: String(d._id), name: d.name, kind: d.kind, tokenHint: d.tokenHint || "", viaHub: Boolean(d.parent),
-        online: Boolean(d.online) && home.isOnline(d, now), lastSeen: d.lastSeen || null, onlineSince: d.onlineSince || null,
+        online: d.kind === "phone" ? Boolean(d.lastSeen) && now - new Date(d.lastSeen).getTime() < PHONE_ONLINE_MS : Boolean(d.online) && home.isOnline(d, now), lastSeen: d.lastSeen || null, onlineSince: d.onlineSince || null,
         status: d.status || {},
         commands: (d.commands || []).slice(-10).reverse().map((c) => ({ id: c.id, type: c.type, args: c.args, status: c.status, result: c.result, createdAt: c.createdAt }))
     };
     if (d.kind === "hub") {
         const labels = d.lanLabels || {};
-        out.lan = Object.entries(d.lanBook || {}).map(([key, v]) => ({
-            key, ...v, label: (labels[key] && labels[key].label) || "", room: (labels[key] && labels[key].room) || ""
-        })).sort((a, b) => (b.up - a.up) || (b.lastSeen - a.lastSeen));
+        out.lan = Object.entries(d.lanBook || {}).map(([key, v]) => {
+            const l = labels[key] || {};
+            return {
+                key, ...v, label: l.label || "", room: l.room || "", tag: l.tag || "", person: l.person || "",
+                wakeMac: l.mac || (v.mac && v.mac !== "02:00:00:00:00:00" ? v.mac : ""), risks: home.risksOf(v.ports),
+                stale: !v.up && now - v.lastSeen > 24 * 3600 * 1000
+            };
+        }).sort((a, b) => (b.up - a.up) || (b.lastSeen - a.lastSeen));
     }
+    if (d.kind === "phone") out.person = d.person || "";
     return out;
+}
+
+/** Joins each family phone to the Wi-Fi row at its address, so the row shows the phone's name and health. */
+function linkPhones(devices) {
+    const phones = devices.filter((d) => d.kind === "phone" && d.status && d.status.wifi && d.status.ip);
+    for (const hub of devices.filter((d) => d.kind === "hub")) {
+        for (const row of hub.lan || []) {
+            const p = phones.find((x) => x.status.ip === row.ip && row.up);
+            if (p) row.phone = { id: p.id, name: p.name, person: p.person, battery: p.status.battery, charging: p.status.charging, storage: p.status.storage, online: p.online, lastSeen: p.lastSeen };
+        }
+    }
+    return devices;
 }
 
 /* ───────── you ───────── */
@@ -55,7 +77,9 @@ router.get("/home/devices", authenticate, async (req, res) => {
     try {
         res.set("Cache-Control", "no-store");
         const list = await HomeDevice.find({ owner: req.rootUser._id }).sort({ createdAt: 1 }).lean();
-        return res.json({ devices: list.map((d) => publicDevice(d)) });
+        const devices = linkPhones(list.map((d) => publicDevice(d)));
+        const people = home.presence(list.filter((d) => d.kind === "hub"), list.filter((d) => d.kind === "phone"));
+        return res.json({ devices, people });
     } catch (e) { return fail(res, e, "Could not load your devices."); }
 });
 
@@ -128,9 +152,14 @@ router.post("/home/devices/:id/commands", authenticate, writeLimiter, async (req
 router.put("/home/devices/:id/lan/:key", authenticate, writeLimiter, async (req, res) => {
     try {
         if (!validId(req.params.id) || !/^[a-z0-9-]{1,60}$/.test(req.params.key)) return res.status(404).json({ error: "Device not found." });
-        const label = String((req.body && req.body.label) || "").trim().slice(0, 60);
-        const room = String((req.body && req.body.room) || "").trim().slice(0, 60);
-        const r = await HomeDevice.updateOne({ _id: req.params.id, owner: req.rootUser._id, kind: "hub" }, { $set: { ["lanLabels." + req.params.key]: { label, room } } });
+        const b = req.body || {};
+        const label = String(b.label || "").trim().slice(0, 60);
+        const room = String(b.room || "").trim().slice(0, 60);
+        const person = String(b.person || "").trim().slice(0, 40);
+        const tag = home.TAGS.includes(b.tag) ? b.tag : "";
+        const mac = b.mac ? (home.okMac(b.mac) ? home.normMac(b.mac) : null) : "";
+        if (mac === null) return res.status(400).json({ error: "That MAC address does not look right (like aa:bb:cc:dd:ee:ff)." });
+        const r = await HomeDevice.updateOne({ _id: req.params.id, owner: req.rootUser._id, kind: "hub" }, { $set: { ["lanLabels." + req.params.key]: { label, room, person, tag, mac } } });
         if (!r.matchedCount) return res.status(404).json({ error: "Device not found." });
         return res.json({ ok: true });
     } catch (e) { return fail(res, e, "Could not save."); }
@@ -148,25 +177,70 @@ router.get("/home/events", authenticate, async (req, res) => {
 /** "volume up", "open netflix", "status": one sentence in, the command out to the right device. */
 router.post("/home/assistant", authenticate, writeLimiter, async (req, res) => {
     try {
-        const sentence = String((req.body && req.body.text) || "").slice(0, 200);
-        const owned = await HomeDevice.find({ owner: req.rootUser._id }).lean();
-        const devices = owned.map((d) => publicDevice(d));
-        const out = assistant.parse(sentence, devices);
-        if (out.status) return res.json({ reply: assistant.statusLine(devices), sent: [] });
-        const sent = [];
-        for (const c of out.commands || []) {
-            const target = owned.find((d) => d.kind === c.kind);
-            const command = target && home.cleanCommand(c.kind, c.type, c.args);
-            if (!command) continue;
-            const waiting = (target.commands || []).filter((x) => x.status === "pending" || x.status === "sent").length;
-            if (waiting >= home.MAX_COMMANDS) return res.status(429).json({ error: "Too many commands are waiting. Wait for the device to catch up." });
-            const entry = { id: new mongoose.Types.ObjectId().toString(), ...command, status: "pending", result: "", createdAt: new Date() };
-            await HomeDevice.updateOne({ _id: target._id }, { $push: { commands: { $each: [entry], $slice: -50 } } });
-            sent.push({ device: target.name, id: entry.id, type: command.type });
-        }
-        return res.json({ reply: out.reply, sent });
+        const out = await runSentence(req.rootUser._id, String((req.body && req.body.text) || "").slice(0, 200));
+        if (out.error) return res.status(out.status || 400).json({ error: out.error });
+        return res.json(out);
     } catch (e) { return fail(res, e, "Could not do that."); }
 });
+
+/**
+ * Hub commands go to the new Stashr Hub app when there is one (it can play music, run the camera and speed tests);
+ * a Wi-Fi scan goes to every tablet.
+ */
+function hubsFor(owned, type) {
+    const hubs = owned.filter((d) => d.kind === "hub");
+    if (type === "scan_now") return hubs;
+    const smart = hubs.filter((d) => (d.status || {}).agent === "stashr-hub");
+    return (smart.length ? smart : hubs).slice(0, 1);
+}
+
+/** One sentence, from the page, the tablet's microphone or Telegram, to commands. Shared by the routes. */
+async function runSentence(owner, sentence) {
+    const owned = await HomeDevice.find({ owner }).lean();
+    const settings = await automation.settingsOf(owner);
+    const scenes = (settings.scenes && settings.scenes.length ? settings.scenes : automation.DEFAULT_SCENES);
+    const devices = linkPhones(owned.map((d) => publicDevice(d)));
+    const out = assistant.parse(sentence, devices, scenes);
+    if (out.status) return { reply: assistant.statusLine(devices), sent: [] };
+    if (out.presence) return { reply: assistant.presenceLine(home.presence(owned.filter((d) => d.kind === "hub"), owned.filter((d) => d.kind === "phone"))), sent: [] };
+    if (out.scene) {
+        const scene = scenes.find((s) => s.id === out.scene);
+        const n = await automation.runSteps(owner, owned, scene.steps, `Scene “${scene.name}”`);
+        return { reply: n ? out.reply : "That scene has nothing the devices can do right now.", sent: [] };
+    }
+    if (out.youtube) {
+        const tv = owned.find((d) => d.kind === "tv");
+        const video = await require("../utils/homeYoutube").firstVideo(out.youtube, { music: out.music });
+        const entry = tv && video && await automation.queue(tv, "open_url", { url: video.url });
+        if (!entry) return { error: "Could not send that to the TV.", status: 400 };
+        return { reply: video.exact ? `Playing “${video.title}” on the TV’s YouTube app.` : `Opening a YouTube search for “${video.title}” on the TV.`, sent: [{ device: tv.name, id: entry.id, type: "open_url" }] };
+    }
+    if (out.wake !== undefined) {
+        const want = String(out.wake || "").toLowerCase();
+        for (const hub of owned.filter((d) => d.kind === "hub")) {
+            for (const [key, l] of Object.entries(hub.lanLabels || {})) {
+                const mac = l.mac || ((hub.lanBook || {})[key] || {}).mac;
+                if (!mac || !home.okMac(mac)) continue;
+                if (want && !String(l.label || "").toLowerCase().includes(want)) continue;
+                const target = hubsFor(owned, "wake")[0];
+                const entry = target && await automation.queue(target, "wake", { mac });
+                if (entry) return { reply: `Waking ${l.label || mac}.`, sent: [{ device: target.name, id: entry.id, type: "wake" }] };
+            }
+        }
+        return { reply: "Add the computer's MAC address in its Wi-Fi row (Name / room) first, then say “wake <its name>”.", sent: [] };
+    }
+    const sent = [];
+    for (const c of out.commands || []) {
+        const targets = c.kind === "hub" ? hubsFor(owned, c.type) : owned.filter((d) => d.kind === c.kind).slice(0, 1);
+        for (const target of targets) {
+            const waiting = (target.commands || []).filter((x) => x.status === "pending" || x.status === "sent").length;
+            if (waiting >= home.MAX_COMMANDS) return { error: "Too many commands are waiting. Wait for the device to catch up.", status: 429 };
+            const entry = await automation.queue(target, c.type, c.args);
+            if (entry) sent.push({ device: target.name, id: entry.id, type: entry.type });
+        }
+    }
+    return { reply: out.reply, sent };
+}
 
 /* ───────── a device ───────── */
 
@@ -205,12 +279,23 @@ async function ingest(d, body, seenAt = new Date()) {
     const events = [];
 
     if (d.kind === "hub") {
-        const merged = home.mergeLan(d.lanBook || {}, status.lan, d.lanLabels || {}, now.getTime());
+        const labels = { ...(d.lanLabels || {}) };
+        const merged = home.mergeLan(d.lanBook || {}, status.lan, labels, now.getTime());
+        // A device that now reports its name moves from its IP key to its name key: so does your label.
+        for (const m of merged.moves || []) if (labels[m.from] && !labels[m.to]) { labels[m.to] = labels[m.from]; delete labels[m.from]; }
+        if ((merged.moves || []).length) set.lanLabels = labels;
         set.lanBook = merged.book;
-        events.push(...merged.events);
+        const settings = await automation.settingsOf(d.owner);
+        const local = automation.localParts(now.getTime(), (settings && settings.timezone) || "Asia/Kolkata");
+        events.push(...automation.lanAlerts(merged.events, labels, settings, local));
         status.lanCount = Object.values(merged.book).filter((x) => x.up).length;
         delete status.lan;
-    } else {
+        // An internet speed test the tablet ran since its last report.
+        const sp = status.speed;
+        if (sp && sp.at && sp.at !== (prev.speed && prev.speed.at) && Number.isFinite(Number(sp.down))) {
+            await HomeSpeed.create({ owner: d.owner, device: d._id, at: new Date(Number(sp.at) || now), down: Math.round(Number(sp.down) * 10) / 10, up: Math.round(Number(sp.up || 0) * 10) / 10, ping: Math.round(Number(sp.ping || 0)), server: String(sp.server || "").slice(0, 60) });
+        }
+    } else if (d.kind === "tv") {
         events.push(...home.diffMovies(prev, status));
         const up = status.upload || {};
         if (up.lastAt && up.lastName && up.lastAt !== (prev.upload && prev.upload.lastAt)) events.push({ kind: "upload", text: `Uploaded to the USB drive: ${up.lastName}` });
@@ -224,7 +309,7 @@ async function ingest(d, body, seenAt = new Date()) {
         if (!wasOnline) events.push({ kind: "online", text: screenOn ? `${d.name} is on` : `${d.name} is connected (standby)`, notify: screenOn });
         else if (screenOn && !wasScreenOn) events.push({ kind: "online", text: `${d.name} turned on`, notify: true });
         else if (!screenOn && wasScreenOn) events.push({ kind: "standby", text: `${d.name} went to standby`, notify: true });
-    } else if (!wasOnline) {
+    } else if (!wasOnline && d.kind === "hub") {
         events.push({ kind: "online", text: `${d.name} is back online`, notify: false });
     }
     for (const e of events.slice(0, 30)) await record({ ...base, ...e });
@@ -321,7 +406,7 @@ async function childOf(hub, key, name) {
     return HomeDevice.create({ owner: hub.owner, parent: hub._id, childKey: key, kind: "tv", name: String(name || "TV").trim().slice(0, 60) || "TV" });
 }
 
-router.post("/home/agent/report", agentLimiter, agentAuth, async (req, res) => {
+router.post("/home/agent/report", agentLimiter, (req, res, next) => agentAuth(req, res, next), async (req, res) => {
     try {
         const d = req.device, body = req.body || {};
         const own = await ingest(d, body);
@@ -344,4 +429,10 @@ router.post("/home/agent/report", agentLimiter, agentAuth, async (req, res) => {
     } catch (e) { return fail(res, e, "Could not save the report."); }
 });
 
+router.agentAuth = agentAuth;
+router.publicDevice = publicDevice;
+router.linkPhones = linkPhones;
+router.ingest = ingest;
+router.runSentence = runSentence;
+router.hubsFor = hubsFor;
 module.exports = router;

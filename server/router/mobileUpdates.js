@@ -142,4 +142,78 @@ router.get("/android/download", async (_req, res) => {
   }
 });
 
+/*
+ * Stashr Hub (the home tablet and family phone app) ships from the same repository as its own GitHub Releases, tagged
+ * "stashr-hub-v<version>-build-<code>" and never marked "latest", so the main app's update check is not affected.
+ */
+const HUB_PACKAGE = "com.tanush.stashr.hub";
+let cachedHub = null;
+let cachedHubAt = 0;
+
+async function latestHubRelease() {
+  if (cachedHub && Date.now() - cachedHubAt < CACHE_MS) return cachedHub;
+  const releases = await githubJson(`https://api.github.com/repos/${GITHUB_REPOSITORY}/releases?per_page=40`);
+  const release = (Array.isArray(releases) ? releases : []).find((r) => !r.draft && !r.prerelease && String(r.tag_name || "").startsWith("stashr-hub-v"));
+  const apk = release && (release.assets || []).find((a) => a.name === "stashr-hub.apk");
+  const manifestAsset = release && (release.assets || []).find((a) => a.name === "stashr-hub-update.json");
+  if (!release || !apk || !manifestAsset) {
+    const error = new Error("No Stashr Hub release is published yet.");
+    error.status = 404;
+    throw error;
+  }
+  const manifestResponse = await fetch(manifestAsset.url, {
+    headers: { Accept: "application/octet-stream", "User-Agent": "Stashr-Android-Updater", ...(process.env.STASHR_UPDATE_GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.STASHR_UPDATE_GITHUB_TOKEN}` } : {}) },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!manifestResponse.ok) throw Object.assign(new Error("Could not read the Stashr Hub release manifest."), { status: 502 });
+  const manifest = await manifestResponse.json();
+  const versionCode = Number(manifest.versionCode);
+  if (manifest.packageName !== HUB_PACKAGE || !Number.isSafeInteger(versionCode) || versionCode < 1 || !/^[0-9]+\.[0-9]+\.[0-9]+$/.test(String(manifest.version || "")) ||
+      !/^[a-f0-9]{64}$/i.test(String(manifest.sha256 || "")) || !Number.isSafeInteger(Number(manifest.sizeBytes)) || Number(manifest.sizeBytes) < 1) {
+    throw Object.assign(new Error("The Stashr Hub release manifest is invalid."), { status: 502 });
+  }
+  cachedHub = {
+    version: manifest.version, versionCode, sha256: manifest.sha256.toLowerCase(), sizeBytes: Number(manifest.sizeBytes),
+    releaseNotes: String(manifest.releaseNotes || release.name || "Stashr Hub update"), publishedAt: release.published_at || null,
+    tagName: release.tag_name, assetApiUrl: apk.url,
+  };
+  cachedHubAt = Date.now();
+  return cachedHub;
+}
+
+router.get("/hub/latest", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const r = await latestHubRelease();
+    const current = Number.parseInt(String(req.query.currentVersionCode || "0"), 10) || 0;
+    const origin = `${req.protocol}://${req.get("host")}`;
+    return res.json({ appId: HUB_PACKAGE, version: r.version, versionCode: r.versionCode, sha256: r.sha256, sizeBytes: r.sizeBytes, releaseNotes: r.releaseNotes,
+      publishedAt: r.publishedAt, tagName: r.tagName, updateAvailable: current < r.versionCode, downloadUrl: `${origin}/api/mobile-updates/hub/download` });
+  } catch (error) {
+    return res.status(error.status || 502).json({ error: "Stashr Hub update information is temporarily unavailable.", detail: process.env.NODE_ENV === "production" ? undefined : error.message });
+  }
+});
+
+router.get("/hub/download", async (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const r = await latestHubRelease();
+    const response = await fetch(r.assetApiUrl, {
+      headers: { Accept: "application/octet-stream", "User-Agent": "Stashr-Android-Updater", ...(process.env.STASHR_UPDATE_GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.STASHR_UPDATE_GITHUB_TOKEN}` } : {}) },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok || !response.body) throw Object.assign(new Error(`GitHub asset download returned HTTP ${response.status}`), { status: 502 });
+    res.status(200);
+    res.set("Content-Type", "application/vnd.android.package-archive");
+    res.set("Content-Disposition", `attachment; filename="Stashr-Hub-${r.version}-build-${r.versionCode}.apk"`);
+    res.set("X-Content-Type-Options", "nosniff");
+    if (r.sizeBytes > 0) res.set("Content-Length", String(r.sizeBytes));
+    return Readable.fromWeb(response.body).pipe(res);
+  } catch (error) {
+    if (res.headersSent) return res.destroy(error);
+    return res.status(error.status || 502).json({ error: "The Stashr Hub APK is not available yet.", detail: process.env.NODE_ENV === "production" ? undefined : error.message });
+  }
+});
+
+router._resetCache = () => { cachedRelease = null; cachedAt = 0; cachedHub = null; cachedHubAt = 0; };
 module.exports = router;

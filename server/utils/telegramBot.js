@@ -458,4 +458,19 @@ async function notifyUser(user, text) {
   } catch { return false; }
 }
 
-module.exports = { notifyUser, modeOf, MODES, connect, disconnect, updateSettings, readState, publicState, handleUpdate, runAllDigests, sendTest, DIGEST_CHOICES, isValidHookId: (id) => mongoose.isValidObjectId(id) || /^[a-f0-9]{32}$/.test(String(id)) };
+/** A photo or a short video to your chat (the tablet camera saw movement). Never throws. */
+async function notifyUserMedia(user, { kind, buffer, filename, caption, contentType }) {
+  try {
+    const s = await readState(user);
+    if (!s || !s.chatId || !s.botToken) return false;
+    const form = new FormData();
+    form.append("chat_id", String(s.chatId));
+    form.append("caption", String(caption || "").slice(0, 1000));
+    form.append(kind === "video" ? "video" : "photo", new Blob([buffer], { type: contentType || (kind === "video" ? "video/mp4" : "image/jpeg") }), filename || (kind === "video" ? "clip.mp4" : "photo.jpg"));
+    const res = await fetch(API + s.botToken + "/" + (kind === "video" ? "sendVideo" : "sendPhoto"), { method: "POST", body: form, signal: AbortSignal.timeout(60000) });
+    const json = await res.json().catch(() => ({}));
+    return Boolean(json.ok);
+  } catch { return false; }
+}
+
+module.exports = { notifyUser, notifyUserMedia, modeOf, MODES, connect, disconnect, updateSettings, readState, publicState, handleUpdate, runAllDigests, sendTest, DIGEST_CHOICES, isValidHookId: (id) => mongoose.isValidObjectId(id) || /^[a-f0-9]{32}$/.test(String(id)) };

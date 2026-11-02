@@ -33,7 +33,15 @@ function findApp(text) {
     return hit ? hit.a : null;
 }
 
-function parse(sentence, devices) {
+const MUSIC_WORDS = ["gaana", "gaane", "gana", "gane", "song", "songs", "music", "bajao", "sunao", "gaano", "geet"];
+const FILLER = new Set(["play", "chalao", "chala", "chalaao", "lagao", "laga", "bajao", "sunao", "gaana", "gaane", "gana", "gane", "gaano", "geet", "song", "songs",
+    "music", "on", "the", "tv", "par", "pe", "pr", "mein", "me", "ke", "ki", "ka", "ko", "tablet", "please", "plz", "karo", "kar", "do", "de", "yt", "youtube", "a", "some", "kuch", "koi", "and"]);
+const musicQuery = (text) => text.split(" ").filter((w) => !FILLER.has(w)).join(" ").trim();
+
+/**
+ * scenes: your saved scenes ([{ id, name }]), so "movie night" runs the scene of that name.
+ */
+function parse(sentence, devices, scenes = []) {
     const text = norm(sentence);
     if (!text) return { reply: "Say something like “pause the movie” or “tv ki volume badhao”." };
     const tv = (devices || []).find((d) => d.kind === "tv");
@@ -42,6 +50,24 @@ function parse(sentence, devices) {
 
     // Questions about the house are answered from what the devices last reported.
     if (has(text, ["status", "kya chal raha", "whats on", "what is playing", "kya chal rha"])) return { reply: "status", status: true };
+
+    // Who is home
+    if (has(text, ["kaun ghar", "kon ghar", "who is home", "whos home", "ghar pe kaun", "ghar par kaun", "ghar me kaun", "ghar mein kaun", "anyone home"])) return { reply: "presence", presence: true };
+
+    // A saved scene by its name: "movie night", "good night"
+    const scene = (scenes || []).slice().sort((a, b) => String(b.name).length - String(a.name).length).find((sc) => sc && sc.name && text.includes(norm(sc.name)));
+    if (scene) return { reply: `Running “${scene.name}”.`, scene: scene.id };
+
+    const toHub = (type, args, reply) => (hub ? { reply, commands: [{ kind: "hub", type, args }] } : { reply: "The tablet is not added to Stashr Home yet." });
+    if (has(text, ["speed test", "internet speed", "net speed", "speed check", "speedtest"])) return toHub("speed_test", {}, "Running an internet speed test on the tablet. The result shows up in a minute.");
+    if (has(text, ["camera"])) {
+        if (has(text, ["off", "band", "disarm", "stop", "bandh"])) return toHub("camera", { action: "disarm" }, "Turning the tablet camera alerts off.");
+        if (has(text, ["video", "clip", "recording"])) return toHub("camera", { action: "clip" }, "Recording a short clip on the tablet camera.");
+        if (has(text, ["photo", "pic", "picture", "snapshot", "dikhao", "dekho"])) return toHub("camera", { action: "snapshot" }, "Taking a photo with the tablet camera.");
+        if (has(text, ["on", "chalu", "start", "arm", "shuru"])) return toHub("camera", { action: "arm" }, "Camera alerts are on: you get a photo when someone comes into view.");
+    }
+    if (has(text, ["wake", "jagao", "jaga", "uthao"]) && !has(text, ["tv"])) return { reply: "wake", wake: text.replace(/\b(wake|up|jagao|jaga|uthao|on|the|ko|please)\b/g, " ").replace(/\s+/g, " ").trim() };
+    if (has(text, ["photo", "photos", "slideshow"]) && has(text, ["slideshow", "dikhao", "chalao", "show", "start"])) return toHub("slideshow", { action: has(text, ["band", "stop", "off"]) ? "stop" : "start" }, "Showing your photos on the tablet.");
 
     if (has(text, ["scan", "wifi", "wi-fi", "devices"]) && hub && has(text, ["scan", "refresh", "check", "dekho", "update"])) {
         return { reply: "Scanning the Wi-Fi now.", commands: [{ kind: "hub", type: "scan_now", args: {} }] };
@@ -58,6 +84,14 @@ function parse(sentence, devices) {
         if (level && Number(level[1] || level[2]) <= 100) return toTv("volume", { level: Number(level[1] || level[2]) }, `Setting the TV volume to ${level[1] || level[2]}.`);
         if (has(text, ["up", "badhao", "badha", "zyada", "jyada", "increase", "louder", "high", "tez"])) return toTv("volume", { action: "up" }, "Turning the TV volume up.");
         if (has(text, ["down", "kam", "ghatao", "decrease", "lower", "quieter", "low", "dheere", "dhire"])) return toTv("volume", { action: "down" }, "Turning the TV volume down.");
+    }
+
+    // Songs: on the tablet through YouTube Music, or on the TV through its YouTube app (your Premium account)
+    const opening = findApp(text) && has(text, ["open", "kholo", "khol", "launch"]);
+    if (has(text, MUSIC_WORDS) && !opening && !has(text, ["pause", "roko", "rok", "ruko", "stop", "next", "agla", "agli", "skip", "previous", "prev", "pichla", "pichli", "awaaz", "awaz", "volume"])) {
+        const query = musicQuery(text) || "top hindi songs";
+        if (has(text, ["tv"]) || !hub) return tv ? { reply: `Playing “${query}” on the TV.`, youtube: query, music: true } : { reply: "No TV is added to Stashr Home yet." };
+        return { reply: `Playing “${query}” on the tablet with YouTube Music.`, commands: [{ kind: "hub", type: "play_music", args: { query } }] };
     }
 
     // Play / pause / next / previous: whatever is playing on the TV
@@ -94,9 +128,18 @@ function statusLine(devices) {
             lines.push(`${d.name} is on${s.app && s.app.label ? ", showing " + s.app.label : ""}${m}.`);
         } else if (d.kind === "hub") {
             lines.push(d.online ? `${d.name}: ${(d.lan || []).filter((x) => x.up).length} devices on the Wi-Fi.` : `${d.name} is not reporting.`);
+        } else if (d.kind === "phone" && d.status && d.status.battery != null) {
+            lines.push(`${d.name}: battery ${d.status.battery}%${d.status.charging ? " (charging)" : ""}.`);
         }
     }
     return lines.length ? lines.join(" ") : "No devices added yet.";
 }
 
-module.exports = { parse, statusLine, APPS };
+/** "Mom is home, Dad is out." */
+function presenceLine(people) {
+    if (!people || !people.length) return "Nobody is set up yet. Give a Wi-Fi device a person (Name / room → Person), or pair a family phone.";
+    const home = people.filter((p) => p.home).map((p) => p.person), out = people.filter((p) => !p.home).map((p) => p.person);
+    return [home.length ? `Home: ${home.join(", ")}.` : "Nobody is home.", out.length ? `Out: ${out.join(", ")}.` : ""].join(" ").trim();
+}
+
+module.exports = { parse, statusLine, presenceLine, musicQuery, APPS };
