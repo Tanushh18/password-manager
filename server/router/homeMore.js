@@ -83,7 +83,7 @@ const publicSettings = (s) => ({
     timezone: s.timezone, alerts: s.alerts, weather: { city: (s.weather && s.weather.city) || "" }, brief: { enabled: s.brief.enabled, time: s.brief.time },
     weekly: { enabled: s.weekly.enabled }, tvLimit: { minutes: s.tvLimit.minutes, action: s.tvLimit.action, lateNight: s.tvLimit.lateNight !== false },
     schedules: s.schedules || [], scenes: (s.scenes && s.scenes.length ? s.scenes : automation.DEFAULT_SCENES),
-    slideshowFolder: s.slideshowFolder || "", camera: { sensitivity: 5, video: true, auto: false, ...(s.camera || {}), autoState: undefined }
+    slideshowFolder: s.slideshowFolder || "", places: s.places || [], camera: { sensitivity: 5, video: true, auto: false, ...(s.camera || {}), autoState: undefined }
 });
 
 router.get("/home/settings", authenticate, async (req, res) => {
@@ -169,6 +169,46 @@ router.put("/home/schedules", authenticate, writeLimiter, async (req, res) => {
         await HomeSettings.updateOne({ owner: req.rootUser._id }, { $set: { schedules: clean } });
         return res.json({ schedules: clean });
     } catch (e) { return fail(res, e, "Could not save the schedules."); }
+});
+
+router.put("/home/places", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const list = Array.isArray(req.body && req.body.places) ? req.body.places : null;
+        if (!list || list.length > 10) return res.status(400).json({ error: "Up to 10 places." });
+        const owner = req.rootUser._id;
+        const phones = (await HomeDevice.find({ owner, kind: "phone" }).select("_id").lean()).map((d) => String(d._id));
+        const old = new Map(((await automation.settingsOf(owner)).places || []).map((p) => [p.id, p]));
+        const clean = [];
+        for (const p of list) {
+            const lat = Number(p && p.lat), lon = Number(p && p.lon), radius = Math.round(Number(p && p.radius));
+            if (!(lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) || (p.lat === "" || p.lon === "")) return res.status(400).json({ error: "Each place needs a location (latitude and longitude)." });
+            if (!(radius >= 50 && radius <= 2000)) return res.status(400).json({ error: "The radius is 50 to 2000 metres." });
+            if (!phones.includes(String(p.phone))) return res.status(400).json({ error: "Pick one of your paired family phones." });
+            const group = String(p.group || "").trim().slice(0, 80);
+            const txt = (v) => String(v || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 500);
+            for (const t of ["arriveFrom", "arriveTo", "leaveFrom", "leaveTo"]) if (p[t] && !automation.okTime(p[t])) return res.status(400).json({ error: "Times look like 09:30." });
+            if (!!p.arriveFrom !== !!p.arriveTo || !!p.leaveFrom !== !!p.leaveTo) return res.status(400).json({ error: "Give both a from and a to time, or neither." });
+            const id = /^[a-f0-9]{12}$/.test(p.id || "") ? p.id : newId();
+            clean.push({ id, name: String(p.name || "").trim().slice(0, 40) || "Place", lat, lon, radius, phone: String(p.phone), group, arriveText: txt(p.arriveText), leaveText: txt(p.leaveText),
+                arriveFrom: p.arriveFrom || "", arriveTo: p.arriveTo || "", leaveFrom: p.leaveFrom || "", leaveTo: p.leaveTo || "", enabled: p.enabled !== false, state: (old.get(id) || {}).state || "" });
+        }
+        await HomeSettings.updateOne({ owner }, { $set: { places: clean } });
+        return res.json({ places: clean });
+    } catch (e) { return fail(res, e, "Could not save the places."); }
+});
+
+router.post("/home/places/:id/test", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const owner = req.rootUser._id;
+        const p = ((await automation.settingsOf(owner)).places || []).find((x) => x.id === req.params.id);
+        if (!p) return res.status(404).json({ error: "Place not found." });
+        const text = String(req.body && req.body.text || p.arriveText || "Test message from Stashr").slice(0, 500);
+        const hubs = await HomeDevice.find({ owner, kind: "hub" }).lean();
+        const tablet = homeRouter.hubsFor(hubs, "send_whatsapp")[0];
+        const entry = tablet && p.group && await automation.queue(tablet, "send_whatsapp", { group: p.group, text });
+        if (!entry) return res.status(400).json({ error: "Add the WhatsApp group name and make sure the tablet is paired." });
+        return res.json({ ok: true, sent: { device: tablet.name, id: entry.id } });
+    } catch (e) { return fail(res, e, "Could not send the test."); }
 });
 
 router.put("/home/scenes", authenticate, writeLimiter, async (req, res) => {

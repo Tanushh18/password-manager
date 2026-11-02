@@ -32,6 +32,10 @@ class Prefs(ctx: Context) {
         get() = p.getBoolean("cameraVideo", true)
         set(v) = p.edit().putBoolean("cameraVideo", v).apply()
 
+    var shareLocation: Boolean
+        get() = p.getBoolean("shareLocation", false)
+        set(v) = p.edit().putBoolean("shareLocation", v).apply()
+
     val paired get() = token.startsWith("sh_") && role.isNotEmpty()
 
     fun forget() = p.edit().remove("token").remove("role").remove("deviceName").apply()

@@ -37,7 +37,8 @@ const COMMANDS = {
         play_music: (a) => (okText(a.query, 120) ? { query: a.query.trim() } : null),
         camera: (a) => (["arm", "disarm", "snapshot", "clip", "live"].includes(a.action) ? { action: a.action } : null),
         slideshow: (a) => (["start", "stop"].includes(a.action) ? { action: a.action } : null),
-        show_today: () => ({})
+        show_today: () => ({}),
+        send_whatsapp: (a) => (okText(a.group, 80) && okText(a.text, 500) ? { group: a.group.trim(), text: a.text.trim() } : null)
     },
     phone: {
         report_now: () => ({})

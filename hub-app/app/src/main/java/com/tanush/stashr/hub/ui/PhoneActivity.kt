@@ -12,6 +12,7 @@ import android.widget.TextView
 import com.tanush.stashr.hub.core.DeviceInfo
 import com.tanush.stashr.hub.core.Prefs
 import com.tanush.stashr.hub.core.Ui
+import com.tanush.stashr.hub.phone.LocationService
 import com.tanush.stashr.hub.phone.PhoneReporter
 import com.tanush.stashr.hub.update.Updater
 import kotlinx.coroutines.CoroutineScope
@@ -30,6 +31,8 @@ class PhoneActivity : Activity() {
     private lateinit var values: TextView
     private lateinit var sent: TextView
     private lateinit var result: TextView
+    private lateinit var locSwitch: android.widget.Switch
+    private lateinit var locInfo: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,8 +63,19 @@ class PhoneActivity : Activity() {
         card.addView(buttons)
         col.addView(card)
 
+        val loc = ui.card("Location", "For arrive / leave messages you set up on the Smart home page")
+        locSwitch = android.widget.Switch(this).apply {
+            text = "Share my location with Stashr (for arrive/leave messages)"; setTextColor(ui.c.text); isChecked = prefs.shareLocation
+            setOnCheckedChangeListener { _, on -> if (on) startSharing() else { prefs.shareLocation = false; LocationService.stop(this@PhoneActivity); refresh() } }
+        }
+        loc.addView(locSwitch)
+        locInfo = ui.dim("")
+        loc.addView(locInfo)
+        loc.addView(ui.dim("Your location goes only to your own Stashr server, and only while this switch is on."))
+        col.addView(loc)
+
         val privacy = ui.card("Private by design")
-        privacy.addView(ui.body("Stashr only gets battery, storage, memory, the network type and this phone's address on the home Wi-Fi. It cannot read your messages, photos, calls or location."))
+        privacy.addView(ui.body("Stashr gets battery, storage, memory, the network type and this phone's address on the home Wi-Fi. It cannot read your messages, photos or calls. Location is sent only if you turn the switch above on."))
         col.addView(privacy)
 
         col.addView(ui.danger("Unpair this phone") {
@@ -74,9 +88,49 @@ class PhoneActivity : Activity() {
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         setContentView(root)
         PhoneReporter.schedule(this)
+        if (prefs.shareLocation && LocationService.hasPermission(this)) LocationService.start(this)
     }
 
-    override fun onResume() { super.onResume(); tick() }
+    override fun onResume() { super.onResume(); continueSharing(); tick() }
+
+    private fun startSharing() {
+        if (!LocationService.hasPermission(this)) {
+            AlertDialog.Builder(this).setTitle("Share your location?")
+                .setMessage("Stashr uses this phone's location only to tell your home when you arrive at or leave a place you set (for example the office). It goes only to your own Stashr server.")
+                .setPositiveButton("Continue") { _, _ -> requestPermissions(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION), REQ_LOC) }
+                .setNegativeButton("Cancel") { _, _ -> locSwitch.isChecked = false }.show()
+        } else askBackground()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_LOC) { if (LocationService.hasPermission(this)) askBackground() else locSwitch.isChecked = false }
+        if (requestCode == REQ_BG) enable()
+    }
+
+    /** Android 10+ asks for "all the time" location separately, after the normal one. */
+    private fun askBackground() {
+        if (LocationService.hasBackground(this)) { enable(); return }
+        AlertDialog.Builder(this).setTitle("Allow location all the time")
+            .setMessage("So Stashr can notice you arriving or leaving while the app is closed, choose “Allow all the time” on the next screen.")
+            .setPositiveButton("Open") { _, _ ->
+                if (Build.VERSION.SDK_INT >= 30) {
+                    try { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$packageName"))) } catch (e: Exception) { }
+                    awaitingBackground = true
+                } else requestPermissions(arrayOf(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION), REQ_BG)
+            }.setNegativeButton("Only while open") { _, _ -> enable() }.show()
+    }
+
+    private var awaitingBackground = false
+    private fun continueSharing() {
+        if (awaitingBackground) { awaitingBackground = false; enable() }
+    }
+
+    private fun enable() {
+        Prefs(this).shareLocation = true
+        if (!locSwitch.isChecked) locSwitch.isChecked = true
+        LocationService.start(this); refresh()
+    }
     override fun onPause() { handler.removeCallbacksAndMessages(null); super.onPause() }
     override fun onDestroy() { scope.cancel(); super.onDestroy() }
 
@@ -93,6 +147,10 @@ class PhoneActivity : Activity() {
             append("🧠 Memory: ${used(r)}% used\n")
             append("📶 Network: ${DeviceInfo.networkName(this@PhoneActivity)}${if (DeviceInfo.onWifi(this@PhoneActivity)) " · " + DeviceInfo.localIp() else ""}")
         }
+        val fix = LocationService.last
+        locInfo.text = if (!Prefs(this).shareLocation) "Off" else if (fix == null) "On · waiting for the first fix" else "Last fix: " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(fix.at)) + " · ±${fix.acc} m"
         sent.text = if (PhoneReporter.lastSentAt > 0) "Last sent: " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(PhoneReporter.lastSentAt)) else "Last sent: not yet from this screen"
     }
+
+    companion object { private const val REQ_LOC = 21; private const val REQ_BG = 22 }
 }

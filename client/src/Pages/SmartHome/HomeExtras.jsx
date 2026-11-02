@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomeScenes, runHomeScene,
+  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, saveHomeScenes, runHomeScene,
   getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, getHomeLiveFrame, testHomeBrief, setHomePhonePerson, removeHomeDevice
 } from "../../api/client";
 import { Section, useConfirm } from "../Render/RenderUi";
@@ -295,6 +295,77 @@ export function SchedulesCard({ home }) {
           </div>
         </form>
       ) : <div className="sh-row"><button className="rd-btn rd-btn--quiet" disabled={s.schedules.length >= 20} onClick={() => setDraft({ index: -1, sc: blank })}>New schedule</button></div>}
+    </Section>
+  );
+}
+
+/* ───────── places: arrive / leave messages on WhatsApp ───────── */
+
+export function PlacesCard({ home, phones, hasSmartHub }) {
+  const { settings: s, setSettings } = home;
+  const [draft, setDraft] = useState(null);
+  const [locating, setLocating] = useState(false);
+  if (!s) return null;
+  const places = s.places || [];
+  const store = async (list) => {
+    try { const r = await saveHomePlaces(list); setSettings({ ...s, places: r.places }); setDraft(null); toast.success("Places saved."); }
+    catch (e) { toast.error(errorMessage(e, "Could not save.")); }
+  };
+  const blank = { name: "Office", lat: "", lon: "", radius: 150, phone: phones[0]?.id || "", group: "", arriveText: "Reached office", leaveText: "Leaving office", arriveFrom: "", arriveTo: "", leaveFrom: "", leaveTo: "", enabled: true };
+  const set = (patch) => setDraft({ ...draft, p: { ...draft.p, ...patch } });
+  const here = () => {
+    if (!navigator.geolocation) { toast.error("This browser cannot give your location."); return; }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { set({ lat: Number(pos.coords.latitude.toFixed(6)), lon: Number(pos.coords.longitude.toFixed(6)) }); setLocating(false); },
+      () => { toast.error("Could not get this device's location. Allow it, or type the numbers."); setLocating(false); },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  };
+  const test = async (pl) => {
+    try { await testHomePlace(pl.id, pl.arriveText); toast.success("Sent to the tablet: WhatsApp should open and send."); }
+    catch (e) { toast.error(errorMessage(e, "Could not send.")); }
+  };
+  const phoneName = (id) => phones.find((p) => p.id === id)?.name || "phone";
+  return (
+    <Section title="Places · WhatsApp messages" subtitle="When a family phone reaches or leaves a place (and the time fits), the tablet opens WhatsApp and sends your message to a group.">
+      {!phones.length ? <p className="sh-dim">Pair a family phone first (Stashr Hub in phone mode, with “Share my location” on).</p> : null}
+      {!hasSmartHub ? <p className="sh-dim">The tablet needs Stashr Hub, with its Accessibility switch on (the WhatsApp card on the tablet’s dashboard).</p> : null}
+      {places.length ? (
+        <ul className="sh-lan">{places.map((pl, i) => (
+          <li key={pl.id}>
+            <div className="sh-lan__main"><b>{pl.name} · {phoneName(pl.phone)}</b><span>{pl.group || "no group"} · “{pl.arriveText || "—"}” on arrive{pl.arriveFrom ? ` ${pl.arriveFrom}–${pl.arriveTo}` : ""} · “{pl.leaveText || "—"}” on leave{pl.leaveFrom ? ` ${pl.leaveFrom}–${pl.leaveTo}` : ""} · {pl.radius} m · now {pl.state === "in" ? "there" : pl.state === "out" ? "away" : "unknown"}</span></div>
+            <label className="sh-switch"><input type="checkbox" checked={pl.enabled !== false} onChange={(e) => store(places.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)))} />On</label>
+            <button className="rd-btn rd-btn--quiet" onClick={() => test(pl)} disabled={!pl.group}>Send test</button>
+            <button className="rd-btn rd-btn--quiet" onClick={() => setDraft({ index: i, p: { ...pl } })}>Edit</button>
+          </li>
+        ))}</ul>
+      ) : <p className="sh-dim">No places yet.</p>}
+      {draft ? (
+        <form className="sh-editor" onSubmit={(e) => { e.preventDefault(); store(draft.index === -1 ? [...places, draft.p] : places.map((x, i) => (i === draft.index ? draft.p : x))); }}>
+          <div className="sh-row">
+            <input value={draft.p.name} onChange={(e) => set({ name: e.target.value })} placeholder="Place, e.g. Office" maxLength={40} aria-label="Place name" required />
+            <select value={draft.p.phone} onChange={(e) => set({ phone: e.target.value })} aria-label="Whose phone">{phones.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+          </div>
+          <div className="sh-row">
+            <input type="number" step="any" value={draft.p.lat} onChange={(e) => set({ lat: e.target.value })} placeholder="Latitude" aria-label="Latitude" required />
+            <input type="number" step="any" value={draft.p.lon} onChange={(e) => set({ lon: e.target.value })} placeholder="Longitude" aria-label="Longitude" required />
+            <button type="button" className="rd-btn rd-btn--quiet" onClick={here} disabled={locating}>{locating ? "Locating…" : "Use this device’s location"}</button>
+          </div>
+          <label className="sh-dim">Circle radius: {draft.p.radius} m<input type="range" min="50" max="1000" step="10" value={draft.p.radius} onChange={(e) => set({ radius: Number(e.target.value) })} aria-label="Radius in metres" /></label>
+          <input value={draft.p.group} onChange={(e) => set({ group: e.target.value })} placeholder="WhatsApp group name, exactly as in WhatsApp" maxLength={80} aria-label="WhatsApp group" required />
+          <div className="sh-row"><input value={draft.p.arriveText} onChange={(e) => set({ arriveText: e.target.value })} placeholder="Message on arriving" maxLength={500} aria-label="Arrive message" />
+            <span className="sh-dim">only between</span><input type="time" value={draft.p.arriveFrom} onChange={(e) => set({ arriveFrom: e.target.value })} aria-label="Arrive from" /><input type="time" value={draft.p.arriveTo} onChange={(e) => set({ arriveTo: e.target.value })} aria-label="Arrive to" /></div>
+          <div className="sh-row"><input value={draft.p.leaveText} onChange={(e) => set({ leaveText: e.target.value })} placeholder="Message on leaving" maxLength={500} aria-label="Leave message" />
+            <span className="sh-dim">only between</span><input type="time" value={draft.p.leaveFrom} onChange={(e) => set({ leaveFrom: e.target.value })} aria-label="Leave from" /><input type="time" value={draft.p.leaveTo} onChange={(e) => set({ leaveTo: e.target.value })} aria-label="Leave to" /></div>
+          <p className="sh-dim">Leave the times empty to send at any time. Leave a message empty to send nothing for that event.</p>
+          <div className="sh-row">
+            <button className="rd-btn rd-btn--primary" type="submit">Save place</button>
+            {draft.index >= 0 ? <button type="button" className="rd-btn rd-btn--danger-quiet" onClick={() => store(places.filter((_, i) => i !== draft.index))}>Delete</button> : null}
+            <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setDraft(null)}>Cancel</button>
+          </div>
+        </form>
+      ) : <div className="sh-row"><button className="rd-btn rd-btn--quiet" disabled={!phones.length || places.length >= 10} onClick={() => setDraft({ index: -1, p: blank })}>New place</button></div>}
     </Section>
   );
 }

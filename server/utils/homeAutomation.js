@@ -157,17 +157,66 @@ async function autoCamera(owner, settings, devices, now) {
         if (!st.awaySince) { await HomeSettings.updateOne({ owner }, { $set: { "camera.autoState": { awaySince: new Date(now) } } }); return; }
         if (now - new Date(st.awaySince).getTime() < 2 * 60000) return;
         if (((hub.status || {}).camera || {}).armed) return;      // already watching (you armed it)
-        if (!await claim(`autocam:${owner}:${Math.floor(now / 60000)}`)) return;
+        if (!await claim(`autocam:${owner}:arm:${Math.floor(now / 60000)}`)) return;
         await queue(hub, "camera", { action: "arm" });
         await HomeSettings.updateOne({ owner }, { $set: { "camera.autoState": { armedByAuto: true } } });
         await record({ owner, device: hub._id, deviceName: hub.name, kind: "camera_auto", notify: true, text: "Everyone is out: the tablet camera is now watching the house." });
     } else if (st.armedByAuto) {
-        if (!await claim(`autocam:${owner}:${Math.floor(now / 60000)}`)) return;
+        if (!await claim(`autocam:${owner}:off:${Math.floor(now / 60000)}`)) return;
         await queue(hub, "camera", { action: "disarm" });
         await HomeSettings.updateOne({ owner }, { $set: { "camera.autoState": {} } });
         await record({ owner, device: hub._id, deviceName: hub.name, kind: "camera_auto", notify: true, text: "Someone is home: the tablet camera is off." });
     } else if (st.awaySince) {
         await HomeSettings.updateOne({ owner }, { $set: { "camera.autoState": {} } });
+    }
+}
+
+const LOC_FRESH_MS = 30 * 60 * 1000;
+const distanceM = (a, b) => {
+    const R = 6371000, rad = (x) => (x * Math.PI) / 180;
+    const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+};
+
+/**
+ * Places: when a family phone gets inside a place's circle (arrive) or leaves it (leave) AND the time is inside the
+ * window you set, the tablet sends your message to the WhatsApp group. The first sighting only records where the phone
+ * is; a place is "left" only when the phone is clearly outside (radius + its accuracy), so a GPS wobble is not a trip.
+ */
+async function geoTick(owner, now, settings, devices) {
+    const places = Array.isArray(settings.places) ? settings.places : [];
+    if (!places.length) return;
+    const tz = settings.timezone || "Asia/Kolkata";
+    const mins = localParts(now, tz).minutes;
+    const tablet = (devices || []).filter((d) => d.kind === "hub").find((d) => (d.status || {}).agent === "stashr-hub" && Boolean(d.online) && home.isOnline(d, now));
+    for (let i = 0; i < places.length; i++) {
+        const p = places[i];
+        if (!p || p.enabled === false) continue;
+        const phone = devices.find((d) => d.kind === "phone" && String(d._id) === String(p.phone));
+        const loc = phone && phone.status && phone.status.location;
+        if (!loc || !Number.isFinite(Number(loc.lat)) || !Number.isFinite(Number(loc.lon)) || now - Number(loc.at || 0) > LOC_FRESH_MS) continue;
+        const dist = distanceM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: p.lat, lon: p.lon });
+        const slack = Math.min(Math.max(Number(loc.acc) || 0, 0), 200);
+        let next = p.state || "";
+        if (dist <= p.radius) next = "in";
+        else if (dist > p.radius + Math.max(50, slack)) next = "out";
+        if (next === (p.state || "")) continue;
+        await HomeSettings.updateOne({ owner }, { $set: { [`places.${i}.state`]: next } });
+        if (!p.state) continue;                                   // first sighting: no message
+        const arrive = next === "in";
+        const from = okTime(arrive ? p.arriveFrom : p.leaveFrom) ? toMinutes(arrive ? p.arriveFrom : p.leaveFrom) : null;
+        const to = okTime(arrive ? p.arriveTo : p.leaveTo) ? toMinutes(arrive ? p.arriveTo : p.leaveTo) : null;
+        if (from !== null && to !== null && !home.inWindow(mins, from, to)) continue;   // not at the time you set
+        const text = String((arrive ? p.arriveText : p.leaveText) || "").trim();
+        if (!text || !p.group) continue;
+        if (!await claim(`place:${owner}:${p.id}:${next}:${Math.floor(now / (30 * 60000))}`)) continue;
+        const who = phone.person || phone.name;
+        if (!tablet || !await queue(tablet, "send_whatsapp", { group: p.group, text })) {
+            await record({ owner, kind: "place_failed", notify: true, text: `${who} ${arrive ? "reached" : "left"} ${p.name}, but the tablet is offline, so “${text}” was not sent to ${p.group}.` });
+            continue;
+        }
+        await record({ owner, device: tablet._id, deviceName: tablet.name, kind: "place", notify: true, text: `${who} ${arrive ? "reached" : "left"} ${p.name}: sending “${text}” to ${p.group} on WhatsApp.` });
     }
 }
 
@@ -271,6 +320,8 @@ async function tickOwner(owner, now = Date.now()) {
     // 5b. The camera follows the house: on when the last person leaves, off when the first one is back.
     if (settings.camera && settings.camera.auto) await autoCamera(owner, settings, devices, now);
 
+    await geoTick(owner, now, settings, devices);
+
     // 6. The morning brief and the weekly report.
     if (settings.brief && settings.brief.enabled && settings.brief.time === local.hhmm && settings.brief.lastSent !== local.date && await claim(`brief:${owner}:${local.date}`)) {
         await HomeSettings.updateOne({ owner }, { $set: { "brief.lastSent": local.date } });
@@ -320,4 +371,4 @@ const DEFAULT_SCENES = [
     { id: "goodnight", name: "Good night", steps: [{ kind: "tv", type: "media", args: { action: "play_pause" } }, { kind: "tv", type: "key", args: { key: "HOME" } }] }
 ];
 
-module.exports = { localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, autoCamera, sendTelegram, DEFAULT_SCENES, fmtMin };
+module.exports = { localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, autoCamera, geoTick, distanceM, sendTelegram, DEFAULT_SCENES, fmtMin };

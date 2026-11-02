@@ -322,6 +322,8 @@ async function ingest(d, body, seenAt = new Date()) {
     // The TV's USB drive lists what it holds; complete copies of Drive movies can be cleared from Drive.
     if (d.kind === "tv") void movies.settle(d.owner, status.movies);
 
+    if (d.kind === "phone" && status.location) void automation.settingsOf(d.owner).then(async (st) => { if ((st.places || []).length) await automation.geoTick(d.owner, Date.now(), st, await HomeDevice.find({ owner: d.owner }).lean()); }).catch(() => {});
+
     // Results of earlier commands.
     for (const a of (Array.isArray(body.acks) ? body.acks.slice(0, 20) : [])) {
         if (!a || typeof a.id !== "string") continue;

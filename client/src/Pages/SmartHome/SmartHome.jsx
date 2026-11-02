@@ -8,7 +8,7 @@ import { Section, Skeleton, Empty, useConfirm } from "../Render/RenderUi";
 import { usePolling } from "../Render/renderHooks";
 import { errorMessage } from "../Render/renderUtils";
 import { stateOf, STATE_LABEL, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName, splitStale, TAG_LABEL } from "../../lib/smartHome";
-import { PairCard, PeopleCard, PhonesCard, AlertsCard, TvTimeCard, ScenesCard, SchedulesCard, SpeedCard, CameraCard, SlideshowCard, useHomeSettings } from "./HomeExtras";
+import { PairCard, PeopleCard, PhonesCard, AlertsCard, TvTimeCard, ScenesCard, SchedulesCard, PlacesCard, SpeedCard, CameraCard, SlideshowCard, useHomeSettings } from "./HomeExtras";
 import "../Render/RenderDashboard.css";
 import "./SmartHome.css";
 
@@ -412,6 +412,7 @@ export default function SmartHome() {
       <TvTimeCard home={home} />
       <SpeedCard hasSmartHub={Boolean(smartHub)} send={send} hubId={smartHub?.id} />
       <SchedulesCard home={home} />
+      <PlacesCard home={home} phones={phones} hasSmartHub={Boolean(smartHub)} />
       <AlertsCard home={home} />
       <MoviesCard />
       <SlideshowCard home={home} hub={smartHub} send={send} />

@@ -26,6 +26,13 @@ vault. The older TV/tablet sign-in (`POST /home/devices`, kinds `tv` and `hub`) 
 - **Today's updates**: say “stashr today updates” / “aaj ke updates” (page, Telegram or the tablet's mic) and the tablet opens a
   list of today (weather, who is home, TV, Wi-Fi, events, speed) by itself (`GET /home/agent/today`, command `show_today`).
   The tablet needs “display over other apps” (asked once) to open its screens while another app is showing.
+- **Places · WhatsApp**: a family phone shares its location (Stashr Hub phone mode, switch “Share my location”, “Allow all the
+  time”). A place is a circle (50–2000 m) with a phone, a WhatsApp group name, a message for arriving and one for leaving,
+  each with an optional time window. When the phone gets inside/outside the circle and the time fits, the server tells the
+  tablet (`send_whatsapp`); the tablet opens WhatsApp's share screen and an Accessibility service picks the group and presses
+  Send. The first sighting sends nothing; a place is only “left” when the phone is clearly outside (radius + accuracy).
+  Fragile by nature: it depends on WhatsApp's screens, needs the tablet to have no PIN lock, the Accessibility switch on
+  (Android 13+: App info → ⋮ → Allow restricted settings) and “Display over other apps”. Telegram gets a note each time.
 - **Who is home**: a person is home when a Wi-Fi device you gave that person answers, or their paired phone's own
   address answers on the tablet's scan (`home.presence`).
 - **TV**: status, remote, USB movies, as before.

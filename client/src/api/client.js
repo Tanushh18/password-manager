@@ -442,6 +442,8 @@ export const setHomePhonePerson = (id, person) => instance.put(`/home/devices/${
 export const makeHomePairCode = (kind, name) => instance.post("/home/pair-codes", { kind, name }).then((r) => r.data);
 export const getHomeSettings = () => instance.get("/home/settings").then((r) => r.data);
 export const saveHomeSettings = (body) => instance.put("/home/settings", body).then((r) => r.data);
+export const saveHomePlaces = (places) => instance.put("/home/places", { places }).then((r) => r.data);
+export const testHomePlace = (id, text) => instance.post(`/home/places/${id}/test`, { text }).then((r) => r.data);
 export const saveHomeSchedules = (schedules) => instance.put("/home/schedules", { schedules }).then((r) => r.data);
 export const saveHomeScenes = (scenes) => instance.put("/home/scenes", { scenes }).then((r) => r.data);
 export const runHomeScene = (id) => instance.post(`/home/scenes/${id}/run`).then((r) => r.data);

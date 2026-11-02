@@ -72,6 +72,8 @@ class DashboardActivity : Activity() {
     private lateinit var cameraSwitch: Switch
     private lateinit var voiceSwitch: Switch
     private lateinit var micButton: TextView
+    private lateinit var waState: TextView
+    private lateinit var waResult: TextView
 
     private var slideshowReady = false
     private var lastTouch = System.currentTimeMillis()
@@ -197,6 +199,25 @@ class DashboardActivity : Activity() {
         ctl.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(buttons) })
         left.addView(ctl)
 
+        // WhatsApp messages
+        val wa = ui.card("WhatsApp messages", "Lets Stashr send “arrived / left” to a WhatsApp group from this tablet")
+        waState = ui.body("")
+        wa.addView(waState)
+        wa.addView(ui.dim("Needs: WhatsApp signed in here, Stashr Hub switched on in Accessibility, and no lock-screen PIN (swipe or none). On Android 13+ for an app installed from a file: Settings → Apps → Stashr Hub → ⋮ → Allow restricted settings, then turn it on."))
+        wa.addView(ui.quiet("Open Accessibility settings") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) })
+        val waGroup = ui.input("WhatsApp group name")
+        val waText = ui.input("Message", "Reached office")
+        wa.addView(waGroup); wa.addView(waText)
+        waResult = ui.dim("")
+        wa.addView(ui.primary("Send a test message") {
+            waResult.text = "Sending…"
+            scope.launch {
+                waResult.text = try { com.tanush.stashr.hub.whatsapp.WhatsAppSender.send(this@DashboardActivity, waGroup.text.toString(), waText.text.toString()) } catch (e: Exception) { e.message ?: "Failed" }
+            }
+        })
+        wa.addView(waResult)
+        left.addView(wa)
+
         if (wide) {
             val two = ui.row(16)
             two.gravity = android.view.Gravity.TOP
@@ -230,6 +251,7 @@ class DashboardActivity : Activity() {
             append(" · voice ").append(VoiceListener.status())
             if (Updater.waiting) append(" · an update is waiting for your tap")
         }
+        waState.text = if (com.tanush.stashr.hub.whatsapp.WhatsAppSender.serviceOn()) "● Accessibility is on: ready" else "○ Accessibility is off"
         if (cameraSwitch.isChecked != prefs.cameraArmed) cameraSwitch.isChecked = prefs.cameraArmed
         if (slideshowReady && resumed && System.currentTimeMillis() - lastTouch > 10 * 60_000) {
             lastTouch = System.currentTimeMillis()

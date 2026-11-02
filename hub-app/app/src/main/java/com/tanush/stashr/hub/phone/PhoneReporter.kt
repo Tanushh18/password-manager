@@ -76,7 +76,7 @@ object PhoneReporter {
     fun status(ctx: Context): JSONObject {
         val bat = DeviceInfo.battery(ctx)
         val wifi = DeviceInfo.onWifi(ctx)
-        return JSONObject()
+        val out = JSONObject()
             .put("battery", bat.opt("pct") ?: JSONObject.NULL)
             .put("charging", bat.optBoolean("charging"))
             .put("batteryTemp", bat.optDouble("temp", 0.0))
@@ -90,6 +90,8 @@ object PhoneReporter {
             .put("android", Build.VERSION.RELEASE)
             .put("uptimeH", DeviceInfo.uptimeHours())
             .put("appVersion", BuildConfig.VERSION_NAME)
+        if (Prefs(ctx).shareLocation) LocationService.last?.let { out.put("location", it.toJson()) }
+        return out
     }
 
     suspend fun reportNow(ctx: Context): String = withContext(Dispatchers.IO) {
