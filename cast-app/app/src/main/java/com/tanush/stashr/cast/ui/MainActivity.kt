@@ -60,6 +60,7 @@ class MainActivity : Activity() {
     private var statusLine: TextView? = null
     private var noteLine: TextView? = null
     private var quality = "sharp"
+    private var savedPin = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,6 +90,7 @@ class MainActivity : Activity() {
     /* ───────── screen ───────── */
 
     private fun render() {
+        if (::pinBox.isInitialized) savedPin = pinBox.text.toString()
         shownCasting = CastSession.casting
         val (root, col) = ui.page()
         col.addView(ui.eyebrow("Stashr Cast"))
@@ -159,6 +161,7 @@ class MainActivity : Activity() {
         error = ui.text("", 13f, ui.c.danger)
         startBtn = ui.primary("Start mirroring") { start() }
         col.addView(error); col.addView(startBtn)
+        pinBox.setText(savedPin)
         updatePin()
     }
 

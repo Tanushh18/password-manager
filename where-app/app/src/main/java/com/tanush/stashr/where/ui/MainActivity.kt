@@ -16,6 +16,8 @@ import android.widget.LinearLayout
 import com.tanush.stashr.where.BuildConfig
 import com.tanush.stashr.where.core.Api
 import com.tanush.stashr.where.core.Logic
+import com.tanush.stashr.where.core.Health
+import com.tanush.stashr.where.core.HealthLogic
 import com.tanush.stashr.where.core.Prefs
 import com.tanush.stashr.where.core.Ui
 import com.tanush.stashr.where.update.Updater
@@ -115,24 +117,30 @@ class MainActivity : Activity() {
         body.addView(ui.dim("Version ${BuildConfig.VERSION_NAME}"))
     }
 
+    /** The same four items the website's Health tab checks for this app, in the same order (see core/Health.kt). */
     private fun permissionsCard(): View {
         val card = ui.card("Permissions", "What this app needs to keep working in the background")
         val fine = granted(Manifest.permission.ACCESS_FINE_LOCATION)
         val coarse = granted(Manifest.permission.ACCESS_COARSE_LOCATION)
-        val bg = Build.VERSION.SDK_INT < 29 || granted(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-        card.addView(row("Location", if (fine) "Allowed (precise)" else if (coarse) "Allowed (approximate: ETA will be rough)" else "Not allowed", fine || coarse))
-        if (!(fine || coarse)) card.addView(ui.primary("Allow location") { requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 1) })
-        else {
-            card.addView(row("Location in the background", if (bg) "Allowed all the time" else "Only while the app is open", bg))
-            if (!bg) {
-                card.addView(ui.dim("To tell your family you are on the way, Android must let this app read your location when it is closed: choose “Allow all the time”."))
-                card.addView(ui.primary("Allow all the time") { askBackground() })
+        val flags = Health.flags(this)
+        for (item in HealthLogic.items(flags, approximateOnly = coarse && !fine)) {
+            card.addView(row(item.label, item.value, item.ok))
+            if (item.ok) continue
+            when (item.id) {
+                "location" -> when {
+                    !(fine || coarse) -> card.addView(ui.primary("Allow location") { requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 1) })
+                    else -> {
+                        card.addView(ui.dim("To tell your family you are on the way, Android must let this app read your location when it is closed: choose “Allow all the time”."))
+                        card.addView(ui.primary("Allow all the time") { askBackground() })
+                    }
+                }
+                "gpsEnabled" -> card.addView(ui.quiet("Open location settings") { open(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) })
+                "notifications" -> card.addView(ui.quiet("Allow messages") {
+                    if (Build.VERSION.SDK_INT >= 33 && !granted(Manifest.permission.POST_NOTIFICATIONS)) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
+                    else open(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+                })
+                "batteryUnrestricted" -> card.addView(ui.quiet("Battery optimisation list") { open(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) })
             }
-        }
-        if (Build.VERSION.SDK_INT >= 33) {
-            val n = granted(Manifest.permission.POST_NOTIFICATIONS)
-            card.addView(row("Messages from Stashr", if (n) "Allowed" else "Not allowed (you will not see “arrived” messages)", n))
-            if (!n) card.addView(ui.quiet("Allow messages") { requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2) })
         }
         return card
     }

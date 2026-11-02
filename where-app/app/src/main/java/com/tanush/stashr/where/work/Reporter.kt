@@ -8,6 +8,7 @@ import android.os.BatteryManager
 import com.tanush.stashr.where.core.Answer
 import com.tanush.stashr.where.core.Api
 import com.tanush.stashr.where.core.ApiError
+import com.tanush.stashr.where.core.Health
 import com.tanush.stashr.where.core.Logic
 import com.tanush.stashr.where.core.Prefs
 import org.json.JSONObject
@@ -62,9 +63,11 @@ object Reporter {
         if (fix == null) fix = Locator.one(app, liveMode, networkOnly = Logic.lowBattery(pct, charging, liveMode))
         if (fix == null) {
             prefs.lastError = if (Locator.hasPermission(app)) "Could not get a location fix" else "Location is not allowed"
+            Health.noteStreak("location", "No location fix in 3 checks in a row: ${prefs.lastError}")
             Scheduler.next(app, Logic.batteryDelay(pct, charging, liveMode, prefs.lastDelaySec), prefs.live)
             return Result.NoFix
         }
+        Health.success("location")
         prefs.fixLat = fix.lat; prefs.fixLon = fix.lon; prefs.fixAcc = fix.acc; prefs.fixAt = fix.at; prefs.fixSpeed = fix.speed ?: -1f
 
         // 3) Within 40 m of the last upload, recently: say "still here" instead of sending the position again.
@@ -80,9 +83,10 @@ object Reporter {
             apply(app, prefs, answer, pct, charging)
         } catch (e: ApiError) {
             if (e.status == 401) { disconnect(app, "Stashr disconnected this phone. Link it again with a new code."); Result.Unlinked }
-            else { prefs.live = false; prefs.lastError = e.message ?: "Server error"; Scheduler.next(app, 300); Result.Failed(prefs.lastError) }
+            else { prefs.live = false; prefs.lastError = e.message ?: "Server error"; Health.noteStreak("report", "Upload to Stashr failed 3 times in a row: ${prefs.lastError}"); Scheduler.next(app, 300); Result.Failed(prefs.lastError) }
         } catch (e: IOException) {
             prefs.lastError = "No connection to Stashr; will try again soon"
+            Health.noteStreak("report", "Upload to Stashr failed 3 times in a row: ${e.message ?: e.javaClass.simpleName}")
             val wasLive = prefs.live
             prefs.live = false
             Scheduler.next(app, if (wasLive) 10 else 300, wasLive)
@@ -99,15 +103,17 @@ object Reporter {
         } catch (e: ApiError) {
             if (e.status == 401) { disconnect(app, "Stashr disconnected this phone. Link it again with a new code."); Result.Unlinked }
             else if (e.status == 400) null
-            else { prefs.lastError = e.message ?: "Server error"; Scheduler.next(app, 300); Result.Failed(prefs.lastError) }
+            else { prefs.lastError = e.message ?: "Server error"; Health.noteStreak("report", "Upload to Stashr failed 3 times in a row: ${prefs.lastError}"); Scheduler.next(app, 300); Result.Failed(prefs.lastError) }
         } catch (e: IOException) {
             prefs.lastError = "No connection to Stashr; will try again soon"
+            Health.noteStreak("report", "Upload to Stashr failed 3 times in a row: ${e.message ?: e.javaClass.simpleName}")
             Scheduler.next(app, 300)
             Result.Failed(prefs.lastError)
         }
     }
 
     private fun apply(app: Context, prefs: Prefs, answer: Answer, pct: Int, charging: Boolean): Result {
+        Health.success("report")
         prefs.state = answer.state; prefs.distanceKm = answer.distanceKm?.toFloat() ?: -1f; prefs.etaMinutes = answer.etaMinutes ?: -1
         prefs.lastError = ""
         prefs.live = answer.live
@@ -139,6 +145,7 @@ object Reporter {
         val (wifi, ip) = wifi(ctx)
         json.put("battery", JSONObject().put("pct", if (pct >= 0) pct else JSONObject.NULL).put("charging", charging))
         json.put("wifi", JSONObject().put("connected", wifi).put("ip", ip))
+        json.put("health", Health.collect(ctx))
         return json
     }
 
