@@ -86,7 +86,8 @@ class MainActivity : Activity() {
             else -> Logic.statusText(prefs.state, prefs.distanceKm.takeIf { it >= 0 }?.toDouble(), prefs.etaMinutes.takeIf { it >= 0 })
         }
         status.addView(ui.text(line, 18f, ui.c.text, bold = true))
-        status.addView(ui.dim("Last shared: " + Logic.ago(prefs.upAt) + if (prefs.fixAcc > 0) " · accuracy about ${prefs.fixAcc.toInt()} m" else ""))
+        status.addView(ui.dim("Last shared: " + Logic.ago(maxOf(prefs.upAt, prefs.callAt)) + if (prefs.fixAcc > 0) " · accuracy about ${prefs.fixAcc.toInt()} m" else ""))
+        if (prefs.lastWasSame && prefs.callAt > 0) status.addView(ui.dim("Last check: still at the same place (no new location needed)"))
         if (prefs.live && System.currentTimeMillis() - prefs.upAt < 2 * 60_000) status.addView(ui.dim("Live view is on (your family is looking at the map)"))
         if (prefs.lastError.isNotEmpty()) status.addView(ui.text(prefs.lastError, 13f, ui.c.warn))
         if (note.isNotEmpty()) status.addView(ui.dim(note))
@@ -159,7 +160,7 @@ class MainActivity : Activity() {
         if (busy) return
         busy = true; note = ""; render()
         scope.launch {
-            val r = withContext(Dispatchers.IO) { Reporter.run(this@MainActivity) }
+            val r = withContext(Dispatchers.IO) { Reporter.run(this@MainActivity, force = true) }
             busy = false
             note = when (r) {
                 is Reporter.Result.Sent -> "Shared just now."

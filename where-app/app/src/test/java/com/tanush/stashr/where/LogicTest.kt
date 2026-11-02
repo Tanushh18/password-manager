@@ -61,4 +61,38 @@ class LogicTest {
         assertEquals(1112.0, Logic.distanceM(28.0, 77.0, 28.01, 77.0), 5.0)
         assertEquals("ABCD1234", Logic.cleanCode("abcd 1234 xyz"))
     }
+
+    @Test fun sameCallRules() {
+        val min = 60_000L
+        // same access point, upload 3 h ago: still here
+        assertTrue(Logic.shouldSendSame(true, 180 * min, null, false, 20 * min))
+        // same access point but the last upload is 7 h old: take a real fix
+        assertFalse(Logic.shouldSendSame(true, 7 * 60 * min, null, false, 20 * min))
+        // live mode never says "same"
+        assertFalse(Logic.shouldSendSame(true, 5 * min, 0.0, true, 1 * min))
+        // different access point: only a near fix (<= 40 m) with a recent upload counts
+        assertTrue(Logic.shouldSendSame(false, 10 * min, 25.0, false, 10 * min))
+        assertFalse(Logic.shouldSendSame(false, 10 * min, 80.0, false, 10 * min))
+        assertFalse(Logic.shouldSendSame(false, 30 * min, 10.0, false, 10 * min))
+        // a real fix must go out at least every 25 minutes
+        assertFalse(Logic.shouldSendSame(false, 15 * min, 10.0, false, 26 * min))
+        // never uploaded: nothing to be "the same" as
+        assertFalse(Logic.shouldSendSame(true, 0, null, false, 0))
+    }
+
+    @Test fun lowBatteryDoublesTheDelay() {
+        assertEquals(1200, Logic.batteryDelay(15, false, false, 600))
+        assertEquals(1800, Logic.batteryDelay(10, false, false, 1500))
+        assertEquals(600, Logic.batteryDelay(16, false, false, 600))
+        assertEquals(600, Logic.batteryDelay(10, true, false, 600))     // charging
+        assertEquals(8, Logic.batteryDelay(5, false, true, 8))           // live mode is left alone
+        assertEquals(600, Logic.batteryDelay(-1, false, false, 600))     // unknown level
+    }
+
+    @Test fun bssidPlaceholdersAreIgnored() {
+        assertEquals("", Logic.usableBssid(null))
+        assertEquals("", Logic.usableBssid("02:00:00:00:00:00"))
+        assertEquals("", Logic.usableBssid("00:00:00:00:00:00"))
+        assertEquals("aa:bb:cc:dd:ee:ff", Logic.usableBssid(" AA:BB:CC:DD:EE:FF "))
+    }
 }
