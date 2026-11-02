@@ -89,3 +89,17 @@ jobs:
           java-version: "17"
           cache: gradle
       - run: ./gradlew testDebugUnitTest assembleDebug --no-daemon
+
+  tv-app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tv-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - run: ./gradlew testDebugUnitTest assembleDebug --no-daemon
