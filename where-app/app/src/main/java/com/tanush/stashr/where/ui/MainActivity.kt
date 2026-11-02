@@ -102,7 +102,7 @@ class MainActivity : Activity() {
         body.addView(help)
 
         val privacy = ui.card("Private by design")
-        privacy.addView(ui.dim("Only your location (latitude, longitude, accuracy, speed), battery level and Wi-Fi connected yes/no are sent, only to your Stashr server. No passwords, contacts or messages. It never runs a tracking notification."))
+        privacy.addView(ui.dim("Only your location (latitude, longitude, accuracy, speed), battery level and Wi-Fi connected yes/no are sent, only to your Stashr server. No passwords, contacts or messages. It never runs a tracking notification. The owner of your Stashr can turn on a location history (places and trips) on their own website; nothing from it is shown on this phone."))
         body.addView(privacy)
 
         body.addView(ui.danger("Disconnect") { confirmDisconnect() })

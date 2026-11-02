@@ -15,6 +15,9 @@ import androidx.lifecycle.lifecycleScope
 import com.tanush.stashr.hub.BuildConfig
 import com.tanush.stashr.hub.R
 import com.tanush.stashr.hub.camera.CameraWatch
+import com.tanush.stashr.hub.local.LocalMode
+import com.tanush.stashr.hub.local.LocalServer
+import com.tanush.stashr.hub.local.MediaQueue
 import com.tanush.stashr.hub.net.LanScanner
 import com.tanush.stashr.hub.net.ScanResult
 import com.tanush.stashr.hub.net.SpeedResult
@@ -47,6 +50,8 @@ class HubService : LifecycleService() {
     private var lastUpdateCheck = 0L
     private val acks = JSONArray()
     private var wakeLock: PowerManager.WakeLock? = null
+    private var firstFailAt = 0L
+    private var lastDashboardAt = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -55,6 +60,7 @@ class HubService : LifecycleService() {
         wakeLock = getSystemService(PowerManager::class.java)?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "stashr:hub")?.apply { setReferenceCounted(false); acquire() }
         CameraWatch.start(this)
         VoiceListener.start(this)
+        LocalServer.ensureStarted(this)
         lifecycleScope.launch { loop() }
     }
 
@@ -67,6 +73,7 @@ class HubService : LifecycleService() {
     override fun onDestroy() {
         CameraWatch.stop()
         VoiceListener.stop()
+        LocalServer.stop()
         wakeLock?.release()
         running = null
         super.onDestroy()
@@ -99,10 +106,19 @@ class HubService : LifecycleService() {
                 val withPorts = now - lastPortsAt > 30 * 60_000
                 lastScan = withContext(Dispatchers.IO) { LanScanner.scan(this@HubService, withPorts) }
                 if (withPorts) lastPortsAt = now
+                lastScan?.let { LocalMode.onScan(this@HubService, it) }
                 if (now - lastSpeedAt > 60 * 60_000) runSpeedTest()
                 if (now - lastUpdateCheck > 6 * 3600_000) { lastUpdateCheck = now; lifecycleScope.launch { Updater.check(this@HubService, manual = false) } }
-                val res = withContext(Dispatchers.IO) { api.report(buildReport()) }
+                val report = buildReport()
+                val sentEvents = report.optJSONArray("localEvents")?.length() ?: 0
+                val res = withContext(Dispatchers.IO) { api.report(report) }
                 synchronized(acks) { while (acks.length() > 0) acks.remove(0) }
+                // The server answered: local mode ends, what happened meanwhile is handed over.
+                firstFailAt = 0L
+                if (sentEvents > 0) LocalMode.eventsSent(this@HubService, sentEvents)
+                res.optJSONObject("local")?.optString("key")?.takeIf { it.length >= 16 }?.let { if (Prefs(this).localKey != it) Prefs(this).localKey = it; LocalServer.ensureStarted(this) }
+                if (LocalMode.offline) { LocalMode.setOffline(this, false); lifecycleScope.launch(Dispatchers.IO) { MediaQueue.flush(this@HubService) } }
+                else if (now - lastDashboardAt > 5 * 60_000) { lastDashboardAt = now; withContext(Dispatchers.IO) { try { LocalMode.saveDashboard(this@HubService, api.dashboard().toString()); MediaQueue.flush(this@HubService) } catch (e: Exception) { } } }
                 lastReport = now
                 lastError = ""
                 val cmds = res.optJSONArray("commands") ?: JSONArray()
@@ -110,11 +126,20 @@ class HubService : LifecycleService() {
             } catch (e: ApiError) {
                 lastError = e.message ?: "Server error"
                 if (e.status == 401) { Prefs(this).forget(); stopSelf(); return }
+                if (e.status >= 500) serverDown()
             } catch (e: Exception) {
                 lastError = e.message ?: e.javaClass.simpleName
+                if (e is java.io.IOException) serverDown()
             }
             withTimeoutOrNull(60_000) { wake.receive() }
         }
+    }
+
+    /** The server did not answer: after 90 seconds of that in a row the tablet switches to local mode. */
+    private fun serverDown() {
+        val now = System.currentTimeMillis()
+        if (firstFailAt == 0L) firstFailAt = now
+        if (now - firstFailAt >= 90_000) LocalMode.setOffline(this, true)
     }
 
     private suspend fun runSpeedTest() {
@@ -139,6 +164,8 @@ class HubService : LifecycleService() {
         }
         lastSpeed?.let { status.put("speed", it.toJson()) }
         val body = JSONObject().put("status", status)
+        val ev = LocalMode.pendingEvents(this)
+        if (ev.length() > 0) body.put("localEvents", ev)
         synchronized(acks) { if (acks.length() > 0) body.put("acks", JSONArray(acks.toString())) }
         return body
     }

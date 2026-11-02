@@ -335,6 +335,14 @@ function comingList(settings, now = Date.now()) {
 }
 const comingLine = (c) => (c.minutes <= 1 ? `${c.person} bas pahunchne wale hain` : `${c.person} ${c.minutes} minute mein aa rahe hain`);
 
+/** The shared secret for local mode; made the first time it is needed. */
+async function localKeyOf(owner) {
+    const s = await settingsOf(owner);
+    if (s.localKey) return s.localKey;
+    await HomeSettings.updateOne({ owner, $or: [{ localKey: "" }, { localKey: { $exists: false } }] }, { $set: { localKey: require("crypto").randomBytes(16).toString("hex") } });
+    return (await settingsOf(owner)).localKey;
+}
+
 /** Everyone with a person is home, and it is a weekend evening (Fri 17:00 on): the TV launcher then offers movie night. */
 function movieNightOn(settings, devices, now = Date.now()) {
     const people = home.presence((devices || []).filter((d) => d.kind === "hub"), (devices || []).filter((d) => d.kind === "phone"), now);
@@ -495,4 +503,4 @@ const DEFAULT_SCENES = [
     { id: "goodnight", name: "Good night", steps: [{ kind: "tv", type: "media", args: { action: "play_pause" } }, { kind: "tv", type: "key", args: { key: "HOME" } }] }
 ];
 
-module.exports = { localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, movieNightOn, autoCamera, geoTick, distanceM, etaTick, announce, whereIs, checkInterval, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };
+module.exports = { localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, movieNightOn, localKeyOf, autoCamera, geoTick, distanceM, etaTick, announce, whereIs, checkInterval, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };

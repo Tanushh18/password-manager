@@ -84,7 +84,7 @@ const publicSettings = (s) => ({
     timezone: s.timezone, alerts: s.alerts, weather: { city: (s.weather && s.weather.city) || "" }, brief: { enabled: s.brief.enabled, time: s.brief.time },
     weekly: { enabled: s.weekly.enabled }, tvLimit: { minutes: s.tvLimit.minutes, action: s.tvLimit.action, lateNight: s.tvLimit.lateNight !== false },
     schedules: s.schedules || [], scenes: (s.scenes && s.scenes.length ? s.scenes : automation.DEFAULT_SCENES),
-    slideshowFolder: s.slideshowFolder || "", places: s.places || [], news: { enabled: true, lang: "en", count: 6, ...(s.news || {}) }, rain: s.rain !== false, homeSpot: s.homeSpot && Number.isFinite(s.homeSpot.lat) ? { lat: s.homeSpot.lat, lon: s.homeSpot.lon, radius: s.homeSpot.radius || 200 } : null, eta: { enabled: true, maxKm: 40, notifyMinutes: 15, routing: true, ...(s.eta || {}) }, camera: { sensitivity: 5, video: true, auto: false, ...(s.camera || {}), autoState: undefined }
+    slideshowFolder: s.slideshowFolder || "", places: s.places || [], history: { enabled: Boolean(s.history && s.history.enabled) }, news: { enabled: true, lang: "en", count: 6, ...(s.news || {}) }, rain: s.rain !== false, homeSpot: s.homeSpot && Number.isFinite(s.homeSpot.lat) ? { lat: s.homeSpot.lat, lon: s.homeSpot.lon, radius: s.homeSpot.radius || 200 } : null, eta: { enabled: true, maxKm: 40, notifyMinutes: 15, routing: true, ...(s.eta || {}) }, camera: { sensitivity: 5, video: true, auto: false, ...(s.camera || {}), autoState: undefined }
 });
 
 router.get("/home/settings", authenticate, async (req, res) => {
@@ -389,7 +389,10 @@ async function buildDashboard(owner) {
         people: home.presence(devices.filter((d) => d.kind === "hub"), devices.filter((d) => d.kind === "phone")),
         coming: automation.comingList(s),
         events: events.map((e) => ({ text: e.text, at: e.at })), speed: speed ? { down: speed.down, up: speed.up, ping: speed.ping, at: speed.at } : null,
-        scenes: (s.scenes && s.scenes.length ? s.scenes : automation.DEFAULT_SCENES).map((x) => ({ id: x.id, name: x.name })),
+        scenes: (s.scenes && s.scenes.length ? s.scenes : automation.DEFAULT_SCENES).map((x) => ({ id: x.id, name: x.name, steps: x.steps || [] })),
+        // For local mode: Wi-Fi device key -> person, so the tablet can announce an arrival by itself when the server is down.
+        localPeople: Object.fromEntries(devices.filter((d) => d.kind === "hub").flatMap((h) => Object.entries(h.lanLabels || {}).filter(([, l]) => l && l.person).map(([k, l]) => [k, l.person]))),
+        ...(await require("./homeInsights").tabletLines(owner, s).catch(() => ({ nudges: [], trips: [] }))),
         config: { camera: { sensitivity: (s.camera && s.camera.sensitivity) || 5, video: !(s.camera && s.camera.video === false), alerts: s.alerts.camera !== false }, slideshow: Boolean(s.slideshowFolder) }
     };
 }

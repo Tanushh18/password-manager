@@ -19,6 +19,7 @@ const home = require("../utils/home");
 const automation = require("../utils/homeAutomation");
 const { record } = require("../utils/homeEvents");
 const homeRouter = require("./home");
+const insights = () => require("./homeInsights");
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: "Too many changes. Slow down." });
 const agentLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: "Too many requests." });
@@ -114,6 +115,7 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
         const settings = await automation.settingsOf(d.owner);
         const all = await HomeDevice.find({ owner: d.owner }).lean();
         await automation.etaTick(d.owner, now, settings, all);
+        await insights().keepFix(d.owner, d, d.person || d.name, loc, settings).catch(() => {});
         const fresh = await automation.settingsOf(d.owner);
         const me = all.find((x) => String(x._id) === String(d._id)) || d;
         const where = automation.whereIs(fresh, { ...me, status: { ...(me.status || {}), location: loc } }, now);

@@ -56,6 +56,21 @@ class Prefs(ctx: Context) {
         get() = p.getString("homeCache", "") ?: ""
         set(v) = p.edit().putString("homeCache", v).apply()
 
+    /** Local mode: the shared key the server gave this TV, and where the tablet was last found on the Wi-Fi. */
+    var localKey: String
+        get() = p.getString("localKey", "") ?: ""
+        set(v) = p.edit().putString("localKey", v).apply()
+    var localAddr: String
+        get() = p.getString("localAddr", "") ?: ""
+        set(v) = p.edit().putString("localAddr", v).apply()
+    var localAddrAt: Long
+        get() = p.getLong("localAddrAt", 0)
+        set(v) = p.edit().putLong("localAddrAt", v).apply()
+    /** When homeCache was saved (the cached home screen is shown for 24 hours at most). */
+    var homeCacheAt: Long
+        get() = p.getLong("homeCacheAt", 0)
+        set(v) = p.edit().putLong("homeCacheAt", v).apply()
+
     fun position(name: String): Long = p.getLong("pos_" + name.hashCode(), 0)
     fun savePosition(name: String, ms: Long) = p.edit().putLong("pos_" + name.hashCode(), ms).apply()
 

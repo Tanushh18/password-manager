@@ -21,6 +21,9 @@ import com.tanush.stashr.tv.access.RemoteAccessibilityService
 import com.tanush.stashr.tv.core.Api
 import com.tanush.stashr.tv.core.ApiError
 import com.tanush.stashr.tv.core.Logic
+import com.tanush.stashr.tv.core.LocalPolicy
+import com.tanush.stashr.tv.net.RawHttp
+import com.tanush.stashr.tv.net.TabletFinder
 import com.tanush.stashr.tv.core.Prefs
 import com.tanush.stashr.tv.overlay.NoticeOverlay
 import com.tanush.stashr.tv.sync.MovieStore
@@ -109,14 +112,68 @@ class TvService : Service() {
 
     /* ───────── report ───────── */
 
+    /**
+     * Normally the TV reports to the server. When that has failed for 45 s in a row it switches to LOCAL mode: it reports
+     * to the home tablet over the Wi-Fi every 10 s (the tablet relays commands and messages), while looking at the server
+     * once a minute; the first answer from the server takes it back.
+     */
     private suspend fun reportLoop() {
+        var firstFailAt = 0L
+        var lastServerTry = 0L
         while (true) {
             if (prefs.linked && screenOn) {
-                try { report(leaving = false) } catch (e: ApiError) { handleError(e) } catch (e: Exception) { prefs.lastError = e.message ?: "Could not reach Stashr" }
+                val now = System.currentTimeMillis()
+                if (!localMode || LocalPolicy.shouldRetryServer(lastServerTry, now)) {
+                    lastServerTry = now
+                    var ok = false
+                    var failed = false
+                    try { report(leaving = false); ok = true }
+                    catch (e: ApiError) { if (LocalPolicy.isFailure(e)) { failed = true; prefs.lastError = e.message ?: "Server error" } else handleError(e) }
+                    catch (e: Exception) { prefs.lastError = e.message ?: "Could not reach Stashr"; failed = LocalPolicy.isFailure(e) }
+                    if (ok) {
+                        firstFailAt = 0L; serverDown = false
+                        if (localMode) { localMode = false; syncPoke.trySend(Unit) }
+                    } else if (failed) {
+                        if (firstFailAt == 0L) firstFailAt = now
+                        serverDown = true
+                        if (!localMode && LocalPolicy.shouldGoLocal(firstFailAt, System.currentTimeMillis())) localMode = true
+                    }
+                }
+                if (localMode) try { localReport() } catch (e: Exception) { /* the tablet is not there right now */ }
             }
-            withTimeoutOrNull(if (screenOn) 20_000 else 60_000) { poke.receive() }
+            withTimeoutOrNull(if (localMode) LocalPolicy.LOCAL_EVERY_MS else if (screenOn) 20_000 else 60_000) { poke.receive() }
         }
     }
+
+    @Volatile private var lastFindAt = 0L
+
+    /** One report to the tablet: this TV's status and acks in, the commands the tablet holds for it out. */
+    private fun localReport() {
+        val key = prefs.localKey
+        if (key.isEmpty()) return                                   // the server never gave a key yet: nothing can be done offline
+        val body = JSONObject().put("name", prefs.deviceName).put("status", status())
+        val sending: JSONArray
+        synchronized(acks) { sending = JSONArray(acks.toString()) }
+        if (sending.length() > 0) body.put("acks", sending)
+        val finder = TabletFinder(this)
+        var addr = LocalPolicy.cachedAddr(prefs.localAddr, prefs.localAddrAt, System.currentTimeMillis())
+        var res = addr?.let { tryLocal(it, key, body) }
+        if (res == null && LocalPolicy.mayFindAgain(lastFindAt, System.currentTimeMillis())) {
+            lastFindAt = System.currentTimeMillis()
+            addr = finder.find(key)
+            res = addr?.let { tryLocal(it, key, body) }
+        }
+        val json = res ?: return
+        synchronized(acks) { for (i in 0 until sending.length()) if (acks.length() > 0) acks.remove(0) }
+        val cmds = json.optJSONArray("commands") ?: return
+        for (i in 0 until cmds.length()) cmds.optJSONObject(i)?.let { handle(it) }
+        if (cmds.length() > 0) poke.trySend(Unit)
+    }
+
+    private fun tryLocal(a: LocalPolicy.Addr, key: String, body: JSONObject): JSONObject? = try {
+        val r = RawHttp.request(a.host, a.port, "POST", "/v1/tv/report", key, body.toString())
+        if (r.status in 200..299) JSONObject(r.body.ifBlank { "{}" }) else null
+    } catch (e: Exception) { null }
 
     private fun handleError(e: ApiError) {
         prefs.lastError = e.message ?: "Error"
@@ -153,6 +210,7 @@ class TvService : Service() {
         val res = Api(this).report(body)
         synchronized(acks) { for (i in 0 until sending.length()) if (acks.length() > 0) acks.remove(0) }
         prefs.lastReportOk = System.currentTimeMillis(); prefs.lastError = ""
+        res.optJSONObject("local")?.optString("key")?.takeIf { it.length >= 16 }?.let { if (it != prefs.localKey) prefs.localKey = it }
         val cmds = res.optJSONArray("commands") ?: return
         for (i in 0 until cmds.length()) cmds.optJSONObject(i)?.let { handle(it) }
         if (cmds.length() > 0) poke.trySend(Unit)
@@ -217,7 +275,7 @@ class TvService : Service() {
     private suspend fun syncLoop() {
         delay(8_000)
         while (true) {
-            if (prefs.linked && online()) movies.runOnce { poke.trySend(Unit) }
+            if (prefs.linked && online() && !localMode && !serverDown) movies.runOnce { poke.trySend(Unit) }
             withTimeoutOrNull(30 * 60_000L) { syncPoke.receive() }
         }
     }
@@ -225,7 +283,7 @@ class TvService : Service() {
     private suspend fun updateLoop() {
         delay(30_000)
         while (true) {
-            if (prefs.linked && online()) Updater.check(this, manual = false)
+            if (prefs.linked && online() && !localMode && !serverDown) Updater.check(this, manual = false)
             delay(6 * 3600_000L)
         }
     }
@@ -238,6 +296,9 @@ class TvService : Service() {
     companion object {
         const val ACTION_SYNC = "com.tanush.stashr.tv.SYNC"
         const val ACTION_REPORT = "com.tanush.stashr.tv.REPORT"
+        /** True while the TV works through the home tablet because the server cannot be reached. */
+        @Volatile var localMode = false
+        @Volatile var serverDown = false
         @Volatile var running: TvService? = null
         @Volatile var syncer: MovieSync? = null
 

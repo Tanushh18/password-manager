@@ -101,3 +101,37 @@ export function SpeedChart({ samples }) {
     </figure>
   );
 }
+
+
+/** Minutes the way home took, by day (one series, bars), with the usual time as a dashed line. */
+export function CommuteChart({ series, usual }) {
+  const [hover, setHover] = useState(null);
+  if (!series || !series.length) return null;
+  const max = niceMax(Math.max(usual || 0, ...series.map((d) => d.minutes)) || 30);
+  const slot = innerW / series.length;
+  const bw = Math.max(6, Math.min(30, slot - 4));
+  const y = (m) => PAD.t + innerH - (m / max) * innerH;
+  const h = hover !== null ? series[hover] : null;
+  return (
+    <figure className="shc">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Minutes the way home took, last ${series.length} days`} onMouseLeave={() => setHover(null)}>
+        <Grid max={max} unit=" min" />
+        {series.map((d, i) => {
+          const x = PAD.l + i * slot + (slot - bw) / 2, top = y(d.minutes), hgt = PAD.t + innerH - top;
+          return (
+            <g key={d.date} onMouseEnter={() => setHover(i)} onFocus={() => setHover(i)} tabIndex={0}>
+              <rect x={PAD.l + i * slot} y={PAD.t} width={slot} height={innerH} fill="transparent" />
+              <path className="shc-bar" d={`M${x},${PAD.t + innerH} v${-Math.max(hgt - 4, 0)} q0,-4 4,-4 h${bw - 8} q4,0 4,4 v${Math.max(hgt - 4, 0)} z`} opacity={hover === null || hover === i ? 1 : 0.55} />
+              <text x={x + bw / 2} y={H - 8} textAnchor="middle" className="shc-axis">{dayLabel(d.date)}</text>
+            </g>
+          );
+        })}
+        {usual ? <><line x1={PAD.l} x2={W - PAD.r} y1={y(usual)} y2={y(usual)} className="shc-limit" /><text x={W - PAD.r + 4} y={y(usual) + 4} className="shc-axis">usual</text></> : null}
+      </svg>
+      {h ? <div className="shc-tip" role="status"><b>{dayLabel(h.date)}</b> · {h.minutes} min</div> : <div className="shc-tip shc-tip--idle">Point at a day</div>}
+      <details className="shc-table"><summary>Show as a table</summary>
+        <table><thead><tr><th>Day</th><th>Minutes</th></tr></thead><tbody>{series.slice().reverse().map((d) => <tr key={d.date}><td>{dayLabel(d.date)}</td><td>{d.minutes}</td></tr>)}</tbody></table>
+      </details>
+    </figure>
+  );
+}

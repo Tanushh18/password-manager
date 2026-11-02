@@ -1,14 +1,14 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, getLocationCode, rotateLocationCode, getHubCode, rotateHubCode, getHomeWhere, saveHomeScenes, runHomeScene,
+  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, getHomeInsights, saveHomeHistory, deleteHomeHistory, saveHomeSpots, getLocationCode, rotateLocationCode, getHubCode, rotateHubCode, getHomeWhere, saveHomeScenes, runHomeScene,
   getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, getHomeLiveFrame, testHomeBrief, setHomePhonePerson, removeHomeDevice
 } from "../../api/client";
 import { Section, useConfirm } from "../Render/RenderUi";
 import { usePolling } from "../Render/renderHooks";
 import { errorMessage } from "../Render/renderUtils";
 import { ago, fmtBytes, fmtMinutes, daysLabel, stepLabel, STEP_CHOICES } from "../../lib/smartHome";
-import { TvTimeChart, SpeedChart } from "./HomeCharts";
+import { TvTimeChart, SpeedChart, CommuteChart } from "./HomeCharts";
 
 /** The settings every card here edits, loaded once. */
 export function useHomeSettings() {
@@ -620,7 +620,8 @@ export function FeaturesCard({ home, devices, goTo }) {
       ["Daily TV limit", s.tvLimit?.minutes ? "on" : "off", s.tvLimit?.minutes ? `${fmtMinutes(s.tvLimit.minutes)}, then ${s.tvLimit.action}` : "", "automations"],
       ["Late-night TV warning", s.tvLimit?.lateNight !== false ? "on" : "off", "", "automations"],
       ["Places and WhatsApp messages", (s.places || []).some((x) => x.enabled !== false) ? "on" : "off", `${(s.places || []).length} places`, "automations"],
-      ["Who is on the way home", s.homeSpot && s.eta?.enabled !== false ? "on" : "off", s.homeSpot ? "" : "Set your home location under Places", "automations"]
+      ["Who is on the way home", s.homeSpot && s.eta?.enabled !== false ? "on" : "off", s.homeSpot ? "" : "Set your home location under Places", "automations"],
+      ["Location history and insights", s.history?.enabled ? "on" : "off", "Off until you turn it on", "insights"]
     ]],
     ["Media and network", [
       ["Weather", s.weather?.city ? "on" : "off", s.weather?.city || "Set a city under Alerts and daily briefs", "security"],
@@ -691,6 +692,81 @@ export function LocationsCard() {
           </li>
         ))}</ul>
       ) : <p className="sh-dim">No phone is linked yet.</p>}
+      {confirm.dialog}
+    </Section>
+  );
+}
+
+
+/* ───────── family insights: places, trips, commute, driving ───────── */
+
+const tripTime = (ms) => new Date(ms).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
+
+export function InsightsCard() {
+  const [d, setD] = useState(null);
+  const [names, setNames] = useState({});
+  const [limit, setLimit] = useState(80);
+  const confirm = useConfirm();
+  const load = useCallback(async () => { try { const r = await getHomeInsights(); setD(r); setLimit(r.speedKmh); } catch (e) { toast.error(errorMessage(e, "Could not load.")); } }, []);
+  useEffect(() => { load(); }, [load]);
+  if (!d) return null;
+  const toggle = async (enabled) => { try { await saveHomeHistory({ enabled }); toast.success(enabled ? "Keeping a location history from now on." : "Stopped keeping the history."); load(); } catch (e) { toast.error(errorMessage(e, "Could not save.")); } };
+  const wipe = async () => {
+    if (!(await confirm.ask({ title: "Delete the whole location history?", message: "Every stored location is erased. Named places stay.", confirmLabel: "Delete it", danger: true }))) return;
+    try { const r = await deleteHomeHistory(); toast.success(`Deleted ${r.deleted} locations.`); load(); } catch (e) { toast.error(errorMessage(e, "Could not delete.")); }
+  };
+  const nameIt = async (c) => {
+    const name = (names[c.id] || "").trim();
+    if (!name) return;
+    try { await saveHomeSpots([...d.spots, { name, lat: c.lat, lon: c.lon, radius: 150 }]); setNames({}); load(); } catch (e) { toast.error(errorMessage(e, "Could not save.")); }
+  };
+  const dropSpot = async (id) => { try { await saveHomeSpots(d.spots.filter((x) => x.id !== id)); load(); } catch (e) { toast.error(errorMessage(e, "Could not save.")); } };
+  return (
+    <Section title="Family insights" subtitle="Places, trips, the usual way home and a driving report, worked out from the phones’ locations. Shown only here and on the home tablet’s screen, never on a phone or the TV.">
+      <div className="sh-editor">
+        <label className="sh-switch"><input type="checkbox" checked={d.enabled} onChange={(e) => toggle(e.target.checked)} />Keep a location history (60 days)</label>
+        <p className="sh-dim">Off until you turn it on. When on, Stashr keeps a location about every 2 minutes or 150 m for each family phone (the phones send one every 1–30 minutes, so everything below is approximate). Hard braking cannot be measured. The Stashr Location app tells each person that their Stashr owner can turn a history on.</p>
+        <div className="sh-row">
+          <label className="sh-dim">Speed to flag <input type="number" min="30" max="200" value={limit} onChange={(e) => setLimit(Number(e.target.value))} style={{ width: 72 }} aria-label="Speed limit in km/h" /> km/h</label>
+          <button className="rd-btn rd-btn--quiet" onClick={async () => { try { await saveHomeHistory({ speedKmh: limit }); toast.success("Saved."); load(); } catch (e) { toast.error(errorMessage(e, "Could not save.")); } }}>Save</button>
+          <button className="rd-btn rd-btn--danger-quiet" onClick={wipe}>Delete the history</button>
+        </div>
+      </div>
+      {!d.homeSet ? <p className="sh-bad">Set the home location first (Automations → Places → Home location).</p> : null}
+      {d.candidates.length ? (
+        <div className="sh-editor">
+          <b>Places Stashr found</b>
+          <p className="sh-dim">Spots where a phone stayed 20+ minutes on 3 or more different days. Name them (Office, School, Market…) to get trips and the usual commute.</p>
+          <ul className="sh-lan">{d.candidates.map((c) => (
+            <li key={c.id}>
+              <div className="sh-lan__main"><b>{c.guess}</b><span>{c.days} days · {c.visits} visits · about {c.avgHours} h each · <a href={`https://www.openstreetmap.org/?mlat=${c.lat}&mlon=${c.lon}#map=17/${c.lat}/${c.lon}`} target="_blank" rel="noreferrer">see on a map</a></span></div>
+              <input value={names[c.id] || ""} onChange={(e) => setNames({ ...names, [c.id]: e.target.value })} placeholder="Name, e.g. Office" maxLength={30} aria-label="Name this place" />
+              <button className="rd-btn rd-btn--quiet" onClick={() => nameIt(c)} disabled={!(names[c.id] || "").trim()}>Save</button>
+            </li>
+          ))}</ul>
+        </div>
+      ) : null}
+      {d.spots.length ? <p className="sh-dim">Named places: {d.spots.map((x) => <span key={x.id} className="sh-chip">{x.name} <button className="rd-btn rd-btn--quiet" aria-label={`Remove ${x.name}`} onClick={() => dropSpot(x.id)}>×</button></span>)}</p> : null}
+      {d.enabled && !d.people.length ? <p className="sh-dim">Nothing yet: places and trips appear after a few days of locations.</p> : null}
+      {d.people.map((p) => (
+        <div key={p.id} className="sh-feat">
+          <h3>{p.name}</h3>
+          {p.commute.map((c) => (
+            <div key={c.place}>
+              <p><b>{c.place} → Home</b>: usually leaves around <b>{c.usualLeave}</b>, the way takes about <b>{c.usualMinutes} min</b> ({c.trips} trips).</p>
+              <CommuteChart series={c.series} usual={c.usualMinutes} />
+            </div>
+          ))}
+          <p><b>Last 7 days of driving</b>: {p.driving.trips} trips · {p.driving.km} km · highest speed seen {p.driving.maxKmh} km/h · {p.driving.over} trip{p.driving.over === 1 ? "" : "s"} over {p.driving.limit} km/h</p>
+          <p className="sh-dim">{p.driving.note}</p>
+          {p.trips.length ? (
+            <details className="sh-table"><summary>Recent trips</summary>
+              <table><thead><tr><th>When</th><th>From → to</th><th>Time</th><th>Km</th><th>Avg</th><th>Top seen</th></tr></thead>
+                <tbody>{p.trips.slice(0, 15).map((t) => <tr key={t.from}><td>{tripTime(t.from)}</td><td>{t.fromName || "somewhere"} → {t.toName || "somewhere"}</td><td>{t.minutes} min</td><td>{t.km}</td><td>{t.avgKmh}</td><td>{t.maxKmh || "—"}</td></tr>)}</tbody></table>
+            </details>
+          ) : null}
+        </div>
+      ))}
       {confirm.dialog}
     </Section>
   );

@@ -52,6 +52,29 @@ All are listed with download buttons on the website's **/apps** page.
   Linking is rate-limited and capped by the device limit. Replace the code any time; linked phones stay linked.
 - **ETA:** by road, with live traffic when `MAPBOX_TOKEN` (a public `pk.` token) is set on the server: Mapbox's `driving-traffic` time for right now, shown as “live traffic” on the page. Without it, or when Mapbox does not answer: by road without traffic. The server asks an OSRM routing server (the free public one at router.project-osrm.org, or your own through `OSRM_URL`) for the driving time and distance from the phone to home, sending only those two coordinates, at most once per 3 minutes or 400 m per phone. No live traffic. At walking pace, when the service is down or timed out (2.5 s), when switched off per account (Home location → *Use real roads*), or server-wide with `HOME_ROUTING=off`, it falls back to a straight line × 1.3 at the phone's speed (or 25 km/h).
 
+## Local mode (when the server or the internet is down)
+- The tablet (Stashr Hub 1.8+) runs a tiny LAN server on port 8765 and advertises `_stashr-hub._tcp`. Server answers carry a shared key
+  (`local.key`) that the tablet and the TV store while they are online. If the server cannot be reached for 90 s (tablet) / 45 s (TV):
+  - the **tablet** shows "Offline mode", keeps its last dashboard, runs scenes and typed or spoken sentences with a small built-in
+    rule set (volume, play/pause, open app, home/back, camera, "kaun ghar par hai") and sends them to the TV through the LAN;
+  - the **TV** reports to the tablet instead of the server (every 10 s), gets those commands and the "Open the door" banners, and tries
+    the server again every minute;
+  - an **arrival** (a Wi-Fi device you gave a person, back after 10+ minutes) is announced on the tablet and the TV, and uploaded as a
+    note "(offline mode) …" when the server is back; camera photos and clips are queued on the tablet (200 MB) and uploaded later.
+- Needs: the tablet and TV have been online once (to learn the key), a tablet with a steady IP, and a Wi-Fi that allows multicast.
+  The TV uses a raw socket to the private address, so Android's cleartext rule is not involved. The key is sent unencrypted on your own Wi-Fi.
+- Not available offline: phones' locations, ETA, Telegram, weather and headlines (the last copy is shown), anything the small rule set doesn't know.
+
+## Family insights (website and tablet only)
+- *Insights* tab: switch **Keep a location history** on (off by default). Stashr keeps about one fix per 2 minutes or 150 m per phone for
+  60 days (`HomeTrack`), and can erase everything from the website. From it: places found (stops of 20+ min on 3+ days, which you name:
+  Office, School…), trips between places, the usual leaving time and way home per place with a 14-day chart, and a 7-day driving
+  report (trips, km, highest speed seen in a fix, trips over your limit). Fixes are 1–30 minutes apart, so speeds and times are
+  approximate and hard braking is not measured.
+- The tablet's *Safar* card shows today's trips and "leave now" lines ("Papa: traffic zyada hai (45 min, aam taur par 32). Abhi niklo"),
+  using live traffic (Mapbox) when set. Nothing from the history is sent to a phone or the TV, and nothing is spoken.
+- The Stashr Location app tells each person in its privacy card that the owner can turn a history on.
+
 ## Two servers
 Stashr runs on two servers that share one database (`password-manager-server-g305` and `password-manager-server-xxdr`, the same list
 the main app uses). Stashr Hub and Stashr Location keep both addresses (Setup → Advanced → server and backup server), try the one

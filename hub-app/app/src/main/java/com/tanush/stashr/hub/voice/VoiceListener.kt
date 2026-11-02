@@ -155,11 +155,11 @@ object VoiceListener {
     private fun send(text: String) {
         val c = app ?: return
         thread {
-            val reply = try {
+            val reply = if (com.tanush.stashr.hub.local.LocalMode.offline) com.tanush.stashr.hub.local.LocalMode.answer(c, text) else try {
                 val r = Api(c).assistant(text)
                 if (r.optString("open") == "today") main.post { c.startActivity(Intent(c, com.tanush.stashr.hub.ui.TodayActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)) }
                 r.optString("reply", "Done.")
-            } catch (e: Exception) { e.message ?: "Could not reach Stashr." }
+            } catch (e: Exception) { if (e is java.io.IOException && e !is com.tanush.stashr.hub.core.ApiError) com.tanush.stashr.hub.local.LocalMode.answer(c, text) else e.message ?: "Could not reach Stashr." }
             c.sendBroadcast(Intent(ACTION_VOICE).setPackage(c.packageName).putExtra("heard", text).putExtra("reply", reply))
         }
     }

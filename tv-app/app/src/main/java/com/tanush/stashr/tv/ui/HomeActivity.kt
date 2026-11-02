@@ -41,6 +41,7 @@ class HomeActivity : Activity() {
     private lateinit var ui: Ui
     private val main = Handler(Looper.getMainLooper())
     private lateinit var clock: TextView
+    private lateinit var offlineChip: TextView
     private lateinit var date: TextView
     private lateinit var hello: TextView
     private lateinit var syncLine: TextView
@@ -70,7 +71,7 @@ class HomeActivity : Activity() {
         super.onCreate(savedInstanceState)
         ui = Ui(this)
         setContentView(build())
-        tvHome = try { Prefs(this).homeCache.takeIf { it.isNotEmpty() }?.let { Logic.parseTvHome(JSONObject(it)) } } catch (e: Exception) { null }
+        tvHome = try { Prefs(this).takeIf { com.tanush.stashr.tv.core.LocalPolicy.homeFresh(it.homeCacheAt, System.currentTimeMillis()) }?.homeCache?.takeIf { it.isNotEmpty() }?.let { Logic.parseTvHome(JSONObject(it)) } } catch (e: Exception) { null }
         renderHome()
         androidx.core.content.ContextCompat.registerReceiver(this, screenOn, IntentFilter(Intent.ACTION_SCREEN_ON), androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
     }
@@ -98,7 +99,8 @@ class HomeActivity : Activity() {
         val head = ui.row(24).apply { setPadding(0, 0, ui.dp(56), 0) }
         val left = ui.column(4)
         hello = ui.text("", 22f, ui.muted); clock = ui.text("", 64f, ui.text, bold = true); date = ui.text("", 22f, ui.muted)
-        left.addView(hello); left.addView(clock); left.addView(date)
+        offlineChip = ui.text("", 18f, ui.accent, bold = true).apply { visibility = View.GONE }
+        left.addView(hello); left.addView(clock); left.addView(date); left.addView(offlineChip)
         head.addView(ui.fill(left))
         val right = ui.column(6).apply { gravity = Gravity.END }
         weatherChip = ui.text("", 24f, ui.text, bold = true).apply { gravity = Gravity.END }
@@ -150,7 +152,7 @@ class HomeActivity : Activity() {
         thread {
             try {
                 val j = Api(this).tvHome()
-                Prefs(this).homeCache = j.toString()
+                Prefs(this).homeCache = j.toString(); Prefs(this).homeCacheAt = System.currentTimeMillis()
                 val parsed = Logic.parseTvHome(j)
                 main.post { tvHome = parsed; renderHome(); maybeMorning() }
             } catch (e: Exception) { /* keep what is on screen */ }
@@ -230,6 +232,9 @@ class HomeActivity : Activity() {
         clock.text = clockFmt.format(now); date.text = dateFmt.format(now)
         hello.text = Logic.greeting(Calendar.getInstance().get(Calendar.HOUR_OF_DAY))
         val prefs = Prefs(this)
+        val local = com.tanush.stashr.tv.service.TvService.localMode
+        offlineChip.visibility = if (local) View.VISIBLE else View.GONE
+        if (local) offlineChip.text = "●  Offline mode · working through the tablet"
         val s = com.tanush.stashr.tv.service.TvService.syncer?.state
         syncLine.text = when {
             !prefs.linked -> "Not linked"

@@ -51,7 +51,12 @@ class Prefs(ctx: Context) {
         get() = p.getBoolean("cameraVideo", true)
         set(v) = p.edit().putBoolean("cameraVideo", v).apply()
 
+    /** The key for local mode on the home Wi-Fi, handed out by the server with every report answer. */
+    var localKey: String
+        get() = p.getString("localKey", "") ?: ""
+        set(v) = p.edit().putString("localKey", v).apply()
+
     val paired get() = token.startsWith("sh_") && role.isNotEmpty()
 
-    fun forget() = p.edit().remove("token").remove("role").remove("deviceName").apply()
+    fun forget() = p.edit().remove("localKey").remove("token").remove("role").remove("deviceName").apply()
 }

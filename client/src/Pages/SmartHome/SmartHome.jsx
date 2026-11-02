@@ -8,7 +8,7 @@ import { Section, Skeleton, Empty, useConfirm } from "../Render/RenderUi";
 import { usePolling } from "../Render/renderHooks";
 import { errorMessage } from "../Render/renderUtils";
 import { stateOf, STATE_LABEL, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName, splitStale, TAG_LABEL } from "../../lib/smartHome";
-import { LocationsCard, HomeScreenCard, FeaturesCard, PairCard, PeopleCard, PhonesCard, AlertsCard, TvTimeCard, ScenesCard, SchedulesCard, PlacesCard, SpeedCard, CameraCard, SlideshowCard, useHomeSettings } from "./HomeExtras";
+import { InsightsCard, LocationsCard, HomeScreenCard, FeaturesCard, PairCard, PeopleCard, PhonesCard, AlertsCard, TvTimeCard, ScenesCard, SchedulesCard, PlacesCard, SpeedCard, CameraCard, SlideshowCard, useHomeSettings } from "./HomeExtras";
 import "../Render/RenderDashboard.css";
 import "./SmartHome.css";
 
@@ -393,7 +393,7 @@ export default function SmartHome() {
   const smartHub = list.find((d) => d.kind === "hub" && d.status?.agent === "stashr-hub");
   const phones = list.filter((d) => d.kind === "phone");
 
-  const TABS = [["overview", "Overview"], ["devices", "Devices"], ["security", "Camera & alerts"], ["automations", "Automations"], ["media", "Media & network"]];
+  const TABS = [["overview", "Overview"], ["devices", "Devices"], ["security", "Camera & alerts"], ["automations", "Automations"], ["insights", "Insights"], ["media", "Media & network"]];
   const [tab, setTabState] = useState(() => { try { const t = localStorage.getItem("smartHomeTab"); return TABS.some(([k]) => k === t) ? t : "overview"; } catch { return "overview"; } });
   const goTo = (t) => { setTabState(t); try { localStorage.setItem("smartHomeTab", t); } catch { /* optional */ } window.scrollTo?.({ top: 0 }); };
 
@@ -436,6 +436,9 @@ export default function SmartHome() {
         <SchedulesCard home={home} />
         <PlacesCard home={home} phones={phones} hasSmartHub={Boolean(smartHub)} />
         <TvTimeCard home={home} />
+      </>) : null}
+      {tab === "insights" ? (<>
+        <InsightsCard />
       </>) : null}
       {tab === "media" ? (<>
         <SpeedCard hasSmartHub={Boolean(smartHub)} send={send} hubId={smartHub?.id} />

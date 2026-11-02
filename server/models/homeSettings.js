@@ -34,6 +34,11 @@ const homeSettingsSchema = new mongoose.Schema({
     // Where home is, for "Papa is 10 minutes away" (the phones' location shared with Stashr Hub).
     news: { enabled: { type: Boolean, default: true }, lang: { type: String, enum: ["en", "hi", "both"], default: "en" }, count: { type: Number, default: 6 } },
     rain: { type: Boolean, default: true },       // "Chhatri le lo" to the phone of someone who leaves when rain is likely
+    // Shared secret for the tablet's local mode on the home Wi-Fi (the tablet and the TV use it to talk to each other when the server is unreachable).
+    localKey: { type: String, default: "" },
+    // Family insights: keep a location history for places, trips and the commute (off until the owner turns it on).
+    history: { enabled: { type: Boolean, default: false }, speedKmh: { type: Number, default: 80 } },
+    spots: { type: [mongoose.Schema.Types.Mixed], default: [] },   // named places: { id, name, lat, lon, radius }
     homeSpot: { lat: Number, lon: Number, radius: { type: Number, default: 200 } },
     eta: { enabled: { type: Boolean, default: true }, maxKm: { type: Number, default: 40 }, notifyMinutes: { type: Number, default: 15 }, routing: { type: Boolean, default: true }, toTablet: { type: Boolean, default: true }, toTv: { type: Boolean, default: true }, toPhones: { type: Boolean, default: true } },
     locationCode: { type: String, default: "", index: true },

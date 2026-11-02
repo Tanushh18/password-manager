@@ -109,6 +109,20 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] Saturday evening with everyone home: "Aaj movie night?" row with USB movies; with someone out: no row.
 - [ ] Nothing on the tablet or TV speaks.
 
+## 7h. Local mode (server down)
+- [ ] Tablet and TV online once (so they hold the key). Then block the server (turn the router's internet off, or unplug the WAN cable).
+- [ ] After ~1.5 min the tablet shows "Offline mode"; after ~1–2 min the TV shows its "Offline mode" chip.
+- [ ] On the tablet press a scene / type "volume up" / "pause": the TV obeys through the LAN.
+- [ ] A person's phone (labelled on the Wi-Fi) joins after 10+ minutes away: "Open the door: … arrived home" on the tablet and on the TV, no sound.
+- [ ] Trigger the camera while offline; plug the internet back: the photos/clips arrive, and the offline arrival appears in "What happened" as "(offline mode) …".
+- [ ] Router with client isolation / no multicast: does the TV still find the tablet (saved address)? Note the result.
+
+## 7i. Family insights
+- [ ] Insights tab: turn history on; after 3–4 days, "Places Stashr found" lists the office; name it; trips and the commute chart appear.
+- [ ] The tablet's Safar card shows a "leave now" line around the usual leaving time at the office, and today's trips.
+- [ ] Nothing about history shows on the TV or on any phone (apart from the privacy line in Stashr Location).
+- [ ] "Delete the history" erases it; switching it off stops new fixes.
+
 ## 8. Updates (OTA)
 - [ ] Push a change under `hub-app/` to `main`; the GitHub Release is created and is **not** "latest".
 - [ ] The app (or "check_update") finds it, verifies it and Android asks for one tap to install.

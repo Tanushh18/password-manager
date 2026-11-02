@@ -650,3 +650,78 @@ describe("TV home: weather, headlines, movie night; rain reminder", () => {
     });
 });
 
+describe("family insights", () => {
+    const HomeTrack = require("../models/homeTrack");
+    const routeMod = require("../utils/homeRoute");
+    const insightsRouter = require("../router/homeInsights");
+    const DAY = 24 * 3600 * 1000;
+
+    async function seed(auth) {
+        const code = (await request(app).get("/home/location-code").set(auth)).body.code;
+        const link = (await request(app).post("/home/agent/link").send({ code, name: "Papa" })).body;
+        await request(app).put("/home/settings").set(auth).send({ homeSpot: { lat: 28.6139, lon: 77.209, radius: 200 } });
+        const owner = (await HomeSettings.findOne({}).lean()).owner;
+        const dev = await HomeDevice.findOne({ name: "Papa" }).lean();
+        // five working days: home 19:00-08:30 (IST), office 09:30-18:00, a drive each way with two fixes on the way
+        const base = Date.UTC(2026, 9, 26, 0, 0) - 5.5 * 3600 * 1000;   // Mon 26 Oct 2026 00:00 IST
+        const rows = [];
+        const at = (d, h, m) => base + d * DAY + (h * 60 + m) * 60000;
+        for (let d = 0; d < 5; d++) {
+            for (let m = 0; m <= 90; m += 10) rows.push({ at: at(d, 7, 0) + m * 60000, lat: 28.6139, lon: 77.209 });                 // home 07:00-08:30
+            rows.push({ at: at(d, 8, 50), lat: 28.64, lon: 77.209, speed: 14 }, { at: at(d, 9, 10), lat: 28.68, lon: 77.209, speed: 22 });
+            for (let m = 0; m <= 510; m += 15) rows.push({ at: at(d, 9, 30) + m * 60000, lat: 28.70, lon: 77.209 });                 // office 09:30-18:00
+            rows.push({ at: at(d, 18, 20), lat: 28.68, lon: 77.209, speed: 30 }, { at: at(d, 18, 45), lat: 28.64, lon: 77.209, speed: 25 });
+            for (let m = 0; m <= 120; m += 15) rows.push({ at: at(d, 19, 10) + m * 60000, lat: 28.6139, lon: 77.209 });             // home again
+        }
+        await HomeTrack.insertMany(rows.map((r) => ({ owner, phone: dev._id, person: "Papa", at: new Date(r.at), lat: r.lat, lon: r.lon, speed: r.speed })));
+        return { owner, dev, link, base };
+    }
+
+    test("nothing is kept until the owner turns the history on; then places, trips and the commute appear", async () => {
+        const auth = await signUp();
+        const code = (await request(app).get("/home/location-code").set(auth)).body.code;
+        const t = (await request(app).post("/home/agent/link").send({ code, name: "Mom" })).body.token;
+        await request(app).post("/home/agent/location").set(bearer(t)).send({ lat: 28.6, lon: 77.2, acc: 20, at: Date.now() });
+        expect(await HomeTrack.countDocuments({})).toBe(0);                              // off by default
+        await request(app).put("/home/history").set(auth).send({ enabled: true });
+        await request(app).post("/home/agent/location").set(bearer(t)).send({ lat: 28.6, lon: 77.2, acc: 20, at: Date.now() + 1000 });
+        expect(await HomeTrack.countDocuments({})).toBe(1);
+        expect((await request(app).put("/home/history").set(auth).send({ speedKmh: 5 })).status).toBe(400);
+        expect((await request(app).delete("/home/history").set(auth)).body.deleted).toBe(1);
+        expect(await HomeTrack.countDocuments({})).toBe(0);
+    });
+
+    test("the office is found, can be named, and the usual leaving time and way home are worked out", async () => {
+        const auth = await signUp();
+        const { owner, base } = await seed(auth);
+        await request(app).put("/home/history").set(auth).send({ enabled: true, speedKmh: 100 });
+        const first = (await request(app).get("/home/insights").set(auth)).body;
+        expect(first.candidates.length > 0).toBe(true);
+        expect(Math.abs(first.candidates[0].lat - 28.70) < 0.01).toBe(true);
+        const named = await request(app).put("/home/spots").set(auth).send({ spots: [{ name: "Office", lat: first.candidates[0].lat, lon: first.candidates[0].lon, radius: 200 }] });
+        expect(named.status).toBe(200);
+        expect((await request(app).put("/home/spots").set(auth).send({ spots: [{ name: "Home", lat: 1, lon: 1 }] })).status).toBe(400);
+        const out = (await request(app).get("/home/insights").set(auth)).body;
+        expect(out.candidates.length).toBe(0);                                           // named now
+        const papa = out.people[0];
+        expect(papa.name).toBe("Papa");
+        expect(papa.commute[0].place).toBe("Office");
+        expect(papa.commute[0].usualLeave >= "17:55" && papa.commute[0].usualLeave <= "18:05").toBe(true);
+        expect(papa.commute[0].trips).toBe(5);
+        expect(papa.driving.trips > 0).toBe(true);
+        expect(papa.driving.maxKmh).toBe(108);                                            // 30 m/s seen in a fix
+        expect(papa.driving.over > 0).toBe(true);                                         // limit set to 100
+        // the tablet's "leave now" nudge: it is Friday 17:50 IST and Papa is at the office; the road is slow
+        const friday = base + 4 * DAY + (17 * 60 + 50) * 60000;
+        await HomeDevice.updateOne({ name: "Papa" }, { $set: { "status.location": { lat: 28.70, lon: 77.209, acc: 20, at: friday - 60000 } } });
+        routeMod.use(async () => ({ seconds: 120 * 60, meters: 14000, traffic: true }));   // the usual way takes ~70 min in this data
+        try {
+            const settings = await automation.settingsOf(owner);
+            const lines = await insightsRouter.tabletLines(owner, settings, friday);
+            
+            expect(lines.nudges.length).toBe(1);
+            expect(/traffic zyada hai/.test(lines.nudges[0])).toBe(true);
+        } finally { routeMod.use(null); }
+    });
+});
+

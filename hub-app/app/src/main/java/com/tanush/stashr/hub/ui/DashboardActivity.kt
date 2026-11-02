@@ -33,6 +33,7 @@ import com.tanush.stashr.hub.core.Api
 import com.tanush.stashr.hub.core.HubService
 import com.tanush.stashr.hub.core.Prefs
 import com.tanush.stashr.hub.core.Ui
+import com.tanush.stashr.hub.local.LocalMode
 import com.tanush.stashr.hub.update.Updater
 import com.tanush.stashr.hub.voice.VoiceListener
 import kotlinx.coroutines.CoroutineScope
@@ -67,6 +68,8 @@ class DashboardActivity : Activity() {
     private lateinit var today: LinearLayout
     private lateinit var events: LinearLayout
     private lateinit var scenes: LinearLayout
+    private lateinit var offlineBanner: TextView
+    private lateinit var safar: LinearLayout
     private lateinit var reply: TextView
     private lateinit var statusLine: TextView
     private lateinit var cameraSwitch: Switch
@@ -89,6 +92,10 @@ class DashboardActivity : Activity() {
         }
     }
 
+    private val stateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) { offlineBanner.visibility = if (i.getBooleanExtra("offline", false)) View.VISIBLE else View.GONE }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -101,6 +108,8 @@ class DashboardActivity : Activity() {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(voiceReceiver, IntentFilter(VoiceListener.ACTION_VOICE))
         }
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(stateReceiver, IntentFilter(LocalMode.ACTION_STATE), Context.RECEIVER_NOT_EXPORTED)
+        else { @Suppress("UnspecifiedRegisterReceiverFlag") registerReceiver(stateReceiver, IntentFilter(LocalMode.ACTION_STATE)) }
         askPermissions()
         tick()
         refresh()
@@ -118,6 +127,12 @@ class DashboardActivity : Activity() {
         titles.addView(ui.h1("Your home"))
         head.addView(ui.fill(titles))
         col.addView(head)
+
+        offlineBanner = ui.text("Offline mode: no connection to Stashr. The house still works on the home Wi-Fi.", 14f, ui.c.warn, bold = true).apply {
+            background = ui.rounded(ui.c.sunken, ui.c.warn); setPadding(ui.dp(14), ui.dp(10), ui.dp(14), ui.dp(10))
+            visibility = if (LocalMode.offline) View.VISIBLE else View.GONE
+        }
+        col.addView(offlineBanner)
 
         coming = ui.card().apply { visibility = View.GONE }
         col.addView(coming)
@@ -153,6 +168,10 @@ class DashboardActivity : Activity() {
         scenes = ui.row(8)
         sceneCard.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(scenes) })
         left.addView(sceneCard)
+
+        // Safar: nudges and today's trips, only when there is something
+        safar = ui.card("Safar").apply { visibility = View.GONE }
+        left.addView(safar)
 
         // Who is home
         val peopleCard = ui.card("Who is home")
@@ -268,15 +287,30 @@ class DashboardActivity : Activity() {
         thread {
             try {
                 val d = Api(this).dashboard()
+                LocalMode.saveDashboard(this, d.toString())
                 main.post { render(d) }
             } catch (e: Exception) {
-                main.post { if (weather.text.isEmpty()) weather.text = "Could not reach Stashr: ${e.message}" }
+                // No server: show the last dashboard that did arrive.
+                val cached = LocalMode.cachedDashboard(this)
+                main.post {
+                    if (cached != null) render(cached)
+                    else if (weather.text.isEmpty()) weather.text = "Could not reach Stashr: ${e.message}"
+                }
             }
         }
         main.postDelayed({ refresh() }, 30_000)
     }
 
     private fun render(d: JSONObject) {
+        offlineBanner.visibility = if (LocalMode.offline) View.VISIBLE else View.GONE
+        safar.removeAllViews()
+        val nudges = d.optJSONArray("nudges") ?: JSONArray(); val trips = d.optJSONArray("trips") ?: JSONArray()
+        safar.visibility = if (nudges.length() + trips.length() > 0) View.VISIBLE else View.GONE
+        if (safar.visibility == View.VISIBLE) {
+            safar.addView(ui.text("Safar", 16f, ui.c.text, bold = true))
+            for (i in 0 until nudges.length()) safar.addView(ui.text(nudges.optString(i), 15f, ui.c.text, bold = true))
+            for (i in 0 until trips.length()) safar.addView(ui.dim(trips.optString(i)))
+        }
         val soon = d.optJSONArray("coming") ?: JSONArray()
         coming.removeAllViews()
         coming.visibility = if (soon.length() > 0) View.VISIBLE else View.GONE
@@ -356,7 +390,10 @@ class DashboardActivity : Activity() {
 
     private fun runScene(id: String, name: String) {
         thread {
-            val msg = try { val n = Api(this).runScene(id).optInt("sent"); if (n > 0) "$name: sent $n command${if (n > 1) "s" else ""}." else "$name: no device is ready." } catch (e: Exception) { e.message ?: "Could not run it." }
+            val local = { val n = LocalMode.runScene(this, id); if (n > 0) "$name: ran $n step${if (n > 1) "s" else ""} on the home Wi-Fi (offline mode)." else "$name: nothing could run without the server." }
+            val msg = if (LocalMode.offline) local() else try { val n = Api(this).runScene(id).optInt("sent"); if (n > 0) "$name: sent $n command${if (n > 1) "s" else ""}." else "$name: no device is ready." }
+                catch (e: java.io.IOException) { if (e is com.tanush.stashr.hub.core.ApiError) (e.message ?: "Could not run it.") else local() }
+                catch (e: Exception) { e.message ?: "Could not run it." }
             main.post { showReply("", msg) }
         }
     }
@@ -366,7 +403,9 @@ class DashboardActivity : Activity() {
         if (t.isEmpty()) return
         showReply(t, "…")
         thread {
-            val r = try { Api(this).assistant(t).optString("reply", "Done.") } catch (e: Exception) { e.message ?: "Could not reach Stashr." }
+            val r = if (LocalMode.offline) LocalMode.answer(this, t) else try { Api(this).assistant(t).optString("reply", "Done.") }
+                catch (e: java.io.IOException) { if (e is com.tanush.stashr.hub.core.ApiError) (e.message ?: "Could not reach Stashr.") else LocalMode.answer(this, t) }
+                catch (e: Exception) { e.message ?: "Could not reach Stashr." }
             main.post { showReply(t, r) }
         }
     }
@@ -478,6 +517,7 @@ class DashboardActivity : Activity() {
         scope.cancel()
         oneShot?.destroy()
         try { unregisterReceiver(voiceReceiver) } catch (e: Exception) { }
+        try { unregisterReceiver(stateReceiver) } catch (e: Exception) { }
         super.onDestroy()
     }
 

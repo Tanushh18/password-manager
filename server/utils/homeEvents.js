@@ -3,9 +3,9 @@ const User = require("../models/schema");
 const bot = require("./telegramBot");
 
 /** Writes one line to the Home timeline, and (when asked) sends it to the user's Telegram bot. Never throws. */
-async function record({ owner, device, deviceName, kind, text, notify = false }) {
+async function record({ owner, device, deviceName, kind, text, notify = false, at }) {
     try {
-        await HomeEvent.create({ owner, device, deviceName: deviceName || "", kind, text: String(text).slice(0, 300) });
+        await HomeEvent.create({ owner, device, deviceName: deviceName || "", kind, text: String(text).slice(0, 300), ...(at ? { at } : {}) });
         if (notify) {
             // Only what the Telegram message needs: not the vault, the photo library or the monitoring histories.
             const skip = Object.fromEntries([...User.HISTORY_FIELDS, ...User.PHOTO_FIELDS, "passwords"].map((f) => [f, 0]));

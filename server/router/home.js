@@ -323,6 +323,16 @@ async function ingest(d, body, seenAt = new Date()) {
         events.push({ kind: "online", text: `${d.name} is back online`, notify: false });
     }
     for (const e of events.slice(0, 30)) await record({ ...base, ...e });
+    // Things the tablet noticed while the server could not be reached (local mode), with the time they happened.
+    if (d.kind === "hub" && Array.isArray(body.localEvents)) {
+        const nowMs = now.getTime();
+        for (const le of body.localEvents.slice(0, 100)) {
+            if (!le || !["arrived", "left", "camera", "local"].includes(le.kind) || typeof le.text !== "string" || !le.text.trim()) continue;
+            const at = Number(le.at);
+            if (!Number.isFinite(at) || at > nowMs + 60000 || at < nowMs - 3 * 24 * 3600 * 1000) continue;
+            await record({ ...base, kind: le.kind === "local" ? "local" : le.kind, text: `(offline mode) ${le.text.trim().slice(0, 250)}`, at: new Date(at) });
+        }
+    }
     // The TV's USB drive lists what it holds; complete copies of Drive movies can be cleared from Drive.
     if (d.kind === "tv") void movies.settle(d.owner, status.movies);
 
@@ -437,7 +447,10 @@ router.post("/home/agent/report", agentLimiter, (req, res, next) => agentAuth(re
                 childCommands[key] = r.commands || [];
             }
         }
-        return res.json({ ok: true, commands: own.commands, childCommands, serverTime: new Date().toISOString() });
+        const out = { ok: true, commands: own.commands, childCommands, serverTime: new Date().toISOString() };
+        // The key for the tablet's local mode (tablet and TV talk to each other on the home Wi-Fi when the server is unreachable).
+        if (d.kind === "hub" || d.kind === "tv") out.local = { key: await automation.localKeyOf(d.owner), port: 8765 };
+        return res.json(out);
     } catch (e) { return fail(res, e, "Could not save the report."); }
 });
 

@@ -86,4 +86,55 @@ class LogicTest {
         assertNull(Logic.volumeTarget(JSONObject("""{}"""), 3, 15))
         assertNull(Logic.volumeTarget(JSONObject("""{"action":"up"}"""), 3, 0))
     }
+
+    @Test fun goesLocalAfter45SecondsOfFailures() {
+        assertEquals(false, com.tanush.stashr.tv.core.LocalPolicy.shouldGoLocal(0, 100_000))          // no failure yet
+        assertEquals(false, com.tanush.stashr.tv.core.LocalPolicy.shouldGoLocal(10_000, 54_999))
+        assertEquals(true, com.tanush.stashr.tv.core.LocalPolicy.shouldGoLocal(10_000, 55_000))
+    }
+
+    @Test fun serverIsRetriedEveryMinuteWhileLocal() {
+        assertEquals(false, com.tanush.stashr.tv.core.LocalPolicy.shouldRetryServer(100_000, 159_999))
+        assertEquals(true, com.tanush.stashr.tv.core.LocalPolicy.shouldRetryServer(100_000, 160_000))
+    }
+
+    @Test fun onlyRealFailuresCount() {
+        val f = com.tanush.stashr.tv.core.LocalPolicy::isFailure
+        assertEquals(true, f(java.io.IOException("timeout")))
+        assertEquals(true, f(com.tanush.stashr.tv.core.ApiError(503, "down")))
+        assertEquals(false, f(com.tanush.stashr.tv.core.ApiError(401, "no")))
+        assertEquals(false, f(com.tanush.stashr.tv.core.ApiError(400, "bad")))
+        assertEquals(false, f(IllegalStateException("x")))
+    }
+
+    @Test fun cachedHomeScreenLivesOneDay() {
+        val p = com.tanush.stashr.tv.core.LocalPolicy
+        assertEquals(true, p.homeFresh(1_000, 1_000 + 23 * 3600_000L))
+        assertEquals(false, p.homeFresh(1_000, 1_000 + 25 * 3600_000L))
+        assertEquals(false, p.homeFresh(0, 5_000))
+    }
+
+    @Test fun tabletAddressCache() {
+        val p = com.tanush.stashr.tv.core.LocalPolicy
+        assertEquals(com.tanush.stashr.tv.core.LocalPolicy.Addr("192.168.1.20", 8765), p.parseAddr("192.168.1.20:8765"))
+        assertNull(p.parseAddr("8.8.8.8:8765"))              // not a home address: never used
+        assertNull(p.parseAddr("example.com:8765"))
+        assertNull(p.parseAddr("192.168.1.20:99999"))
+        assertNull(p.parseAddr(""))
+        assertEquals(com.tanush.stashr.tv.core.LocalPolicy.Addr("10.0.0.5", 1), p.cachedAddr("10.0.0.5:1", 1_000, 2_000))
+        assertNull(p.cachedAddr("10.0.0.5:1", 1_000, 1_000 + 31L * 24 * 3600_000))
+        assertNull(p.cachedAddr("10.0.0.5:1", 0, 2_000))
+        assertEquals(false, p.mayFindAgain(100_000, 129_999))
+        assertEquals(true, p.mayFindAgain(100_000, 130_000))
+        assertEquals(true, p.privateHost("172.20.1.1")); assertEquals(false, p.privateHost("172.32.1.1"))
+    }
+
+    @Test fun rawHttpReplyIsParsed() {
+        val plain = com.tanush.stashr.tv.net.RawHttp.parse("HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\n{\"ok\":true}EXTRA".toByteArray())
+        assertEquals(200, plain.status); assertEquals("{\"ok\":true}", plain.body)
+        val chunked = com.tanush.stashr.tv.net.RawHttp.parse("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n".toByteArray())
+        assertEquals("hello world", chunked.body)
+        val err = com.tanush.stashr.tv.net.RawHttp.parse("HTTP/1.1 401 Unauthorized\r\n\r\nno".toByteArray())
+        assertEquals(401, err.status); assertEquals("no", err.body)
+    }
 }

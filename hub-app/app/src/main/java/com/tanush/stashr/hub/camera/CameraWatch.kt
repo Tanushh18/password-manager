@@ -449,6 +449,7 @@ object CameraWatch {
                                 try {
                                     if (file.length() > 0) Api(svc).uploadMedia("video", reason, file.readBytes())
                                 } catch (e: Exception) {
+                                    if (com.tanush.stashr.hub.local.MediaQueue.worthKeeping(e) && file.length() > 0) { try { com.tanush.stashr.hub.local.MediaQueue.enqueue(svc, "video", reason, file.readBytes()) } catch (x: Exception) { } }
                                     error = "Clip upload failed: ${e.message ?: e.javaClass.simpleName}"
                                 } finally { file.delete() }
                             } else file.delete()
@@ -482,7 +483,10 @@ object CameraWatch {
         val s = scope ?: return
         s.launch {
             try { Api(c).uploadMedia(kind, reason, bytes) }
-            catch (e: Exception) { error = "Photo upload failed: ${e.message ?: e.javaClass.simpleName}" }
+            catch (e: Exception) {
+                if (com.tanush.stashr.hub.local.MediaQueue.worthKeeping(e)) com.tanush.stashr.hub.local.MediaQueue.enqueue(c, kind, reason, bytes)
+                error = "Photo upload failed: ${e.message ?: e.javaClass.simpleName}"
+            }
         }
     }
 }
