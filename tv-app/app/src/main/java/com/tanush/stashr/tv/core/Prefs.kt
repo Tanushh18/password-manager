@@ -71,6 +71,35 @@ class Prefs(ctx: Context) {
         get() = p.getLong("homeCacheAt", 0)
         set(v) = p.edit().putLong("homeCacheAt", v).apply()
 
+    /** Screen mirror: the phones that may cast without the PIN (JSON list) and the current 4-digit PIN. */
+    var castTokens: String
+        get() = p.getString("castTokens", "") ?: ""
+        set(v) = p.edit().putString("castTokens", v).apply()
+    private var castPinValue: String
+        get() = p.getString("castPin", "") ?: ""
+        set(v) = p.edit().putString("castPin", v).apply()
+    private var castPinAt: Long
+        get() = p.getLong("castPinAt", 0)
+        set(v) = p.edit().putLong("castPinAt", v).apply()
+
+    /** The PIN a phone must type (new every 24 hours and every time one is used). */
+    @Synchronized fun castPin(): String {
+        val now = System.currentTimeMillis()
+        if (castPinValue.length != 4 || com.tanush.stashr.tv.cast.Pin.needsNew(castPinAt, now)) { castPinValue = com.tanush.stashr.tv.cast.Pin.generate(); castPinAt = now }
+        return castPinValue
+    }
+    @Synchronized fun rotateCastPin() { castPinValue = com.tanush.stashr.tv.cast.Pin.generate(); castPinAt = System.currentTimeMillis() }
+
+    /** The last error worth showing on the website's health check (a crash, or a report/cast/sync failure), kept 7 days. */
+    fun healthError(): HealthError? {
+        val raw = p.getString("healthError", "") ?: ""
+        if (raw.isEmpty()) return null
+        return try { org.json.JSONObject(raw).let { HealthError(it.optLong("at"), it.optString("where"), it.optString("text")) } } catch (e: Exception) { null }
+    }
+    fun setHealthError(e: HealthError) {
+        p.edit().putString("healthError", org.json.JSONObject().put("at", e.at).put("where", e.where).put("text", e.text.take(Health.MAX_TEXT)).toString()).commit()   // commit: a crash may follow
+    }
+
     fun position(name: String): Long = p.getLong("pos_" + name.hashCode(), 0)
     fun savePosition(name: String, ms: Long) = p.edit().putLong("pos_" + name.hashCode(), ms).apply()
 

@@ -30,6 +30,7 @@ import android.widget.Switch
 import android.widget.TextView
 import com.tanush.stashr.hub.camera.CameraWatch
 import com.tanush.stashr.hub.core.Api
+import com.tanush.stashr.hub.core.Health
 import com.tanush.stashr.hub.core.HubService
 import com.tanush.stashr.hub.core.Prefs
 import com.tanush.stashr.hub.core.Ui
@@ -72,6 +73,7 @@ class DashboardActivity : Activity() {
     private lateinit var safar: LinearLayout
     private lateinit var reply: TextView
     private lateinit var statusLine: TextView
+    private lateinit var checkBox: LinearLayout
     private lateinit var cameraSwitch: Switch
     private lateinit var voiceSwitch: Switch
     private lateinit var micButton: TextView
@@ -201,6 +203,8 @@ class DashboardActivity : Activity() {
         val ctl = ui.card("This tablet (Stashr Hub)")
         statusLine = ui.dim("")
         ctl.addView(statusLine)
+        checkBox = ui.column(4)
+        ctl.addView(checkBox)
         cameraSwitch = switch("Camera alerts: send a photo when someone comes into view", prefs.cameraArmed) { on ->
             if (on) CameraWatch.arm() else CameraWatch.disarm()
         }
@@ -509,7 +513,20 @@ class DashboardActivity : Activity() {
     /* ───────── lifecycle ───────── */
 
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean { lastTouch = System.currentTimeMillis(); return super.dispatchTouchEvent(ev) }
-    override fun onResume() { super.onResume(); resumed = true; lastTouch = System.currentTimeMillis() }
+    override fun onResume() { super.onResume(); resumed = true; lastTouch = System.currentTimeMillis(); renderChecks() }
+
+    /** "Check": what is not set up on this tablet, red first, with where to switch it on. Nothing is shown when all is well. */
+    private fun renderChecks() {
+        if (!::checkBox.isInitialized) return
+        checkBox.removeAllViews()
+        val problems = Health.problems(this)
+        if (problems.isEmpty()) return
+        checkBox.addView(ui.text("Check", 14f, ui.c.text, bold = true))
+        for (p in problems) {
+            checkBox.addView(ui.text((if (p.red) "● " else "○ ") + p.label, 13f, if (p.red) ui.c.danger else ui.c.faint, bold = p.red))
+            checkBox.addView(ui.dim(p.fix))
+        }
+    }
     override fun onPause() { resumed = false; super.onPause() }
 
     override fun onDestroy() {

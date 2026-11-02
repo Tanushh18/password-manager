@@ -18,8 +18,11 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.tanush.stashr.tv.BuildConfig
 import com.tanush.stashr.tv.access.RemoteAccessibilityService
+import com.tanush.stashr.tv.cast.CastHub
+import com.tanush.stashr.tv.cast.CastServer
 import com.tanush.stashr.tv.core.Api
 import com.tanush.stashr.tv.core.ApiError
+import com.tanush.stashr.tv.core.Health
 import com.tanush.stashr.tv.core.Logic
 import com.tanush.stashr.tv.core.LocalPolicy
 import com.tanush.stashr.tv.net.RawHttp
@@ -63,6 +66,7 @@ class TvService : Service() {
     @Volatile private var leftSent = false
     private lateinit var prefs: Prefs
     private lateinit var movies: MovieSync
+    private var cast: CastServer? = null
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
@@ -83,6 +87,7 @@ class TvService : Service() {
         syncer = movies
         screenOn = (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive
         ContextCompat.registerReceiver(this, screenReceiver, IntentFilter().apply { addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_SCREEN_OFF) }, ContextCompat.RECEIVER_NOT_EXPORTED)
+        cast = CastServer(this).also { it.start() }
         scope.launch { reportLoop() }
         scope.launch { syncLoop() }
         scope.launch { updateLoop() }
@@ -107,6 +112,7 @@ class TvService : Service() {
     override fun onDestroy() {
         running = null
         try { unregisterReceiver(screenReceiver) } catch (e: Exception) { /* not registered */ }
+        cast?.stop(); cast = null
         scope.cancel()
         super.onDestroy()
     }
@@ -121,6 +127,7 @@ class TvService : Service() {
     private suspend fun reportLoop() {
         var firstFailAt = 0L
         var lastServerTry = 0L
+        var failsInARow = 0
         while (true) {
             if (prefs.linked && screenOn) {
                 val now = System.currentTimeMillis()
@@ -132,9 +139,11 @@ class TvService : Service() {
                     catch (e: ApiError) { if (LocalPolicy.isFailure(e)) { failed = true; prefs.lastError = e.message ?: "Server error" } else handleError(e) }
                     catch (e: Exception) { prefs.lastError = e.message ?: "Could not reach Stashr"; failed = LocalPolicy.isFailure(e) }
                     if (ok) {
+                        failsInARow = 0
                         firstFailAt = 0L; serverDown = false
                         if (localMode) { localMode = false; syncPoke.trySend(Unit) }
                     } else if (failed) {
+                        if (++failsInARow == 3) Health.record("report", "Report to Stashr failed 3 times in a row: " + prefs.lastError)
                         if (firstFailAt == 0L) firstFailAt = now
                         serverDown = true
                         if (!localMode && LocalPolicy.shouldGoLocal(firstFailAt, System.currentTimeMillis())) localMode = true
@@ -189,8 +198,10 @@ class TvService : Service() {
             st.put("app", JSONObject().put("label", "Stashr TV").put("package", packageName))
             st.put("media", JSONObject().put("title", NowPlaying.title).put("state", if (NowPlaying.playing) "playing" else "paused"))
         } else if (fg != null) st.put("app", JSONObject().put("label", fg.second).put("package", fg.first))
+        st.put("health", Health.collect(this))
         st.put("movies", movieJson(MovieStore.list(this)))
         if (prefs.lastUploadAt > 0) st.put("upload", JSONObject().put("lastAt", prefs.lastUploadAt).put("lastName", prefs.lastUploadName))
+        if (CastHub.active()) st.put("cast", JSONObject().put("active", true).put("from", CastHub.from()))
         val s = movies.state
         if (s.active) st.put("sync", JSONObject().put("active", true).put("name", s.name).put("pct", s.pct))
         return st
@@ -267,6 +278,7 @@ class TvService : Service() {
                 startOnTv(Intent(this, PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_NAME, m.name)); "Playing ${m.name}"
             }
             "notify" -> NoticeOverlay.show(this, a.optString("text"))
+            "mirror_stop" -> { CastHub.stop("Stopped from Stashr"); "Stopped" }
             "live_location" -> { startOnTv(Intent(this, LiveMapActivity::class.java)); "Shown" }
             else -> throw IllegalArgumentException("This app version does not know “$type”")
         }

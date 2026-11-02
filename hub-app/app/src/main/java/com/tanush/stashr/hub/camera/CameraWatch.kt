@@ -86,6 +86,11 @@ object CameraWatch {
     @Volatile private var clipsSupported = true
     @Volatile private var lastMotion: Long = 0L
     @Volatile private var error: String = ""
+        set(v) {
+            field = v
+            // A missing permission is shown by the permission checklist; everything else is worth remembering.
+            if (v.isNotEmpty() && !v.startsWith("Allow the camera")) com.tanush.stashr.hub.core.Health.note("camera", v)
+        }
 
     // Motion state, touched only on the analyzer thread.
     private var background: FloatArray? = null

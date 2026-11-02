@@ -17,6 +17,7 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
     <application
+        android:name=".core.StashrTvApp"
         android:allowBackup="false"
         android:banner="@drawable/banner"
         android:icon="@drawable/ic_launcher_plain"
@@ -40,6 +41,9 @@
         <activity android:name=".ui.SettingsActivity" android:exported="false" />
         <activity android:name=".ui.LiveMapActivity" android:exported="false" android:screenOrientation="landscape"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout" />
+        <activity android:name=".ui.MirrorActivity" android:exported="false" android:screenOrientation="landscape" />
+        <activity android:name=".ui.CastReceiverActivity" android:exported="false" android:launchMode="singleTask" android:theme="@style/Theme.StashrTV.Player"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode" />
         <activity android:name=".ui.PlayerActivity" android:exported="false" android:theme="@style/Theme.StashrTV.Player"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode" />
 

@@ -36,6 +36,7 @@ class SettingsActivity : Activity() {
     private lateinit var accessText: TextView
     private lateinit var overlayText: TextView
     private lateinit var updateText: TextView
+    private lateinit var mirrorText: TextView
     @Volatile private var alive = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,6 +71,11 @@ class SettingsActivity : Activity() {
         perms.addView(ui.dim("Needed for messages like “Parveen is arriving in 15 mins” over Netflix, and for opening apps from Stashr."))
         col.addView(perms)
 
+        val mirror = ui.card("Screen mirror", "Show a phone's screen and sound on this TV over the Wi-Fi (Stashr Cast app)")
+        mirrorText = ui.body(""); mirror.addView(mirrorText)
+        mirror.addView(ui.quiet("Forget all phones") { prefs.castTokens = ""; android.widget.Toast.makeText(this, "All phones forgotten", android.widget.Toast.LENGTH_SHORT).show() })
+        col.addView(mirror)
+
         val upd = ui.card("App updates", "Stashr TV updates itself from the Stashr server")
         updateText = ui.body(Updater.lastMessage.ifEmpty { "Version ${BuildConfig.VERSION_NAME}" }); upd.addView(updateText)
         upd.addView(ui.quiet("Check for updates") {
@@ -92,6 +98,7 @@ class SettingsActivity : Activity() {
             else "Linked as “${prefs.deviceName}”\n" + (if (prefs.lastReportOk > 0) "Last report to Stashr: ${fmt.format(Date(prefs.lastReportOk))}" else "No report yet") + (if (prefs.lastError.isNotEmpty()) "\n⚠ ${prefs.lastError}" else "")
         accessText.text = if (RemoteAccessibilityService.enabled(this)) "✓ Accessibility: on" else "✗ Accessibility: off (Back and “which app is open” will not work)"
         overlayText.text = if (Settings.canDrawOverlays(this)) "✓ Display over other apps: allowed" else "✗ Display over other apps: not allowed (messages show as a small toast)"
+        mirrorText.text = "PIN: ${prefs.castPin()}" + (if (com.tanush.stashr.tv.cast.CastHub.active()) "\nShowing ${com.tanush.stashr.tv.cast.CastHub.from()} now" else "")
         val s = TvService.syncer?.state
         syncText.text = when {
             s == null -> "Waiting for the first sync"

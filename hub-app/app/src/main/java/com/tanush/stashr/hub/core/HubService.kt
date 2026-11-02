@@ -121,14 +121,17 @@ class HubService : LifecycleService() {
                 else if (now - lastDashboardAt > 5 * 60_000) { lastDashboardAt = now; withContext(Dispatchers.IO) { try { LocalMode.saveDashboard(this@HubService, api.dashboard().toString()); MediaQueue.flush(this@HubService) } catch (e: Exception) { } } }
                 lastReport = now
                 lastError = ""
+                Health.success("report")
                 val cmds = res.optJSONArray("commands") ?: JSONArray()
                 for (i in 0 until cmds.length()) handle(cmds.getJSONObject(i))
             } catch (e: ApiError) {
                 lastError = e.message ?: "Server error"
+                Health.noteStreak("report", "Report to Stashr failed 3 times in a row: $lastError")
                 if (e.status == 401) { Prefs(this).forget(); stopSelf(); return }
                 if (e.status >= 500) serverDown()
             } catch (e: Exception) {
                 lastError = e.message ?: e.javaClass.simpleName
+                Health.noteStreak("report", "Report to Stashr failed 3 times in a row: $lastError")
                 if (e is java.io.IOException) serverDown()
             }
             withTimeoutOrNull(60_000) { wake.receive() }
@@ -158,6 +161,7 @@ class HubService : LifecycleService() {
             .put("camera", CameraWatch.status())
             .put("voice", VoiceListener.status())
             .put("updateWaiting", Updater.waiting)
+            .put("health", Health.collect(this))
         if (scan != null) {
             status.put("scan", JSONObject().put("at", System.currentTimeMillis()).put("ms", scan.ms).put("subnet", scan.subnet))
             status.put("lan", scan.toJson())

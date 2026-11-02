@@ -114,14 +114,14 @@ class MovieSync(private val ctx: Context) {
                     prefs.lastUploadAt = System.currentTimeMillis(); prefs.lastUploadName = name
                     onChange()
                 } catch (e: Exception) {
-                    state = SyncState(active = true, name = name, error = e.message ?: "Download failed"); onChange()
+                    state = SyncState(active = true, name = name, error = e.message ?: "Download failed"); com.tanush.stashr.tv.core.Health.record("sync", "Download of $name failed: " + (e.message ?: "")); onChange()
                     if (e is com.tanush.stashr.tv.core.ApiError && e.status == 401) throw e
                 }
             }
             val err = state.error
             state = SyncState(finishedAt = System.currentTimeMillis(), error = err)
         } catch (e: Exception) {
-            state = SyncState(finishedAt = System.currentTimeMillis(), error = e.message ?: "Sync failed")
+            state = SyncState(finishedAt = System.currentTimeMillis(), error = e.message ?: "Sync failed"); com.tanush.stashr.tv.core.Health.record("sync", e.message ?: "Sync failed")
         } finally { running.set(false); onChange() }
         return true
     }

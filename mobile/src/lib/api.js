@@ -44,6 +44,8 @@ export const setToken = (t) => {
   token = t || null;
 };
 export const activeServer = () => SERVERS[active];
+/** Headers for loading an image or video straight from the API (the Smart home camera pictures). */
+export const authHeaders = () => (token ? { Authorization: `Bearer ${token}`, "X-Client": "mobile" } : { "X-Client": "mobile" });
 export const setActiveServer = (url) => {
   const i = SERVERS.indexOf(url);
   if (i >= 0) active = i;

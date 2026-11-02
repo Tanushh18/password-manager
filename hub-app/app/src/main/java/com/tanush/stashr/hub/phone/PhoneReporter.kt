@@ -90,6 +90,7 @@ object PhoneReporter {
             .put("android", Build.VERSION.RELEASE)
             .put("uptimeH", DeviceInfo.uptimeHours())
             .put("appVersion", BuildConfig.VERSION_NAME)
+            .put("health", com.tanush.stashr.hub.core.Health.collectPhone(ctx))
         return out
     }
 
@@ -111,13 +112,16 @@ object PhoneReporter {
             if (acks.length() > 0 || again) res = api.report(JSONObject().put("status", status(ctx)).put("acks", acks))
             lastSentAt = System.currentTimeMillis()
             lastMessage = "Sent"
+            com.tanush.stashr.hub.core.Health.success("report")
             "Sent"
         } catch (e: ApiError) {
             if (e.status == 401) prefs.forget()
             lastMessage = e.message ?: "Server error"
+            com.tanush.stashr.hub.core.Health.noteStreak("report", "Report to Stashr failed 3 times in a row: $lastMessage")
             lastMessage
         } catch (e: Exception) {
             lastMessage = e.message ?: "Could not reach Stashr"
+            com.tanush.stashr.hub.core.Health.noteStreak("report", "Report to Stashr failed 3 times in a row: $lastMessage")
             lastMessage
         }
     }
