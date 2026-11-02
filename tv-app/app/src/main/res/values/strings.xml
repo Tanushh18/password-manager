@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Stashr TV</string>
+    <string name="access_label">Stashr TV remote</string>
+    <string name="access_desc">Lets Stashr press Home or Back on this TV and learn which app is open, for the commands you send from the Stashr Smart home page. It does not read what is on the screen.</string>
+    <string name="fgs_reason">Reports this TV to your own Stashr server, takes its commands and syncs your movies.</string>
+</resources>
