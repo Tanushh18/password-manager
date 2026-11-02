@@ -22,10 +22,15 @@ const fail = (res, error, fallback) => res.status(Number.isInteger(error.status)
 const DAYS = 14;
 
 /** Called for every fix of a phone running Stashr Location: keeps it when the history is on (at most one per ~100 s). */
+const lastKept = new Map();    // phone id -> { at (ms), lat, lon }: no database read for the usual "nothing new" case
 async function keepFix(owner, phone, person, loc, settings) {
     if (!settings.history || !settings.history.enabled) return;
-    const last = await HomeTrack.findOne({ owner, phone: phone._id }).sort({ at: -1 }).select("at lat lon").lean();
-    if (last && Number(loc.at) - last.at.getTime() < 100000 && ins.dist(last, loc) < 150) return;
+    const key = String(phone._id);
+    let last = lastKept.get(key);
+    if (!last) { const row = await HomeTrack.findOne({ owner, phone: phone._id }).sort({ at: -1 }).select("at lat lon").lean(); last = row ? { at: row.at.getTime(), lat: row.lat, lon: row.lon } : null; }
+    if (last && Number(loc.at) - last.at < 100000 && ins.dist(last, loc) < 150) { lastKept.set(key, last); return; }
+    lastKept.set(key, { at: Number(loc.at), lat: loc.lat, lon: loc.lon });
+    if (lastKept.size > 500) lastKept.delete(lastKept.keys().next().value);
     await HomeTrack.create({ owner, phone: phone._id, person, at: new Date(Number(loc.at)), lat: loc.lat, lon: loc.lon, acc: loc.acc || 0, ...(Number.isFinite(loc.speed) ? { speed: loc.speed } : {}) });
 }
 

@@ -399,7 +399,7 @@ export default function SmartHome() {
     } catch (e) { setError(errorMessage(e, "Could not load your devices.")); }
   }, []);
   useEffect(() => { load(); }, [load]);
-  usePolling(load, 8000);
+  usePolling(load, 15000);
   const send = useSend(load);
   const list = devices || [];
   const smartHub = list.find((d) => d.kind === "hub" && d.status?.agent === "stashr-hub");

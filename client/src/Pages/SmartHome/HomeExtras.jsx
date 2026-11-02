@@ -570,7 +570,7 @@ export function HomeScreenCard() {
   const [err, setErr] = useState("");
   const load = useCallback(async () => { try { setD(await getHomeDashboard()); setErr(""); } catch (e) { setErr(errorMessage(e, "Could not load.")); } }, []);
   useEffect(() => { load(); }, [load]);
-  usePolling(load, 15000);
+  usePolling(load, 20000);
   if (!d) return err ? <p className="sh-bad" role="alert">{err}</p> : null;
   const w = d.weather;
   const comingText = (c) => (c.minutes <= 1 ? `${c.person} bas pahunchne wale hain` : `${c.person} ${c.minutes} minute mein aa rahe hain`);
@@ -670,7 +670,7 @@ export function LocationsCard() {
   const confirm = useConfirm();
   const load = useCallback(async () => { try { setData(await getHomeWhere()); } catch { /* keeps the last list */ } }, []);
   useEffect(() => { load(); getLocationCode().then((r) => setCode(r.code)).catch(() => {}); }, [load]);
-  usePolling(load, 20000);
+  usePolling(load, 30000);
   const copy = async () => { try { await navigator.clipboard.writeText(code); toast.success("Code copied."); } catch { toast.error("Could not copy. Select the code and copy it."); } };
   const renew = async () => {
     if (!(await confirm.ask({ title: "Make a new link code?", message: "Phones that are already linked stay linked. Only new phones need the new code.", confirmLabel: "New code" }))) return;

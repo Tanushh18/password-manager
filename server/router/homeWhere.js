@@ -83,6 +83,7 @@ router.post("/home/agent/link", linkLimiter, async (req, res) => {
         const owner = s.owner;
         if (await HomeDevice.countDocuments({ owner, parent: { $exists: false } }) >= 20) return res.status(400).json({ error: "This Stashr home already has the most devices it can hold." });
         if (await HomeDevice.exists({ owner, kind: kindWanted, name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") })) return res.status(409).json({ error: tablet ? "A tablet or TV with that name is already linked. Pick another name." : "Someone with that name is already linked. Add your surname or pick another name." });
+        forgetDevices(owner);
         const token = home.newToken();
         const device = await HomeDevice.create(tablet
             ? { owner, name, kind: kindWanted, tokenHash: home.hashToken(token), tokenHint: token.slice(-4) }
@@ -94,14 +95,53 @@ router.post("/home/agent/link", linkLimiter, async (req, res) => {
 
 const num = (v) => (v === undefined || v === null || v === "" ? NaN : Number(v));
 
+// Short-lived memory so a phone's upload does not re-read every device of the home each time (a tablet's Wi-Fi book is big).
+const devCache = new Map();     // owner -> { at, list }
+const DEV_TTL = 20 * 1000;
+async function devicesOf(owner, now) {
+    const hit = devCache.get(String(owner));
+    if (hit && now - hit.at < DEV_TTL) return hit.list;
+    const list = await HomeDevice.find({ owner }).lean();
+    devCache.set(String(owner), { at: now, list });
+    if (devCache.size > 200) devCache.delete(devCache.keys().next().value);
+    return list;
+}
+const forgetDevices = (owner) => devCache.delete(String(owner));
+
+function answer(res, out, settings, where, now) {
+    const liveOn = Boolean(settings.liveUntil && new Date(settings.liveUntil).getTime() > now) && settings.tvLive?.enabled !== false && where.state !== "home";
+    return res.json({
+        live: liveOn, ok: true, state: where.state, traffic: Boolean(where.traffic), distanceKm: where.distanceKm ?? null, etaMinutes: where.state === "home" ? 0 : where.etaMinutes ?? null,
+        nextCheckSec: liveOn ? 8 : automation.checkInterval(where), home: { set: where.state !== "unset" },
+        notices: (out.commands || []).filter((c) => c.type === "notice").map((c) => ({ id: c.id, text: (c.args || {}).text || "" })).filter((n) => n.text)
+    });
+}
+
 router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter.agentAuth(req, res, next), async (req, res) => {
     try {
         const d = req.device;
         if (d.kind !== "phone") return res.status(403).json({ error: "Only a family phone can share its location." });
         const b = req.body || {};
+        const now = Date.now();
+        const prev = (d.status && d.status.location) || null;
+
+        // "Still here": the phone has not moved (same Wi-Fi as last time), so it sends no coordinates. Just mark the last one as current,
+        // which is one small write and no trip maths.
+        if (b.same === true && prev && Number.isFinite(prev.lat) && now - Number(prev.at) < 12 * 3600 * 1000) {
+            const set = { lastSeen: new Date(now), online: true, "status.location.at": now };
+            if (b.battery && Number.isFinite(num(b.battery.pct))) { set["status.battery"] = Math.min(Math.max(Math.round(num(b.battery.pct)), 0), 100); set["status.charging"] = b.battery.charging === true; }
+            if (b.wifi) { set["status.wifi"] = Boolean(b.wifi.connected); if (/^\d{1,3}(\.\d{1,3}){3}$/.test(String(b.wifi.ip || ""))) set["status.ip"] = String(b.wifi.ip); }
+            await HomeDevice.updateOne({ _id: d._id }, { $set: set });
+            const settings = await automation.settingsOf(d.owner);
+            const fresh = await HomeDevice.findById(d._id).select("commands").lean();
+            const notices = (fresh.commands || []).filter((c) => c.type === "notice" && c.status === "pending");
+            if (notices.length) await HomeDevice.updateOne({ _id: d._id }, { $set: { "commands.$[c].status": "sent" } }, { arrayFilters: [{ "c.status": "pending", "c.type": "notice" }] });
+            const where = automation.whereIs(settings, { ...d.toObject(), status: { ...(d.status || {}), location: { ...prev, at: now } } }, now);
+            return answer(res, { commands: notices.map((c) => ({ id: c.id, type: c.type, args: c.args })) }, settings, where, now);
+        }
+
         const lat = num(b.lat), lon = num(b.lon);
         if (!(lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180)) return res.status(400).json({ error: "The location is not valid." });
-        const now = Date.now();
         let at = num(b.at);
         if (!Number.isFinite(at) || at > now + 60_000 || at < now - 24 * 3600_000) at = now;
         const loc = { lat, lon, acc: Math.min(Math.max(num(b.acc) || 0, 0), 100000), at };
@@ -115,19 +155,13 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
         if (out.error) return res.status(400).json({ error: out.error });
         // Work out the trip now (the Wi-Fi sees this phone too) and answer with where it is and when to look again.
         const settings = await automation.settingsOf(d.owner);
-        const all = await HomeDevice.find({ owner: d.owner }).lean();
-        await automation.etaTick(d.owner, now, settings, all);
+        const list = await devicesOf(d.owner, now);
+        const all = list.map((x) => (String(x._id) === String(d._id) ? { ...x, status: { ...(x.status || {}), ...status }, lastSeen: new Date(now) } : x));
+        const state = await automation.etaTick(d.owner, now, settings, all);
         await insights().keepFix(d.owner, d, d.person || d.name, loc, settings).catch(() => {});
-        const fresh = await automation.settingsOf(d.owner);
         const me = all.find((x) => String(x._id) === String(d._id)) || d;
-        const where = automation.whereIs(fresh, { ...me, status: { ...(me.status || {}), location: loc } }, now);
-        // While a TV shows the live map, phones that are out look every few seconds.
-        const liveOn = Boolean(fresh.liveUntil && new Date(fresh.liveUntil).getTime() > now) && fresh.tvLive?.enabled !== false && where.state !== "home";
-        return res.json({
-            live: liveOn, ok: true, state: where.state, traffic: Boolean(where.traffic), distanceKm: where.distanceKm ?? null, etaMinutes: where.state === "home" ? 0 : where.etaMinutes ?? null,
-            nextCheckSec: liveOn ? 8 : automation.checkInterval(where), home: { set: where.state !== "unset" },
-            notices: (out.commands || []).filter((c) => c.type === "notice").map((c) => ({ id: c.id, text: (c.args || {}).text || "" })).filter((n) => n.text)
-        });
+        const where = automation.whereIs({ ...settings, etaState: state }, me, now);
+        return answer(res, out, settings, where, now);
     } catch (e) { return fail(res, e, "Could not save the location."); }
 });
 
@@ -135,6 +169,7 @@ router.post("/home/agent/unlink", agentLimiter, (req, res, next) => homeRouter.a
     try {
         const d = req.device;
         await HomeDevice.deleteOne({ _id: d._id });
+        forgetDevices(d.owner);
         await record({ owner: d.owner, kind: "unpaired", text: `${d.name} disconnected their phone (Stashr Location)` });
         return res.json({ ok: true });
     } catch (e) { return fail(res, e, "Could not disconnect."); }

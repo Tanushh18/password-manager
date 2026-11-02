@@ -63,6 +63,18 @@ All are listed with download buttons on the website's **/apps** page.
   Android may stretch the 8-second checks in the background (Doze), so expect updates every 10–60 s, not exactly 5. Instant start needs
   push messages (Firebase), which this project does not use. The map has no street tiles (no map-tile service), only the route line.
 
+## Less load, less battery
+- **Phone → server:** a phone that has not moved (same Wi-Fi access point as its last fix, no live view) sends a tiny `{same:true}` call
+  instead of taking a new fix; a fix within 40 m of the last upload is also sent as `same`; a fix younger than 4 minutes is reused. A
+  call still goes out at least every 25 minutes so the server knows the phone is alive. Low battery (≤ 15 %, not charging) doubles
+  the delay and skips GPS. No network → no fix at all, retry in 5 minutes.
+- **Server answers how long to wait:** moving or heading home: 1–10 minutes; away and near: 15; at home: 20; far away: 30; and **twice as
+  long (max 30 min) after 3 checks at the same place**.
+- **Server side:** a `same` call is one small write; a normal fix reads the settings, uses a 20 s memory of the home's devices (instead of
+  loading them all each time), skips the history read, and answers from the state it just computed. The tablet/website dashboard is
+  shared for 8 s, and the page polls less (devices 15 s, home screen 20 s, family locations 30 s; nothing polls while the tab is hidden;
+  the live map and the TV map poll every 5 s only while open).
+
 ## Live map and home location on the website
 - *Devices → Live map* (**Start live view**): a Leaflet map on OpenStreetMap tiles (fetched by your browser) with Home, a pin for every
   linked phone (orange = live, grey = waiting), the road home for those who are out, ETA, speed, accuracy and "updated N s ago".

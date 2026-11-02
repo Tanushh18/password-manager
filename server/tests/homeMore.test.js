@@ -773,3 +773,33 @@ describe("live map on the TV", () => {
     });
 });
 
+describe("fewer calls, less battery", () => {
+    test("a phone that has not moved sends a tiny 'same' call, and a phone that stays put is asked less often", async () => {
+        const auth = await signUp();
+        const code = (await request(app).get("/home/location-code").set(auth)).body.code;
+        const t = (await request(app).post("/home/agent/link").send({ code, name: "Papa" })).body.token;
+        await request(app).put("/home/settings").set(auth).send({ homeSpot: { lat: 28.6139, lon: 77.209, radius: 200 } });
+        const send = (body) => request(app).post("/home/agent/location").set(bearer(t)).send(body);
+        const t0 = Date.now();
+        const first = await send({ lat: 28.70, lon: 77.209, acc: 20, at: t0, battery: { pct: 70, charging: false } });
+        expect(first.body.state).toBe("away");
+        expect(first.body.nextCheckSec).toBe(900);                              // near and away: 15 min
+        const before = await HomeDevice.findOne({ name: "Papa" }).lean();
+        const same = await send({ same: true, battery: { pct: 69, charging: false }, wifi: { connected: true, ip: "192.168.1.9" } });
+        expect(same.status).toBe(200);
+        expect(same.body.state).toBe("away");
+        const after = await HomeDevice.findOne({ name: "Papa" }).lean();
+        expect(after.status.location.lat).toBe(before.status.location.lat);      // the coordinates are not touched
+        expect(after.status.location.at >= before.status.location.at).toBe(true);
+        expect(after.status.battery).toBe(69);
+        expect(after.status.ip).toBe("192.168.1.9");
+        // staying in the same place: after three still checks the answer says "wait twice as long"
+        let last;
+        for (let i = 1; i <= 4; i++) last = await send({ lat: 28.70, lon: 77.209, acc: 20, at: t0 + i * 60_000 });
+        expect(last.body.nextCheckSec).toBe(1800);
+        // 'same' before any location is just a normal (invalid) call
+        const t2 = (await request(app).post("/home/agent/link").send({ code, name: "Mom" })).body.token;
+        expect((await request(app).post("/home/agent/location").set(bearer(t2)).send({ same: true })).status).toBe(400);
+    });
+});
+

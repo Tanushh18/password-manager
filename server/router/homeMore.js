@@ -370,7 +370,16 @@ router.get("/home/camera/live", authenticate, async (req, res) => {
 const weatherCache = new Map(); // owner -> { at, value }
 
 /** What the tablet's home screen shows; the website shows the same (GET /home/dashboard). */
+const dashCache = new Map();   // owner -> { at, value }: the tablet and the website ask for the same picture every few seconds
 async function buildDashboard(owner) {
+    const hit = dashCache.get(String(owner));
+    if (hit && Date.now() - hit.at < 8000) return hit.value;
+    const value = await buildDashboardNow(owner);
+    dashCache.set(String(owner), { at: Date.now(), value });
+    if (dashCache.size > 200) dashCache.delete(dashCache.keys().next().value);
+    return value;
+}
+async function buildDashboardNow(owner) {
     const s = await automation.settingsOf(owner);
     const devices = await HomeDevice.find({ owner }).lean();
     let w = weatherCache.get(String(owner));

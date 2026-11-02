@@ -244,7 +244,7 @@ async function announce(owner, text, { settings, devices, exceptDevice, urgent =
  */
 async function etaTick(owner, now, settings, devices) {
     const spot = settings.homeSpot, eta = settings.eta || {};
-    if (!spot || !Number.isFinite(spot.lat) || !Number.isFinite(spot.lon) || eta.enabled === false) return;
+    if (!spot || !Number.isFinite(spot.lat) || !Number.isFinite(spot.lon) || eta.enabled === false) return settings.etaState || {};
     const radius = spot.radius || 200, state = { ...(settings.etaState || {}) };
     const people = home.presence((devices || []).filter((d) => d.kind === "hub"), (devices || []).filter((d) => d.kind === "phone"), now);
     const wifiHome = new Set(people.filter((p) => p.home).map((p) => p.person));
@@ -259,6 +259,7 @@ async function etaTick(owner, now, settings, devices) {
         const atHome = d <= radius || (wifiHome.has(person) && d <= 2000);
         const newFix = old.locAt !== Number(loc.at);
         let next = { ...old, person, atHome, d, locAt: Number(loc.at) };
+        if (old.locAt !== Number(loc.at)) next.still = old.d !== undefined && Math.abs(d - old.d) < 80 ? Math.min((old.still || 0) + 1, 20) : 0;
         if (newFix) {
             const dt = old.locAt ? (Number(loc.at) - old.locAt) / 1000 : 0;
             let coming = Boolean(old.coming);
@@ -304,6 +305,7 @@ async function etaTick(owner, now, settings, devices) {
         if (JSON.stringify(next) !== JSON.stringify(old)) { state[key] = next; changed = true; }
     }
     if (changed) await HomeSettings.updateOne({ owner }, { $set: { etaState: state } });
+    return state;
 }
 
 /** Where one phone is for the page and for the app: { state: unset|home|coming|away, distanceKm, etaMinutes }. */
@@ -314,15 +316,17 @@ function whereIs(settings, phone, now = Date.now()) {
     const e = (settings.etaState || {})[String(phone._id)] || {};
     const d = distanceM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: spot.lat, lon: spot.lon });
     const km = e.road && e.km ? e.km : Math.round(d / 100) / 10;
-    if (e.atHome || d <= (spot.radius || 200)) return { state: "home", distanceKm: km, fixAt: Number(loc.at) };
-    return { state: e.coming ? "coming" : "away", distanceKm: km, etaMinutes: e.minutes || null, traffic: Boolean(e.road && e.traffic), fixAt: Number(loc.at) };
+    if (e.atHome || d <= (spot.radius || 200)) return { state: "home", distanceKm: km, still: e.still || 0, fixAt: Number(loc.at) };
+    return { state: e.coming ? "coming" : "away", distanceKm: km, etaMinutes: e.minutes || null, traffic: Boolean(e.road && e.traffic), still: e.still || 0, fixAt: Number(loc.at) };
 }
 
 /** How long the Stashr Location app should wait before it looks again: often when heading home, rarely when far away. */
 function checkInterval(where) {
+    // Not moving for 3 checks in a row (at home, at the office…): look half as often, at most every 30 minutes.
+    const calm = (sec) => ((where.still || 0) >= 3 ? Math.min(sec * 2, 1800) : sec);
     if (where.state === "coming") { const k = where.distanceKm; return k > 20 ? 600 : k > 10 ? 300 : k > 3 ? 120 : 60; }
-    if (where.state === "away") return where.distanceKm < 10 ? 900 : 1800;
-    if (where.state === "home") return 1200;
+    if (where.state === "away") return calm(where.distanceKm < 10 ? 900 : 1800);
+    if (where.state === "home") return calm(1200);
     return 900;
 }
 
