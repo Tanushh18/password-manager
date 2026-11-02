@@ -7,6 +7,7 @@ All are listed with download buttons on the website's **/apps** page.
 | **Stashr for Android** (`mobile/`) | You | Vault, 2FA, photo backup, servers | Everything of yours |
 | **Stashr Hub** (`hub-app/`, `com.tanush.stashr.hub`) | The always-on home tablet (and optionally a phone to report its health) | Wi-Fi scan with names, security camera, "Hey Stashr" voice, dashboard, slideshow, speed tests, WhatsApp sender, announcements | Home data only. Joins with a pairing code, never your password |
 | **Stashr TV** (`tv-app/`, `com.tanush.stashr.tv`) | The living-room Android TV | Launcher (apps + movies), Drive → USB movie sync, built-in player, remote control, on-screen messages | Home data only. Joins with the home-device code |
+| **Stashr Cast** (`cast-app/`, `com.tanush.stashr.cast`) | Each phone that wants to show its screen | Mirrors the screen and sound to Stashr TV over the Wi-Fi | Only what is on the screen while casting; nothing leaves the Wi-Fi |
 | **Stashr Location** (`where-app/`, `com.tanush.stashr.where`) | Each family member's phone | Shares only location, battery and "on Wi-Fi yes/no" | Nothing of the vault. Joins with the fixed code + the person's name |
 | **Browser extension** (`extension/`) | You | Autofill | Your vault |
 
@@ -32,6 +33,22 @@ All are listed with download buttons on the website's **/apps** page.
 - **Updates:** Stashr TV is built by `tv-apk.yml` on every change under `tv-app/`, released as `stashr-tv-v…` (never "latest") and served at
   `/api/mobile-updates/tv/*`; the TV offers it (one tap). The first install is by cable (`adb install`).
 - **Limits:** a TV can't be powered off by an app (limits pause and go home); foreground-app detection needs the accessibility service.
+
+## Stashr Cast (phone screen on the TV)
+- **How:** the phone captures its screen (MediaProjection) and encodes H.264 on the phone's hardware encoder (low-latency, CBR, no B-frames,
+  60 fps in *Smooth*), sends it over a plain TCP stream on the home Wi-Fi to Stashr TV (port 8766, found by NSD `_stashr-cast._tcp`), which
+  decodes it on the TV's hardware decoder straight onto a full-screen surface. Sound is captured on the phone (Android 10+) and played with a
+  small buffer. If the Wi-Fi is slow, the phone drops frames and asks for a fresh key frame instead of letting the delay grow.
+- **Pairing:** TV → *Screen mirror* tile shows a 4-digit PIN; the phone types it once and gets a token, so next time it is one tap. The TV
+  can forget phones. 5 wrong PINs lock an address for 10 minutes. Nothing needs the internet or the Stashr server.
+- **Expect:** roughly 80–200 ms delay on 5 GHz, more on 2.4 GHz; secure (DRM) screens appear black; a phone cannot cast while the TV is
+  already showing another cast. **The easy alternative** — if the TV has Chromecast built in (most Android/Google TVs), the phone's own
+  *Cast / Smart View* in Quick Settings works with no app at all.
+- **Not included:** iPhone (use AirPlay or the TV's Cast), Miracast (third-party apps can't be a Miracast receiver on Android).
+
+## Photo frame needs Drive
+Google no longer lets apps read a whole Google Photos library (only items the app itself made, or ones you pick), so the tablet's photo frame
+only works with a **Google Drive folder**. To use Google Photos pictures: select them in Google Photos → Save to Drive → put them in one folder.
 
 ## Stashr Location (family phones)
 - **Link:** website → Smart home → Devices → *Family locations* shows one fixed 8-letter code (copy / "New code"). In the app type the code,

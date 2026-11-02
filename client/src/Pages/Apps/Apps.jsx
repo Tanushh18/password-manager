@@ -33,6 +33,16 @@ const TV = [
   "Tells Stashr when the TV is on, what is playing, and how long the TV has been watched today",
 ];
 
+// Stashr Cast: shows the phone screen on the TV (built by cast-apk.yml, served like the other side apps).
+const CAST_APK = `${publicApiBase}/api/mobile-updates/cast/download`;
+const CAST = [
+  "Mirrors your Android phone’s screen and sound to the living-room TV over your own Wi-Fi, with very little delay (about a tenth of a second on a 5 GHz network)",
+  "Pick the TV from a list, type the 4-digit PIN once, and from then on it is one tap; the phone remembers the TV",
+  "Smooth (60 frames a second), Sharp or Max quality, and a switch for sound",
+  "Nothing goes through the internet, so it also works when the internet is down",
+  "Needs Stashr TV (1.3 or later) on the TV; secure screens such as some banking or streaming apps show black, which is Android’s rule",
+];
+
 // Stashr Location: location only, for family phones (built by where-apk.yml, served like Stashr Hub).
 const WHERE_APK = `${publicApiBase}/api/mobile-updates/where/download`;
 const WHERE = [
@@ -94,6 +104,16 @@ export default function Apps() {
           <li>In Stashr TV’s settings turn on the “Stashr TV remote” accessibility service and “Display over other apps”, so Home/Back commands and on-screen messages work.</li>
         </ol>
         <p className="apps__note">Plug in a USB drive for movies. Stashr TV updates itself from GitHub releases; Android asks for one tap.</p>
+        <h2>Stashr Cast for Android</h2>
+        <p>Show your phone on the TV. It is a separate small app, so it never touches your Stashr data.</p>
+        <a className="btn btn--primary apps__download" href={CAST_APK} download="stashr-cast.apk">Download Stashr Cast</a>
+        <ul>{CAST.map((f) => <li key={f}>{f}</li>)}</ul>
+        <ol>
+          <li>On the TV open Stashr TV → <strong>Screen mirror</strong>; it shows a 4-digit PIN.</li>
+          <li>On the phone open Stashr Cast, pick the TV, type the PIN and tap <strong>Start mirroring</strong>.</li>
+          <li>Allow the screen-capture question. Tap Stop in the notification (or press Back on the TV) to end.</li>
+        </ol>
+        <p className="apps__note">Phone and TV on the same Wi-Fi, ideally 5 GHz. iPhones can’t use this app; they use AirPlay or the TV’s built-in Cast.</p>
         <h2>Stashr Location for Android</h2>
         <p>A tiny app for the phones of people at home. It only shares where the phone is, so the family never gets near your passwords. Install it on each family phone.</p>
         <a className="btn btn--primary apps__download" href={WHERE_APK} download="stashr-location.apk">Download Stashr Location</a>

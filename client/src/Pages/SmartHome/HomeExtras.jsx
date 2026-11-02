@@ -557,7 +557,8 @@ export function SlideshowCard({ home, hub, send }) {
         <button className="rd-btn rd-btn--quiet" type="submit">Save</button>
         <button type="button" className="rd-btn rd-btn--primary" disabled={!s.slideshowFolder} onClick={() => send(hub.id, "slideshow", { action: "start" }, "Slideshow starting on the tablet.")}>Start on the tablet</button>
       </form>
-      <p className="sh-dim">The tablet also starts the slideshow by itself after 10 idle minutes on its dashboard, when a folder is set.</p>
+      <p className="sh-dim">The tablet also starts the slideshow by itself after 10 idle minutes on its dashboard, when a folder is set. Leave the folder empty to keep the photo frame off.</p>
+      <p className="sh-dim">Only a Google Drive folder works. Google no longer lets apps read a whole Google Photos library, so photos that live only in Google Photos can’t be shown here: copy the ones you want into a Drive folder (Google Photos → select → Save to Drive), or use the photos backed up by the Stashr app.</p>
     </Section>
   );
 }

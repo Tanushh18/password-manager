@@ -150,6 +150,7 @@ router.get("/android/download", async (_req, res) => {
 const SIDE_APPS = {
   hub: { label: "Stashr Hub", pkg: "com.tanush.stashr.hub", prefix: "stashr-hub-v", apk: "stashr-hub.apk", manifest: "stashr-hub-update.json", file: "Stashr-Hub" },
   tv: { label: "Stashr TV", pkg: "com.tanush.stashr.tv", prefix: "stashr-tv-v", apk: "stashr-tv.apk", manifest: "stashr-tv-update.json", file: "Stashr-TV" },
+  cast: { label: "Stashr Cast", pkg: "com.tanush.stashr.cast", prefix: "stashr-cast-v", apk: "stashr-cast.apk", manifest: "stashr-cast-update.json", file: "Stashr-Cast" },
   where: { label: "Stashr Location", pkg: "com.tanush.stashr.where", prefix: "stashr-where-v", apk: "stashr-where.apk", manifest: "stashr-where-update.json", file: "Stashr-Location" },
 };
 const sideCache = {};

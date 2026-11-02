@@ -137,6 +137,16 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] After 1–3 minutes the pin of a phone that is out turns orange ("live") and moves; Stop live view: phones return to the slow pace.
 - [ ] Dark mode / phone browser: the map and the list are usable.
 
+## 7l. Stashr Cast (phone screen on the TV)
+- [ ] Install Stashr Cast on a phone (from /apps); Stashr TV 1.3+ on the TV. TV → Screen mirror shows a PIN.
+- [ ] Phone lists the TV (same Wi-Fi); PIN once; Start mirroring → the phone screen appears full-screen on the TV within ~2 s.
+- [ ] Scroll a list and play a game / video: is it smooth? Note the delay (clap a timer app) on 5 GHz and on 2.4 GHz.
+- [ ] Sound plays on the TV in sync (Android 10+); the "Send sound" switch off mutes it.
+- [ ] Rotate the phone: the picture follows. Quality chips (Smooth / Sharp / Max) change sharpness.
+- [ ] Stop from the notification, from the TV Back button, and by switching Wi-Fi off: the TV returns to the launcher each time.
+- [ ] Second phone while one is casting gets "TV is busy"; wrong PIN is refused; "Forget phones" on the TV asks for the PIN again.
+- [ ] A Netflix screen goes black (DRM): expected.
+
 ## 8. Updates (OTA)
 - [ ] Push a change under `hub-app/` to `main`; the GitHub Release is created and is **not** "latest".
 - [ ] The app (or "check_update") finds it, verifies it and Android asks for one tap to install.

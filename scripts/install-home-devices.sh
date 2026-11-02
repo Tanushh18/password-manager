@@ -6,7 +6,8 @@
 #   scripts/install-home-devices.sh --tablet 192.168.1.20 --tv 192.168.1.30
 #   scripts/install-home-devices.sh --tablet usb                         # only the tablet
 #   scripts/install-home-devices.sh --tv auto                            # only the TV
-#   scripts/install-home-devices.sh --phone-apk                          # only download the Stashr Location APK
+#   scripts/install-home-devices.sh --phone-apk                          # only download the Stashr Location and Stashr Cast APKs
+#   scripts/install-home-devices.sh --phone usb                          # install Stashr Location and Stashr Cast on a phone on the USB cable
 #
 # --tablet usb|<ip>   usb = the device on the cable (pass --serial <id> if several are plugged in)
 # --tv auto|<ip>      auto = look for an Android TV on this Wi-Fi (adb mdns, then a scan of the /24 for port 5555)
@@ -15,7 +16,7 @@ set -euo pipefail
 
 REPO="${STASHR_REPO:-Tanushh18/stashr-Home-Automation}"
 OUT="${STASHR_APK_DIR:-$HOME/stashr-apks}"
-TABLET="" TV="" PHONE_APK=0 PORT=5555 USB_SERIAL=""
+TABLET="" TV="" PHONE="" PHONE_APK=0 PORT=5555 USB_SERIAL=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --tablet) TABLET="$2"; shift 2 ;;
@@ -23,11 +24,12 @@ while [ $# -gt 0 ]; do
     --port) PORT="$2"; shift 2 ;;
     --serial) USB_SERIAL="$2"; shift 2 ;;
     --phone-apk) PHONE_APK=1; shift ;;
+    --phone) PHONE="$2"; shift 2 ;;
     -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
-[ -n "$TABLET$TV" ] || [ "$PHONE_APK" = 1 ] || { echo "Give --tablet <ip>, --tv <ip> or --phone-apk." >&2; exit 2; }
+[ -n "$TABLET$TV$PHONE" ] || [ "$PHONE_APK" = 1 ] || { echo "Give --tablet <ip|usb>, --tv <ip|auto>, --phone usb or --phone-apk." >&2; exit 2; }
 for c in adb curl python3; do command -v "$c" >/dev/null || { echo "Missing: $c" >&2; exit 1; }; done
 mkdir -p "$OUT"
 
@@ -158,7 +160,27 @@ setup_tv() {
   echo "TV done. On the TV: type the same home-device code and a name (Living room TV). Plug in the USB drive for movies."
 }
 
-[ "$PHONE_APK" = 1 ] && { download stashr-where-v stashr-where.apk stashr-location.apk; echo "Send $OUT/stashr-location.apk to each family phone (or use the /apps page on the phone)."; }
+setup_phone() {   # a family phone on the USB cable: Stashr Location (+ Stashr Cast when it has been released)
+  download stashr-where-v stashr-where.apk stashr-location.apk
+  usb_device
+  echo "Phone: $SERIAL ($(dsh getprop ro.product.model | tr -d '\r'))"
+  adb -s "$SERIAL" install -r "$OUT/stashr-location.apk"
+  dsh pm grant com.tanush.stashr.where android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+  if asset_url stashr-cast-v stashr-cast.apk >/dev/null 2>&1; then
+    download stashr-cast-v stashr-cast.apk stashr-cast.apk
+    adb -s "$SERIAL" install -r "$OUT/stashr-cast.apk"
+    dsh pm grant com.tanush.stashr.cast android.permission.RECORD_AUDIO 2>/dev/null || true
+    dsh pm grant com.tanush.stashr.cast android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+  fi
+  echo "Phone done. Open Stashr Location, type the link code and the person's name; location must be 'Allow all the time'."
+}
+
+if [ "$PHONE_APK" = 1 ]; then
+  download stashr-where-v stashr-where.apk stashr-location.apk
+  if asset_url stashr-cast-v stashr-cast.apk >/dev/null 2>&1; then download stashr-cast-v stashr-cast.apk stashr-cast.apk; fi
+  echo "Send the APKs in $OUT to each family phone (or use the /apps page on the phone)."
+fi
+[ -n "$PHONE" ] && setup_phone
 [ -n "$TABLET" ] && setup_tablet
 [ -n "$TV" ] && setup_tv
 echo "All done."
