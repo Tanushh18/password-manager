@@ -176,7 +176,7 @@ jobs:
           retention-days: 30
 
       - name: Publish APK and manifest as a GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.release.outputs.tag }}
           name: Stashr Android ${{ steps.release.outputs.app_version }} (build ${{ steps.release.outputs.version_code }})
