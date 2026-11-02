@@ -19,6 +19,8 @@ object WhatsAppSender {
         var searched = false
         var typed = false
         var misses = 0
+        @Volatile var clicks = 0
+        @Volatile var lastClick = 0L
     }
 
     @Volatile var job: Job? = null
@@ -52,7 +54,7 @@ object WhatsAppSender {
                 WhatsAppAccessibility.instance?.poke()
                 delay(500)
             }
-            throw IllegalStateException(if (j.picked) "Timed out before pressing Send" else "Timed out. Allow “Display over other apps” for Stashr Hub")
+            throw IllegalStateException(if (j.picked) (if (j.clicks > 0) "Pressed Send but WhatsApp did not confirm" else "Timed out before pressing Send") else "Timed out. Allow “Display over other apps” for Stashr Hub")
         } finally {
             job = null
             if (wl.isHeld) wl.release()

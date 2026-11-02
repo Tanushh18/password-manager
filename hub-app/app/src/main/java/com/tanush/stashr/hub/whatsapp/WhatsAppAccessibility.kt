@@ -62,13 +62,32 @@ class WhatsAppAccessibility : AccessibilityService() {
         if (job.misses > 12 || (job.typed && ++job.misses > 12)) job.error = "Group not found"
     }
 
+    /**
+     * WhatsApp's share flow can have two Send steps (a bar under the chosen chat, then the preview with the text), so one
+     * click is not "sent". After a click it waits 1.5 s for the next screen; the message counts as sent once no Send button
+     * has shown for 2.5 s after at least one click. The same button is never pressed twice within 1.5 s.
+     */
     private fun pressSend(root: AccessibilityNodeInfo, job: WhatsAppSender.Job) {
+        val now = System.currentTimeMillis()
+        if (job.clicks > 0 && now - job.lastClick < 1_500) return
+        val btn = findSendButton(root)
+        if (btn != null) {
+            if (clickUp(btn)) { job.clicks++; job.lastClick = now; job.misses = 0 }
+            return
+        }
+        if (job.clicks > 0) { if (now - job.lastClick > 2_500) job.done = true }
+        else if (++job.misses > 40) job.error = "Could not find WhatsApp's Send button"
+    }
+
+    private fun findSendButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        for (id in SEND_IDS) root.findAccessibilityNodeInfosByViewId(id).orEmpty().firstOrNull { it.isVisibleToUser }?.let { return it }
         for (w in SEND) {
             val n = root.findAccessibilityNodeInfosByText(w).orEmpty().firstOrNull {
-                it.text?.toString().equals(w, true) || it.contentDescription?.toString().equals(w, true)
-            } ?: continue
-            if (clickUp(n)) { job.done = true; return }
+                it.isVisibleToUser && !it.isEditable && (it.text?.toString().equals(w, true) || it.contentDescription?.toString().equals(w, true))
+            }
+            if (n != null) return n
         }
+        return null
     }
 
     private fun clickUp(n: AccessibilityNodeInfo): Boolean {
@@ -96,5 +115,6 @@ class WhatsAppAccessibility : AccessibilityService() {
     companion object {
         @Volatile var instance: WhatsAppAccessibility? = null
         private val SEND = listOf("Send", "भेजें", "Enviar", "Envoyer")
+        private val SEND_IDS = listOf("com.whatsapp:id/send", "com.whatsapp.w4b:id/send")
     }
 }

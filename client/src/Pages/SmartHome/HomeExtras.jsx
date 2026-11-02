@@ -28,7 +28,7 @@ export function useHomeSettings() {
 
 const KIND_LABEL = { hub: "Home tablet", tv: "TV", phone: "Family phone" };
 
-export function PairCard({ devices = [] }) {
+export function PairCard({ devices = [], onChanged = () => {} }) {
   const [code, setCode] = useState("");
   const [old, setOld] = useState({ kind: "hub", name: "", code: null });
   const { ask, dialog } = useConfirm();
@@ -38,6 +38,10 @@ export function PairCard({ devices = [] }) {
   const renew = async () => {
     if (!(await ask({ title: "Make a new tablet code?", message: "A tablet that is already linked stays linked. Only a new tablet needs the new code.", confirmLabel: "New code" }))) return;
     try { setCode((await rotateHubCode()).code); toast.success("New code ready."); } catch (e) { toast.error(errorMessage(e, "Could not make a new code.")); }
+  };
+  const disconnect = async (d) => {
+    if (!(await ask({ title: `Disconnect ${d.name || "this device"}?`, message: "It stops syncing with Stashr. To bring it back, type the home-device code on it again.", confirmLabel: "Disconnect", danger: true }))) return;
+    try { await removeHomeDevice(d.id); toast.success("Disconnected."); onChanged(); } catch (e) { toast.error(errorMessage(e, "Could not disconnect.")); }
   };
   const make = async (e) => {
     e.preventDefault();
@@ -55,9 +59,10 @@ export function PairCard({ devices = [] }) {
         <b>Linked now</b>
         {linked.length ? (
           <ul className="sh-people">{linked.map((d) => (
-            <li key={d._id || d.name} className={d.online ? "is-home" : ""}>
+            <li key={d.id || d.name} className={d.online ? "is-home" : ""}>
               <span className="sh-avatar" aria-hidden="true">{d.kind === "tv" ? "TV" : d.kind === "phone" ? "PH" : "TB"}</span>
               <div><b>{d.name || "Unnamed"}</b><span>{KIND_LABEL[d.kind] || d.kind} · {d.online ? "online" : "offline"}{d.lastSeen ? ` · seen ${ago(d.lastSeen)}` : ""}</span></div>
+              {d.kind === "hub" || d.kind === "tv" ? <button type="button" className="rd-btn rd-btn--quiet" onClick={() => disconnect(d)}>Disconnect</button> : null}
             </li>
           ))}</ul>
         ) : <p className="sh-dim">Nothing is linked yet. Type the code above on the tablet or TV.</p>}
