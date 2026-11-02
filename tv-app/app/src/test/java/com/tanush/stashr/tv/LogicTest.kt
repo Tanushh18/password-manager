@@ -58,4 +58,32 @@ class LogicTest {
         assertEquals("com.google.android.youtube.tv", Logic.youtubePackage("https://www.youtube.com/watch?v=1"))
         assertEquals("Good morning", Logic.greeting(8)); assertEquals("Good night", Logic.greeting(2))
     }
+
+    @Test fun tvHomeIsParsed() {
+        val j = JSONObject("""{"time":"2026-11-02T03:00:00Z","weather":{"city":"Delhi, Delhi, India","temp":27,"feels":29,"text":"rain \uD83C\uDF27\uFE0F","min":22,"max":29,"rainChance":80},
+            "news":[{"title":"Big news","source":"The Hindu","at":1},{"title":"","source":"x"},{"title":"Second","source":"Mint"}],"movieNight":true,
+            "coming":[{"person":"Papa","minutes":10,"km":4.2},{"person":"Mom","minutes":0,"km":0.1}]}""")
+        val h = Logic.parseTvHome(j)
+        assertEquals("Delhi 27°C · rain · 22–29°C · 80% rain", Logic.weatherLine(h.weather!!))
+        assertEquals(listOf("Big news", "Second"), h.news.map { it.title })
+        assertEquals(true, h.movieNight)
+        assertEquals("Papa 10 minute mein aa rahe hain", Logic.comingLine(h.coming[0]))
+        assertEquals("Mom bas pahunchne wale hain", Logic.comingLine(h.coming[1]))
+        val empty = Logic.parseTvHome(JSONObject("""{"weather":null,"news":[],"movieNight":false,"coming":[]}"""))
+        assertNull(empty.weather); assertEquals(0, empty.news.size); assertEquals(false, empty.movieNight)
+        assertEquals("Delhi 27°C", Logic.weatherLine(Logic.Weather("Delhi", 27, "", 22, 29, null).copy(min = 22, max = 29)).substringBefore(" · "))
+    }
+
+    @Test fun morningPanelOncePerDayBetweenFiveAndEleven() {
+        assertEquals(false, Logic.inMorningWindow(4)); assertEquals(true, Logic.inMorningWindow(5)); assertEquals(true, Logic.inMorningWindow(10)); assertEquals(false, Logic.inMorningWindow(11))
+        assertEquals(true, Logic.shouldShowMorning(7, "2026-11-02", "2026-11-01"))
+        assertEquals(false, Logic.shouldShowMorning(7, "2026-11-02", "2026-11-02"))
+        assertEquals(false, Logic.shouldShowMorning(14, "2026-11-02", ""))
+    }
+
+    @Test fun commandArgumentsAreChecked() {
+        assertEquals("com.google.android.youtube.tv", Logic.youtubePackage("https://youtu.be/abc"))
+        assertNull(Logic.volumeTarget(JSONObject("""{}"""), 3, 15))
+        assertNull(Logic.volumeTarget(JSONObject("""{"action":"up"}"""), 3, 0))
+    }
 }

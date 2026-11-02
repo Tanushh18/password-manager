@@ -48,7 +48,7 @@ object NowPlaying {
 
 /**
  * The always-on part: reports this TV to Stashr every ~20 s while the screen is on (and at once on a change), runs the
- * commands that come back, syncs the movies on start / every 30 minutes / on request, and checks for app updates daily.
+ * commands that come back, syncs the movies on start / every 30 minutes / on request, and checks for app updates on start and every 6 hours.
  */
 class TvService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -226,7 +226,7 @@ class TvService : Service() {
         delay(30_000)
         while (true) {
             if (prefs.linked && online()) Updater.check(this, manual = false)
-            delay(24 * 3600_000L)
+            delay(6 * 3600_000L)
         }
     }
 

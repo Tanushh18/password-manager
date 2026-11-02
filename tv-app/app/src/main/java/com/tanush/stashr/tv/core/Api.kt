@@ -92,6 +92,9 @@ class Api(ctx: Context) {
         throw last ?: IOException("No server to reach.")
     }
 
+    /** GET /home/agent/tv-home: weather, headlines, movie night, who is on the way home. */
+    fun tvHome(): JSONObject = get("/home/agent/tv-home", auth = true, timeoutMs = 20000)
+
     /** GET /api/mobile-updates/tv/latest. */
     fun latest(currentVersionCode: Int): JSONObject = get("/api/mobile-updates/tv/latest?currentVersionCode=$currentVersionCode", auth = false)
 

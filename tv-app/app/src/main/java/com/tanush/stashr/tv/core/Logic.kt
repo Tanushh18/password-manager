@@ -60,4 +60,34 @@ object Logic {
 
     /** Where a YouTube link should open on a TV: the music app for music.youtube.com, else the YouTube TV app. */
     fun youtubePackage(url: String): String = if (url.contains("music.youtube.com")) "com.google.android.youtube.tvmusic" else "com.google.android.youtube.tv"
+
+    /* ───────── the launcher's content from the server (GET /home/agent/tv-home) ───────── */
+
+    data class Weather(val city: String, val temp: Int, val text: String, val min: Int, val max: Int, val rainChance: Int?)
+    data class Headline(val title: String, val source: String)
+    data class Coming(val person: String, val minutes: Int, val km: Double)
+    data class TvHome(val weather: Weather?, val news: List<Headline>, val movieNight: Boolean, val coming: List<Coming>)
+
+    /** The weather text from the server ends with an emoji the TV font may not draw: keep letters, digits and spaces. */
+    fun plainText(s: String) = s.replace(Regex("[^\\p{L}\\p{N}\\s,.'-]"), "").replace(Regex("\\s+"), " ").trim()
+
+    fun parseTvHome(j: JSONObject): TvHome {
+        val w = j.optJSONObject("weather")?.let {
+            Weather(it.optString("city").substringBefore(","), it.optInt("temp"), plainText(it.optString("text")), it.optInt("min"), it.optInt("max"), if (it.isNull("rainChance") || !it.has("rainChance")) null else it.optInt("rainChance"))
+        }
+        val news = j.optJSONArray("news")?.let { a -> (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let { o -> o.optString("title").takeIf { t -> t.isNotBlank() }?.let { t -> Headline(t.take(160), o.optString("source").take(40)) } } } } ?: emptyList()
+        val coming = j.optJSONArray("coming")?.let { a -> (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let { o -> o.optString("person").takeIf { p -> p.isNotBlank() }?.let { p -> Coming(p, maxOf(1, o.optInt("minutes", 1)), o.optDouble("km", 0.0)) } } } } ?: emptyList()
+        return TvHome(w, news.take(10), j.optBoolean("movieNight"), coming)
+    }
+
+    /** "Delhi 27°C · rain · 22–29°C · 80% rain" */
+    fun weatherLine(w: Weather): String = listOfNotNull(
+        (if (w.city.isNotBlank()) w.city + " " else "") + "${w.temp}°C", w.text.takeIf { it.isNotBlank() }, "${w.min}–${w.max}°C", w.rainChance?.let { "$it% rain" }
+    ).joinToString(" · ")
+
+    fun comingLine(c: Coming) = if (c.minutes <= 1) "${c.person} bas pahunchne wale hain" else "${c.person} ${c.minutes} minute mein aa rahe hain"
+
+    /** The morning panel shows from 05:00 to 10:59 local time, once per local day. */
+    fun inMorningWindow(hour: Int) = hour in 5..10
+    fun shouldShowMorning(hour: Int, today: String, shownOn: String) = inMorningWindow(hour) && today != shownOn
 }

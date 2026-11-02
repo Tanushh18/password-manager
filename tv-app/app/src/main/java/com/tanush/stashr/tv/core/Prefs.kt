@@ -47,6 +47,15 @@ class Prefs(ctx: Context) {
         get() = p.getString("lastError", "") ?: ""
         set(v) = p.edit().putString("lastError", v).apply()
 
+    /** The local date (yyyy-MM-dd) on which the morning panel was last shown. */
+    var morningShown: String
+        get() = p.getString("morningShown", "") ?: ""
+        set(v) = p.edit().putString("morningShown", v).apply()
+    /** The last good answer of /home/agent/tv-home, kept so the launcher is not empty while offline. */
+    var homeCache: String
+        get() = p.getString("homeCache", "") ?: ""
+        set(v) = p.edit().putString("homeCache", v).apply()
+
     fun position(name: String): Long = p.getLong("pos_" + name.hashCode(), 0)
     fun savePosition(name: String, ms: Long) = p.edit().putLong("pos_" + name.hashCode(), ms).apply()
 
