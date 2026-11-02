@@ -73,7 +73,12 @@ export function useConfirm() {
   useEffect(() => () => { resolver.current?.(null); resolver.current = null; }, []);
 
   const dialog = state ? <ConfirmDialog {...state} onSettle={settle} /> : null;
-  return [ask, dialog];
+  // An array for `const [ask, dialog] = useConfirm()`, with the same two members as properties so that
+  // `const { ask, dialog } = useConfirm()` and `confirm.ask(...)` (used on the Smart home page) work too.
+  const out = [ask, dialog];
+  out.ask = ask;
+  out.dialog = dialog;
+  return out;
 }
 
 function ConfirmDialog({ title = "Please confirm", message, confirmLabel = "Confirm", cancelLabel = "Cancel", danger = false, input = null, onSettle }) {
