@@ -126,3 +126,25 @@ export const STEP_CHOICES = [
   { label: "Tablet: speed test", step: { kind: "hub", type: "speed_test", args: {} } },
   { label: "Tablet: scan the Wi-Fi", step: { kind: "hub", type: "scan_now", args: {} } }
 ];
+
+/**
+ * Reads a place from what people paste: "28.6139, 77.2090", "28.6139 77.2090", "28.6139N 77.2090E", or a Google Maps / OpenStreetMap
+ * link ("…/@28.6139,77.2090,17z", "?q=28.6139,77.2090", "!3d28.6139!4d77.2090", "mlat=…&mlon=…"). Returns { lat, lon } or null.
+ */
+export function parseCoords(text) {
+  const t = decodeURIComponent(String(text || "")).trim();
+  if (!t) return null;
+  const ok = (la, lo) => (Number.isFinite(la) && Number.isFinite(lo) && Math.abs(la) <= 90 && Math.abs(lo) <= 180 ? { lat: Math.round(la * 1e6) / 1e6, lon: Math.round(lo * 1e6) / 1e6 } : null);
+  let m = /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/.exec(t) || /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/.exec(t) || /[?&](?:q|ll|query|center)=(-?\d+(?:\.\d+)?)(?:,|%2C)\s*(-?\d+(?:\.\d+)?)/.exec(t);
+  if (m) return ok(Number(m[1]), Number(m[2]));
+  m = /mlat=(-?\d+(?:\.\d+)?)&mlon=(-?\d+(?:\.\d+)?)/.exec(t);
+  if (m) return ok(Number(m[1]), Number(m[2]));
+  m = /^\s*(-?\d+(?:\.\d+)?)\s*°?\s*([NS])?\s*[,;\s]\s*(-?\d+(?:\.\d+)?)\s*°?\s*([EW])?\s*$/i.exec(t);
+  if (m) {
+    let la = Number(m[1]), lo = Number(m[3]);
+    if (/s/i.test(m[2] || "")) la = -Math.abs(la);
+    if (/w/i.test(m[4] || "")) lo = -Math.abs(lo);
+    return ok(la, lo);
+  }
+  return null;
+}

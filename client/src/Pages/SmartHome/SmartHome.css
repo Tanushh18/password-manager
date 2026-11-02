@@ -141,3 +141,13 @@
 .sh-chip.is-on { background: color-mix(in srgb, var(--ok, #1a8f4d) 20%, transparent); color: var(--ok, #1a8f4d); font-weight: 600; }
 .sh-ok { margin: 0; padding: .55rem .8rem; border-radius: 10px; background: color-mix(in srgb, var(--ok, #1a8f4d) 14%, transparent); }
 .sh-feat h3 { margin: .9rem 0 .25rem; font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; color: var(--text-faint, #667085); }
+
+/* maps */
+.hm__map { height: 300px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line, #d0d5dd); margin: .5rem 0; z-index: 0; }
+.hm__map--big { height: min(60vh, 520px); }
+.hm-pin { position: relative; }
+.hm-pin span { position: absolute; transform: translate(-50%, -100%); white-space: nowrap; padding: .15rem .55rem; border-radius: 999px; font: 600 .75rem system-ui, sans-serif; color: #fff; background: #2a78d6; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+.hm-pin span::after { content: ""; position: absolute; left: 50%; bottom: -7px; width: 0; height: 0; margin-left: -5px; border: 5px solid transparent; border-top-color: #fff; }
+.hm-live span { background: #eb6834; }
+.hm-old span { background: #7a8699; }
+.hm-home span { background: #1a8f4d; }

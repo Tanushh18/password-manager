@@ -131,6 +131,12 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] Say "tv par live location" in Stashr (website/Telegram): the TV opens the screen.
 - [ ] Turn the website switch off: the TV shows that it is switched off.
 
+## 7k. Website live map and home picker
+- [ ] Automations → Places → Home location: click the map, search your street, paste a Google Maps link, paste "lat, lon": each moves the pin; Save home keeps it.
+- [ ] Devices → Live map → Start live view: tiles load, Home pin and circle show; phones at home show as pins; a phone that is out shows the road line.
+- [ ] After 1–3 minutes the pin of a phone that is out turns orange ("live") and moves; Stop live view: phones return to the slow pace.
+- [ ] Dark mode / phone browser: the map and the list are usable.
+
 ## 8. Updates (OTA)
 - [ ] Push a change under `hub-app/` to `main`; the GitHub Release is created and is **not** "latest".
 - [ ] The app (or "check_update") finds it, verifies it and Android asks for one tap to install.

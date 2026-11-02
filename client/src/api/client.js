@@ -451,6 +451,8 @@ export const getHomeInsights = () => instance.get("/home/insights").then((r) => 
 export const saveHomeHistory = (body) => instance.put("/home/history", body).then((r) => r.data);
 export const deleteHomeHistory = () => instance.delete("/home/history").then((r) => r.data);
 export const saveHomeSpots = (spots) => instance.put("/home/spots", { spots }).then((r) => r.data);
+export const getHomeLive = (passive) => instance.get("/home/live" + (passive ? "?passive=1" : "")).then((r) => r.data);
+export const searchPlace = (q) => instance.get("/home/geocode", { params: { q } }).then((r) => r.data);
 export const getHomeWhere = () => instance.get("/home/where").then((r) => r.data);
 export const saveHomePlaces = (places) => instance.put("/home/places", { places }).then((r) => r.data);
 export const testHomePlace = (id, text) => instance.post(`/home/places/${id}/test`, { text }).then((r) => r.data);

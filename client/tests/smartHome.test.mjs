@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { stateOf, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName } from "../src/lib/smartHome.js";
+import { stateOf, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName, parseCoords } from "../src/lib/smartHome.js";
 
 test("a TV is off, in standby or on", () => {
   assert.equal(stateOf({ kind: "tv", online: false }), "off");
@@ -74,4 +74,16 @@ test("every step a person can pick has words", () => {
   for (const c of STEP_CHOICES) assert.ok(stepLabel(c.step) && !stepLabel(c.step).includes("_"), c.label);
   assert.equal(stepLabel({ type: "launch_app", args: { package: "com.netflix.ninja" } }), "Open Netflix");
   assert.equal(stepLabel({ type: "play_music", args: { query: "arijit" } }), "Play “arijit” on the tablet");
+});
+
+test("coordinates are read from text and map links", () => {
+  assert.deepEqual(parseCoords("28.6139, 77.2090"), { lat: 28.6139, lon: 77.209 });
+  assert.deepEqual(parseCoords("28.6139 77.2090"), { lat: 28.6139, lon: 77.209 });
+  assert.deepEqual(parseCoords("33.9 S, 18.4 E"), { lat: -33.9, lon: 18.4 });
+  assert.deepEqual(parseCoords("https://www.google.com/maps/place/Home/@28.6139,77.2090,17z/data=!3m1"), { lat: 28.6139, lon: 77.209 });
+  assert.deepEqual(parseCoords("https://www.google.com/maps/place/X/data=!3d28.6139!4d77.2090"), { lat: 28.6139, lon: 77.209 });
+  assert.deepEqual(parseCoords("https://maps.google.com/?q=28.6139,77.2090"), { lat: 28.6139, lon: 77.209 });
+  assert.deepEqual(parseCoords("https://www.openstreetmap.org/?mlat=28.6139&mlon=77.2090#map=17/28.6139/77.2090"), { lat: 28.6139, lon: 77.209 });
+  assert.equal(parseCoords("hello"), null);
+  assert.equal(parseCoords("123, 200"), null);
 });

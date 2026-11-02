@@ -63,6 +63,14 @@ All are listed with download buttons on the website's **/apps** page.
   Android may stretch the 8-second checks in the background (Doze), so expect updates every 10–60 s, not exactly 5. Instant start needs
   push messages (Firebase), which this project does not use. The map has no street tiles (no map-tile service), only the route line.
 
+## Live map and home location on the website
+- *Devices → Live map* (**Start live view**): a Leaflet map on OpenStreetMap tiles (fetched by your browser) with Home, a pin for every
+  linked phone (orange = live, grey = waiting), the road home for those who are out, ETA, speed, accuracy and "updated N s ago".
+  It polls every 5 s only while switched on and puts phones that are out into live mode (like the TV). `GET /home/live`.
+- *Automations → Places → Home location*: set it any of these ways — click on the map; search an address (`GET /home/geocode`, OpenStreetMap
+  Nominatim with Open-Meteo as a fallback); paste coordinates ("28.6139, 77.2090") or a Google Maps / OpenStreetMap link; type the
+  numbers; or "Use this device's location". The circle shows the "at home" area. One home location serves every phone and device.
+
 ## Local mode (when the server or the internet is down)
 - The tablet (Stashr Hub 1.8+) runs a tiny LAN server on port 8765 and advertises `_stashr-hub._tcp`. Server answers carry a shared key
   (`local.key`) that the tablet and the TV store while they are online. If the server cannot be reached for 90 s (tablet) / 45 s (TV):

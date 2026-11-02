@@ -750,9 +750,14 @@ describe("live map on the TV", () => {
             expect(r.body.devices[0].route.length).toBe(3);
             expect(r.body.devices[0].etaMinutes).toBe(20);
             expect(r.body.home.lat).toBe(28.6139);
+            const web = await request(app).get("/home/live").set(auth);                  // the website: also shows Mom at home
+            expect(web.status).toBe(200);
+            expect(web.body.devices.map((x) => x.name).sort()).toEqual(["Mom", "Papa"]);
             const fast = await loc(papa.token, 28.67, t0 + 5000);
             expect(fast.body.live).toBe(true);
             expect(fast.body.nextCheckSec).toBe(8);
+            const geo = await request(app).get("/home/geocode?q=ab").set(auth);
+            expect(geo.status).toBe(400);
             const homeBody = await loc(mom.token, 28.6139, t0 + 6000);
             expect(homeBody.body.live).toBe(false);                           // the one at home keeps its normal pace
             await request(app).put("/home/settings").set(auth).send({ tvLive: { enabled: false } });

@@ -141,36 +141,69 @@ router.post("/home/agent/unlink", agentLimiter, (req, res, next) => homeRouter.a
 
 // The TV's live map: the phones that are out, where they are right now, and the road home.
 const routeCache = new Map();   // phone id -> { at, lat, lon, line, seconds, meters, traffic }
+async function buildLive(owner, { includeHome = false, extend = true } = {}) {
+    const now = Date.now();
+    const s = await automation.settingsOf(owner);
+    if (s.tvLive && s.tvLive.enabled === false) return { ok: false, error: "The live map is switched off on the Stashr website (Family locations).", devices: [], home: null };
+    if (extend) await HomeSettings.updateOne({ owner }, { $set: { liveUntil: new Date(now + 2 * 60 * 1000) } });
+    const spot = s.homeSpot && Number.isFinite(s.homeSpot.lat) ? { lat: s.homeSpot.lat, lon: s.homeSpot.lon, radius: s.homeSpot.radius || 200 } : null;
+    const phones = (await HomeDevice.find({ owner, kind: "phone" }).lean()).filter((p) => p.status && p.status.agent === "stashr-where" && p.status.location);
+    const devices = [];
+    for (const p of phones.slice(0, 8)) {
+        const w = automation.whereIs(s, p, now), loc = p.status.location;
+        const out = w.state === "away" || w.state === "coming";
+        if (!out && !(includeHome && (w.state === "home" || w.state === "unset" || w.state === "unknown"))) continue;
+        let line = spot && out ? [[loc.lat, loc.lon], [spot.lat, spot.lon]] : [];
+        if (spot && out && devices.length < 6) {
+            const key = String(p._id), c = routeCache.get(key);
+            if (c && now - c.at < 45000 && automation.distanceM({ lat: loc.lat, lon: loc.lon }, c) < 300) line = c.line;
+            else {
+                const r = await route.drivingRoute({ lat: loc.lat, lon: loc.lon }, { lat: spot.lat, lon: spot.lon }, { geometry: true });
+                if (r && r.line && r.line.length > 1) { line = r.line; routeCache.set(key, { at: now, lat: loc.lat, lon: loc.lon, line }); }
+            }
+        }
+        devices.push({ id: String(p._id), name: p.person || p.name, lat: loc.lat, lon: loc.lon, acc: Math.round(loc.acc || 0), speedKmh: Number.isFinite(loc.speed) ? Math.round(loc.speed * 3.6) : null,
+            at: Number(loc.at), ageSec: Math.max(0, Math.round((now - Number(loc.at)) / 1000)), state: w.state, etaMinutes: w.etaMinutes || null, km: w.distanceKm ?? null, traffic: Boolean(w.traffic),
+            live: now - Number(loc.at) < 40000, route: line });
+    }
+    return { ok: true, now, home: spot, devices: devices.sort((a, b2) => (a.etaMinutes || 999) - (b2.etaMinutes || 999)) };
+}
+
 router.get("/home/agent/tv-live", agentLimiter, (req, res, next) => homeRouter.agentAuth(req, res, next), async (req, res) => {
     try {
         res.set("Cache-Control", "no-store");
-        const d = req.device;
-        if (d.kind !== "tv" && d.kind !== "hub") return res.status(403).json({ error: "Only the TV or the tablet can show the live map." });
-        const owner = d.owner, now = Date.now();
-        const s = await automation.settingsOf(owner);
-        if (s.tvLive && s.tvLive.enabled === false) return res.json({ ok: false, error: "The live map is switched off on the Stashr website.", devices: [], home: null });
-        await HomeSettings.updateOne({ owner }, { $set: { liveUntil: new Date(now + 2 * 60 * 1000) } });
-        const spot = s.homeSpot && Number.isFinite(s.homeSpot.lat) ? { lat: s.homeSpot.lat, lon: s.homeSpot.lon, radius: s.homeSpot.radius || 200 } : null;
-        const phones = (await HomeDevice.find({ owner, kind: "phone" }).lean()).filter((p) => p.status && p.status.agent === "stashr-where" && p.status.location);
-        const devices = [];
-        for (const p of phones.slice(0, 8)) {
-            const w = automation.whereIs(s, p, now), loc = p.status.location;
-            if (w.state !== "away" && w.state !== "coming") continue;          // only the ones that are out
-            let line = spot ? [[loc.lat, loc.lon], [spot.lat, spot.lon]] : [];
-            if (spot && devices.length < 6) {
-                const key = String(p._id), c = routeCache.get(key);
-                if (c && now - c.at < 45000 && automation.distanceM({ lat: loc.lat, lon: loc.lon }, c) < 300) line = c.line;
-                else {
-                    const r = await route.drivingRoute({ lat: loc.lat, lon: loc.lon }, { lat: spot.lat, lon: spot.lon }, { geometry: true });
-                    if (r && r.line && r.line.length > 1) { line = r.line; routeCache.set(key, { at: now, lat: loc.lat, lon: loc.lon, line }); }
-                }
-            }
-            devices.push({ id: String(p._id), name: p.person || p.name, lat: loc.lat, lon: loc.lon, acc: Math.round(loc.acc || 0), speedKmh: Number.isFinite(loc.speed) ? Math.round(loc.speed * 3.6) : null,
-                at: Number(loc.at), ageSec: Math.max(0, Math.round((now - Number(loc.at)) / 1000)), state: w.state, etaMinutes: w.etaMinutes || null, km: w.distanceKm ?? null, traffic: Boolean(w.traffic),
-                live: now - Number(loc.at) < 40000, route: line });
-        }
-        return res.json({ ok: true, now, home: spot, devices: devices.sort((a, b) => (a.etaMinutes || 999) - (b.etaMinutes || 999)) });
+        if (req.device.kind !== "tv" && req.device.kind !== "hub") return res.status(403).json({ error: "Only the TV or the tablet can show the live map." });
+        return res.json(await buildLive(req.device.owner));
     } catch (e) { return fail(res, e, "Could not load the live map."); }
+});
+
+// The website's live map: the same, and it also puts the phones that are out into live mode while the page keeps asking.
+router.get("/home/live", authenticate, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        return res.json(await buildLive(req.rootUser._id, { includeHome: true, extend: req.query.passive !== "1" }));
+    } catch (e) { return fail(res, e, "Could not load the live map."); }
+});
+
+// Look up an address or a place for the home location (OpenStreetMap Nominatim, falling back to Open-Meteo's place search).
+const geoLimiter = rateLimit({ windowMs: 60 * 1000, max: 12, message: "Too many searches. Wait a minute." });
+router.get("/home/geocode", authenticate, geoLimiter, async (req, res) => {
+    try {
+        const q = String(req.query.q || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 120);
+        if (q.length < 3) return res.status(400).json({ error: "Type at least 3 letters." });
+        let results = [];
+        try {
+            const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=${encodeURIComponent(q)}`, { headers: { "User-Agent": "Stashr-Home/1.0 (personal home automation)", Accept: "application/json" }, signal: AbortSignal.timeout(6000) });
+            if (r.ok) results = (await r.json()).map((x) => ({ name: String(x.display_name || "").slice(0, 160), lat: Number(x.lat), lon: Number(x.lon) }));
+        } catch (e) { /* try the fallback */ }
+        if (!results.length) {
+            try {
+                const g = await require("../utils/homeWeather").geocode(q);
+                if (g) results = [{ name: g.city, lat: g.lat, lon: g.lon }];
+            } catch (e) { /* nothing */ }
+        }
+        return res.json({ results: results.filter((x) => Number.isFinite(x.lat) && Number.isFinite(x.lon)) });
+    } catch (e) { return fail(res, e, "Could not search."); }
 });
 
 // The page: who is where, how far from home, and how long they will take.

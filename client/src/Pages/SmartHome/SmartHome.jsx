@@ -8,6 +8,7 @@ import { Section, Skeleton, Empty, useConfirm } from "../Render/RenderUi";
 import { usePolling } from "../Render/renderHooks";
 import { errorMessage } from "../Render/renderUtils";
 import { stateOf, STATE_LABEL, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName, splitStale, TAG_LABEL } from "../../lib/smartHome";
+import { LiveMapCard } from "./HomeMap";
 import { InsightsCard, LocationsCard, HomeScreenCard, FeaturesCard, PairCard, PeopleCard, PhonesCard, AlertsCard, TvTimeCard, ScenesCard, SchedulesCard, PlacesCard, SpeedCard, CameraCard, SlideshowCard, useHomeSettings } from "./HomeExtras";
 import "../Render/RenderDashboard.css";
 import "./SmartHome.css";
@@ -424,6 +425,7 @@ export default function SmartHome() {
           ? <TvCard key={d.id} device={d} send={send} onChanged={load} />
           : <HubCard key={d.id} device={d} send={send} onChanged={load} />)}
         <LocationsCard />
+        <LiveMapCard />
         <PhonesCard phones={phones} onChanged={load} />
         <PairCard />
       </>) : null}

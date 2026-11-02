@@ -9,6 +9,8 @@ import { usePolling } from "../Render/renderHooks";
 import { errorMessage } from "../Render/renderUtils";
 import { ago, fmtBytes, fmtMinutes, daysLabel, stepLabel, STEP_CHOICES } from "../../lib/smartHome";
 import { TvTimeChart, SpeedChart, CommuteChart } from "./HomeCharts";
+import { MapPicker } from "./HomeMap";
+import { parseCoords } from "../../lib/smartHome";
 
 /** The settings every card here edits, loaded once. */
 export function useHomeSettings() {
@@ -339,11 +341,13 @@ function HomeSpotBlock({ home }) {
     <div className="sh-editor">
       <b>Home location · arrival time</b>
       <p className="sh-dim">With a home location, the tablet and this page show “Papa 10 minute mein aa rahe hain” for family phones that share their location and are heading home. With “real roads” on, Stashr asks the free OpenStreetMap routing service (OSRM) for the driving time and sends it only two points: the phone’s position and your home. With a Mapbox token set on the server it is the driving time for right now including live traffic; without one it is the normal driving time. Off, or if the service does not answer, it falls back to a straight-line estimate, good to a few minutes.</p>
+      <MapPicker lat={Number(lat) || null} lon={Number(lon) || null} radius={spot?.radius || 200} onPick={(p) => { setLat(String(p.lat)); setLon(String(p.lon)); }} />
       <div className="sh-row">
         <input type="number" step="any" value={lat} onChange={(e) => setLat(e.target.value)} placeholder="Home latitude" aria-label="Home latitude" />
         <input type="number" step="any" value={lon} onChange={(e) => setLon(e.target.value)} placeholder="Home longitude" aria-label="Home longitude" />
         <button type="button" className="rd-btn rd-btn--quiet" onClick={here} disabled={busy}>{busy ? "Locating…" : "Use this device’s location"}</button>
         <button type="button" className="rd-btn rd-btn--primary" disabled={!lat || !lon} onClick={() => save({ homeSpot: { lat, lon, radius: spot?.radius || 200 } }, "Home location saved.")}>Save home</button>
+        <input value="" onChange={(e) => { const p = parseCoords(e.target.value); if (p) { setLat(String(p.lat)); setLon(String(p.lon)); } }} placeholder="…or paste coordinates / Google Maps link" aria-label="Paste coordinates or a map link" onPaste={(e) => { const p = parseCoords(e.clipboardData.getData("text")); if (p) { e.preventDefault(); setLat(String(p.lat)); setLon(String(p.lon)); } }} />
       </div>
       <div className="sh-row">
         <label className="sh-switch"><input type="checkbox" checked={eta.enabled !== false} onChange={(e) => save({ eta: { enabled: e.target.checked } })} />Show who is on the way home</label>
