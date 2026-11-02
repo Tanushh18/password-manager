@@ -156,6 +156,7 @@ export function AlertsCard({ home }) {
             <span className="sh-dim">to</span>
             <input type="time" value={a.nightTo} onChange={(e) => setA("nightTo", e.target.value)} aria-label="Night ends" />
           </div>
+          <Toggle checked={s.rain !== false} onChange={(v) => save({ rain: v }, v ? "People who leave home when rain is likely get a “take an umbrella” message." : "Umbrella reminders are off.")}>Remind someone to take an umbrella when they leave and rain is likely</Toggle>
           <Toggle checked={a.presence} onChange={(v) => setA("presence", v)}>Someone comes home or leaves</Toggle>
           <Toggle checked={a.emptyHomeTv} onChange={(v) => setA("emptyHomeTv", v)}>Nobody is home but the TV is on</Toggle>
           <Toggle checked={a.camera} onChange={(v) => setA("camera", v)}>The tablet camera sees someone (with the photo)</Toggle>
@@ -174,6 +175,17 @@ export function AlertsCard({ home }) {
             <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Your city, for the weather" aria-label="City" maxLength={80} />
             <button className="rd-btn rd-btn--quiet" type="submit">Save</button>
           </form>
+          <h4 className="sh-h">News on the TV</h4>
+          <Toggle checked={s.news?.enabled !== false} onChange={(v) => save({ news: { enabled: v } })}>Morning headlines on the TV launcher</Toggle>
+          <div className="sh-row sh-indent">
+            <select value={s.news?.lang || "en"} onChange={(e) => save({ news: { lang: e.target.value } })} aria-label="News language">
+              <option value="en">English</option><option value="hi">हिन्दी</option><option value="both">English and Hindi</option>
+            </select>
+            <select value={s.news?.count || 6} onChange={(e) => save({ news: { count: Number(e.target.value) } })} aria-label="How many headlines">
+              {[3, 5, 6, 8, 10].map((n) => <option key={n} value={n}>{n} headlines</option>)}
+            </select>
+          </div>
+          <p className="sh-dim">Headlines come from the public Google News (India) feed. The first time the TV shows its home screen each morning, it shows the weather and the top headlines for half a minute.</p>
           <p className="sh-dim">Times are in {s.timezone}.</p>
         </div>
       </div>
@@ -612,6 +624,8 @@ export function FeaturesCard({ home, devices, goTo }) {
     ]],
     ["Media and network", [
       ["Weather", s.weather?.city ? "on" : "off", s.weather?.city || "Set a city under Alerts and daily briefs", "security"],
+      ["Morning headlines on the TV", s.news?.enabled !== false ? "on" : "off", "", "security"],
+      ["Umbrella reminder when leaving", s.rain !== false ? "on" : "off", "Needs the weather city", "security"],
       ["Internet speed tests", hub?.status?.speed ? "on" : "off", "Every hour from the tablet", "media"],
       ["Photo frame (slideshow)", s.slideshowFolder ? "on" : "off", "", "media"]
     ]]

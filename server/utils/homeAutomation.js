@@ -289,6 +289,14 @@ async function etaTick(owner, now, settings, devices) {
                 await announce(owner, text, { settings, devices, exceptDevice: ph._id, now });
             }
         }
+        if (!atHome && old.atHome === true && fresh && settings.rain !== false && ph.status && ph.status.agent === "stashr-where"
+            && await claim(`rain:${owner}:${key}:${localParts(now, settings.timezone || "Asia/Kolkata").date}:${Math.floor(localParts(now, settings.timezone || "Asia/Kolkata").minutes / 360)}`)) {
+            // Left home: if rain is likely today, tell this person (only) to take an umbrella.
+            try {
+                const f = await weather.forecast(settings.weather, settings.timezone || "Asia/Kolkata");
+                if (f && Number(f.rainChance) >= 50) await queue(ph, "notice", { text: `Barish ki ${f.rainChance}% sambhavna hai aaj. Chhatri le lo ☔` });
+            } catch (e) { /* no weather: stay quiet */ }
+        }
         if (atHome && old.atHome === false && fresh && await claim(`arrived:${owner}:${key}:${Math.floor(now / (20 * 60000))}`)) {
             next.coming = false; next.fired = [];
             await announce(owner, `Open the door: ${person} arrived home`, { settings, devices, exceptDevice: ph._id, urgent: true, kind: "arrived", now });
@@ -326,6 +334,14 @@ function comingList(settings, now = Date.now()) {
         .sort((a, b) => a.minutes - b.minutes);
 }
 const comingLine = (c) => (c.minutes <= 1 ? `${c.person} bas pahunchne wale hain` : `${c.person} ${c.minutes} minute mein aa rahe hain`);
+
+/** Everyone with a person is home, and it is a weekend evening (Fri 17:00 on): the TV launcher then offers movie night. */
+function movieNightOn(settings, devices, now = Date.now()) {
+    const people = home.presence((devices || []).filter((d) => d.kind === "hub"), (devices || []).filter((d) => d.kind === "phone"), now);
+    if (!people.length || !people.every((p) => p.home)) return false;
+    const l = localParts(now, settings.timezone || "Asia/Kolkata");
+    return l.weekday === 6 || l.weekday === 0 ? l.minutes >= 16 * 60 : l.weekday === 5 && l.minutes >= 17 * 60;
+}
 
 /** The weekly report: TV time per day, new devices, speed, camera alerts. */
 async function weeklyText(owner, settings, now = Date.now()) {
@@ -479,4 +495,4 @@ const DEFAULT_SCENES = [
     { id: "goodnight", name: "Good night", steps: [{ kind: "tv", type: "media", args: { action: "play_pause" } }, { kind: "tv", type: "key", args: { key: "HOME" } }] }
 ];
 
-module.exports = { localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, autoCamera, geoTick, distanceM, etaTick, announce, whereIs, checkInterval, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };
+module.exports = { localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, movieNightOn, autoCamera, geoTick, distanceM, etaTick, announce, whereIs, checkInterval, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };

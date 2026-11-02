@@ -32,6 +32,8 @@ const homeSettingsSchema = new mongoose.Schema({
     // Places: a family phone arrives at / leaves a spot, and the tablet sends a WhatsApp message to a group.
     places: { type: [mongoose.Schema.Types.Mixed], default: [] },
     // Where home is, for "Papa is 10 minutes away" (the phones' location shared with Stashr Hub).
+    news: { enabled: { type: Boolean, default: true }, lang: { type: String, enum: ["en", "hi", "both"], default: "en" }, count: { type: Number, default: 6 } },
+    rain: { type: Boolean, default: true },       // "Chhatri le lo" to the phone of someone who leaves when rain is likely
     homeSpot: { lat: Number, lon: Number, radius: { type: Number, default: 200 } },
     eta: { enabled: { type: Boolean, default: true }, maxKm: { type: Number, default: 40 }, notifyMinutes: { type: Number, default: 15 }, routing: { type: Boolean, default: true }, toTablet: { type: Boolean, default: true }, toTv: { type: Boolean, default: true }, toPhones: { type: Boolean, default: true } },
     locationCode: { type: String, default: "", index: true },

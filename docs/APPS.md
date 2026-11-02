@@ -25,6 +25,12 @@ All are listed with download buttons on the website's **/apps** page.
   server directly with its own token (no tablet relay needed; the old relay through the tablet still works if present).
 - **Commands it understands:** launch_app, volume, media, key (HOME/BACK through its accessibility service), open_url (YouTube),
   sync_now, remove_movie, play_movie, notify (banner over whatever is playing; needs "Display over other apps").
+- **On the TV home screen:** weather chip, a *Headlines* row, a one-time *Good morning* panel (weather + top 5 headlines, 30 s) the
+  first time the launcher shows each morning (05:00–11:00), "Aaj movie night?" (a row of the USB movies) when everyone with a person
+  is home on a weekend evening (Fri 17:00 on, Sat/Sun 16:00 on), and "X is arriving…" cards. Data: `GET /home/agent/tv-home`
+  (weather from Open-Meteo, headlines from the public Google News India RSS feed, English / Hindi / both, cached 20 min).
+- **Updates:** Stashr TV is built by `tv-apk.yml` on every change under `tv-app/`, released as `stashr-tv-v…` (never "latest") and served at
+  `/api/mobile-updates/tv/*`; the TV offers it (one tap). The first install is by cable (`adb install`).
 - **Limits:** a TV can't be powered off by an app (limits pause and go home); foreground-app detection needs the accessibility service.
 
 ## Stashr Location (family phones)

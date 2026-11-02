@@ -29,6 +29,7 @@ const home = require("../utils/home");
 const automation = require("../utils/homeAutomation");
 const media = require("../utils/homeMedia");
 const weather = require("../utils/homeWeather");
+const news = require("../utils/homeNews");
 const movies = require("../utils/homeMovies");
 const { record } = require("../utils/homeEvents");
 const homeRouter = require("./home");
@@ -83,7 +84,7 @@ const publicSettings = (s) => ({
     timezone: s.timezone, alerts: s.alerts, weather: { city: (s.weather && s.weather.city) || "" }, brief: { enabled: s.brief.enabled, time: s.brief.time },
     weekly: { enabled: s.weekly.enabled }, tvLimit: { minutes: s.tvLimit.minutes, action: s.tvLimit.action, lateNight: s.tvLimit.lateNight !== false },
     schedules: s.schedules || [], scenes: (s.scenes && s.scenes.length ? s.scenes : automation.DEFAULT_SCENES),
-    slideshowFolder: s.slideshowFolder || "", places: s.places || [], homeSpot: s.homeSpot && Number.isFinite(s.homeSpot.lat) ? { lat: s.homeSpot.lat, lon: s.homeSpot.lon, radius: s.homeSpot.radius || 200 } : null, eta: { enabled: true, maxKm: 40, notifyMinutes: 15, routing: true, ...(s.eta || {}) }, camera: { sensitivity: 5, video: true, auto: false, ...(s.camera || {}), autoState: undefined }
+    slideshowFolder: s.slideshowFolder || "", places: s.places || [], news: { enabled: true, lang: "en", count: 6, ...(s.news || {}) }, rain: s.rain !== false, homeSpot: s.homeSpot && Number.isFinite(s.homeSpot.lat) ? { lat: s.homeSpot.lat, lon: s.homeSpot.lon, radius: s.homeSpot.radius || 200 } : null, eta: { enabled: true, maxKm: 40, notifyMinutes: 15, routing: true, ...(s.eta || {}) }, camera: { sensitivity: 5, video: true, auto: false, ...(s.camera || {}), autoState: undefined }
 });
 
 router.get("/home/settings", authenticate, async (req, res) => {
@@ -139,6 +140,13 @@ router.put("/home/settings", authenticate, writeLimiter, async (req, res) => {
             if (raw && !id) return res.status(400).json({ error: "Paste the Drive folder's link." });
             set.slideshowFolder = id;
         }
+        if (b.news && typeof b.news === "object") {
+            const c = cur.news || {}, n = b.news;
+            const lang = n.lang !== undefined ? String(n.lang) : (c.lang || "en"), count = n.count !== undefined ? Number(n.count) : (c.count || 6);
+            if (!["en", "hi", "both"].includes(lang) || !Number.isInteger(count) || count < 1 || count > 10) return res.status(400).json({ error: "News language is English, Hindi or both; 1 to 10 headlines." });
+            set.news = { enabled: bool(n.enabled, c.enabled !== false), lang, count };
+        }
+        if (b.rain !== undefined) set.rain = Boolean(b.rain);
         if (b.homeSpot !== undefined) {
             if (b.homeSpot === null) set.homeSpot = {};
             else {
@@ -402,6 +410,28 @@ router.get("/home/agent/today", agentLimiter, agentAuth, async (req, res) => {
         const s = await automation.settingsOf(req.device.owner);
         return res.json(await automation.todayLines(req.device.owner, s));
     } catch (e) { return fail(res, e, "Could not load today's updates."); }
+});
+
+// What the TV launcher shows on top: the weather, the morning headlines, movie night.
+router.get("/home/agent/tv-home", agentLimiter, agentAuth, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const owner = req.device.owner;
+        const s = await automation.settingsOf(owner);
+        const devices = await HomeDevice.find({ owner }).lean();
+        let w = weatherCache.get(String(owner));
+        if (!w || Date.now() - w.at > 15 * 60 * 1000) {
+            w = { at: Date.now(), value: await weather.forecast(s.weather, s.timezone).catch(() => null) };
+            weatherCache.set(String(owner), w);
+        }
+        const n = s.news || {};
+        return res.json({
+            time: new Date().toISOString(), timezone: s.timezone, weather: w.value,
+            news: n.enabled === false ? [] : await news.headlines(n.lang || "en", Math.min(Math.max(Number(n.count) || 6, 1), 10)),
+            movieNight: automation.movieNightOn(s, devices),
+            coming: automation.comingList(s)
+        });
+    } catch (e) { return fail(res, e, "Could not load the TV home screen."); }
 });
 
 router.post("/home/agent/scene/:id", agentLimiter, agentAuth, async (req, res) => {

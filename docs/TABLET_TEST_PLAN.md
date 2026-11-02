@@ -102,6 +102,13 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] Family locations shows "live traffic" next to a coming-home phone; the minutes match Google Maps' current time within a few minutes, at rush hour and at night.
 - [ ] Remove the token: the label disappears and the OSRM time returns.
 
+## 7g. Rain, news, movie night, TV home screen
+- [ ] Set the weather city; when the forecast chance is ≥ 50% and one phone leaves home, only that phone gets "Chhatri le lo" (not the others, not twice within 6 hours).
+- [ ] TV launcher shows the weather chip and the Headlines row; changing language/count on the website changes it within 15 min.
+- [ ] First launcher view each morning (05:00–11:00) shows the Good morning panel for ~30 s; not again the same day.
+- [ ] Saturday evening with everyone home: "Aaj movie night?" row with USB movies; with someone out: no row.
+- [ ] Nothing on the tablet or TV speaks.
+
 ## 8. Updates (OTA)
 - [ ] Push a change under `hub-app/` to `main`; the GitHub Release is created and is **not** "latest".
 - [ ] The app (or "check_update") finds it, verifies it and Android asks for one tap to install.

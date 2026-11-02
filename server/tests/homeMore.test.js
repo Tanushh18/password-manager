@@ -589,3 +589,64 @@ describe("live traffic from Mapbox", () => {
     });
 });
 
+describe("TV home: weather, headlines, movie night; rain reminder", () => {
+    const newsMod = require("../utils/homeNews");
+    test("headlines are parsed from the RSS feed", () => {
+        const xml = `<rss><channel><item><title>Big rain in Delhi &amp; NCR - The Hindu</title><source url="x">The Hindu</source><pubDate>Mon, 02 Nov 2026 03:00:00 GMT</pubDate></item><item><title><![CDATA[Markets rise - Mint]]></title><pubDate>Mon, 02 Nov 2026 02:00:00 GMT</pubDate></item></channel></rss>`;
+        const items = newsMod.parse(xml);
+        expect(items[0]).toEqual({ title: "Big rain in Delhi & NCR", source: "The Hindu", at: Date.parse("Mon, 02 Nov 2026 03:00:00 GMT") });
+        expect(items[1].title).toBe("Markets rise");
+        expect(items[1].source).toBe("Mint");
+    });
+
+    test("the TV asks for its home screen data; movie night needs everyone home on a weekend evening", async () => {
+        const auth = await signUp();
+        const tv = (await request(app).post("/home/devices").set(auth).send({ name: "TV", kind: "tv" })).body;
+        newsMod.use(async (lang) => [{ title: lang === "hi" ? "खबर" : "News one", source: "S", at: 1 }]);
+        try {
+            const r = await request(app).get("/home/agent/tv-home").set(bearer(tv.token));
+            expect(r.status).toBe(200);
+            expect(r.body.news[0].title).toBe("News one");
+            expect(r.body.movieNight).toBe(false);
+            await request(app).put("/home/settings").set(auth).send({ news: { lang: "both", count: 2 } });
+            expect((await request(app).get("/home/agent/tv-home").set(bearer(tv.token))).body.news.length).toBe(2);
+            expect((await request(app).put("/home/settings").set(auth).send({ news: { lang: "fr" } })).status).toBe(400);
+            await request(app).put("/home/settings").set(auth).send({ news: { enabled: false } });
+            expect((await request(app).get("/home/agent/tv-home").set(bearer(tv.token))).body.news).toEqual([]);
+        } finally { newsMod.use(null); }
+        // movie night rule, directly
+        const sat = Date.UTC(2026, 10, 7, 15, 0);      // Saturday 20:30 in India
+        const wed = Date.UTC(2026, 10, 4, 15, 0);
+        const hubHome = { kind: "hub", lanBook: { "n-mom": { ip: "1", up: true, lastSeen: sat } }, lanLabels: { "n-mom": { person: "Mom" } } };
+        expect(automation.movieNightOn({ timezone: "Asia/Kolkata" }, [hubHome], sat)).toBe(true);
+        expect(automation.movieNightOn({ timezone: "Asia/Kolkata" }, [{ ...hubHome, lanBook: { "n-mom": { ip: "1", up: true, lastSeen: wed } } }], wed)).toBe(false);
+        expect(automation.movieNightOn({ timezone: "Asia/Kolkata" }, [{ ...hubHome, lanBook: { "n-mom": { ip: "1", up: false, lastSeen: sat - 3600_000 } } }], sat)).toBe(false);
+    });
+
+    test("leaving home when rain is likely tells that person (only) to take an umbrella", async () => {
+        const auth = await signUp();
+        const code = (await request(app).get("/home/location-code").set(auth)).body.code;
+        const a = (await request(app).post("/home/agent/link").send({ code, name: "Papa" })).body;
+        const b = (await request(app).post("/home/agent/link").send({ code, name: "Mom" })).body;
+        await request(app).put("/home/settings").set(auth).send({ homeSpot: { lat: 28.6139, lon: 77.209, radius: 200 } });
+        const owner = (await HomeSettings.findOne({}).lean()).owner;
+        await HomeSettings.updateOne({ owner }, { $set: { "weather.lat": 28.6, "weather.lon": 77.2, "weather.city": "Delhi" } });
+        const realFetch = global.fetch;
+        global.fetch = async (url) => (String(url).includes("open-meteo") ? { ok: true, json: async () => ({ current: { temperature_2m: 25, apparent_temperature: 26, weather_code: 61 }, daily: { temperature_2m_max: [28], temperature_2m_min: [22], precipitation_probability_max: [80] } }) } : realFetch(url));
+        try {
+            const loc = (t, lat, at) => request(app).post("/home/agent/location").set(bearer(t)).send({ lat, lon: 77.209, acc: 20, at, speed: 10 });
+            const t0 = Date.now();
+            await loc(a.token, 28.6139, t0);           // Papa at home
+            await loc(b.token, 28.6139, t0);
+            const out = await loc(a.token, 28.64, t0 + 60_000);   // Papa leaves
+            const after = await loc(a.token, 28.645, t0 + 61_000);
+            const notices = [...out.body.notices, ...after.body.notices].map((n) => n.text);
+            const mom = await loc(b.token, 28.6139, t0 + 62_000);
+            expect(notices.length + (await HomeDevice.findOne({ name: "Papa" }).lean()).commands.filter((c) => c.type === "notice" && /Chhatri/.test(c.args.text)).length > 0).toBe(true);
+            expect(mom.body.notices.some((n) => /Chhatri/.test(n.text))).toBe(false);
+            await request(app).put("/home/settings").set(auth).send({ rain: false });
+            expect((await request(app).get("/home/settings").set(auth)).body.rain).toBe(false);
+        } finally { global.fetch = realFetch; }
+    });
+});
+

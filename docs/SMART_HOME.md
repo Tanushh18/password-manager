@@ -47,6 +47,9 @@ vault. The older TV/tablet sign-in (`POST /home/devices`, kinds `tv` and `hub`) 
   `docs/APPS.md`): fixed link code from *Devices → Family locations*, no notification, adaptive checking. The tablet shows (it never speaks) “X is arriving in N mins” and “Open the door: X arrived home”; the TV, the other family phones and Telegram get it too.
 - **Telegram control**: write to your Stashr bot like the assistant (“pause the tv”, “camera photo”, “kaun ghar par hai”,
   “papa kab aayenge”, “today”), or /home, /who, /camera, /today, /tv. Only your linked chat is answered.
+- **Umbrella reminder:** when someone's Stashr Location phone leaves home and today's rain chance is 50% or more, only that
+  phone gets “Barish ki N% sambhavna hai aaj. Chhatri le lo ☔” (once per 6 hours). Switch in *Alerts and daily briefs*.
+- **TV home screen data:** weather, headlines and movie night come from `GET /home/agent/tv-home` (see `docs/APPS.md`).
 - **Who is home**: a person is home when a Wi-Fi device you gave that person answers, or their paired phone's own
   address answers on the tablet's scan (`home.presence`).
 - **TV**: status, remote, USB movies, as before.
