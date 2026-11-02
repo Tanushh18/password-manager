@@ -91,6 +91,8 @@ describe("Servers tab background sync", () =>
   test("never empties a list: all-suspended or single-URL lists are left alone", async () =>
   {
     adminUsers = [admin()];
+    // ShineOne Estate ships with two built-in URLs; give it one saved URL so only the lists under test are in play.
+    docs = [{ app: "stashr", urls: ["https://password-manager-server-xxdr.onrender.com", "https://password-manager-server-8gvj.onrender.com"] }, { app: "shineoneestate", urls: ["https://password-manager-server-g305.onrender.com"] }];
     servicesFor = () => ({ services: [svc("s1", "password-manager-server-xxdr", { suspended: true }), svc("s2", "password-manager-server-8gvj", { suspended: true })], accounts: accountsMap });
     const summary = await runAllRegistrySync();
     expect(summary.urlsRemoved).toBe(0);
