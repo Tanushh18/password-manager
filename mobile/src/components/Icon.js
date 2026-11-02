@@ -3,6 +3,7 @@ import Svg, { Path, Circle, Rect } from "react-native-svg";
 
 /* Line icons (24px grid, round caps) — same family as the website's icon set. */
 const P = {
+  home: [<Path key="a" d="M3.5 11 12 4l8.5 7M6 9.5V20h12V9.5M10 20v-5h4v5" />],
   shield: [<Path key="a" d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3z" />],
   shieldCheck: [
     <Path key="a" d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3z" />,

@@ -1,11 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Modal, Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { activeServer, authHeaders } from "../../lib/api";
 import { home, mediaPath } from "../../lib/homeApi";
 import { ago } from "../../lib/smartHome";
-import { Bad, Boundary, Box, Btn, Dim, Good, Input, Pick, Row, Sub, Toggle, Txt, ask, useAct, usePoll } from "./h";
+import { Bad, Boundary, Box, Btn, Dim, Input, Pick, Row, Sub, Toggle, Txt, ask, useAct, usePoll } from "./h";
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -47,7 +47,7 @@ function LiveView({ hub, onClose }) {
     const ask_ = setInterval(start, 110 * 1000);
     const tick = setInterval(() => setN((x) => x + 1), 1500);
     return () => { clearInterval(ask_); clearInterval(tick); };
-  }, [hub.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hub.id]);
   return (
     <View style={{ gap: 6 }}>
       <View style={{ height: 220, backgroundColor: "#000", borderRadius: 10, overflow: "hidden", alignItems: "center", justifyContent: "center" }}>

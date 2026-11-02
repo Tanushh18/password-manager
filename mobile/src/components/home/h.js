@@ -158,8 +158,7 @@ export function useLoad(fn, deps = []) {
   const load = useCallback(async () => {
     try { setData(await saved.current()); setError(""); } catch (e) { setError(e.message || "Could not load."); }
   }, []);
-  useEffect(() => { load(); // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  useEffect(() => { load(); }, deps);
   return { data, setData, error, reload: load };
 }
 

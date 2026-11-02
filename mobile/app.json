@@ -3,7 +3,7 @@
     "name": "Stashr",
     "slug": "aurelia-vault",
     "scheme": "stashr",
-    "version": "2.3.1",
+    "version": "2.4.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "com.tanush.stashr.com",
-      "versionCode": 7,
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#31AAA9"

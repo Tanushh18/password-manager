@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import Svg, { Circle, G, Line, Path, Polyline, Rect, Text as SText } from "react-native-svg";
+import Svg, { Circle, G, Line, Polyline, Rect, Text as SText } from "react-native-svg";
 import { useTheme } from "../../lib/theme";
 import { fmtMinutes, niceMax } from "../../lib/smartHome";
 import { Dim } from "./h";

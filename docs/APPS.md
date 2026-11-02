@@ -11,6 +11,22 @@ All are listed with download buttons on the website's **/apps** page.
 | **Stashr Location** (`where-app/`, `com.tanush.stashr.where`) | Each family member's phone | Shares only location, battery and "on Wi-Fi yes/no" | Nothing of the vault. Joins with the fixed code + the person's name |
 | **Browser extension** (`extension/`) | You | Autofill | Your vault |
 
+## Stashr for Android (the main app): Smart home inside
+Settings → **Smart home** (version 2.4.0) opens every Smart home function the website has, as native screens with the same seven sections
+(Overview, Devices, Camera & alerts, Automations, Insights, Media & network, Health): Ask Stashr (typed), the Home screen card, TV remote,
+the tablet's Wi-Fi rows, family phones and locations (link code, live map), link code for the tablet or TV, camera (start/stop, photo, clip,
+live view, gallery), alerts and briefs, scenes, schedules, places and WhatsApp, home location (paste coordinates or a Google Maps link, or
+search an address), TV time, insights, speed chart, movies from Drive and the health check. Differences from the website: no microphone in
+Ask Stashr, times are typed as HH:MM, and the maps are schematic drawings (home, distance rings, route line) rather than street maps.
+It updates through the usual Settings → Check for updates (GitHub release built by `android-apk.yml`).
+
+## Health check
+Every app (Hub 1.9, TV 1.3, Location 1.5) sends `status.health` with each report: app version, Android version, "Display over other
+apps", accessibility, battery limits, notifications, camera and microphone (tablet), location "all the time" (phone), USB drive (TV), and its
+last error (crashes are caught and sent too, kept 7 days). The website's *Health* tab (and the app's Health section) turn that into
+green/yellow/red per device with the exact thing to switch on, and a **Copy a report** button to paste into a chat instead of logs.
+An app older than the health feature shows grey "update to …".
+
 ## Stashr Hub (the home tablet)
 - **Link:** website → Smart home → Devices → *Link the home tablet* shows one fixed 8-letter **tablet code** (copy / "New code"). In
   Stashr Hub type the code and a name for the tablet. A one-time 15-minute code still works as an alternative.

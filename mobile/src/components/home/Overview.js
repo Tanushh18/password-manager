@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { View } from "react-native";
 import { home } from "../../lib/homeApi";
 import { ago, fmtMinutes, healthItems } from "../../lib/smartHome";
-import { Boundary, Bad, Box, Btn, Dim, Good, Input, Row, Txt, Dot, usePoll, useAct, useLoad, Sub } from "./h";
+import { Boundary, Bad, Box, Btn, Dim, Good, Input, Row, Txt, Dot, usePoll, useLoad, Sub } from "./h";
 
 /** Ask Stashr: the same sentences the website, Telegram and the tablet understand. */
 function Assistant({ reload }) {

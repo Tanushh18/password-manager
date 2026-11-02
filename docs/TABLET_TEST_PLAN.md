@@ -147,6 +147,12 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] Second phone while one is casting gets "TV is busy"; wrong PIN is refused; "Forget phones" on the TV asks for the PIN again.
 - [ ] A Netflix screen goes black (DRM): expected.
 
+## 7m. Health tab and the main app's Smart home
+- [ ] Website → Health: every device shows its version and green/yellow/red; turn "Display over other apps" off on the TV: it turns red with the fix text within a minute or two; "Copy a report" pastes a readable block.
+- [ ] Force a crash is hard; check instead that a device's "Last error" line appears after you break something (e.g. unplug the USB movie drive during a sync).
+- [ ] Stashr app 2.4.0 (update via Settings → Check for updates): Settings → Smart home opens; go through all seven sections; compare a few values with the website (devices, family locations, health).
+- [ ] In the app: TV volume/pause buttons, camera start/stop, a scene run, home location by pasting a Google Maps link, the live map.
+
 ## 8. Updates (OTA)
 - [ ] Push a change under `hub-app/` to `main`; the GitHub Release is created and is **not** "latest".
 - [ ] The app (or "check_update") finds it, verifies it and Android asks for one tap to install.

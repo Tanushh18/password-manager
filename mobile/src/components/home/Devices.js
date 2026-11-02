@@ -3,7 +3,7 @@ import { View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { home } from "../../lib/homeApi";
 import {
-  APP_NAMES, STATE_LABEL, TAG_LABEL, ago, batteryOf, fmtBytes, groupByRoom, lanName, nowPlaying, signalWord, splitStale, stateOf,
+  STATE_LABEL, TAG_LABEL, ago, batteryOf, fmtBytes, groupByRoom, lanName, nowPlaying, signalWord, splitStale, stateOf,
 } from "../../lib/smartHome";
 import { Bad, Boundary, Box, Btn, Dim, Dot, Good, Input, Pick, Row, Sub, Toggle, Txt, ask, useAct, useLoad, usePoll } from "./h";
 import { FamilyMap } from "./Charts";
