@@ -12,8 +12,9 @@ Time: lagbhag 45 minute. Kuch bhi galat lage to aakhir mein "Agar kuch na chale"
 ## Shortcut: ek command se tablet aur TV (computer se)
 Computer, tablet aur TV ek Wi-Fi par. Dono par Developer options → USB debugging (aur Network/Wireless debugging) on. Phir repo ke andar:
 ```bash
-scripts/install-home-devices.sh --tablet <TABLET-IP> --tv <TV-IP>
+scripts/install-home-devices.sh --tablet usb --tv auto
 ```
+(`--tablet usb` = tablet USB-C cable se juda hai; `--tv auto` = TV ko script khud Wi-Fi par dhoondhti hai. IP pata ho to `--tv <ip>` / `--tablet <ip>` bhi chalta hai.)
 Ye GitHub se sabse naye Hub aur TV APK utarta hai, `adb install` karta hai, aur jo permissions adb de sakta hai wo deta hai (camera, mic,
 notifications, "Display over other apps", battery, TV ka accessibility, Stashr TV ko home app). Family phones ke liye `--phone-apk` APK
 download kar deta hai. Uske baad bas Step 2.2/2.3 aur 4.4 ke codes tablet/TV par daalne hain. Baaki neeche ke steps tab dekho jab script kuch
