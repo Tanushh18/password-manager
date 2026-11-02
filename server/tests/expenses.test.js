@@ -135,12 +135,12 @@ function fakeGoogle() {
         if (!u.pathname.startsWith("/v4/spreadsheets/")) throw new Error("unexpected fetch " + url);
         const rest = u.pathname.replace("/v4/spreadsheets/", "");
         const id = rest.split(/[/:]/)[0];
-        if (id === "nopermission") return json({}, 403);
+        if (id.startsWith("nopermission")) return json({}, 403);
         if (rest === id) return json({ sheets: Object.entries(book.tabs).map(([title, t]) => ({ properties: { sheetId: t.id, title } })) });
         if (rest === `${id}:batchUpdate`) {
             for (const r of body.requests) {
                 if (r.addSheet) addTab(r.addSheet.properties.title);
-                if (r.deleteDimension) { const t = Object.values(book.tabs).find((x) => x.id === r.deleteDimension.range.sheetId); t.rows.splice(r.deleteDimension.range.startIndex - 1, 1); }
+                if (r.deleteDimension) { const t = Object.values(book.tabs).find((x) => x.id === r.deleteDimension.range.sheetId); t.rows.splice(r.deleteDimension.range.startIndex, 1); }
             }
             return json({});
         }
@@ -324,7 +324,8 @@ describe("the money API", () => {
             expect(G.tab("Archive").rows.slice(1).map((x) => x[8])).toEqual(["777777777777"]);        // arrived straight in the Archive
             expect(G.tab("Transactions").rows.slice(1).map((x) => x[8])).toEqual(["888888888888"]);
             // a row that was recent when it arrived and later ages out is moved by the daily clean-up
-            G.tab("Transactions").rows.push(ex.rowFromTx({ date: "2026-06-10", time: "09:00", amount: 20, type: "Debit", counterparty: "Chai", account: "X9229", method: "UPI", ref: "999999999999", balance: null }, "Food", "SMS", "Unverified", 0, []));
+            G.tab("Transactions").rows.push(ex.rowFromTx({ date: "2026-06-10", time: "09:00", amount: 20, type: "Debit", counterparty: "Chai", account: "X9229", method: "UPI", ref: "999999999999", balance: null }, "Food", "SMS", "Unverified", "", 0, []));
+            await new Promise((r) => setTimeout(r, 200));                         // the clean-up started by the upload has finished
             await ExpenseSettings.updateOne({}, { $set: { lastArchiveDay: "2026-10-21" } });
             sheets.forget("1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcdef");
             const list = (await request(app).get("/expenses").set(auth)).body;

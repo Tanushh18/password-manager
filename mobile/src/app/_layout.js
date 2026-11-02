@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { View } from "react-native";
+import { AppState, View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
@@ -16,6 +16,8 @@ import { ToastProvider } from "../components/Toast";
 import SkyFx from "../components/SkyFx";
 import { refreshServers } from "../lib/api";
 import "../lib/photoBackground";
+import "../lib/moneyBackground";
+import { syncIfStale } from "../lib/moneySync";
 import { startAutoBackup } from "../lib/photoAuto";
 
 // Load the latest server list from the registry in the background.
@@ -40,6 +42,14 @@ function RootStack({ fontsReady }) {
   // Once the vault is unlocked, keep camera-roll backup going while the app is open.
   useEffect(() => {
     if (status === "ready") startAutoBackup();
+  }, [status]);
+
+  // Money: when the app comes to the front (and once it is unlocked), send any new bank SMS to the sheet — at most every 10 minutes.
+  useEffect(() => {
+    if (status !== "ready") return undefined;
+    syncIfStale(10).catch(() => {});
+    const sub = AppState.addEventListener("change", (s) => { if (s === "active") syncIfStale(10).catch(() => {}); });
+    return () => sub.remove();
   }, [status]);
 
   // No screenshots / screen recording, and a blank preview in recent apps (FLAG_SECURE).

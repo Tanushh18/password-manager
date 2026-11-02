@@ -202,6 +202,7 @@ export default function Settings() {
 
           <Section title="WORKSPACE" delay={80}>
             <Row icon="home" title="Smart home" subtitle="TV, tablet, family locations, camera, scenes and insights" onPress={() => router.push("/home")} />
+            <Row icon="note" title="Money" subtitle="UPI and bank payments from your SMS, by category, in your Google Sheet" onPress={() => router.push("/money")} />
             <Row icon="user" title="Shared with me" subtitle="Photo folders other people shared with you" onPress={() => router.push("/shared")} />
             {profile?.features?.projects !== false ? <Row icon="folder" title="Projects" subtitle="Notes, variables and deploy status for each project" onPress={() => router.push("/projects")} /> : null}
             {profile?.features?.servers !== false ? <Row icon="globe" title="Servers" subtitle="Render services: status, deploys, restart" onPress={() => router.push("/servers")} /> : null}
