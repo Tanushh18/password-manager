@@ -58,6 +58,10 @@ class MainActivity : Activity() {
         if (!Prefs(this).linked) { startActivity(Intent(this, SetupActivity::class.java)); finish(); return }
         Scheduler.registerPassive(this)
         render()
+        // Opening the app is a good moment to check at once (a pending live-map request is picked up), at most every 20 s.
+        if (!busy && System.currentTimeMillis() - Prefs(this).upAt > 20_000 && Prefs(this).lastActivityCheck(20_000)) {
+            scope.launch { withContext(Dispatchers.IO) { Reporter.run(this@MainActivity) }; render() }
+        }
     }
 
     override fun onDestroy() { scope.cancel(); main.removeCallbacksAndMessages(null); super.onDestroy() }
@@ -83,6 +87,7 @@ class MainActivity : Activity() {
         }
         status.addView(ui.text(line, 18f, ui.c.text, bold = true))
         status.addView(ui.dim("Last shared: " + Logic.ago(prefs.upAt) + if (prefs.fixAcc > 0) " · accuracy about ${prefs.fixAcc.toInt()} m" else ""))
+        if (prefs.live && System.currentTimeMillis() - prefs.upAt < 2 * 60_000) status.addView(ui.dim("Live view is on (your family is looking at the map)"))
         if (prefs.lastError.isNotEmpty()) status.addView(ui.text(prefs.lastError, 13f, ui.c.warn))
         if (note.isNotEmpty()) status.addView(ui.dim(note))
         status.addView(ui.primary(if (busy) "Updating…" else "Update my location now") { updateNow() }.apply { isEnabled = !busy })
@@ -102,7 +107,7 @@ class MainActivity : Activity() {
         body.addView(help)
 
         val privacy = ui.card("Private by design")
-        privacy.addView(ui.dim("Only your location (latitude, longitude, accuracy, speed), battery level and Wi-Fi connected yes/no are sent, only to your Stashr server. No passwords, contacts or messages. It never runs a tracking notification. The owner of your Stashr can turn on a location history (places and trips) on their own website; nothing from it is shown on this phone."))
+        privacy.addView(ui.dim("Only your location (latitude, longitude, accuracy, speed), battery level and Wi-Fi connected yes/no are sent, only to your Stashr server. No passwords, contacts or messages. It never runs a tracking notification. While a family TV shows the live map, your location is sent every few seconds until it is closed. The owner of your Stashr can turn on a location history (places and trips) on their own website; nothing from it is shown on this phone."))
         body.addView(privacy)
 
         body.addView(ui.danger("Disconnect") { confirmDisconnect() })

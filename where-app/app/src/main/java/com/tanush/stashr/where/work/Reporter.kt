@@ -22,14 +22,14 @@ object Reporter {
         object Unlinked : Result()
     }
 
-    suspend fun run(ctx: Context, given: Fix? = null): Result {
+    suspend fun run(ctx: Context, given: Fix? = null, live: Boolean = false): Result {
         val app = ctx.applicationContext
         val prefs = Prefs(app)
         if (!prefs.linked) return Result.Unlinked
-        val fix = given ?: Locator.one(app)
+        val fix = given ?: Locator.one(app, live || prefs.live)
         if (fix == null) {
             prefs.lastError = if (Locator.hasPermission(app)) "Could not get a location fix" else "Location is not allowed"
-            Scheduler.next(app, prefs.lastDelaySec)
+            Scheduler.next(app, prefs.lastDelaySec, prefs.live)
             return Result.NoFix
         }
         prefs.fixLat = fix.lat; prefs.fixLon = fix.lon; prefs.fixAcc = fix.acc; prefs.fixAt = fix.at; prefs.fixSpeed = fix.speed ?: -1f
@@ -38,17 +38,20 @@ object Reporter {
             prefs.upLat = fix.lat; prefs.upLon = fix.lon; prefs.upAt = System.currentTimeMillis()
             prefs.state = answer.state; prefs.distanceKm = answer.distanceKm?.toFloat() ?: -1f; prefs.etaMinutes = answer.etaMinutes ?: -1
             prefs.lastError = ""
-            val delay = Logic.clampDelay(answer.nextCheckSec)
+            prefs.live = answer.live
+            val delay = Logic.clampDelay(answer.nextCheckSec, answer.live)
             prefs.lastDelaySec = delay
             Notices.show(app, answer.notices)
-            Scheduler.next(app, delay)
+            Scheduler.next(app, delay, answer.live)
             Result.Sent(Logic.statusText(answer.state, answer.distanceKm, answer.etaMinutes))
         } catch (e: ApiError) {
             if (e.status == 401) { disconnect(app, "Stashr disconnected this phone. Link it again with a new code."); Result.Unlinked }
-            else { prefs.lastError = e.message ?: "Server error"; Scheduler.next(app, 300); Result.Failed(prefs.lastError) }
+            else { prefs.live = false; prefs.lastError = e.message ?: "Server error"; Scheduler.next(app, 300); Result.Failed(prefs.lastError) }
         } catch (e: IOException) {
             prefs.lastError = "No connection to Stashr; will try again soon"
-            Scheduler.next(app, 300)
+            val wasLive = prefs.live
+            prefs.live = false
+            Scheduler.next(app, if (wasLive) 10 else 300, wasLive)
             Result.Failed(prefs.lastError)
         }
     }

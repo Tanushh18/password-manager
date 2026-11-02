@@ -29,14 +29,16 @@ object Locator {
     fun toFix(l: Location) = Fix(l.latitude, l.longitude, if (l.hasAccuracy()) l.accuracy else 0f, if (l.time > 0) l.time else System.currentTimeMillis(), if (l.hasSpeed()) l.speed else null)
 
     @SuppressLint("MissingPermission")
-    suspend fun one(ctx: Context): Fix? {
+    suspend fun one(ctx: Context, live: Boolean = false): Fix? {
         if (!hasPermission(ctx)) return null
         val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
         return try {
             var best: Location? = null
-            if (safeEnabled(lm, LocationManager.NETWORK_PROVIDER)) best = fresh(lm, LocationManager.NETWORK_PROVIDER)
-            if ((best == null || (best.hasAccuracy() && best.accuracy > 300f)) && safeEnabled(lm, LocationManager.GPS_PROVIDER)) {
-                val gps = fresh(lm, LocationManager.GPS_PROVIDER)
+            val timeout = if (live) 15_000L else 20_000L
+            if (safeEnabled(lm, LocationManager.NETWORK_PROVIDER)) best = fresh(lm, LocationManager.NETWORK_PROVIDER, timeout, live)
+            // Live mode wants a fix that is good enough to draw on a map: GPS when the network fix is worse than 100 m.
+            if ((best == null || (best.hasAccuracy() && best.accuracy > (if (live) 100f else 300f))) && safeEnabled(lm, LocationManager.GPS_PROVIDER)) {
+                val gps = fresh(lm, LocationManager.GPS_PROVIDER, timeout, live)
                 if (gps != null) best = gps
             }
             best?.let { toFix(it) }
@@ -46,11 +48,11 @@ object Locator {
     private fun safeEnabled(lm: LocationManager, provider: String) = try { lm.isProviderEnabled(provider) } catch (e: Exception) { false }
 
     @SuppressLint("MissingPermission")
-    private suspend fun fresh(lm: LocationManager, provider: String): Location? {
+    private suspend fun fresh(lm: LocationManager, provider: String, timeoutMs: Long = 20_000, live: Boolean = false): Location? {
         if (Build.VERSION.SDK_INT >= 30) {
             val exec = Executors.newSingleThreadExecutor()
             try {
-                return withTimeoutOrNull(20_000) {
+                return withTimeoutOrNull(timeoutMs) {
                     suspendCancellableCoroutine<Location?> { cont ->
                         val signal = android.os.CancellationSignal()
                         cont.invokeOnCancellation { signal.cancel() }
@@ -60,12 +62,13 @@ object Locator {
             } finally { exec.shutdown() }
         }
         val last = lm.getLastKnownLocation(provider)
-        if (last != null && System.currentTimeMillis() - last.time < 5 * 60_000) return last
-        return withTimeoutOrNull(20_000) {
+        // Live mode never reuses an old position.
+        if (!live && last != null && System.currentTimeMillis() - last.time < 5 * 60_000) return last
+        return withTimeoutOrNull(timeoutMs) {
             suspendCancellableCoroutine<Location?> { cont ->
                 @Suppress("DEPRECATION")
                 lm.requestSingleUpdate(provider, { loc -> if (cont.isActive) cont.resume(loc) }, Looper.getMainLooper())
             }
-        } ?: last
+        } ?: (if (live) null else last)
     }
 }

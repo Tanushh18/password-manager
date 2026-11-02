@@ -1,6 +1,7 @@
 package com.tanush.stashr.where.work
 
 import android.annotation.SuppressLint
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -29,6 +30,7 @@ object Scheduler {
     private const val NEXT = "where-next"
     private const val PERIODIC = "where-periodic"
     private const val PASSIVE_WORK = "where-passive"
+    private const val LIVE_NOW = "where-live-now"
 
     fun start(ctx: Context) {
         val app = ctx.applicationContext
@@ -39,11 +41,40 @@ object Scheduler {
         registerPassive(app)
     }
 
-    fun next(ctx: Context, delaySec: Int) {
-        val d = Logic.clampDelay(delaySec)
+    /**
+     * The next check. live = a family TV is showing the live map: 5 to 30 seconds, the check takes a fresh fix and a second,
+     * slightly later trigger (AlarmManager.setAndAllowWhileIdle, no permission needed) covers a delayed WorkManager job.
+     * Back to a normal long delay, the alarm is cancelled.
+     */
+    fun next(ctx: Context, delaySec: Int, live: Boolean = false) {
+        val app = ctx.applicationContext
+        val d = Logic.clampDelay(delaySec, live)
         val req = OneTimeWorkRequestBuilder<LocationWorker>().setInitialDelay(d.toLong(), TimeUnit.SECONDS)
+            .setInputData(workDataOf("live" to live))
             .setConstraints(Constraints.Builder().build()).build()
-        WorkManager.getInstance(ctx.applicationContext).enqueueUniqueWork(NEXT, ExistingWorkPolicy.REPLACE, req)
+        WorkManager.getInstance(app).enqueueUniqueWork(NEXT, ExistingWorkPolicy.REPLACE, req)
+        if (live) armAlarm(app, d + 4) else cancelAlarm(app)
+    }
+
+    private fun alarmIntent(ctx: Context): PendingIntent =
+        PendingIntent.getBroadcast(ctx, 9, Intent(ctx, LiveAlarmReceiver::class.java).setPackage(ctx.packageName), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+    private fun armAlarm(ctx: Context, afterSec: Int) {
+        try {
+            val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + afterSec * 1000L, alarmIntent(ctx))
+        } catch (e: Exception) { /* the WorkManager job still runs */ }
+    }
+
+    fun cancelAlarm(ctx: Context) {
+        try { (ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(alarmIntent(ctx)) } catch (e: Exception) { }
+    }
+
+    /** The backup alarm fired: run the live check now (the worker skips it when the scheduled one already ran). */
+    fun liveNow(ctx: Context) {
+        val req = OneTimeWorkRequestBuilder<LocationWorker>().setInputData(workDataOf("live" to true))
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build()
+        WorkManager.getInstance(ctx.applicationContext).enqueueUniqueWork(LIVE_NOW, ExistingWorkPolicy.KEEP, req)
     }
 
     /** A fix that arrived through the passive provider: upload it soon (the worker checks the 300 m / 2 minute rule). */
@@ -56,7 +87,8 @@ object Scheduler {
     fun stop(ctx: Context) {
         val app = ctx.applicationContext
         val wm = WorkManager.getInstance(app)
-        wm.cancelUniqueWork(NEXT); wm.cancelUniqueWork(PERIODIC); wm.cancelUniqueWork(PASSIVE_WORK)
+        wm.cancelUniqueWork(NEXT); wm.cancelUniqueWork(PERIODIC); wm.cancelUniqueWork(PASSIVE_WORK); wm.cancelUniqueWork(LIVE_NOW)
+        cancelAlarm(app)
         unregisterPassive(app)
     }
 
@@ -87,6 +119,12 @@ class LocationWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
             if (prefs.pendingAt > 0 && Logic.passiveWorthUploading(moved, System.currentTimeMillis() - prefs.upAt)) {
                 Reporter.run(applicationContext, Fix(prefs.pendingLat, prefs.pendingLon, prefs.pendingAcc, prefs.pendingAt, prefs.pendingSpeed.takeIf { it >= 0 }))
             }
+            return Result.success()
+        }
+        if (inputData.getBoolean("live", false)) {
+            // Live mode: a fresh fix and an upload at once. The scheduled job and the backup alarm may both fire; one is enough.
+            if (System.currentTimeMillis() - prefs.upAt < 3_000) return Result.success()
+            Reporter.run(applicationContext, live = true)
             return Result.success()
         }
         // The safety net must not double an upload the scheduled check just made.

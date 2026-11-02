@@ -95,6 +95,9 @@ class Api(ctx: Context) {
     /** GET /home/agent/tv-home: weather, headlines, movie night, who is on the way home. */
     fun tvHome(): JSONObject = get("/home/agent/tv-home", auth = true, timeoutMs = 20000)
 
+    /** GET /home/agent/tv-live: the family members who are out, with the road home. Each call keeps their phones in fast mode for 2 minutes. */
+    fun tvLive(): JSONObject = get("/home/agent/tv-live", auth = true, timeoutMs = 8000)
+
     /** GET /api/mobile-updates/tv/latest. */
     fun latest(currentVersionCode: Int): JSONObject = get("/api/mobile-updates/tv/latest?currentVersionCode=$currentVersionCode", auth = false)
 

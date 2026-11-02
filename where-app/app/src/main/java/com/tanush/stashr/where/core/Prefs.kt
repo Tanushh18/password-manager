@@ -60,6 +60,15 @@ class Prefs(ctx: Context) {
     var distanceKm: Float get() = p.getFloat("distanceKm", -1f); set(v) = p.edit().putFloat("distanceKm", v).apply()
     var etaMinutes: Int get() = p.getInt("etaMinutes", -1); set(v) = p.edit().putInt("etaMinutes", v).apply()
     var lastError: String get() = p.getString("lastError", "") ?: ""; set(v) = p.edit().putString("lastError", v).apply()
+    /** True (and remembers now) when the last check from opening the app was more than [ms] ago. */
+    fun lastActivityCheck(ms: Long): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - p.getLong("openCheckAt", 0L) < ms) return false
+        p.edit().putLong("openCheckAt", now).apply()
+        return true
+    }
+    /** The last answer said a family TV is showing the live map. */
+    var live: Boolean get() = p.getBoolean("live", false); set(v) = p.edit().putBoolean("live", v).apply()
     var lastDelaySec: Int get() = p.getInt("lastDelaySec", Logic.DEFAULT_DELAY_SEC); set(v) = p.edit().putInt("lastDelaySec", v).apply()
 
     /** Notice ids already shown, newest last (so a repeated notice is not shown twice). */

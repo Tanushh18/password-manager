@@ -17,6 +17,23 @@ class LogicTest {
         assertEquals(1800, Logic.clampDelay(99999))
     }
 
+    @Test fun liveDelayIsFiveToThirtySeconds() {
+        assertEquals(8, Logic.clampDelay(null, true))
+        assertEquals(8, Logic.clampDelay(0, true))
+        assertEquals(5, Logic.clampDelay(1, true))
+        assertEquals(8, Logic.clampDelay(8, true))
+        assertEquals(30, Logic.clampDelay(600, true))
+        // not live: the old 1 to 30 minutes
+        assertEquals(60, Logic.clampDelay(8, false))
+        assertEquals(900, Logic.clampDelay(null, false))
+        assertEquals(1800, Logic.clampDelay(9999, false))
+    }
+
+    @Test fun liveFlagIsParsed() {
+        assertEquals(true, Logic.parseAnswer(JSONObject("""{"ok":true,"state":"coming","live":true,"nextCheckSec":8}""")).live)
+        assertEquals(false, Logic.parseAnswer(JSONObject("""{"ok":true,"state":"home"}""")).live)
+    }
+
     @Test fun answerIsParsed() {
         val a = Logic.parseAnswer(JSONObject("""{"ok":true,"state":"coming","distanceKm":12.4,"etaMinutes":25,"nextCheckSec":120,"home":{"set":true},"notices":[{"id":"n1","text":"Open the door"},{"id":"n2","text":" "}]}"""))
         assertEquals("coming", a.state); assertEquals(12.4, a.distanceKm!!, 0.001); assertEquals(25, a.etaMinutes); assertEquals(120, a.nextCheckSec)

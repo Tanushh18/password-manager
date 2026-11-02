@@ -90,4 +90,81 @@ object Logic {
     /** The morning panel shows from 05:00 to 10:59 local time, once per local day. */
     fun inMorningWindow(hour: Int) = hour in 5..10
     fun shouldShowMorning(hour: Int, today: String, shownOn: String) = inMorningWindow(hour) && today != shownOn
+
+    /* ───────── the live map (GET /home/agent/tv-live) ───────── */
+
+    data class LiveDevice(
+        val id: String, val name: String, val lat: Double, val lon: Double, val acc: Int, val speedKmh: Int?, val ageSec: Int,
+        val state: String, val etaMinutes: Int?, val km: Double?, val traffic: Boolean, val live: Boolean, val route: List<Pair<Double, Double>>
+    )
+    data class LiveMap(val ok: Boolean, val error: String, val home: Pair<Double, Double>?, val devices: List<LiveDevice>)
+
+    fun parseLive(j: JSONObject): LiveMap {
+        val h = j.optJSONObject("home")?.takeIf { it.has("lat") && it.has("lon") }?.let { it.optDouble("lat") to it.optDouble("lon") }
+        val list = j.optJSONArray("devices")?.let { a ->
+            (0 until a.length()).mapNotNull { i ->
+                val o = a.optJSONObject(i) ?: return@mapNotNull null
+                if (!o.has("lat") || !o.has("lon")) return@mapNotNull null
+                val route = o.optJSONArray("route")?.let { r -> (0 until r.length()).mapNotNull { k -> r.optJSONArray(k)?.takeIf { p -> p.length() >= 2 }?.let { p -> p.optDouble(0) to p.optDouble(1) } } } ?: emptyList()
+                LiveDevice(
+                    o.optString("id"), o.optString("name").ifBlank { "Phone" }, o.optDouble("lat"), o.optDouble("lon"), o.optInt("acc", 0),
+                    if (o.isNull("speedKmh") || !o.has("speedKmh")) null else o.optInt("speedKmh"), o.optInt("ageSec", 0), o.optString("state", "away"),
+                    if (o.isNull("etaMinutes") || !o.has("etaMinutes")) null else o.optInt("etaMinutes"),
+                    if (o.isNull("km") || !o.has("km")) null else o.optDouble("km"), o.optBoolean("traffic"), o.optBoolean("live"), route
+                )
+            }
+        } ?: emptyList()
+        return LiveMap(j.optBoolean("ok", true), j.optString("error"), h, list)
+    }
+
+    fun firstName(name: String) = name.trim().substringBefore(' ').ifEmpty { name }
+
+    /** Metres east (x) and north (y) of [home], flat-earth maths that is good to well under 1% at city and highway distances. */
+    fun metres(home: Pair<Double, Double>, lat: Double, lon: Double): Pair<Double, Double> {
+        val x = (lon - home.second) * Math.cos(Math.toRadians(home.first)) * 111_320.0
+        val y = (lat - home.first) * 110_540.0
+        return x to y
+    }
+
+    /** Pixels per metre so that everything fits around a centred home with [pad] pixels of margin; never zoomed in past [minRadiusM]. */
+    fun scaleFor(points: List<Pair<Double, Double>>, w: Float, h: Float, pad: Float, minRadiusM: Double = 400.0): Float {
+        var rx = minRadiusM; var ry = minRadiusM
+        for ((x, y) in points) { rx = maxOf(rx, Math.abs(x)); ry = maxOf(ry, Math.abs(y)) }
+        val sx = (w / 2f - pad) / rx.toFloat(); val sy = (h / 2f - pad) / ry.toFloat()
+        return maxOf(minOf(sx, sy), 1e-6f)
+    }
+
+    /** Screen position (north up) of a point given in metres from home; home sits at ([cx], [cy]). */
+    fun toScreen(xy: Pair<Double, Double>, scale: Float, cx: Float, cy: Float): Pair<Float, Float> = (cx + xy.first.toFloat() * scale) to (cy - xy.second.toFloat() * scale)
+
+    /** Up to three round distance rings (in metres) that fit inside [maxMetres]: 1-2-5 steps. */
+    fun ringDistances(maxMetres: Double): List<Double> {
+        if (maxMetres < 300) return listOf(maxMetres.coerceAtLeast(100.0).let { Math.floor(it / 100) * 100 }.coerceAtLeast(100.0))
+        val steps = listOf(500.0, 1000.0, 2000.0, 5000.0, 10_000.0, 20_000.0, 50_000.0, 100_000.0, 200_000.0)
+        val step = steps.firstOrNull { maxMetres / it <= 3.0 } ?: steps.last()
+        return (1..3).map { it * step }.filter { it <= maxMetres * 1.02 }.ifEmpty { listOf(step) }
+    }
+
+    fun ringLabel(metres: Double) = if (metres < 1000) "${metres.toInt()} m" else if (metres % 1000.0 == 0.0) "${(metres / 1000).toInt()} km" else "%.1f km".format(metres / 1000)
+
+    enum class Freshness { FRESH, AMBER, RED }
+    /** Green up to 30 s, amber up to 2 minutes, red after that. */
+    fun freshness(ageSec: Int) = when { ageSec > 120 -> Freshness.RED; ageSec > 30 -> Freshness.AMBER; else -> Freshness.FRESH }
+
+    fun ageText(ageSec: Int) = when { ageSec < 60 -> "$ageSec s ago"; ageSec < 3600 -> "${ageSec / 60} min ago"; else -> "${ageSec / 3600} h ago" }
+
+    fun liveLine(d: LiveDevice): String {
+        val km = d.km?.let { "%.1f km".format(it) }
+        return if (d.state == "coming") listOfNotNull(
+            if (d.etaMinutes == null) "Heading home" else if (d.etaMinutes <= 1) "Almost home" else "About ${d.etaMinutes} min away", km, if (d.traffic) "live traffic" else null
+        ).joinToString(" · ")
+        else listOfNotNull(km?.let { "$it from home" } ?: "Away", d.etaMinutes?.let { "about $it min if they head home now" }, if (d.traffic) "live traffic" else null).joinToString(" · ")
+    }
+
+    /** What the screen says when there is nothing to draw. */
+    fun liveEmptyText(m: LiveMap) = when {
+        !m.ok -> m.error.ifBlank { "The live map is switched off." }
+        m.home == null -> "Set the home location on the Stashr website"
+        else -> "Everyone is at home"
+    }
 }

@@ -14,7 +14,8 @@ data class Answer(
     val etaMinutes: Int?,
     val nextCheckSec: Int?,
     val notices: List<Pair<String, String>>,   // (id, text)
-    val homeSet: Boolean
+    val homeSet: Boolean,
+    val live: Boolean = false   // a family TV is showing the live map: look every few seconds
 )
 
 /** Pure helpers (no Android), so they can be unit-tested. */
@@ -25,6 +26,14 @@ object Logic {
 
     /** The server says when to look again; keep it between 1 and 30 minutes, 15 when it says nothing. */
     fun clampDelay(sec: Int?): Int = if (sec == null || sec <= 0) DEFAULT_DELAY_SEC else sec.coerceIn(MIN_DELAY_SEC, MAX_DELAY_SEC)
+
+    const val LIVE_MIN_DELAY_SEC = 5
+    const val LIVE_MAX_DELAY_SEC = 30
+    const val LIVE_DEFAULT_DELAY_SEC = 8
+
+    /** In live mode the server asks for a few seconds: keep it between 5 and 30 s (8 when it says nothing). Otherwise as above. */
+    fun clampDelay(sec: Int?, live: Boolean): Int =
+        if (!live) clampDelay(sec) else if (sec == null || sec <= 0) LIVE_DEFAULT_DELAY_SEC else sec.coerceIn(LIVE_MIN_DELAY_SEC, LIVE_MAX_DELAY_SEC)
 
     fun parseAnswer(json: JSONObject): Answer {
         val notices = ArrayList<Pair<String, String>>()
@@ -40,7 +49,8 @@ object Logic {
             etaMinutes = if (json.has("etaMinutes") && !json.isNull("etaMinutes")) json.optInt("etaMinutes") else null,
             nextCheckSec = if (json.has("nextCheckSec") && !json.isNull("nextCheckSec")) json.optInt("nextCheckSec") else null,
             notices = notices,
-            homeSet = json.optJSONObject("home")?.optBoolean("set", true) ?: (json.optString("state") != "unset")
+            homeSet = json.optJSONObject("home")?.optBoolean("set", true) ?: (json.optString("state") != "unset"),
+            live = json.optBoolean("live", false)
         )
     }
 
