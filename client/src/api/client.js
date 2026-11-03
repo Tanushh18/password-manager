@@ -514,6 +514,7 @@ export const setExpenseStorage = (mode) => instance.put("/expenses/storage", { m
 export const unlinkExpenseSheet = () => instance.delete("/expenses/sheet").then((r) => r.data);
 export const exportExpenseSheet = () => instance.post("/expenses/export-sheet").then((r) => r.data);
 export const setExpenseStart = (date) => instance.post("/expenses/start", { date }).then((r) => r.data);
+export const requestExpenseSync = () => instance.post("/expenses/sync-request").then((r) => r.data);
 export const postExpenseSms = (messages) => instance.post("/expenses/sms", { messages }).then((r) => r.data);
 export const getExpenses = (month) => instance.get("/expenses", { params: month ? { month } : {} }).then((r) => r.data);
 export const setExpenseCategory = (index, category, remember) => instance.put("/expenses/category", { index, category, remember }).then((r) => r.data);

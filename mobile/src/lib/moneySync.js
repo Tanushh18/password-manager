@@ -42,9 +42,12 @@ export function syncNow() {
   running = (async () => {
     try {
       const settings = await money.settings();
-      if (!settings.configured) return { skipped: "Add your Google Sheet first." };
-      if (settings.needsStartDate || !settings.startDate) return { skipped: "Choose how far back to read first." };
-      if (!(await hasPermission())) return { skipped: "Allow Stashr to read your SMS first." };
+      // Tell the server what this pass found (or why it could not look), so the website can show a real status.
+      const done = (result) => money.syncDone(result).catch(() => {});
+      const skip = async (why) => { await done({ skipped: why }); return { skipped: why }; };
+      if (!settings.configured) return skip("Add your Google Sheet first.");
+      if (settings.needsStartDate || !settings.startDate) return skip("Choose how far back to read first.");
+      if (!(await hasPermission())) return skip("Allow Stashr to read your SMS first.");
       const localCursor = Number(await get(K.cursor)) || 0;
       const startMs = istMidnight(settings.startDate);
       const first = Math.max(Math.max(Number(settings.lastSmsAt) || 0, localCursor) ? Math.max(Number(settings.lastSmsAt) || 0, localCursor) - OVERLAP_MS : startMs, startMs);
@@ -53,7 +56,7 @@ export function syncNow() {
       const total = { added: 0, flagged: 0, duplicates: 0, ignored: 0, unparsed: 0, sent: 0 };
       for (const batch of plan.batches) {
         const r = await money.sms(batch.map((m) => ({ address: m.address, body: m.body, date: m.date })));
-        if (r && r.needsStartDate) return { skipped: "Choose how far back to read first." };
+        if (r && r.needsStartDate) return skip("Choose how far back to read first.");
         total.added += r.added || 0; total.flagged += r.flagged || 0; total.duplicates += r.duplicates || 0; total.ignored += r.ignored || 0; total.unparsed += (r.unparsed || []).length; total.sent += batch.length;
         await put(K.cursor, Math.max(Number(r.lastSmsAt) || 0, batch[batch.length - 1].date));
       }
@@ -62,15 +65,26 @@ export function syncNow() {
       await put(K.ran, Date.now());
       await put(K.result, JSON.stringify({ ...total, at: Date.now() }));
       await del(K.error);
+      await done({ added: total.added, flagged: total.flagged, duplicates: total.duplicates });
       return total;
     } catch (e) {
       await put(K.error, String(e && e.message ? e.message : e).slice(0, 200));
+      money.syncDone({ error: String(e && e.message ? e.message : e).slice(0, 160) }).catch(() => {});
       return { error: String(e && e.message ? e.message : e) };
     } finally {
       running = null;
     }
   })();
   return running;
+}
+
+/** True when the website asked (Refresh) and this phone has not answered yet; then a pass runs. Cheap when nobody asked. */
+export async function syncIfRequested() {
+  try {
+    const s = await money.settings();
+    if (Number(s.syncRequestedAt) > Number(s.syncAckAt || 0)) return await syncNow();
+  } catch (e) { /* no connection: the next try asks again */ }
+  return null;
 }
 
 /** For the app coming to the front: at most one pass every 10 minutes. */

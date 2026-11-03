@@ -1,7 +1,7 @@
 import { Platform } from "react-native";
 import { loadSavedToken, refreshServers } from "./api";
 import { hasNewSince } from "./sms";
-import { lastSeenArrival, syncNow } from "./moneySync";
+import { lastSeenArrival, syncNow, syncIfRequested } from "./moneySync";
 
 /* Looks for new bank SMS about every 15 minutes through the system scheduler. It only reads and uploads when a new message arrived. */
 export const MONEY_TASK = "stashr-money-sms";
@@ -12,7 +12,12 @@ if (Platform.OS !== "web") {
   TaskManager.defineTask(MONEY_TASK, async () => {
     try {
       if (!(await loadSavedToken())) return BackgroundTask.BackgroundTaskResult.Success;
-      if (!(await hasNewSince(await lastSeenArrival()))) return BackgroundTask.BackgroundTaskResult.Success;
+      if (!(await hasNewSince(await lastSeenArrival()))) {
+        // No new bank message, but the website may have pressed Refresh: answer that.
+        await refreshServers().catch(() => {});
+        await syncIfRequested();
+        return BackgroundTask.BackgroundTaskResult.Success;
+      }
       await refreshServers().catch(() => {});
       const r = await syncNow();
       return r && r.error ? BackgroundTask.BackgroundTaskResult.Failed : BackgroundTask.BackgroundTaskResult.Success;

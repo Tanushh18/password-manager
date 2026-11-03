@@ -20,7 +20,11 @@ const expenseSettingsSchema = new mongoose.Schema({
     copyErrors: { type: Number, default: 0 },                        // failed writes to the optional sheet copy since the last success
     lastCopyError: { type: String, default: "" },
     lastCopyAt: { type: Date },
-    lastStatement: { type: mongoose.Schema.Types.Mixed, default: null } // summary numbers of the last reconcile (no rows)
+    lastStatement: { type: mongoose.Schema.Types.Mixed, default: null }, // summary numbers of the last reconcile (no rows)
+    // The website's Refresh asks the phone (the only thing that can read the bank SMS) to look now; the phone answers with an ack.
+    syncRequestedAt: { type: Number, default: 0 },
+    syncAckAt: { type: Number, default: 0 },
+    phoneResult: { type: mongoose.Schema.Types.Mixed, default: null }  // { at, added, flagged, duplicates, skipped, error } of the phone's last pass
 }, { minimize: false });
 
 module.exports = mongoose.models.ExpenseSettings || mongoose.model("ExpenseSettings", expenseSettingsSchema);

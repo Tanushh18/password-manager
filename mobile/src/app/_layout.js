@@ -52,6 +52,17 @@ function RootStack({ fontsReady }) {
     return () => sub.remove();
   }, [status]);
 
+  // Money: the moment the internet comes back, send any bank SMS that arrived while it was off (at most every 2 minutes).
+  useEffect(() => {
+    if (status !== "ready") return undefined;
+    let sub = null;
+    try {
+      const Network = require("expo-network");
+      if (Network.addNetworkStateListener) sub = Network.addNetworkStateListener((st) => { if (st && st.isInternetReachable) syncIfStale(2).catch(() => {}); });
+    } catch (e) { /* no network listener in this build: the app-open and 15-minute checks still run */ }
+    return () => { try { if (sub) sub.remove(); } catch (e) { /* already gone */ } };
+  }, [status]);
+
   // No screenshots / screen recording, and a blank preview in recent apps (FLAG_SECURE).
   useEffect(() => {
     if (Platform.OS === "web") return undefined;

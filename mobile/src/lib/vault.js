@@ -3,6 +3,7 @@ import { AppState, Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import * as LocalAuthentication from "expo-local-authentication";
 import { api, ApiError, setToken, activeServer, setActiveServer, openVaultEvents } from "./api";
+import { syncNow as moneySyncNow, syncIfStale as moneySyncIfStale } from "./moneySync";
 import { normalizeItem, withHistory, trashExpired } from "./items";
 import { mergeDelta, createSseParser, reconnectDelay } from "./sync";
 import { normalizeProject } from "./projectItems";
@@ -448,7 +449,15 @@ export function VaultProvider({ children }) {
           const res = await openVaultEvents(controller.signal);
           if (!res.ok || !res.body) throw new Error(`stream ${res.status}`);
           attempt = 0;
-          const parse = createSseParser((ev) => { if (ev.event === "change") void sync(); });
+          // The stream just (re)connected, so the internet is back: let Money catch up (at most every 2 minutes).
+          void moneySyncIfStale(2).catch(() => {});
+          const parse = createSseParser((ev) => {
+            if (ev.event !== "change") return;
+            let type = "";
+            try { type = String(JSON.parse(ev.data).type || ""); } catch (e) { /* plain change */ }
+            if (type === "money-sync") { void moneySyncNow().catch(() => {}); return; }   // the website pressed Refresh
+            void sync();
+          });
           const reader = res.body.getReader();
           const decoder = new TextDecoder();
           for (;;) {

@@ -7,6 +7,7 @@ export const money = {
   settings: () => request("/expenses/settings"),
   saveSheet: (sheetUrl) => j("/expenses/sheet", "PUT", { sheetUrl }, 40000),
   start: (date) => j("/expenses/start", "POST", { date }),
+  syncDone: (result) => j("/expenses/sync-done", "POST", { result }, 20000),
   sms: (messages) => j("/expenses/sms", "POST", { messages }, 60000),
   list: (month) => request(`/expenses${month ? `?month=${encodeURIComponent(month)}` : ""}`, { timeout: 40000 }),
   setCategory: (index, category, remember) => j("/expenses/category", "PUT", { index, category, remember: Boolean(remember) }, 40000),

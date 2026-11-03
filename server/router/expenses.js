@@ -23,6 +23,7 @@ const Settings = require("../models/expenseSettings");
 const ex = require("../utils/expenses");
 const sheets = require("../utils/sheets");
 const stores = require("../utils/expenseStore");
+const hub = require("../utils/syncHub");
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 40, message: "Too many changes. Slow down." });
 const smsLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: "Too many syncs. Wait a minute." });
@@ -48,7 +49,8 @@ const publicSettings = (s) => {
         sheetReady: sheets.ready(), serviceAccountEmail: sheets.serviceEmail(), sheetUrl: s.sheetUrl || "", sheetId: s.sheetId || "", sheetCopy: mode === "db" && Boolean(s.sheetId),
         copyErrors: s.copyErrors || 0, lastCopyError: s.lastCopyError || "", lastCopyAt: s.lastCopyAt || null,
         startDate: s.startDate || "", needsStartDate: (mode === "db" || Boolean(s.sheetId)) && !s.startDate, lastSyncAt: s.lastSyncAt || null, lastSmsAt: s.lastSmsAt || 0,
-        retentionMonths: 4, retention: RETENTION[mode], categories: allCategories(s), rules: userRules(s).map((r) => ({ match: r.match, category: r.category })), lastStatement: s.lastStatement || null
+        retentionMonths: 4, retention: RETENTION[mode], categories: allCategories(s), rules: userRules(s).map((r) => ({ match: r.match, category: r.category })), lastStatement: s.lastStatement || null,
+        syncRequestedAt: s.syncRequestedAt || 0, syncAckAt: s.syncAckAt || 0, phoneResult: s.phoneResult || null
     };
 };
 
@@ -154,6 +156,30 @@ router.post("/expenses/start", authenticate, writeLimiter, async (req, res) => {
         if (!r.modifiedCount) return res.status(400).json({ error: "The start date is already set." });
         return res.json({ startDate: d, retention: modeOf(s) === "db" ? `Entries are deleted ${RETENTION_DAYS} days after their date (4 months); older messages are not kept.` : `Entries older than ${RETENTION_DAYS} days go to the Archive tab of your sheet.` });
     } catch (e) { return fail(res, e, "Could not save the start date."); }
+});
+
+// The website's Refresh: ask the phone to look for new bank SMS now. If the Stashr app is open on the phone it hears this at once
+// (the live stream); otherwise it does it the next time its background check runs or the app is opened.
+router.post("/expenses/sync-request", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const owner = req.rootUser._id, now = Date.now(), s = await settingsOf(owner);
+        let at = Number(s.syncRequestedAt) || 0;
+        if (now - at > 5000) { at = now; await Settings.updateOne({ owner }, { $set: { syncRequestedAt: at } }); }
+        const phoneOnline = hub.notify(owner, "money-sync", "web") > 0;
+        return res.json({ requestedAt: at, phoneOnline, syncAckAt: Number(s.syncAckAt) || 0 });
+    } catch (e) { return fail(res, e, "Could not ask the phone."); }
+});
+
+// The phone says it looked (with what it found, or why it could not).
+router.post("/expenses/sync-done", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const r = (req.body && typeof req.body.result === "object" && req.body.result) || {};
+        const n = (v) => Math.max(0, Math.min(100000, Math.round(Number(v) || 0)));
+        const now = Date.now();
+        const phoneResult = { at: now, added: n(r.added), flagged: n(r.flagged), duplicates: n(r.duplicates), skipped: String(r.skipped || "").slice(0, 120), error: String(r.error || "").slice(0, 160) };
+        await Settings.updateOne({ owner: req.rootUser._id }, { $set: { syncAckAt: now, phoneResult } });
+        return res.json({ ok: true });
+    } catch (e) { return fail(res, e, "Could not save the sync result."); }
 });
 
 router.post("/expenses/sms", authenticate, smsLimiter, async (req, res) => {

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, postExpenseSms, getExpenses, setExpenseCategory, reviewExpense, uploadStatement
+  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, postExpenseSms, requestExpenseSync, getExpenses, setExpenseCategory, reviewExpense, uploadStatement
 } from "../../api/client";
 import { Section, Skeleton, useConfirm } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
@@ -127,6 +127,18 @@ function StartDateCard({ onDone }) {
 }
 
 /* ───────── 3. month, totals, categories ───────── */
+
+/** What the phone is doing about Refresh, in plain words. */
+function PhoneStatus({ phone, settings }) {
+  const at = Number(settings && settings.syncAckAt) || 0;
+  const tone = { done: "mn-ok", problem: "mn-bad", late: "mn-warn" }[phone.phase] || "mn-dim";
+  return (
+    <div className="mn-phone" aria-live="polite">
+      {phone.text ? <p className={tone}>{phone.phase === "asking" || phone.phase === "waiting" ? "⏳ " : phone.phase === "done" ? "✓ " : "⚠ "}{phone.text}</p> : null}
+      <p className="mn-dim">{at ? `Phone last checked for payments ${new Date(at).toLocaleString()}.` : "The phone has not checked for payments yet."}</p>
+    </div>
+  );
+}
 
 function MonthBar({ month, months, onChange, onRefresh, busy }) {
   const list = months && months.length ? months : [month];
@@ -394,6 +406,39 @@ export default function Money() {
   }, [ready, month, loadData]);
 
   const reload = useCallback(() => { loadSettings(); if (ready) loadData(month); }, [ready, month, loadData, loadSettings]);
+
+  // Refresh: show what Stashr has, and ask the phone (it alone reads the bank SMS) to look for new payments right now.
+  const [phone, setPhone] = useState({ phase: "idle", text: "" });
+  const pollTimer = useRef(null);
+  useEffect(() => () => clearTimeout(pollTimer.current), []);
+  const refreshWithPhone = useCallback(async () => {
+    clearTimeout(pollTimer.current);
+    setPhone({ phase: "asking", text: "Asking your phone to check for new payments…" });
+    loadSettings(); if (ready) loadData(month);
+    let req;
+    try { req = await requestExpenseSync(); }
+    catch (e) { setPhone({ phase: "problem", text: errorMessage(e, "Could not ask your phone.") }); return; }
+    setPhone({ phase: "waiting", text: req.phoneOnline ? "Your phone is open, waiting for its answer…" : "Waiting for your phone. It is not open right now, so it answers when it is online (about every 15 minutes, or at once when you open Stashr)." });
+    const until = Date.now() + 75000;
+    const poll = async () => {
+      try {
+        const s = await getExpenseSettings();
+        setSettings(s);
+        if (Number(s.syncAckAt) >= Number(req.requestedAt)) {
+          const r = s.phoneResult || {};
+          await loadData(month);
+          if (r.skipped) setPhone({ phase: "problem", text: `The phone answered, but: ${r.skipped}` });
+          else if (r.error) setPhone({ phase: "problem", text: `The phone could not finish: ${r.error}` });
+          else setPhone({ phase: "done", text: r.added ? `Phone synced: ${r.added} new payment${r.added > 1 ? "s" : ""}${r.flagged ? `, ${r.flagged} need checking` : ""}.` : "Phone synced: no new payments." });
+          return;
+        }
+      } catch (e) { /* ask again in a moment */ }
+      if (Date.now() < until) pollTimer.current = setTimeout(poll, 3000);
+      else setPhone({ phase: "late", text: `No answer from the phone yet, so this is what Stashr already has. ${req.phoneOnline ? "" : "Open Stashr on the phone to sync right away."}`.trim() });
+    };
+    pollTimer.current = setTimeout(poll, 2500);
+  }, [ready, month, loadData, loadSettings]);
+  const asking = phone.phase === "asking" || phone.phase === "waiting";
   const categories = (settings && settings.categories) || (data && data.totals && data.totals.byCategory.map((c) => c.category)) || [];
 
   return (
@@ -409,7 +454,8 @@ export default function Money() {
           {settings.configured && !settings.needsStartDate ? (
             <>
               <p className="mn-dim">Reading messages from {settings.startDate || "the start date"}{settings.lastSyncAt ? ` · last message handled ${new Date(settings.lastSyncAt).toLocaleString()}` : ""}.</p>
-              <MonthBar month={month} months={data && data.months} onChange={(m) => { setMonth(m); setFilter(""); }} onRefresh={reload} busy={busy} />
+              <MonthBar month={month} months={data && data.months} onChange={(m) => { setMonth(m); setFilter(""); }} onRefresh={refreshWithPhone} busy={busy || asking} />
+              <PhoneStatus phone={phone} settings={settings} />
               {!data ? <Skeleton lines={5} /> : (
                 <>
                   <CardBoundary><Tiles totals={data.totals} flagged={(data.flagged || []).length} /></CardBoundary>
