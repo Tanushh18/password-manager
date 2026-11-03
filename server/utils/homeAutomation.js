@@ -288,7 +288,7 @@ async function announce(owner, text, { settings, devices, exceptDevice, urgent =
  * "Papa is 10 minutes away": there is no routing service, so the distance is a straight line times 1.3 (roads wind), at
  * the phone's own speed, or the speed it just covered, or 25 km/h: good to a few minutes. A person is "home" when they are
  * inside the home circle, or when the tablet sees their phone on the Wi-Fi and they are within 2 km: whichever comes
- * first. Announces "arriving in N mins" at notifyMinutes and at 5, and "Open the door" on arrival, once each.
+ * first. Announces "arriving in N mins" at notifyMinutes and again at 10, 5, 3, 2 and 1 minute, and "Open the door" on arrival, once each.
  */
 async function etaTick(owner, now, settings, devices) {
     const spot = settings.homeSpot, eta = settings.eta || {};
@@ -296,7 +296,9 @@ async function etaTick(owner, now, settings, devices) {
     const radius = spot.radius || 200, state = { ...(settings.etaState || {}) };
     const people = home.presence((devices || []).filter((d) => d.kind === "hub"), (devices || []).filter((d) => d.kind === "phone"), now);
     const wifiHome = new Set(people.filter((p) => p.home).map((p) => p.person));
-    const milestones = [...new Set([Number(eta.notifyMinutes) || 15, 5])].sort((x, y) => y - x);
+    // Tell the family at the chosen time (15 min by default) and then again as they get closer, so a notice is never far away.
+    const base = Number(eta.notifyMinutes) || 15;
+    const milestones = [...new Set([base, 10, 5, 3, 2, 1].filter((m) => m <= base))].sort((x, y) => y - x);
     let changed = false;
     for (const ph of (devices || []).filter((d) => d.kind === "phone")) {
         const loc = ph.status && ph.status.location;
