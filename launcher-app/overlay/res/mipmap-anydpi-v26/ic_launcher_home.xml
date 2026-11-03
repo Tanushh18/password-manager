@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stashr Launcher icon (replaces Lawnchair's). Lawnchair is Apache-2.0; see launcher-app/NOTICE.md. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/stashr_launcher_bg" />
+    <foreground android:drawable="@drawable/stashr_launcher_fg" />
+    <monochrome android:drawable="@drawable/stashr_launcher_fg" />
+</adaptive-icon>

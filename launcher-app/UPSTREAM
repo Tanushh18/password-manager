@@ -1,0 +1,3 @@
+# The Lawnchair commit the Stashr Launcher is built from. Change `sha` to move to a newer Lawnchair, then run the build and fix whatever apply.py complains about.
+repo=https://github.com/LawnchairLauncher/lawnchair
+sha=85493b9776d678c5b22d88b644f1ca530c3af92d

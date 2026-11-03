@@ -1,0 +1,47 @@
+# Stashr Launcher
+
+A phone launcher (home screen) for the family, built from [Lawnchair](https://github.com/LawnchairLauncher/lawnchair) with Stashr's name,
+icon and colour. Lawnchair is large (about 480 MB with its prebuilt libraries), so **this folder holds only the Stashr changes**; the build
+fetches Lawnchair at a pinned version and applies them.
+
+| File | What it is |
+|---|---|
+| `UPSTREAM` | Which Lawnchair repository and commit the launcher is built from |
+| `apply.py` | The edits to Lawnchair's own files (name, package id, version, default colour). Stops with a message if Lawnchair has changed that text |
+| `overlay/` | Files copied over Lawnchair's: the Stashr icon (adaptive, round, themed) and colour |
+| `version.txt` | The launcher's version (`1.0.0`) |
+| `NOTICE.md` | Credit to Lawnchair and a list of what is changed |
+| `../.github/workflows/launcher-apk.yml` | Builds, signs and publishes the APK |
+
+## Build the APK (no computer setup needed)
+GitHub → **Actions** → *Stashr Launcher Android Release* → **Run workflow**. It takes about 25 to 45 minutes. The signed APK appears under
+**Releases** as `stashr-launcher-v<version>-build-<number>` (package `com.tanush.stashr.launcher`). It uses the same signing key as the other
+Stashr apps. It installs next to a normal Lawnchair; it never replaces it.
+
+## Work on the look at home (Android Studio)
+You need Android Studio, JDK 21 and Git.
+
+1. On GitHub, **Fork** `LawnchairLauncher/lawnchair` into your own account (one click). This is where launcher code changes live.
+2. `git clone --recurse-submodules https://github.com/<you>/lawnchair` and `git checkout` the commit in `UPSTREAM`.
+3. From inside that folder run `python3 <path to this repo>/launcher-app/apply.py .` to get the Stashr name, icon and colour.
+4. Open the folder in Android Studio and run the variant `lawnWithQuickstepGithubDebug` (or `./gradlew assembleLawnWithQuickstepGithubDebug`).
+5. Colours, icons and defaults: change `overlay/` or `apply.py` here and push; the workflow above builds it. Real code changes (new screens,
+   gestures): make them in your fork, then point `UPSTREAM` at your fork's commit. Delete from `apply.py` any edit your fork already contains.
+
+To move to a newer Lawnchair: change `sha` in `UPSTREAM`, run the workflow, and fix whatever `apply.py` reports.
+
+## First run on an OPPO / ColorOS phone
+ColorOS stops background apps. After choosing Stashr Launcher as the Home app (Settings → Apps → Default apps → Home app):
+1. Settings → Battery → Stashr Launcher → **Unrestricted** (or "Allow background activity").
+2. Settings → Apps → Stashr Launcher → **Auto-start** on.
+3. In Recent apps, lock Stashr Launcher (swipe down on its card) so it is not cleared.
+
+If anything looks wrong, Settings → Apps → Default apps → Home app → pick the old launcher; nothing is lost.
+
+## Where each Stashr upgrade lives
+| Upgrade | Status | Plan |
+|---|---|---|
+| Stashr name, icon, green accent | **Done** in `apply.py` and `overlay/` | Built by the workflow above |
+| Cleaner OPPO setup | **Done as the checklist above** | A first-run reminder screen would need code inside the launcher: fork work |
+| Stashr card on the home screen (who is home, today's spend, vault button) | **Not built yet** | The card needs the family's Stashr login, which a launcher does not have. Build it as a home-screen **widget in the main Stashr app** (it already has the login); it then shows on this launcher and any other |
+| Stashr shortcuts on the dock (Money, Smart home, Passwords) | **Not built yet** | Add them as app shortcuts to the main Stashr app; long-pressing its icon in the dock then shows them, in this launcher and any other |
