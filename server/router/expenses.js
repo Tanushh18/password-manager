@@ -50,7 +50,7 @@ const publicSettings = (s) => {
         copyErrors: s.copyErrors || 0, lastCopyError: s.lastCopyError || "", lastCopyAt: s.lastCopyAt || null,
         startDate: s.startDate || "", needsStartDate: (mode === "db" || Boolean(s.sheetId)) && !s.startDate, lastSyncAt: s.lastSyncAt || null, lastSmsAt: s.lastSmsAt || 0,
         retentionMonths: 4, retention: RETENTION[mode], categories: allCategories(s), rules: userRules(s).map((r) => ({ match: r.match, category: r.category })), lastStatement: s.lastStatement || null,
-        syncRequestedAt: s.syncRequestedAt || 0, syncAckAt: s.syncAckAt || 0, phoneResult: s.phoneResult || null
+        rescanToken: s.rescanToken || 0, syncRequestedAt: s.syncRequestedAt || 0, syncAckAt: s.syncAckAt || 0, phoneResult: s.phoneResult || null
     };
 };
 
@@ -156,6 +156,23 @@ router.post("/expenses/start", authenticate, writeLimiter, async (req, res) => {
         if (!r.modifiedCount) return res.status(400).json({ error: "The start date is already set." });
         return res.json({ startDate: d, retention: modeOf(s) === "db" ? `Entries are deleted ${RETENTION_DAYS} days after their date (4 months); older messages are not kept.` : `Entries older than ${RETENTION_DAYS} days go to the Archive tab of your sheet.` });
     } catch (e) { return fail(res, e, "Could not save the start date."); }
+});
+
+// Change the start date later (the website only). Earlier: the phone reads the older messages again, once. Later: entries already
+// saved stay; only messages from the new date on are read from now.
+router.put("/expenses/start", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const owner = req.rootUser._id, s = await settingsOf(owner);
+        if (!s.startDate) return res.status(400).json({ error: "Choose the start date first." });
+        const d = ex.parseDate(req.body && req.body.date);
+        if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(String(req.body.date).slice(0, 10)) || d > ex.ist(Date.now()) || d < "2015-01-01") return res.status(400).json({ error: "Pick a date in the past (or today)." });
+        if (d === s.startDate) return res.json({ startDate: d, rescan: false, message: "That is already the start date." });
+        const earlier = d < s.startDate;
+        const set = { startDate: d };
+        if (earlier) { set.lastSmsAt = 0; set.rescanToken = Date.now(); }       // forget how far the phone had read
+        await Settings.updateOne({ owner }, { $set: set });
+        return res.json({ startDate: d, rescan: earlier, message: earlier ? "Done. Your phone will read the older messages the next time it syncs." : "Done. Messages before that date are no longer read; entries already saved stay." });
+    } catch (e) { return fail(res, e, "Could not change the start date."); }
 });
 
 // The website's Refresh: ask the phone to look for new bank SMS now. If the Stashr app is open on the phone it hears this at once

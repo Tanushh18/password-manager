@@ -8,7 +8,7 @@ import { MonthView, Flagged } from "../components/money/Month";
 import Statement from "../components/money/Statement";
 import { money } from "../lib/moneyApi";
 import { hasPermission } from "../lib/sms";
-import { lastResult, syncNow } from "../lib/moneySync";
+import { lastResult, syncNow, onMoneySynced } from "../lib/moneySync";
 import { dayLabel } from "../lib/moneyFmt";
 
 /** Money: UPI and bank payments from Federal Bank SMS, sorted into categories, kept in your own Google Sheet. */
@@ -47,6 +47,9 @@ export default function Money() {
     })();
     return () => { alive = false; };
   }, []));
+
+  // A pass finished (also one the website asked for after changing the start date): show the new date, status and payments.
+  useEffect(() => onMoneySynced(() => { loadAll(month || undefined); }), [loadAll, month]);
 
   useEffect(() => { if (month && settings && settings.configured && !settings.needsStartDate) loadList(month); }, [month]);
 

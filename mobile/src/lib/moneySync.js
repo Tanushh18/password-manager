@@ -7,7 +7,7 @@ import { hasPermission, readBankSms, newestBankSmsDate } from "./sms";
  * cursors: how far we have read, when the last message arrived, the last result line and the last error text. Never reads
  * anything older than the start date the owner chose once.
  */
-const K = { cursor: "stashr.money.cursor", arrival: "stashr.money.arrival", ran: "stashr.money.ran", result: "stashr.money.result", error: "stashr.money.error" };
+const K = { cursor: "stashr.money.cursor", arrival: "stashr.money.arrival", ran: "stashr.money.ran", rescan: "stashr.money.rescan", result: "stashr.money.result", error: "stashr.money.error" };
 const get = async (k) => { try { return await SecureStore.getItemAsync(k); } catch (e) { return null; } };
 const put = (k, v) => SecureStore.setItemAsync(k, String(v)).catch(() => {});
 const del = (k) => SecureStore.deleteItemAsync(k).catch(() => {});
@@ -35,6 +35,10 @@ export const lastResult = async () => {
 };
 
 let running = null;
+const listeners = new Set();
+/** A screen that is open can listen for a finished pass (the website may have asked for one) and show the new numbers. */
+export const onMoneySynced = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
+const tell = () => listeners.forEach((fn) => { try { fn(); } catch (e) { /* a screen went away */ } });
 
 /** One pass. Resolves to { skipped } or { added, flagged, duplicates, ignored, unparsed, sent }. Never throws. */
 export function syncNow() {
@@ -48,7 +52,10 @@ export function syncNow() {
       if (!settings.configured) return skip("Add your Google Sheet first.");
       if (settings.needsStartDate || !settings.startDate) return skip("Choose how far back to read first.");
       if (!(await hasPermission())) return skip("Allow Stashr to read your SMS first.");
-      const localCursor = Number(await get(K.cursor)) || 0;
+      // The start date was moved earlier on the website: read the older messages again, once (the server already reset its cursor).
+      const rescanToken = String(Number(settings.rescanToken) || 0);
+      const rescanning = rescanToken !== "0" && (await get(K.rescan)) !== rescanToken;
+      const localCursor = rescanning ? 0 : Number(await get(K.cursor)) || 0;
       const startMs = istMidnight(settings.startDate);
       const first = Math.max(Math.max(Number(settings.lastSmsAt) || 0, localCursor) ? Math.max(Number(settings.lastSmsAt) || 0, localCursor) - OVERLAP_MS : startMs, startMs);
       const messages = await readBankSms({ sinceMs: first, limit: 3000 });
@@ -65,6 +72,7 @@ export function syncNow() {
       await put(K.ran, Date.now());
       await put(K.result, JSON.stringify({ ...total, at: Date.now() }));
       await del(K.error);
+      if (rescanning) await put(K.rescan, rescanToken);
       await done({ added: total.added, flagged: total.flagged, duplicates: total.duplicates });
       return total;
     } catch (e) {
@@ -73,6 +81,7 @@ export function syncNow() {
       return { error: String(e && e.message ? e.message : e) };
     } finally {
       running = null;
+      tell();
     }
   })();
   return running;

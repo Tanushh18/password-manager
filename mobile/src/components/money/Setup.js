@@ -58,7 +58,7 @@ export function StartDate({ onDone }) {
     } catch (e) { setError(e.message || "Could not save."); } finally { setBusy(false); }
   };
   return (
-    <Box title="How far back should I read your bank SMS?" subtitle="You choose this once. Nothing older is ever read. Entries stay in the list for 4 months; older ones move to the sheet's Archive tab.">
+    <Box title="How far back should I read your bank SMS?" subtitle="Nothing older is ever read. You can change the date later on the Stashr website. Entries stay in the list for 4 months; older ones move to the sheet's Archive tab.">
       <Pick options={[["month", "This month"], ["m3", "3 months"], ["m6", "6 months"], ["y1", "1 year"]]} value={typed ? "" : kind} onChange={(k) => { setTyped(""); setKind(k); }} />
       <Input value={typed} onChangeText={setTyped} placeholder="or type a date, YYYY-MM-DD" maxLength={10} keyboardType="numbers-and-punctuation" />
       <Dim>{ok ? `I will read messages from ${dayLabel(date)}.` : "Use the form 2026-07-01."}</Dim>

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, postExpenseSms, requestExpenseSync, getExpenses, setExpenseCategory, reviewExpense, uploadStatement
+  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, changeExpenseStart, postExpenseSms, requestExpenseSync, getExpenses, setExpenseCategory, reviewExpense, uploadStatement
 } from "../../api/client";
 import { Section, Skeleton, useConfirm } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
@@ -113,7 +113,7 @@ function StartDateCard({ onDone }) {
     finally { setBusy(false); }
   };
   return (
-    <Section title="How far back should I read your bank SMS?" subtitle="You choose this once. Nothing before this date is ever read.">
+    <Section title="How far back should I read your bank SMS?" subtitle="Nothing before this date is ever read. You can change the date later on this page.">
       <div className="mn-chips" role="group" aria-label="Quick dates">
         {chips.map(([label, kind]) => <button key={kind} type="button" className={"mn-chip" + (date === startDateChip(kind) ? " is-on" : "")} onClick={() => setDate(startDateChip(kind))}>{label}</button>)}
       </div>
@@ -123,6 +123,46 @@ function StartDateCard({ onDone }) {
       </div>
       <p className="mn-dim">After this, new messages are read automatically and sorted month by month; this question never comes back. The active list keeps the last 4 months; after that Stashr deletes an entry (in “My Google Sheet only” mode older entries move to the sheet's Archive tab instead).</p>
     </Section>
+  );
+}
+
+/** "Reading messages from <date>" with a way to move that date (website only). */
+function StartDateLine({ settings, onChanged }) {
+  const { ask, dialog } = useConfirm();
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState(settings.startDate || today());
+  const [busy, setBusy] = useState(false);
+  const chips = [["This month", "month"], ["3 months ago", "3m"], ["6 months ago", "6m"], ["1 year ago", "1y"]];
+  const earlier = date < settings.startDate;
+  const save = async () => {
+    if (!date || date === settings.startDate) { setOpen(false); return; }
+    const keepsFourMonths = settings.storage !== "sheet" && earlier;
+    const message = earlier
+      ? `Your phone will read the bank messages from ${date} again, once, and add what is missing.${keepsFourMonths ? " Stashr keeps only the last 4 months, so anything older than that is not kept." : ""}`
+      : `Messages before ${date} will no longer be read. Entries already saved stay as they are.`;
+    if (!(await ask({ title: `Read messages from ${date}?`, message, confirmLabel: "Change date" }))) return;
+    setBusy(true);
+    try { const r = await changeExpenseStart(date); toast.success(r.message || "Start date changed."); setOpen(false); await onChanged(r); }
+    catch (err) { toast.error(errorMessage(err, "Could not change the date.")); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="mn-startline">
+      <p className="mn-dim">Reading messages from {settings.startDate || "the start date"}{settings.lastSyncAt ? ` · last message handled ${new Date(settings.lastSyncAt).toLocaleString()}` : ""}. <button type="button" className="mn-link" onClick={() => setOpen(!open)}>{open ? "Cancel" : "Change date"}</button></p>
+      {open ? (
+        <div className="mn-editor">
+          <div className="mn-chips" role="group" aria-label="Quick dates">
+            {chips.map(([label, kind]) => <button key={kind} type="button" className={"mn-chip" + (date === startDateChip(kind) ? " is-on" : "")} onClick={() => setDate(startDateChip(kind))}>{label}</button>)}
+          </div>
+          <div className="mn-row">
+            <label className="mn-field">Read messages from <input type="date" value={date} min="2015-01-01" max={today()} onChange={(e) => setDate(e.target.value)} /></label>
+            <button className="rd-btn rd-btn--primary" onClick={save} disabled={busy || !date || date === settings.startDate}>{busy ? "Saving…" : "Save date"}</button>
+          </div>
+          <p className="mn-dim">{date && date < settings.startDate ? "Earlier than now: the phone will read the older messages again the next time it syncs." : "Later than now: older messages stop being read; saved entries stay."}</p>
+        </div>
+      ) : null}
+      {dialog}
+    </div>
   );
 }
 
@@ -453,7 +493,7 @@ export default function Money() {
           {settings.configured && settings.needsStartDate ? <CardBoundary><StartDateCard onDone={loadSettings} /></CardBoundary> : null}
           {settings.configured && !settings.needsStartDate ? (
             <>
-              <p className="mn-dim">Reading messages from {settings.startDate || "the start date"}{settings.lastSyncAt ? ` · last message handled ${new Date(settings.lastSyncAt).toLocaleString()}` : ""}.</p>
+              <StartDateLine settings={settings} onChanged={async () => { await loadSettings(); refreshWithPhone(); }} />
               <MonthBar month={month} months={data && data.months} onChange={(m) => { setMonth(m); setFilter(""); }} onRefresh={refreshWithPhone} busy={busy || asking} />
               <PhoneStatus phone={phone} settings={settings} />
               {!data ? <Skeleton lines={5} /> : (

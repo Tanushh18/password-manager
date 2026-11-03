@@ -22,6 +22,8 @@ const expenseSettingsSchema = new mongoose.Schema({
     lastCopyAt: { type: Date },
     lastStatement: { type: mongoose.Schema.Types.Mixed, default: null }, // summary numbers of the last reconcile (no rows)
     // The website's Refresh asks the phone (the only thing that can read the bank SMS) to look now; the phone answers with an ack.
+    // Set when the owner moves the start date EARLIER on the website: the phone then reads the older messages again (once).
+    rescanToken: { type: Number, default: 0 },
     syncRequestedAt: { type: Number, default: 0 },
     syncAckAt: { type: Number, default: 0 },
     phoneResult: { type: mongoose.Schema.Types.Mixed, default: null }  // { at, added, flagged, duplicates, skipped, error } of the phone's last pass

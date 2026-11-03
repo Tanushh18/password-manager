@@ -513,6 +513,7 @@ export const saveExpenseSheet = (sheetUrl) => instance.put("/expenses/sheet", { 
 export const setExpenseStorage = (mode) => instance.put("/expenses/storage", { mode }).then((r) => r.data);
 export const unlinkExpenseSheet = () => instance.delete("/expenses/sheet").then((r) => r.data);
 export const exportExpenseSheet = () => instance.post("/expenses/export-sheet").then((r) => r.data);
+export const changeExpenseStart = (date) => instance.put("/expenses/start", { date }).then((r) => r.data);
 export const setExpenseStart = (date) => instance.post("/expenses/start", { date }).then((r) => r.data);
 export const requestExpenseSync = () => instance.post("/expenses/sync-request").then((r) => r.data);
 export const postExpenseSms = (messages) => instance.post("/expenses/sms", { messages }).then((r) => r.data);
