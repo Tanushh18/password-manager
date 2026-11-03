@@ -48,6 +48,10 @@ class Prefs(ctx: Context) {
     var batterySaver: Boolean
         get() = p.getBoolean("batterySaver", true)
         set(v) = p.edit().putBoolean("batterySaver", v).apply()
+    /** Fullscreen: the status bar (battery, clock, Wi-Fi icons) is hidden while Stashr Hub is open. Swipe from the top to see it for a moment. */
+    var hideStatusBar: Boolean
+        get() = p.getBoolean("hideStatusBar", true)
+        set(v) = p.edit().putBoolean("hideStatusBar", v).apply()
     var cameraSensitivity: Int
         get() = p.getInt("cameraSensitivity", 5)
         set(v) = p.edit().putInt("cameraSensitivity", v).apply()

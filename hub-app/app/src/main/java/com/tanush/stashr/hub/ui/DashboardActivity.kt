@@ -216,7 +216,11 @@ class DashboardActivity : Activity() {
             prefs.batterySaver = on
             applyPower()
         }
-        ctl.addView(cameraSwitch); ctl.addView(voiceSwitch); ctl.addView(saverSwitch)
+        val barSwitch = switch("Fullscreen: hide the status bar (battery, clock) while this app is open", prefs.hideStatusBar) { on ->
+            prefs.hideStatusBar = on
+            applyFullscreen()
+        }
+        ctl.addView(cameraSwitch); ctl.addView(voiceSwitch); ctl.addView(saverSwitch); ctl.addView(barSwitch)
         val buttons = ui.row(8)
         buttons.addView(ui.quiet("Slideshow") { startActivity(Intent(this, SlideshowActivity::class.java)) })
         buttons.addView(ui.quiet("Check for update") {
@@ -527,7 +531,24 @@ class DashboardActivity : Activity() {
     /* ───────── lifecycle ───────── */
 
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean { lastTouch = System.currentTimeMillis(); return super.dispatchTouchEvent(ev) }
-    override fun onResume() { super.onResume(); resumed = true; lastTouch = System.currentTimeMillis(); renderChecks() }
+    override fun onResume() { super.onResume(); resumed = true; lastTouch = System.currentTimeMillis(); renderChecks(); applyFullscreen() }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) { super.onWindowFocusChanged(hasFocus); if (hasFocus) applyFullscreen() }
+
+    /** Hides or shows the system bars. A swipe from the top brings them back for a moment, then they hide again. */
+    @Suppress("DEPRECATION")
+    private fun applyFullscreen() {
+        val hide = prefs.hideStatusBar
+        if (Build.VERSION.SDK_INT >= 30) {
+            window.setDecorFitsSystemWindows(!hide)
+            window.insetsController?.let {
+                if (hide) { it.hide(android.view.WindowInsets.Type.statusBars()); it.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE }
+                else it.show(android.view.WindowInsets.Type.statusBars())
+            }
+        } else {
+            window.decorView.systemUiVisibility = if (hide) View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE else View.SYSTEM_UI_FLAG_VISIBLE
+        }
+    }
 
     /** "Check": what is not set up on this tablet, red first, with where to switch it on. Nothing is shown when all is well. */
     private fun renderChecks() {
