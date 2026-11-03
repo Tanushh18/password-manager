@@ -126,6 +126,7 @@ class HomeActivity : Activity() {
         buttons.addView(usbButton)
         buttons.addView(roundButton("wifi", "Wi-Fi") { openSettings(android.provider.Settings.ACTION_WIFI_SETTINGS) })
         buttons.addView(roundButton("bluetooth", "Bluetooth") { openSettings(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS) })
+        buttons.addView(roundButton("pin", "Live location") { startActivity(Intent(this, LiveMapActivity::class.java)) })
         buttons.addView(roundButton("sliders", "Settings") { openSettings(android.provider.Settings.ACTION_SETTINGS) })
         syncLine = ui.text("", 18f, 0xFFFFE08A.toInt()).apply { gravity = Gravity.END }
         right.addView(buttons); right.addView(syncLine)

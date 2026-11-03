@@ -69,6 +69,9 @@ class SettingsActivity : Activity() {
         perms.addView(overlayText)
         perms.addView(ui.quiet("Allow Display over other apps") { open(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) })
         perms.addView(ui.dim("Needed for messages like “Parveen is arriving in 15 mins” over Netflix, and for opening apps from Stashr."))
+        perms.addView(ui.quiet("Test on-screen message") {
+            com.tanush.stashr.tv.overlay.NoticeOverlay.show(this, "Parveen is arriving in 15 mins")
+        })
         col.addView(perms)
 
         val mirror = ui.card("Screen mirror", "Show a phone's screen and sound on this TV over the Wi-Fi (Stashr Cast app)")
