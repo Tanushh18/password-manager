@@ -51,6 +51,13 @@ class Prefs(ctx: Context) {
     var pendingAt: Long get() = p.getLong("pAt", 0L); set(v) = p.edit().putLong("pAt", v).apply()
     var pendingSpeed: Float get() = p.getFloat("pSpeed", -1f); set(v) = p.edit().putFloat("pSpeed", v).apply()
 
+    /** A fix taken while the phone had no connection: sent first, with its real time, when the connection is back (so "left the office" is not lost). */
+    var offLat: Double get() = Double.fromBits(p.getLong("offLat", Double.NaN.toRawBits())); set(v) = p.edit().putLong("offLat", v.toRawBits()).apply()
+    var offLon: Double get() = Double.fromBits(p.getLong("offLon", Double.NaN.toRawBits())); set(v) = p.edit().putLong("offLon", v.toRawBits()).apply()
+    var offAcc: Float get() = p.getFloat("offAcc", 0f); set(v) = p.edit().putFloat("offAcc", v).apply()
+    var offAt: Long get() = p.getLong("offAt", 0L); set(v) = p.edit().putLong("offAt", v).apply()
+    var offSpeed: Float get() = p.getFloat("offSpeed", -1f); set(v) = p.edit().putFloat("offSpeed", v).apply()
+
     /** The last fix that reached the server. */
     var upLat: Double get() = Double.fromBits(p.getLong("upLat", Double.NaN.toRawBits())); set(v) = p.edit().putLong("upLat", v.toRawBits()).apply()
     var upLon: Double get() = Double.fromBits(p.getLong("upLon", Double.NaN.toRawBits())); set(v) = p.edit().putLong("upLon", v.toRawBits()).apply()

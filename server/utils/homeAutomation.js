@@ -173,7 +173,8 @@ async function autoCamera(owner, settings, devices, now) {
     }
 }
 
-const LOC_FRESH_MS = 30 * 60 * 1000;
+const LOC_FRESH_MS = 3 * 3600 * 1000;       // a fix this young still counts (a phone that was offline uploads its fix late)
+const PLACE_RETRY_MS = 2 * 3600 * 1000;    // a place message that could not go out (tablet offline) is retried for this long
 const distanceM = (a, b) => {
     const R = 6371000, rad = (x) => (x * Math.PI) / 180;
     const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
@@ -200,24 +201,39 @@ async function geoTick(owner, now, settings, devices) {
         if (!loc || !Number.isFinite(Number(loc.lat)) || !Number.isFinite(Number(loc.lon)) || now - Number(loc.at || 0) > LOC_FRESH_MS) continue;
         const dist = distanceM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: p.lat, lon: p.lon });
         const slack = Math.min(Math.max(Number(loc.acc) || 0, 0), 200);
+        // A message that could not be sent earlier (the tablet was offline) is tried again while it is still recent.
+        let sendState = "";
+        let eventAt = Number(loc.at) || now;
+        const waiting = p.pending && p.pending.state && now - Number(p.pending.at) < PLACE_RETRY_MS ? p.pending : null;
+        if (waiting) { sendState = waiting.state; eventAt = Number(waiting.at); }
         let next = p.state || "";
         if (dist <= p.radius) next = "in";
         else if (dist > p.radius + Math.max(50, slack)) next = "out";
-        if (next === (p.state || "")) continue;
-        await HomeSettings.updateOne({ owner }, { $set: { [`places.${i}.state`]: next } });
-        if (!p.state) continue;                                   // first sighting: no message
-        const arrive = next === "in";
+        if (next !== (p.state || "")) {
+            await HomeSettings.updateOne({ owner }, { $set: { [`places.${i}.state`]: next } });
+            if (!p.state) continue;                                   // first sighting: no message
+            sendState = next; eventAt = Number(loc.at) || now;
+        }
+        if (!sendState) { if (p.pending && p.pending.state) await HomeSettings.updateOne({ owner }, { $unset: { [`places.${i}.pending`]: 1 } }); continue; }
+        const arrive = sendState === "in";
+        // The time window is judged at the moment the phone actually crossed the circle (its fix), not when the report finally arrived.
+        const eventMins = localParts(eventAt, tz).minutes;
         const from = okTime(arrive ? p.arriveFrom : p.leaveFrom) ? toMinutes(arrive ? p.arriveFrom : p.leaveFrom) : null;
         const to = okTime(arrive ? p.arriveTo : p.leaveTo) ? toMinutes(arrive ? p.arriveTo : p.leaveTo) : null;
-        if (from !== null && to !== null && !home.inWindow(mins, from, to)) continue;   // not at the time you set
+        if (from !== null && to !== null && !home.inWindow(eventMins, from, to)) { if (waiting) await HomeSettings.updateOne({ owner }, { $unset: { [`places.${i}.pending`]: 1 } }); continue; }   // not at the time you set
         const text = String((arrive ? p.arriveText : p.leaveText) || "").trim();
         if (!text || !p.group) continue;
-        if (!await claim(`place:${owner}:${p.id}:${next}:${Math.floor(now / (30 * 60000))}`)) continue;
         const who = phone.person || phone.name;
+        const key = `place:${owner}:${p.id}:${sendState}:${Math.floor(eventAt / (30 * 60000))}`;
+        if (tablet && !await claim(key)) continue;                  // already sent for this crossing
         if (!tablet || !await queue(tablet, "send_whatsapp", { group: p.group, text })) {
-            await record({ owner, kind: "place_failed", notify: true, text: `${who} ${arrive ? "reached" : "left"} ${p.name}, but the tablet is offline, so “${text}” was not sent to ${p.group}.` });
+            if (!waiting) {
+                await HomeSettings.updateOne({ owner }, { $set: { [`places.${i}.pending`]: { state: sendState, at: eventAt } } });
+                await record({ owner, kind: "place_failed", notify: true, text: `${who} ${arrive ? "reached" : "left"} ${p.name}, but the tablet is offline, so “${text}” was not sent to ${p.group}. It will be sent when the tablet is back.` });
+            }
             continue;
         }
+        if (p.pending) await HomeSettings.updateOne({ owner }, { $unset: { [`places.${i}.pending`]: 1 } });
         await record({ owner, device: tablet._id, deviceName: tablet.name, kind: "place", notify: true, text: `${who} ${arrive ? "reached" : "left"} ${p.name}: sending “${text}” to ${p.group} on WhatsApp.` });
     }
 }

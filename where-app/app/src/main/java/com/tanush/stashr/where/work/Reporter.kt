@@ -39,12 +39,30 @@ object Reporter {
         val liveMode = live || prefs.live
         val now = System.currentTimeMillis()
         if (!online(app)) {
+            // No internet is no reason to lose where the phone is: GPS works offline. Keep the newest fix and send it, with its real time, once back online.
+            if (!liveMode && Locator.hasPermission(app)) {
+                Locator.one(app, false, networkOnly = false)?.let { f ->
+                    prefs.offLat = f.lat; prefs.offLon = f.lon; prefs.offAcc = f.acc; prefs.offAt = f.at; prefs.offSpeed = f.speed ?: -1f
+                }
+            }
             prefs.lastError = "No connection; will try again soon"
             Scheduler.next(app, if (liveMode) 10 else 300, liveMode)
             return Result.Failed(prefs.lastError)
         }
         val (pct, charging) = battery(app)
         val bssid = currentBssid(app)
+
+        // 0) A fix kept while there was no connection goes first, so the server sees where the phone really was and when.
+        if (prefs.offAt > 0 && !prefs.offLat.isNaN() && given == null) {
+            try {
+                val old = Fix(prefs.offLat, prefs.offLon, prefs.offAcc, prefs.offAt, prefs.offSpeed.takeIf { it >= 0 })
+                Api(app).location(body(app, old, pct, charging))
+                prefs.offAt = 0L
+            } catch (e: ApiError) {
+                if (e.status == 401) { disconnect(app, "Stashr disconnected this phone. Link it again with a new code."); return Result.Unlinked }
+                prefs.offAt = 0L           // the server refused it: do not keep sending it
+            } catch (e: IOException) { /* still cannot reach Stashr: keep it and let the normal path below report the failure */ }
+        }
 
         // 1) Same access point as at the last upload: the phone has not gone far. No fix at all.
         if (given == null && !force && !liveMode && bssid.isNotEmpty() && bssid == prefs.upBssid &&
