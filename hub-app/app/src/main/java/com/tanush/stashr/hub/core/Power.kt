@@ -22,10 +22,17 @@ object Power {
     /** Power saving is on (the default). It no longer depends on the charger. */
     fun saving(ctx: Context) = Prefs(ctx).batterySaver
 
-    /** How often the whole Wi-Fi is swept: every 3 minutes, every 5 when running on a battery at 20% or less. */
+    /**
+     * How often the whole Wi-Fi is swept. On the charger: every 30 seconds (the power is free, so Stashr stays close to real time).
+     * On the battery with power saving: every 3 minutes, every 5 at 20% or less. Power saving off: every round.
+     */
     fun scanEveryMs(ctx: Context): Long = when {
+        charging(ctx) -> 30_000L
         !saving(ctx) -> 0L
-        !charging(ctx) && percent(ctx) <= 20 -> 5 * 60_000L
+        percent(ctx) <= 20 -> 5 * 60_000L
         else -> 3 * 60_000L
     }
+
+    /** How long the tablet waits between two reports (they also fetch the commands from the website, so this is how fast a tap there arrives). */
+    fun reportEveryMs(ctx: Context): Long = if (charging(ctx)) 10_000L else 60_000L
 }

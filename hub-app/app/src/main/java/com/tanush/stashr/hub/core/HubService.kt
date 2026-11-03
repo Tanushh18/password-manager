@@ -61,6 +61,14 @@ class HubService : LifecycleService() {
         running = this
         startInForeground()
         wakeLock = getSystemService(PowerManager::class.java)?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "stashr:hub")?.apply { setReferenceCounted(false); acquire() }
+        // Plugging in or unplugging changes the pace at once (fast on the charger), not after the next wait ends.
+        val powerFilter = android.content.IntentFilter().apply { addAction(Intent.ACTION_POWER_CONNECTED); addAction(Intent.ACTION_POWER_DISCONNECTED) }
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(powerReceiver, powerFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(powerReceiver, powerFilter)
+        }
         CameraWatch.start(this)
         VoiceListener.start(this)
         LocalServer.ensureStarted(this)
@@ -73,7 +81,12 @@ class HubService : LifecycleService() {
         return START_STICKY
     }
 
+    private val powerReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) { wake.trySend(Unit) }
+    }
+
     override fun onDestroy() {
+        try { unregisterReceiver(powerReceiver) } catch (e: Exception) { /* not registered */ }
         CameraWatch.stop()
         VoiceListener.stop()
         LocalServer.stop()
@@ -155,7 +168,7 @@ class HubService : LifecycleService() {
                 Health.noteStreak("report", "Report to Stashr failed 3 times in a row: $lastError")
                 if (e is java.io.IOException) serverDown()
             }
-            withTimeoutOrNull(60_000) { wake.receive() }
+            withTimeoutOrNull(Power.reportEveryMs(this)) { wake.receive() }
         }
     }
 
