@@ -216,7 +216,7 @@ class DashboardActivity : Activity() {
             prefs.batterySaver = on
             applyPower()
         }
-        val barSwitch = switch("Fullscreen: hide the status bar (battery, clock) while this app is open", prefs.hideStatusBar) { on ->
+        val barSwitch = switch("Fullscreen: hide the status bar and the Back/Home buttons while Stashr is open (swipe from the edge to show them)", prefs.hideStatusBar) { on ->
             prefs.hideStatusBar = on
             applyFullscreen()
         }
