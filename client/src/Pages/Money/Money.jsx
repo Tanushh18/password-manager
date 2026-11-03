@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, changeExpenseStart, postExpenseSms, requestExpenseSync, getExpenses, setExpenseCategory, reviewExpense, uploadStatement
+  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, changeExpenseStart, removeUnmatchedExpenses, postExpenseSms, requestExpenseSync, getExpenses, setExpenseCategory, reviewExpense, uploadStatement
 } from "../../api/client";
 import { Section, Skeleton, useConfirm } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
@@ -251,9 +251,15 @@ function FlaggedCard({ rows, onChanged }) {
     catch (err) { toast.error(errorMessage(err, "Could not do that.")); }
     finally { setBusy(null); }
   };
+  const unmatched = rows.filter((r) => r.status === "Not in statement");
+  const removeUnmatched = async () => {
+    if (!(await ask({ title: `Delete ${unmatched.length} entries?`, message: "Your bank statement does not have them, so they are most likely duplicates or fake messages. They will be removed.", confirmLabel: "Delete them all", danger: true }))) return;
+    try { const r = await removeUnmatchedExpenses(); toast.success(`Removed ${r.removed}.`); onChanged(); } catch (err) { toast.error(errorMessage(err, "Could not remove them.")); }
+  };
   return (
     <Section title={`Needs checking (${rows.length})`} subtitle="These look doubtful, or your bank statement did not confirm them, so they are not counted in your totals. Upload your bank statement to check them automatically, or decide yourself.">
       {dialog}
+      {unmatched.length > 1 ? <div className="mn-row"><button className="rd-btn rd-btn--danger-quiet" onClick={removeUnmatched}>Delete all {unmatched.length} that the statement does not have</button></div> : null}
       <ul className="mn-flag">{rows.map((r) => (
         <li key={r.index}>
           <div className="mn-flag__top"><b>{inr(r.amount)}</b> <span>{r.type === "Credit" ? "from" : "to"} {r.merchant || "unknown"}</span> <em>{dayLabel(r.date)}{r.time ? " · " + r.time : ""}</em></div>
@@ -348,6 +354,7 @@ function TxList({ rows, categories, filter, onClear, onChanged, uncategorized })
 /* ───────── 6. bank statement ───────── */
 
 function StatementCard({ settings, onDone }) {
+  const { ask, dialog } = useConfirm();
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState(null);
   const [error, setError] = useState("");
@@ -364,8 +371,13 @@ function StatementCard({ settings, onDone }) {
     finally { setBusy(false); }
   };
   const r = report || last;
+  const removeUnmatched = async () => {
+    if (!(await ask({ title: `Delete ${r.notInStatement} entries?`, message: "Your bank statement does not have them, so they are most likely duplicates or fake messages. They will be removed.", confirmLabel: "Delete them all", danger: true }))) return;
+    try { const x = await removeUnmatchedExpenses(); toast.success(`Removed ${x.removed}.`); setReport({ ...r, notInStatement: 0 }); onDone(); } catch (err) { toast.error(errorMessage(err, "Could not remove them.")); }
+  };
   return (
-    <Section title="Check against a bank statement" subtitle="Download your Federal Bank statement from net banking as Excel or CSV and upload it. Every line is matched with your entries.">
+    <Section title="Check against a bank statement" subtitle="Download your Federal Bank statement from net banking as Excel or CSV and upload it. The statement is treated as the truth: what it confirms takes its date, amount and name, what is missing is added, and what it does not have is set aside.">
+      {dialog}
       <div className="mn-row">
         <input ref={input} type="file" accept=".csv,.xlsx,.xls,text/csv" onChange={pick} hidden />
         <button className="rd-btn rd-btn--primary" onClick={() => input.current && input.current.click()} disabled={busy}>{busy ? "Checking…" : "Choose a statement (.csv or .xlsx)"}</button>
@@ -376,10 +388,26 @@ function StatementCard({ settings, onDone }) {
           <p className="mn-dim">{report ? "Result" : "Last check"}{r.from ? `: ${r.from} to ${r.to}` : ""} · {r.lines} lines</p>
           <div className="mn-tiles">
             <div className="mn-tile is-ok"><span>Verified</span><b>{r.verified}</b></div>
-            <div className={"mn-tile" + (r.mismatched ? " is-bad" : "")}><span>Mismatched</span><b>{r.mismatched}</b></div>
+            <div className={"mn-tile" + (r.mismatched ? " is-warn" : "")}><span>Amount corrected</span><b>{r.mismatched}</b></div>
             <div className="mn-tile"><span>Added from statement</span><b>{r.added}</b></div>
+            {r.renamed != null ? <div className="mn-tile"><span>Names fixed</span><b>{r.renamed}</b></div> : null}
             <div className={"mn-tile" + (r.notInStatement ? " is-warn" : "")}><span>Not in statement</span><b>{r.notInStatement}</b></div>
           </div>
+          {r.months && r.months.length ? (
+            <div className="mn-months">
+              <b>{r.allMonthsMatch ? "✓ Every month now adds up to your statement" : "⚠ Some months do not add up to your statement"}</b>
+              <ul>{r.months.map((m) => (
+                <li key={m.month} className={m.match ? "mn-ok" : "mn-bad"}>
+                  <span>{monthLabel(m.month)}</span>
+                  <span>Statement: spent {inr(m.statementDebit)}, received {inr(m.statementCredit)}</span>
+                  <span>Stashr: spent {inr(m.stashrDebit)}, received {inr(m.stashrCredit)}</span>
+                  <span>{m.match ? "✓" : "differs"}</span>
+                </li>
+              ))}</ul>
+              {!r.allMonthsMatch ? <p className="mn-dim">A month differs when you confirmed an entry by hand that the statement does not have, or an entry is still under "Needs checking".</p> : null}
+            </div>
+          ) : null}
+          {r.notInStatement > 0 ? <div className="mn-row"><button className="rd-btn rd-btn--danger-quiet" onClick={removeUnmatched}>Delete the {r.notInStatement} entries the statement does not have</button></div> : null}
           {(r.balanceBreakCount || 0) > 0 ? (
             <div className="mn-warn"><b>{r.balanceBreakCount} balance {r.balanceBreakCount === 1 ? "break" : "breaks"}</b> in the statement itself: the running balance does not follow the amounts.
               {r.balanceBreaks && r.balanceBreaks.length ? <ul>{r.balanceBreaks.slice(0, 5).map((b, i) => <li key={i}>{b.date} · {b.desc} · expected {inr(b.expected)}, got {inr(b.got)}</li>)}</ul> : null}

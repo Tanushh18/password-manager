@@ -82,3 +82,8 @@
 label.mn-chip { display: inline-flex; align-items: center; gap: .4rem; }
 label.mn-chip input { accent-color: var(--accent, #2a78d6); margin: 0; }
 label.mn-chip:has(input:disabled) { opacity: .55; cursor: not-allowed; }
+
+.mn-months { display: grid; gap: .35rem; margin: .5rem 0; }
+.mn-months ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .25rem; }
+.mn-months li { display: grid; grid-template-columns: 7rem 1fr 1fr 4rem; gap: .5rem; font-size: .8rem; align-items: baseline; }
+@media (max-width: 640px) { .mn-months li { grid-template-columns: 1fr 1fr; } }

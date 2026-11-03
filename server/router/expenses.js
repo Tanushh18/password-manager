@@ -338,6 +338,18 @@ router.put("/expenses/rules", authenticate, writeLimiter, async (req, res) => {
     } catch (e) { return fail(res, e, "Could not save the rules."); }
 });
 
+// After a statement: remove, in one go, every entry the statement did not have (the owner decided the statement is right).
+router.post("/expenses/remove-unmatched", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const owner = req.rootUser._id, s = await settingsOf(owner);
+        const { st, copy } = await storeFor(req, s);
+        const rows = (await st.list()).filter((t) => t.status === "Not in statement");
+        const removed = rows.length ? await st.removeMany(rows.map((t) => t.index)) : 0;
+        if (copy && rows.length) copy.removeMany(rows);
+        return res.json({ removed });
+    } catch (e) { return fail(res, e, "Could not remove them."); }
+});
+
 router.post("/expenses/statement", authenticate, writeLimiter, express.raw({ type: "application/octet-stream", limit: "8mb" }), async (req, res) => {
     try {
         const owner = req.rootUser._id, s = await settingsOf(owner);
@@ -359,10 +371,12 @@ router.post("/expenses/statement", authenticate, writeLimiter, express.raw({ typ
         const { updates, additions, report } = ex.reconcile(rows, stmt, userRules(s));
         const items = [];
         for (const u of updates) {
+            // the statement is the truth: whatever it says (date, amount, name, balance, status...) is written, but only where it differs
             const cur = rows.find((t) => String(t.index) === String(u.index));
             const fields = {};
-            if (!cur || cur.status !== u.status) fields.status = u.status;
-            if ((cur && cur.note) !== u.note && (u.note || (cur && cur.note))) fields.note = u.note;
+            for (const [k, v] of Object.entries(u.fields || { status: u.status, note: u.note })) {
+                if (JSON.stringify(cur ? cur[k] : undefined) !== JSON.stringify(v)) fields[k] = v;
+            }
             if (Object.keys(fields).length) items.push({ index: u.index, fields, tx: cur });
         }
         await st.updateMany(items);
@@ -370,7 +384,7 @@ router.post("/expenses/statement", authenticate, writeLimiter, express.raw({ typ
         const txs = additions.map((t) => ex.makeTx(t, t.category, "Statement", "Verified", "Added from your statement (no message was found)", 0, []));
         const saved = await st.append(txs);
         if (copy) copy.append(saved.stored);
-        const summary = { at: new Date().toISOString(), from: report.from, to: report.to, lines: report.lines, verified: report.verified, mismatched: report.mismatched, added: report.added, notInStatement: report.notInStatement, balanceBreakCount: report.balanceBreakCount };
+        const summary = { at: new Date().toISOString(), from: report.from, to: report.to, lines: report.lines, verified: report.verified, mismatched: report.mismatched, added: report.added, renamed: report.renamed, notInStatement: report.notInStatement, months: report.months, allMonthsMatch: report.allMonthsMatch, closingBalance: report.closingBalance, balanceBreakCount: report.balanceBreakCount };
         await Settings.updateOne({ owner }, { $set: { lastStatement: summary } });
         return res.json({ report });
     } catch (e) { return fail(res, e, "Could not check the statement."); }

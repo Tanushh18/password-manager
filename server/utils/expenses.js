@@ -6,6 +6,7 @@ const zlib = require("zlib");
 
 const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
 const pad = (n) => String(n).padStart(2, "0");
+const kit = require("./statementKit");
 const num = (s) => Number(String(s).replace(/[,\s]/g, ""));
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -100,7 +101,7 @@ const DEFAULT_RULES = [
     ["school", "Education"], ["college", "Education"], ["course", "Education"], ["udemy", "Education"], ["coaching", "Education"], ["fees", "Education"],
     ["rent", "Rent & Home"], ["maintenance", "Rent & Home"], ["society", "Rent & Home"], ["furniture", "Rent & Home"],
     ["zerodha", "Investments"], ["groww", "Investments"], ["upstox", "Investments"], ["mutual", "Investments"], ["sip", "Investments"], ["lic", "Investments"], ["insurance", "Investments"],
-    ["atm", "Cash"], ["cash", "Cash"], ["salary", "Salary & Income"], ["interest", "Salary & Income"], ["refund", "Salary & Income"]
+    ["atm", "Cash"], ["cash", "Cash"], ["bank charges", "Other"], ["salary", "Salary & Income"], ["interest", "Salary & Income"], ["refund", "Salary & Income"]
 ];
 
 const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9& ]+/g, " ").replace(/\s+/g, " ").trim();
@@ -183,21 +184,8 @@ function summarize(rows) {
 
 /* ───────── bank statements (CSV or Excel) ───────── */
 
-function parseCsv(text) {
-    const rows = [];
-    let row = [], cell = "", q = false;
-    const s = String(text).replace(/^﻿/, "");
-    for (let i = 0; i < s.length; i++) {
-        const c = s[i];
-        if (q) { if (c === '"' && s[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c; }
-        else if (c === '"') q = true;
-        else if (c === "," || c === "\t" || c === ";") { row.push(cell); cell = ""; }
-        else if (c === "\n" || c === "\r") { if (c === "\r" && s[i + 1] === "\n") i++; row.push(cell); cell = ""; if (row.some((x) => x.trim())) rows.push(row); row = []; }
-        else cell += c;
-    }
-    row.push(cell); if (row.some((x) => x.trim())) rows.push(row);
-    return rows;
-}
+/** CSV text -> rows of text; the delimiter (comma, tab, semicolon, pipe) is found from the file itself. */
+function parseCsv(text) { return kit.parseDelimited(text); }
 
 /** A tiny .xlsx reader (zip + XML, no libraries): the first worksheet as rows of text. */
 function parseXlsx(buf) {
@@ -235,66 +223,163 @@ function parseXlsx(buf) {
     return rows;
 }
 
-/** Rows of text -> [{ date, desc, amount, type, balance, ref }] by finding the header row (Date / Particulars / Withdrawals / Deposits / Balance). */
+/**
+ * Rows of text -> [{ date, desc, amount, type, balance, ref }], oldest first. The header row is found by what its cells mean (Date /
+ * Particulars / Withdrawals / Deposits / Balance, or one Amount column with Dr/Cr), whatever the bank calls them. A narration that
+ * continues on the next row (no date there) is joined to the line above, opening/closing balance rows and totals are skipped, and a
+ * statement listed newest first is turned round (checked against its own running balance when the dates cannot tell).
+ */
 function statementRows(table) {
-    const low = (v) => String(v || "").toLowerCase();
-    let h = -1;
-    for (let i = 0; i < Math.min(table.length, 60); i++) {
-        const cells = table[i].map(low);
-        if (cells.some((c) => /\bdate\b/.test(c)) && cells.some((c) => /withdraw|debit|\bdr\b|amount/.test(c)) && cells.some((c) => /balance/.test(c))) { h = i; break; }
+    const low = (v) => String(v ?? "").toLowerCase().replace(/[._]/g, " ").replace(/\s+/g, " ").trim();
+    const rolesOf = (cells) => {
+        const r = { date: -1, valueDate: -1, desc: -1, deb: -1, cred: -1, amt: -1, dc: -1, bal: -1, id: -1 };
+        cells.forEach((c, i) => {
+            if (!c) return;
+            if (/^value ?date$|^val date$/.test(c)) { if (r.valueDate < 0) r.valueDate = i; }
+            else if (/^(txn|tran|trans|transaction|posting|post)? ?date$/.test(c)) { if (r.date < 0) r.date = i; }
+            else if (/dr ?\/ ?cr|cr ?\/ ?dr|^type$|^indicator$|debit ?\/ ?credit|credit ?\/ ?debit/.test(c)) { if (r.dc < 0) r.dc = i; }
+            else if (/particular|narration|description|details|remark/.test(c)) { if (r.desc < 0) r.desc = i; }
+            else if (/withdraw|debit|paid out|^dr( amount| amt)?$|amount dr|^dr amt/.test(c)) { if (r.deb < 0) r.deb = i; }
+            else if (/deposit|credit|paid in|^cr( amount| amt)?$|amount cr|^cr amt/.test(c)) { if (r.cred < 0) r.cred = i; }
+            else if (/balance/.test(c)) { if (r.bal < 0 || /closing|running/.test(c)) r.bal = i; }
+            else if (/^(txn |tran |transaction )?(amount|amt)/.test(c)) { if (r.amt < 0) r.amt = i; }
+            else if (/tran(saction)? ?id|ref|utr|chq|cheque|instrument/.test(c)) { if (r.id < 0) r.id = i; }
+        });
+        return r;
+    };
+    let h = -1, R = null;
+    for (let i = 0; i < Math.min(table.length, 80); i++) {
+        const r = rolesOf(table[i].map(low));
+        if (r.date >= 0 && r.bal >= 0 && (r.deb >= 0 || r.cred >= 0 || r.amt >= 0)) { h = i; R = r; break; }
     }
     if (h < 0) throw new Error("Could not find the table in this statement. Download it as Excel or CSV from net banking (columns like Date, Particulars, Withdrawals, Deposits, Balance).");
-    const head = table[h].map(low);
-    const find = (re, skip = -1) => head.findIndex((c, i) => i !== skip && re.test(c));
-    const iDate = find(/\bdate\b/), iDesc = find(/particular|narration|description|details|remarks/), iBal = find(/balance/);
-    const iDeb = find(/withdraw|debit|dr amount/), iCred = find(/deposit|credit|cr amount/), iAmt = iDeb < 0 ? find(/amount/) : -1, iDc = find(/^dr\/?cr$|type|cr\/dr/);
-    const iId = find(/tran(saction)? ?id|ref|utr|chq|cheque/);
-    const out = [];
-    for (const r of table.slice(h + 1)) {
-        const date = parseDate(r[iDate]);
-        if (!date) continue;
-        const d = iDeb >= 0 ? num(r[iDeb] || 0) : 0, c = iCred >= 0 ? num(r[iCred] || 0) : 0;
-        let amount = 0, type = "";
-        if (d > 0) { amount = d; type = "Debit"; } else if (c > 0) { amount = c; type = "Credit"; }
-        else if (iAmt >= 0 && num(r[iAmt] || 0) > 0) { amount = num(r[iAmt]); type = /cr/i.test(String(r[iDc] || "")) && !/dr/i.test(String(r[iDc] || "")) ? "Credit" : "Debit"; }
-        if (!amount) continue;
-        const desc = String(r[iDesc] ?? "").trim(), idCell = iId >= 0 ? String(r[iId] || "") : "";
-        const ref = (/\b(\d{12})\b/.exec(desc + " " + idCell) || [])[1] || "";
-        out.push({ date, desc, amount: round2(amount), type, balance: iBal >= 0 && String(r[iBal] || "").trim() ? round2(num(String(r[iBal]).replace(/[^\d.\-,]/g, ""))) : null, ref });
+    const body = table.slice(h + 1);
+    if (R.desc < 0) {                                         // no recognisable narration column: the widest text column is it
+        let best = -1, bestLen = 0;
+        for (let c = 0; c < (table[h] || []).length; c++) {
+            if ([R.date, R.valueDate, R.deb, R.cred, R.amt, R.dc, R.bal, R.id].includes(c)) continue;
+            const len = body.slice(0, 40).reduce((n, r) => n + String(r[c] ?? "").length, 0);
+            if (len > bestLen) { best = c; bestLen = len; }
+        }
+        R.desc = best;
     }
-    return out;
+    const dateOf = (r) => parseDate(r[R.date]) || (R.valueDate >= 0 ? parseDate(r[R.valueDate]) : null);
+    const out = [];
+    let last = null;
+    for (const r of body) {
+        const text = R.desc >= 0 ? String(r[R.desc] ?? "").replace(/\s+/g, " ").trim() : "";
+        const date = dateOf(r);
+        const dv = R.deb >= 0 ? kit.money(r[R.deb]) : null, cv = R.cred >= 0 ? kit.money(r[R.cred]) : null, av = R.amt >= 0 ? kit.money(r[R.amt]) : null;
+        const hasAmount = Boolean((dv && dv !== 0) || (cv && cv !== 0) || (av && av !== 0));
+        if (!date || !hasAmount) {
+            // the rest of the narration on the next row; anything else (opening balance, totals, notes) is not a transaction
+            if (last && text && !hasAmount && !(r[R.bal] != null && String(r[R.bal]).trim()) && !/total|opening|closing|brought forward|carried|statement/i.test(text)) last.desc = `${last.desc} ${text}`.trim();
+            continue;
+        }
+        let amount = 0, type = "";
+        if (dv && dv !== 0) { amount = Math.abs(dv); type = "Debit"; }
+        else if (cv && cv !== 0) { amount = Math.abs(cv); type = "Credit"; }
+        else {
+            amount = Math.abs(av);
+            const ind = R.dc >= 0 ? String(r[R.dc] ?? "") : String(r[R.amt] ?? "");
+            type = /\bdr\b|debit|withdraw/i.test(ind) ? "Debit" : /\bcr\b|credit|deposit/i.test(ind) ? "Credit" : av < 0 ? "Debit" : "Credit";
+        }
+        const idCell = R.id >= 0 ? String(r[R.id] ?? "") : "";
+        const ref = (/\b(\d{12})\b/.exec(`${text} ${idCell}`) || /\b([A-Z]{4}[A-Z0-9]\d{11})\b/.exec(`${text} ${idCell}`) || [])[1] || "";
+        const bal = R.bal >= 0 ? kit.money(r[R.bal]) : null;
+        last = { date, desc: text, amount: round2(amount), type, balance: bal == null ? null : round2(bal), ref };
+        out.push(last);
+    }
+    // oldest first: by the dates, or (a single day) by whichever order the running balance follows
+    const breaks = (a) => { let n = 0; for (let i = 1; i < a.length; i++) { if (a[i - 1].balance == null || a[i].balance == null) continue; if (Math.abs(round2(a[i - 1].balance + (a[i].type === "Credit" ? a[i].amount : -a[i].amount)) - a[i].balance) >= 0.01) n++; } return n; };
+    let ordered = out;
+    if (out.length > 1) {
+        const first = out[0].date, end = out[out.length - 1].date;
+        if (first > end) ordered = out.slice().reverse();
+        else if (first === end) { const rev = out.slice().reverse(); if (breaks(rev) < breaks(out)) ordered = rev; }
+    }
+    return ordered;
 }
 
 /**
- * Checks the sheet against a statement. For each statement line: the sheet row with the same reference (or, failing that, the same
- * amount and type on the same day) is "Verified" (or "Mismatch" when the amount differs); a statement line the sheet does not have is
- * added; a sheet row inside the statement's dates that the statement does not have is "Not in statement". Also reports where the
- * statement's own running balance breaks.
+ * The bank statement is the truth. Every statement line is paired with one stored entry (the same reference, or failing that the same
+ * type and amount within a day with the references not in conflict; the same day and a similar name win). The paired entry is made to
+ * say what the statement says: its date, amount, type, running balance and, when the message said "unknown" or cut the name short, its
+ * headline; it becomes "Verified". A line with no entry is added. An entry inside the statement's dates that no line matches is
+ * "Not in statement" (left out of the totals until the owner decides). Also reports, month by month, whether Stashr's totals now
+ * equal the statement's, and where the statement's own running balance breaks.
+ *
+ * -> { updates: [{ index, status, note, fields }], additions: [tx fields], report }
  */
 function reconcile(sheetRows, stmt, userRules = []) {
     const used = new Set();
     const updates = [], additions = [];
     const dates = stmt.map((s) => s.date).sort();
     const from = dates[0], to = dates[dates.length - 1];
-    let verified = 0, mismatched = 0;
-    for (const s of stmt) {
-        let hit = s.ref ? sheetRows.find((t) => !used.has(t.index) && t.ref && t.ref === s.ref) : null;
-        if (!hit) hit = sheetRows.find((t) => !used.has(t.index) && t.type === s.type && Math.abs(t.amount - s.amount) < 0.005 && t.date === s.date);
-        if (!hit) hit = sheetRows.find((t) => !used.has(t.index) && t.type === s.type && Math.abs(t.amount - s.amount) < 0.005 && Math.abs(Date.parse(t.date) - Date.parse(s.date)) <= 86400000);
-        if (hit) {
-            used.add(hit.index);
-            const bad = Math.abs(hit.amount - s.amount) >= 0.005 || hit.type !== s.type;
-            const balBad = hit.balance != null && s.balance != null && Math.abs(hit.balance - s.balance) >= 0.005;
-            updates.push({ index: hit.index, status: bad ? "Mismatch" : "Verified", note: bad ? `Statement says ${s.type} ${s.amount}` : balBad ? `Verified; balance after it differs (SMS ${hit.balance}, statement ${s.balance})` : "" });
-            if (bad) mismatched++; else verified++;
-        } else {
-            const merchant = (/(?:UPI|IMPS|NEFT)[\/\-][A-Z]*[\/\-]?\d*[\/\-]?([A-Za-z][A-Za-z0-9 &.]{2,30})/.exec(s.desc) || [])[1] || s.desc.slice(0, 40);
-            const t = { date: s.date, time: "", amount: s.amount, type: s.type, counterparty: merchant.trim(), account: "", method: /UPI/i.test(s.desc) ? "UPI" : /ATM/i.test(s.desc) ? "ATM" : /NEFT|IMPS|RTGS/i.test(s.desc) ? (/NEFT|IMPS|RTGS/i.exec(s.desc) || [])[0].toUpperCase() : "Other", ref: s.ref, balance: s.balance };
-            additions.push({ ...t, category: categorize(t.counterparty, t.type, t.method, userRules) });
-        }
+    const info = stmt.map((s) => kit.describeLine(s.desc));
+    const dayGap = (a, b) => Math.abs(Date.parse(a) - Date.parse(b)) / 86400000;
+    const pairs = new Map();                                  // statement line index -> stored entry
+
+    stmt.forEach((s, i) => {                                  // 1. the same reference
+        if (!s.ref) return;
+        const hit = sheetRows.find((t) => !used.has(t.index) && t.ref && t.ref === s.ref);
+        if (hit) { pairs.set(i, hit); used.add(hit.index); }
+    });
+    for (const maxGap of [0, 1]) {                            // 2. the same day first, then a day either side
+        stmt.forEach((s, i) => {
+            if (pairs.has(i)) return;
+            let best = null, bestScore = -1;
+            for (const t of sheetRows) {
+                if (used.has(t.index) || t.type !== s.type || Math.abs(t.amount - s.amount) >= 0.005) continue;
+                if (t.ref && s.ref && t.ref !== s.ref) continue;                       // two different payments that happen to cost the same
+                if (dayGap(t.date, s.date) > maxGap) continue;
+                const score = kit.nameMatch(t.merchant, info[i].merchant) * 3 + (t.ref && s.ref ? 5 : 0);
+                if (score > bestScore) { best = t; bestScore = score; }
+            }
+            if (best) { pairs.set(i, best); used.add(best.index); }
+        });
     }
-    const missing = sheetRows.filter((t) => !used.has(t.index) && t.date >= from && t.date <= to && t.status !== "Verified");
-    for (const t of missing) updates.push({ index: t.index, status: "Not in statement", note: "Not found in the statement you sent" });
+
+    let verified = 0, mismatched = 0, renamed = 0;
+    const finalRows = [];
+    stmt.forEach((s, i) => {
+        const t = pairs.get(i);
+        if (!t) return;
+        const fields = {}, notes = [];
+        if (t.date !== s.date) { fields.date = s.date; fields.month = s.date.slice(0, 7); notes.push(`date ${t.date} → ${s.date}`); }
+        const wrong = Math.abs(t.amount - s.amount) >= 0.005 || t.type !== s.type;
+        if (Math.abs(t.amount - s.amount) >= 0.005) { fields.amount = s.amount; notes.push(`amount ${t.amount} → ${s.amount}`); }
+        if (t.type !== s.type) { fields.type = s.type; notes.push(`${t.type} → ${s.type}`); }
+        if (!t.ref && s.ref) fields.ref = s.ref;
+        if (s.balance != null && t.balance !== s.balance) fields.balance = s.balance;
+        const name = kit.betterName(t.merchant, info[i].merchant);
+        if (name && name !== t.merchant) { fields.merchant = name; renamed++; }
+        if ((!t.method || t.method === "Other") && info[i].method !== "Other") fields.method = info[i].method;
+        if (!t.category || t.category === "Uncategorized") {
+            const c = categorize(fields.merchant || t.merchant, s.type, fields.method || t.method, userRules);
+            if (c !== "Uncategorized") fields.category = c;
+        }
+        fields.status = "Verified"; fields.flags = [];
+        fields.note = notes.length ? `Corrected from the bank statement: ${notes.join(", ")}` : "";
+        updates.push({ index: t.index, status: "Verified", note: fields.note, fields });
+        if (wrong) mismatched++; else verified++;
+        finalRows.push({ ...t, ...fields });
+    });
+    stmt.forEach((s, i) => {
+        if (pairs.has(i)) return;
+        const merchant = info[i].merchant || s.desc.slice(0, 40);
+        const t = { date: s.date, time: "", amount: s.amount, type: s.type, counterparty: merchant, account: "", method: info[i].method, ref: s.ref, balance: s.balance };
+        const add = { ...t, category: categorize(merchant, s.type, info[i].method, userRules) };
+        additions.push(add);
+        finalRows.push({ date: s.date, amount: s.amount, type: s.type, status: "Verified", category: add.category });
+    });
+    // entries the statement does not have (inside its dates; the owner's own "Confirmed" and earlier-verified rows are left alone)
+    const missing = sheetRows.filter((t) => !used.has(t.index) && t.date >= from && t.date <= to && t.status !== "Verified" && t.status !== "Confirmed");
+    for (const t of missing) updates.push({ index: t.index, status: "Not in statement", note: "Not found in the statement you sent", fields: { status: "Not in statement", note: "Not found in the statement you sent" } });
+    for (const t of sheetRows) {
+        if (!used.has(t.index) && t.date >= from && t.date <= to) finalRows.push(missing.includes(t) ? { ...t, status: "Not in statement" } : t);
+    }
+
     const breaks = [];
     for (let i = 1; i < stmt.length; i++) {
         const a = stmt[i - 1], b = stmt[i];
@@ -302,7 +387,21 @@ function reconcile(sheetRows, stmt, userRules = []) {
         const expect = round2(a.balance + (b.type === "Credit" ? b.amount : -b.amount));
         if (Math.abs(expect - b.balance) >= 0.01) breaks.push({ date: b.date, desc: b.desc.slice(0, 50), expected: expect, got: b.balance });
     }
-    return { updates, additions, report: { from, to, lines: stmt.length, verified, mismatched, added: additions.length, notInStatement: missing.length, balanceBreaks: breaks.slice(0, 20), balanceBreakCount: breaks.length } };
+
+    // does each month now add up to the statement? (only the days the statement covers)
+    const byMonth = new Map();
+    for (const s of stmt) {
+        const m = byMonth.get(s.date.slice(0, 7)) || { month: s.date.slice(0, 7), statementDebit: 0, statementCredit: 0, lines: 0 };
+        if (s.type === "Debit") m.statementDebit = round2(m.statementDebit + s.amount); else m.statementCredit = round2(m.statementCredit + s.amount);
+        m.lines++; byMonth.set(m.month, m);
+    }
+    const months = [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month)).map((m) => {
+        const mine = summarize(finalRows.filter((t) => t.date && t.date.slice(0, 7) === m.month && t.date >= from && t.date <= to));
+        return { ...m, stashrDebit: round2(mine.debit), stashrCredit: round2(mine.credit), match: Math.abs(mine.debit - m.statementDebit) < 0.01 && Math.abs(mine.credit - m.statementCredit) < 0.01 };
+    });
+
+    return { updates, additions, report: { from, to, lines: stmt.length, verified, mismatched, added: additions.length, renamed, notInStatement: missing.length, months, allMonthsMatch: months.every((m) => m.match),
+        closingBalance: stmt.length ? stmt[stmt.length - 1].balance : null, balanceBreaks: breaks.slice(0, 20), balanceBreakCount: breaks.length } };
 }
 
 module.exports = { makeTx, txToRow, assess, bankSender, ist, parseDate, parseSms, categorize, ruleKey, norm, DEFAULT_CATEGORIES, DEFAULT_RULES, HEADERS, rowFromTx, txFromRow, sameTx, reclearBalanceFlags, DOUBTFUL, summarize, parseCsv, parseXlsx, statementRows, reconcile, round2 };

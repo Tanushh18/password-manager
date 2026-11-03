@@ -17,7 +17,8 @@ const sheets = require("./sheets");
 
 const DAY = 86400000;
 const RETENTION_DAYS = 120;
-const COL = { category: 5, status: 11, note: 12 };
+const COL = { date: 0, time: 1, amount: 2, type: 3, merchant: 4, category: 5, account: 6, method: 7, ref: 8, balance: 9, source: 10, status: 11, note: 12, month: 13, flags: 15 };
+const cellValue = (k, v) => (k === "flags" ? (v || []).join(" | ") : v == null ? "" : v);
 
 /* ───────── Stashr storage (MongoDB, encrypted) ───────── */
 
@@ -52,20 +53,29 @@ function dbStore(owner, dataKey) {
             }
             return { added, duplicates, stored };
         },
-        /** items: [{ index, fields: { category?, status?, note? } }] */
+        /** items: [{ index, fields: { any of date, time, amount, type, merchant, category, method, ref, balance, status, note, flags } }] */
         async updateMany(items) {
             let n = 0;
             for (const it of items) {
                 const id = idOf(it.index);
                 const doc = id && await ExpenseTx.findOne({ _id: id, owner });
                 if (!doc) continue;
-                const next = { ...open(doc), ...it.fields };
+                const cur = open(doc);
+                const next = { ...cur, ...it.fields };
                 doc.status = next.status; doc.enc = seal(next);
-                await doc.save(); n++;
+                if (next.date && next.date !== cur.date) { doc.date = next.date; doc.month = next.date.slice(0, 7); doc.expireAt = expireAtOf(next.date); }
+                // the keyed hash that skips duplicates follows what identifies the payment
+                if (["date", "time", "amount", "ref", "merchant"].some((k) => it.fields[k] !== undefined && it.fields[k] !== cur[k])) doc.refHash = hash(next);
+                try { await doc.save(); n++; }
+                catch (e) {
+                    // the corrected entry is now the same payment as another stored entry: keep that one, drop this repeat
+                    if (e && e.code === 11000) await ExpenseTx.deleteOne({ _id: doc._id }); else throw e;
+                }
             }
             return n;
         },
         async remove(index) { const id = idOf(index); if (id) await ExpenseTx.deleteOne({ _id: id, owner }); },
+        async removeMany(indexes) { const ids = indexes.map(idOf).filter(Boolean); if (ids.length) await ExpenseTx.deleteMany({ _id: { $in: ids }, owner }); return ids.length; },
         async archiveOld() { return 0; }
     };
 }
@@ -86,11 +96,12 @@ function sheetStore(sheetId, cutoff) {
         },
         async updateMany(items) {
             const cells = [];
-            for (const it of items) for (const [k, v] of Object.entries(it.fields)) if (COL[k] !== undefined) cells.push({ tab: "Transactions", row: Number(it.index), col: COL[k], value: v });
+            for (const it of items) for (const [k, v] of Object.entries(it.fields)) if (COL[k] !== undefined) cells.push({ tab: "Transactions", row: Number(it.index), col: COL[k], value: cellValue(k, v) });
             await sheets.updateCells(sheetId, cells);
             return items.length;
         },
         async remove(index) { await sheets.deleteRows(sheetId, "Transactions", [Number(index)]); },
+        async removeMany(indexes) { const rows = indexes.map(Number).filter((r) => r >= 2); if (rows.length) await sheets.deleteRows(sheetId, "Transactions", rows); return rows.length; },
         async archiveOld() { return 0; }          // done by the route (it keeps the "once a day" mark)
     };
 }
@@ -111,10 +122,11 @@ function mirror(sheetId, report) {
         pending.add(p);
         p.finally(() => pending.delete(p));
     };
-    const rowOf = async (ref) => {
-        if (!ref) return 0;
+    const rowOf = async (tx) => {
         const rows = await sheets.readRows(sheetId, "Transactions");
-        const i = rows.findIndex((r) => String(r[8]) === String(ref));
+        const i = tx.ref
+            ? rows.findIndex((r) => String(r[8]) === String(tx.ref))
+            : rows.findIndex((r) => String(r[0]) === String(tx.date) && String(r[1] || "") === String(tx.time || "") && Number(r[2]) === Number(tx.amount) && String(r[4] || "") === String(tx.merchant || ""));
         return i < 0 ? 0 : i + 2;
     };
     const cutoff = ex.ist(Date.now() - RETENTION_DAYS * DAY);
@@ -125,11 +137,12 @@ function mirror(sheetId, report) {
             if (!items.length) return;
             run(async () => {
                 const cells = [];
-                for (const it of items) { const row = await rowOf(it.tx.ref); if (row) for (const [k, v] of Object.entries(it.fields)) if (COL[k] !== undefined) cells.push({ tab: "Transactions", row, col: COL[k], value: v }); }
+                for (const it of items) { const row = await rowOf(it.tx); if (row) for (const [k, v] of Object.entries(it.fields)) if (COL[k] !== undefined) cells.push({ tab: "Transactions", row, col: COL[k], value: cellValue(k, v) }); }
                 await sheets.updateCells(sheetId, cells);
             });
         },
-        remove(tx) { run(async () => { const row = await rowOf(tx.ref); if (row) await sheets.deleteRows(sheetId, "Transactions", [row]); }); }
+        remove(tx) { run(async () => { const row = await rowOf(tx); if (row) await sheets.deleteRows(sheetId, "Transactions", [row]); }); },
+        removeMany(txs) { if (!txs.length) return; run(async () => { const rows = []; for (const tx of txs) { const row = await rowOf(tx); if (row) rows.push(row); } if (rows.length) await sheets.deleteRows(sheetId, "Transactions", rows); }); }
     };
 }
 

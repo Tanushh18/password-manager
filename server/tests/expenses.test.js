@@ -92,7 +92,8 @@ describe("statements", () => {
         ]);
         const { updates, additions, report } = ex.reconcile(sheet, ex.statementRows(ex.parseCsv(stmtCsv)), []);
         expect(updates.find((u) => u.index === 2).status).toBe("Verified");         // a flagged row confirmed by the statement
-        expect(updates.find((u) => u.index === 3).status).toBe("Mismatch");
+        expect(updates.find((u) => u.index === 3).status).toBe("Verified");         // the statement is the truth: 1400 becomes 1500
+        expect(updates.find((u) => u.index === 3).fields.amount).toBe(1500);
         expect(updates.find((u) => u.index === 4).status).toBe("Not in statement");
         expect(additions.length).toBe(2);                                           // Swiggy and the ATM line
         expect(additions[0].category).toBe("Food");
