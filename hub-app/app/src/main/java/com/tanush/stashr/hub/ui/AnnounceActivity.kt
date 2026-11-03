@@ -83,8 +83,11 @@ class AnnounceActivity : Activity() {
         }
     }
 
+    override fun onStart() { super.onStart(); showing = true }
+
     override fun onDestroy() {
         main.removeCallbacksAndMessages(null)
+        if (isFinishing) { showing = false; com.tanush.stashr.hub.core.ScreenGuard.restore(applicationContext, offBefore) }
         super.onDestroy()
     }
 
@@ -95,9 +98,12 @@ class AnnounceActivity : Activity() {
         private const val CHANNEL = "announcements"
         private const val NOTE_ID = 4242
         private val recent = ArrayList<Pair<String, Long>>()
+        @Volatile private var showing = false
+        @Volatile private var offBefore = false
 
         /** Opens the screen and posts the heads-up notification (the fallback when Android blocks the screen). */
         fun show(ctx: Context, text: String, speak: Boolean, urgent: Boolean) {
+            if (!showing) offBefore = com.tanush.stashr.hub.core.ScreenGuard.wasOff(ctx)
             val intent = Intent(ctx, AnnounceActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 .putExtra(EXTRA_TEXT, text).putExtra(EXTRA_SPEAK, speak).putExtra(EXTRA_URGENT, urgent)

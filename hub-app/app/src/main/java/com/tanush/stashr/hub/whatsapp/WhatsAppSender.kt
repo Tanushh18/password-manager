@@ -42,6 +42,7 @@ object WhatsAppSender {
         if (WhatsAppAccessibility.instance == null) throw IllegalStateException("Turn on Stashr Hub in Accessibility settings")
         val pkg = installed(ctx) ?: throw IllegalStateException("WhatsApp is not installed")
         if (job != null && job?.done == false && System.currentTimeMillis() < job!!.deadline) throw IllegalStateException("Another message is being sent")
+        val wasOff = com.tanush.stashr.hub.core.ScreenGuard.wasOff(ctx)
         val j = Job(g, t, System.currentTimeMillis() + 60_000)
         job = j
         val wl = (ctx.getSystemService(Context.POWER_SERVICE) as PowerManager).newWakeLock(
@@ -61,6 +62,7 @@ object WhatsAppSender {
             job = null
             if (wl.isHeld) wl.release()
             if (j.done) try { ctx.startActivity(Intent(ctx, com.tanush.stashr.hub.ui.DashboardActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) { }
+            com.tanush.stashr.hub.core.ScreenGuard.restore(ctx, wasOff)
         }
     }
 

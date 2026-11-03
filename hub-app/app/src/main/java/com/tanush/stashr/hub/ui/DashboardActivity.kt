@@ -100,7 +100,7 @@ class DashboardActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (!prefs.screenOffAfter) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         ui = Ui(this)
         HubService.start(this)
         setContentView(build())
@@ -212,6 +212,10 @@ class DashboardActivity : Activity() {
             prefs.voiceOn = on
             if (on) VoiceListener.start(this) else VoiceListener.stop()
         }
+        val darkSwitch = switch("Keep the screen off (saves battery): the screen sleeps by itself and goes back to sleep after a WhatsApp message or announcement. Camera, voice and live view keep working.", prefs.screenOffAfter) { on ->
+            prefs.screenOffAfter = on
+            applyPower()
+        }
         val saverSwitch = switch("Power saving (always): scan the Wi-Fi less often, dim the screen and let it sleep", prefs.batterySaver) { on ->
             prefs.batterySaver = on
             applyPower()
@@ -220,7 +224,7 @@ class DashboardActivity : Activity() {
             prefs.hideStatusBar = on
             applyFullscreen()
         }
-        ctl.addView(cameraSwitch); ctl.addView(voiceSwitch); ctl.addView(saverSwitch); ctl.addView(barSwitch)
+        ctl.addView(cameraSwitch); ctl.addView(voiceSwitch); ctl.addView(darkSwitch); ctl.addView(saverSwitch); ctl.addView(barSwitch)
         val buttons = ui.row(8)
         buttons.addView(ui.quiet("Slideshow") { startActivity(Intent(this, SlideshowActivity::class.java)) })
         buttons.addView(ui.quiet("Check for update") {
@@ -277,7 +281,7 @@ class DashboardActivity : Activity() {
     /** Power saving on: the screen may sleep and is dimmed while it is on. Off: always on, normal brightness. */
     private fun applyPower() {
         val saving = com.tanush.stashr.hub.core.Power.saving(this)
-        if (saving) window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (saving || prefs.screenOffAfter) window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val lp = window.attributes
         val want = if (saving) 0.25f else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
         if (lp.screenBrightness != want) { lp.screenBrightness = want; window.attributes = lp }

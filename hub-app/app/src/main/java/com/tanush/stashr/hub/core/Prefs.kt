@@ -43,6 +43,10 @@ class Prefs(ctx: Context) {
     var cameraArmed: Boolean
         get() = p.getBoolean("cameraArmed", false)
         set(v) = p.edit().putBoolean("cameraArmed", v).apply()
+    /** After a WhatsApp message or an announcement woke the screen, put it back to sleep. */
+    var screenOffAfter: Boolean
+        get() = p.getBoolean("screenOffAfter", true)
+        set(v) = p.edit().putBoolean("screenOffAfter", v).apply()
     var voiceOn: Boolean
         get() = p.getBoolean("voiceOn", true)
         set(v) = p.edit().putBoolean("voiceOn", v).apply()
