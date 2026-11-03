@@ -386,7 +386,7 @@ describe("places and WhatsApp", () => {
 });
 
 describe("on the way home, and Telegram control", () => {
-    test("a phone heading home gets an ETA, announced once, and the assistant answers", async () => {
+    test("a phone heading home gets an ETA, announced at each milestone once, and the assistant answers", async () => {
         const auth = await signUp();
         const tab = await pair(auth, "hub");
         await pair(auth, "phone", "Papa phone");
@@ -408,8 +408,10 @@ describe("on the way home, and Telegram control", () => {
         await fix(28.63, t0 + 240_000);              // ~2 km: inside the notify window
         const ev = await HomeEvent.find({ kind: "eta" }).lean();
         expect(ev.length).toBe(1);
-        await fix(28.625, t0 + 300_000);
-        expect((await HomeEvent.find({ kind: "eta" }).lean()).length).toBe(1);
+        await fix(28.625, t0 + 300_000);             // ~1.2 km, about 3 min: the 3-minute notice
+        expect((await HomeEvent.find({ kind: "eta" }).lean()).length).toBe(2);
+        await fix(28.625, t0 + 330_000);             // same spot again: nothing new to say
+        expect((await HomeEvent.find({ kind: "eta" }).lean()).length).toBe(2);
         const r = await request(app).post("/home/assistant").set(auth).send({ text: "papa kab aayenge" });
         expect(r.body.reply).toMatch(/minute mein aa rahe hain/);
         const dash = await request(app).get("/home/agent/dashboard").set(bearer(tab.token));
