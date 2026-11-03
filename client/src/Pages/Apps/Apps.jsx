@@ -1,12 +1,16 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Ambience from "../../Components/Ambience/Ambience";
 import { publicApiBase } from "../../api/client";
 import "./Apps.css";
 
-// The APK is a static file served by this site, so /apps works with no extra server. Keep in step with mobile/app.json.
 const EXT = { file: "/apps/stashr-extension.zip", version: "1.0.1" };
-const APK = { file: "/apps/stashr.apk", version: "2.3.0" };
+// The main app is always the newest GitHub release, served by the API like the other apps (no old copy kept on this site).
+// If the API cannot reach GitHub, the direct GitHub link below still works.
+const APK = {
+  file: `${publicApiBase}/api/mobile-updates/android/download`,
+  github: "https://github.com/Tanushh18/stashr-Home-Automation/releases/latest/download/stashr-release.apk",
+};
 
 // Stashr Hub is built by GitHub Actions (hub-apk.yml) and served by the API from the newest GitHub release.
 const HUB_APK = `${publicApiBase}/api/mobile-updates/hub/download`;
@@ -62,15 +66,25 @@ const FEATURES = [
 ];
 
 export default function Apps() {
+  const [version, setVersion] = useState("");
+  useEffect(() => {
+    let live = true;
+    fetch(`${publicApiBase}/api/mobile-updates/android/latest?currentVersionCode=0`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (live && d && d.version) setVersion(d.version); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
   return (
     <div className="apps page">
       <Ambience petals={false} />
       <article className="shell-narrow apps__doc card anim-fade-up">
         <span className="card__ribbon" />
-        <p className="eyebrow">Android · version {APK.version}</p>
+        <p className="eyebrow">Android · {version ? `version ${version}` : "latest version"}</p>
         <h1>Stashr for Android</h1>
         <p className="lede">Your vault, photos and servers in your pocket. Sign in with the account you use on the website.</p>
         <a className="btn btn--primary apps__download" href={APK.file} download="stashr.apk">Download APK</a>
+        <p className="apps__note">Button not working? <a href={APK.github}>Download from GitHub</a>.</p>
         <h2>What you get</h2>
         <ul>{FEATURES.map((f) => <li key={f}>{f}</li>)}</ul>
         <h2>How to install</h2>
