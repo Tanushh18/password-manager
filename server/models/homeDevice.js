@@ -27,6 +27,8 @@ const homeDeviceSchema = new mongoose.Schema({
     status: { type: mongoose.Schema.Types.Mixed, default: {} },
     lastSeen: { type: Date },
     online: { type: Boolean, default: false },
+    // Paused from the website: the device stays linked, but its reports are not stored and it is shown as offline until resumed.
+    syncPaused: { type: Boolean, default: false },
     onlineSince: { type: Date },
     // Hub only: every device the tablet has seen on the Wi-Fi, keyed by address, with first/last seen.
     lanBook: { type: mongoose.Schema.Types.Mixed, default: {} },

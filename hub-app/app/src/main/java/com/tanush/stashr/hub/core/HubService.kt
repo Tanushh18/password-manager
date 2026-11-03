@@ -53,6 +53,8 @@ class HubService : LifecycleService() {
     private var firstFailAt = 0L
     private var lastDashboardAt = 0L
     private var lastScanAt = 0L
+    /** Syncing was paused from the website: only a tiny "are we back on?" report goes out, every 2 minutes. */
+    @Volatile private var paused = false
 
     override fun onCreate() {
         super.onCreate()
@@ -104,6 +106,12 @@ class HubService : LifecycleService() {
             try {
                 if (!Prefs(this).paired) { stopSelf(); return }
                 val now = System.currentTimeMillis()
+                if (paused) {
+                    val r = withContext(Dispatchers.IO) { api.report(JSONObject().put("status", JSONObject().put("agent", "stashr-hub"))) }
+                    paused = r.optBoolean("paused", false)
+                    lastError = if (paused) "Syncing is paused from the Stashr website" else ""
+                    if (paused) { withTimeoutOrNull(120_000) { wake.receive() }; continue }
+                }
                 // Battery saver: on battery the full Wi-Fi sweep, the port scan and the speed test are spaced out. The report still
                 // goes every minute (Stashr marks the tablet offline after 150 s of silence) and carries the last scan.
                 val saving = Power.saving(this)
@@ -119,6 +127,12 @@ class HubService : LifecycleService() {
                 val report = buildReport()
                 val sentEvents = report.optJSONArray("localEvents")?.length() ?: 0
                 val res = withContext(Dispatchers.IO) { api.report(report) }
+                if (res.optBoolean("paused", false)) {
+                    // Paused from the website: stop scanning and reporting until it is switched back on (checked every 2 minutes).
+                    paused = true; lastError = "Syncing is paused from the Stashr website"
+                    withTimeoutOrNull(120_000) { wake.receive() }
+                    continue
+                }
                 synchronized(acks) { while (acks.length() > 0) acks.remove(0) }
                 // The server answered: local mode ends, what happened meanwhile is handed over.
                 firstFailAt = 0L

@@ -40,7 +40,7 @@ const validId = (id) => mongoose.isValidObjectId(id);
 function publicDevice(d, now = Date.now()) {
     const out = {
         id: String(d._id), name: d.name, kind: d.kind, tokenHint: d.tokenHint || "", viaHub: Boolean(d.parent),
-        online: d.kind === "phone" ? Boolean(d.lastSeen) && now - new Date(d.lastSeen).getTime() < PHONE_ONLINE_MS : Boolean(d.online) && home.isOnline(d, now), lastSeen: d.lastSeen || null, onlineSince: d.onlineSince || null,
+        online: d.kind === "phone" ? Boolean(d.lastSeen) && now - new Date(d.lastSeen).getTime() < PHONE_ONLINE_MS : Boolean(d.online) && home.isOnline(d, now), lastSeen: d.lastSeen || null, onlineSince: d.onlineSince || null, syncPaused: Boolean(d.syncPaused),
         status: d.status || {},
         commands: (d.commands || []).slice(-10).reverse().map((c) => ({ id: c.id, type: c.type, args: c.args, status: c.status, result: c.result, createdAt: c.createdAt }))
     };
@@ -120,6 +120,23 @@ router.put("/home/devices/:id", authenticate, writeLimiter, async (req, res) => 
         if (!r.matchedCount) return res.status(404).json({ error: "Device not found." });
         return res.json({ ok: true });
     } catch (e) { return fail(res, e, "Could not rename it."); }
+});
+
+// Pause or resume syncing for the home tablet: it stays linked, but is treated as disconnected until it is resumed.
+router.put("/home/devices/:id/sync", authenticate, writeLimiter, async (req, res) => {
+    try {
+        if (!validId(req.params.id) || typeof (req.body && req.body.paused) !== "boolean") return res.status(400).json({ error: "Say whether syncing is paused." });
+        const paused = req.body.paused;
+        const d = await HomeDevice.findOne({ _id: req.params.id, owner: req.rootUser._id, parent: { $exists: false }, kind: "hub" });
+        if (!d) return res.status(404).json({ error: "Device not found." });
+        if (Boolean(d.syncPaused) === paused) return res.json({ ok: true, syncPaused: paused });
+        const set = { syncPaused: paused };
+        if (paused) set.online = false;
+        const ids = paused ? [d._id, ...(await HomeDevice.find({ owner: d.owner, parent: d._id }).distinct("_id"))] : [d._id];
+        await HomeDevice.updateMany({ _id: { $in: ids } }, { $set: set });
+        await record({ owner: d.owner, device: d._id, deviceName: d.name, kind: paused ? "sync_paused" : "sync_resumed", text: paused ? `Syncing with ${d.name} is paused from the website` : `Syncing with ${d.name} is back on` });
+        return res.json({ ok: true, syncPaused: paused });
+    } catch (e) { return fail(res, e, "Could not change syncing."); }
 });
 
 router.delete("/home/devices/:id", authenticate, writeLimiter, async (req, res) => {
@@ -431,6 +448,8 @@ async function childOf(hub, key, name) {
 router.post("/home/agent/report", agentLimiter, (req, res, next) => agentAuth(req, res, next), async (req, res) => {
     try {
         const d = req.device, body = req.body || {};
+        // Paused from the website: nothing is stored and no commands go out. The device keeps asking now and then, so it notices when syncing is back on.
+        if (d.syncPaused) return res.json({ ok: true, paused: true, commands: [], childCommands: {}, serverTime: new Date().toISOString() });
         const own = await ingest(d, body);
         if (own.error) return res.status(400).json({ error: own.error });
 

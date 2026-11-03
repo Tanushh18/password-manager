@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
   makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, getHomeInsights, saveHomeHistory, deleteHomeHistory, saveHomeSpots, getLocationCode, rotateLocationCode, getHubCode, rotateHubCode, getHomeWhere, saveHomeScenes, runHomeScene,
-  getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, getHomeLiveFrame, testHomeBrief, setHomePhonePerson, removeHomeDevice
+  getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, getHomeLiveFrame, testHomeBrief, setHomePhonePerson, removeHomeDevice, setHomeSyncPaused
 } from "../../api/client";
 import { Section, useConfirm } from "../Render/RenderUi";
 import { usePolling } from "../Render/renderHooks";
@@ -43,6 +43,11 @@ export function PairCard({ devices = [], onChanged = () => {} }) {
     if (!(await ask({ title: `Disconnect ${d.name || "this device"}?`, message: "It stops syncing with Stashr. To bring it back, type the home-device code on it again.", confirmLabel: "Disconnect", danger: true }))) return;
     try { await removeHomeDevice(d.id); toast.success("Disconnected."); onChanged(); } catch (e) { toast.error(errorMessage(e, "Could not disconnect.")); }
   };
+  const togglePause = async (d) => {
+    const pause = !d.syncPaused;
+    if (pause && !(await ask({ title: `Pause syncing with ${d.name || "the tablet"}?`, message: "The tablet stays linked but is treated as disconnected: no Wi-Fi scan results, no camera or messages, and WhatsApp place messages will not be sent. Resume any time.", confirmLabel: "Pause syncing" }))) return;
+    try { await setHomeSyncPaused(d.id, pause); toast.success(pause ? "Syncing paused. The tablet picks this up within a couple of minutes." : "Syncing is back on."); onChanged(); } catch (e) { toast.error(errorMessage(e, "Could not change syncing.")); }
+  };
   const make = async (e) => {
     e.preventDefault();
     try { setOld({ ...old, code: await makeHomePairCode(old.kind, old.name.trim()) }); }
@@ -61,7 +66,8 @@ export function PairCard({ devices = [], onChanged = () => {} }) {
           <ul className="sh-people">{linked.map((d) => (
             <li key={d.id || d.name} className={d.online ? "is-home" : ""}>
               <span className="sh-avatar" aria-hidden="true">{d.kind === "tv" ? "TV" : d.kind === "phone" ? "PH" : "TB"}</span>
-              <div><b>{d.name || "Unnamed"}</b><span>{KIND_LABEL[d.kind] || d.kind} · {d.online ? "online" : "offline"}{d.lastSeen ? ` · seen ${ago(d.lastSeen)}` : ""}</span></div>
+              <div><b>{d.name || "Unnamed"}</b><span>{KIND_LABEL[d.kind] || d.kind} · {d.syncPaused ? "syncing paused" : d.online ? "online" : "offline"}{d.lastSeen ? ` · seen ${ago(d.lastSeen)}` : ""}</span></div>
+              {d.kind === "hub" && !d.viaHub ? <button type="button" className="rd-btn rd-btn--quiet" onClick={() => togglePause(d)}>{d.syncPaused ? "Resume syncing" : "Pause syncing"}</button> : null}
               {d.kind === "hub" || d.kind === "tv" ? <button type="button" className="rd-btn rd-btn--quiet" onClick={() => disconnect(d)}>Disconnect</button> : null}
             </li>
           ))}</ul>
