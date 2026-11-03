@@ -235,6 +235,11 @@ function CategoryBars({ totals, selected, onSelect }) {
 
 /* ───────── 4. doubtful entries ───────── */
 
+/** Why an entry is in the "Needs checking" list. */
+const reasonsOf = (r) => (r.status === "Not in statement" ? ["The bank statement you uploaded does not have this one. It may be a duplicate or a fake message."]
+  : r.status === "Mismatch" ? [r.note || "The amount or type differs from your bank statement."]
+  : r.flags && r.flags.length ? r.flags : ["Something about this message looked wrong"]);
+
 function FlaggedCard({ rows, onChanged }) {
   const { ask, dialog } = useConfirm();
   const [busy, setBusy] = useState(null);
@@ -247,12 +252,12 @@ function FlaggedCard({ rows, onChanged }) {
     finally { setBusy(null); }
   };
   return (
-    <Section title={`Needs checking (${rows.length})`} subtitle="These look doubtful, so they are not counted in your totals. Upload your bank statement to check them automatically, or decide yourself.">
+    <Section title={`Needs checking (${rows.length})`} subtitle="These look doubtful, or your bank statement did not confirm them, so they are not counted in your totals. Upload your bank statement to check them automatically, or decide yourself.">
       {dialog}
       <ul className="mn-flag">{rows.map((r) => (
         <li key={r.index}>
           <div className="mn-flag__top"><b>{inr(r.amount)}</b> <span>{r.type === "Credit" ? "from" : "to"} {r.merchant || "unknown"}</span> <em>{dayLabel(r.date)}{r.time ? " · " + r.time : ""}</em></div>
-          <ul className="mn-reasons">{(r.flags && r.flags.length ? r.flags : ["Something about this message looked wrong"]).map((f, i) => <li key={i}>{f}</li>)}</ul>
+          <ul className="mn-reasons">{reasonsOf(r).map((f, i) => <li key={i}>{f}</li>)}</ul>
           <div className="mn-row">
             <button className="rd-btn rd-btn--quiet" disabled={busy === r.index} onClick={() => act(r, "genuine")}>This is genuine</button>
             <button className="rd-btn rd-btn--danger-quiet" disabled={busy === r.index} onClick={() => act(r, "delete")}>Delete (fake)</button>

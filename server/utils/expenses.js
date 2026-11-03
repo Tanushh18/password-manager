@@ -167,11 +167,14 @@ function reclearBalanceFlags(all) {
 
 const sameTx = (a, b) => (a.ref && b.ref ? a.ref === b.ref : a.date === b.date && a.time === b.time && a.amount === b.amount && norm(a.merchant) === norm(b.merchant));
 
+/** Entries that are not counted in the totals until the owner decides: doubtful messages, and rows the bank statement did not confirm. */
+const DOUBTFUL = ["Flagged", "Not in statement", "Mismatch"];
+
 function summarize(rows) {
     const by = new Map();
     let debit = 0, credit = 0, flagged = 0;
     for (const t of rows) {
-        if (t.status === "Flagged") { flagged++; continue; }     // doubtful entries are not counted until they are confirmed
+        if (DOUBTFUL.includes(t.status)) { flagged++; continue; }     // doubtful entries are not counted until they are confirmed
         if (t.type === "Debit") { debit += t.amount; const e = by.get(t.category) || { category: t.category, amount: 0, count: 0 }; e.amount = round2(e.amount + t.amount); e.count++; by.set(t.category, e); }
         else if (t.type === "Credit") credit += t.amount;
     }
@@ -302,4 +305,4 @@ function reconcile(sheetRows, stmt, userRules = []) {
     return { updates, additions, report: { from, to, lines: stmt.length, verified, mismatched, added: additions.length, notInStatement: missing.length, balanceBreaks: breaks.slice(0, 20), balanceBreakCount: breaks.length } };
 }
 
-module.exports = { makeTx, txToRow, assess, bankSender, ist, parseDate, parseSms, categorize, ruleKey, norm, DEFAULT_CATEGORIES, DEFAULT_RULES, HEADERS, rowFromTx, txFromRow, sameTx, reclearBalanceFlags, summarize, parseCsv, parseXlsx, statementRows, reconcile, round2 };
+module.exports = { makeTx, txToRow, assess, bankSender, ist, parseDate, parseSms, categorize, ruleKey, norm, DEFAULT_CATEGORIES, DEFAULT_RULES, HEADERS, rowFromTx, txFromRow, sameTx, reclearBalanceFlags, DOUBTFUL, summarize, parseCsv, parseXlsx, statementRows, reconcile, round2 };

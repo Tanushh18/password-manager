@@ -274,8 +274,8 @@ router.get("/expenses", authenticate, async (req, res) => {
         const month = /^\d{4}-\d{2}$/.test(String(req.query.month || "")) ? String(req.query.month) : ex.ist(Date.now()).slice(0, 7);
         const rows = all.filter((t) => t.month === month).sort((a, b) => key(b).localeCompare(key(a)));
         return res.json({
-            month, months: months.includes(month) ? months : [month, ...months], rows, flagged: all.filter((t) => t.status === "Flagged").sort((a, b) => key(b).localeCompare(key(a))),
-            totals: ex.summarize(rows), uncategorized: rows.filter((t) => t.status !== "Flagged" && t.category === "Uncategorized").length
+            month, months: months.includes(month) ? months : [month, ...months], rows, flagged: all.filter((t) => ex.DOUBTFUL.includes(t.status)).sort((a, b) => key(b).localeCompare(key(a))),
+            totals: ex.summarize(rows), uncategorized: rows.filter((t) => !ex.DOUBTFUL.includes(t.status) && t.category === "Uncategorized").length
         });
     } catch (e) { return fail(res, e, "Could not read your transactions."); }
 });
