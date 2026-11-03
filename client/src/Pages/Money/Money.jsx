@@ -158,6 +158,7 @@ function StartDateLine({ settings, onChanged }) {
             <label className="mn-field">Read messages from <input type="date" value={date} min="2015-01-01" max={today()} onChange={(e) => setDate(e.target.value)} /></label>
             <button className="rd-btn rd-btn--primary" onClick={save} disabled={busy || !date || date === settings.startDate}>{busy ? "Saving…" : "Save date"}</button>
           </div>
+          <p className="mn-dim">Using Stashr on two phones? Their messages are merged and repeats are skipped.</p>
           <p className="mn-dim">{date && date < settings.startDate ? "Earlier than now: the phone will read the older messages again the next time it syncs." : "Later than now: older messages stop being read; saved entries stay."}</p>
         </div>
       ) : null}

@@ -144,6 +144,27 @@ function txFromRow(r, index) {
         account: String(r[6] || ""), method: String(r[7] || ""), ref: String(r[8] || ""), balance: r[9] === "" || r[9] == null ? null : Number(r[9]), source: String(r[10] || ""), status: String(r[11] || ""), note: String(r[12] || ""), month: String(r[13] || String(r[0] || "").slice(0, 7)), received: String(r[14] || ""), flags: String(r[15] || "") ? String(r[15]).split(" | ") : [] };
 }
 
+/**
+ * Two phones can hold different halves of the same month. An entry saved before the other half arrived was flagged because its balance
+ * did not follow the one before it (that one was missing). Once the missing messages are in, an entry flagged ONLY for that reason
+ * and whose balance now follows is cleared. Returns [{ index, fields, tx }] for the store's updateMany.
+ */
+function reclearBalanceFlags(all) {
+    const key = (t) => `${t.date} ${t.time || ""}`;
+    const withBal = all.filter((t) => t.balance != null && t.date).sort((a, b) => key(a).localeCompare(key(b)));
+    const out = [];
+    for (const t of all) {
+        const flags = t.flags || [];
+        if (t.status !== "Flagged" || !flags.length || !flags.every((f) => /^Balance .* does not follow/.test(f))) continue;
+        let prev = null;
+        for (const o of withBal) { if (o === t || key(o) >= key(t)) { if (o !== t && key(o) >= key(t)) break; continue; } prev = o; }
+        if (!prev || t.balance == null) continue;
+        const expect = round2(prev.balance + (t.type === "Credit" ? t.amount : -t.amount));
+        if (Math.abs(expect - t.balance) < 0.01) out.push({ index: t.index, fields: { status: "Unverified", flags: [], note: "Balance now follows: the missing messages came from another phone" }, tx: t });
+    }
+    return out;
+}
+
 const sameTx = (a, b) => (a.ref && b.ref ? a.ref === b.ref : a.date === b.date && a.time === b.time && a.amount === b.amount && norm(a.merchant) === norm(b.merchant));
 
 function summarize(rows) {
@@ -281,4 +302,4 @@ function reconcile(sheetRows, stmt, userRules = []) {
     return { updates, additions, report: { from, to, lines: stmt.length, verified, mismatched, added: additions.length, notInStatement: missing.length, balanceBreaks: breaks.slice(0, 20), balanceBreakCount: breaks.length } };
 }
 
-module.exports = { makeTx, txToRow, assess, bankSender, ist, parseDate, parseSms, categorize, ruleKey, norm, DEFAULT_CATEGORIES, DEFAULT_RULES, HEADERS, rowFromTx, txFromRow, sameTx, summarize, parseCsv, parseXlsx, statementRows, reconcile, round2 };
+module.exports = { makeTx, txToRow, assess, bankSender, ist, parseDate, parseSms, categorize, ruleKey, norm, DEFAULT_CATEGORIES, DEFAULT_RULES, HEADERS, rowFromTx, txFromRow, sameTx, reclearBalanceFlags, summarize, parseCsv, parseXlsx, statementRows, reconcile, round2 };

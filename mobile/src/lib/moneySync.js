@@ -57,9 +57,11 @@ export function syncNow() {
       const rescanning = rescanToken !== "0" && (await get(K.rescan)) !== rescanToken;
       const localCursor = rescanning ? 0 : Number(await get(K.cursor)) || 0;
       const startMs = istMidnight(settings.startDate);
-      const first = Math.max(Math.max(Number(settings.lastSmsAt) || 0, localCursor) ? Math.max(Number(settings.lastSmsAt) || 0, localCursor) - OVERLAP_MS : startMs, startMs);
+      // Only THIS phone's own cursor counts, not the server's: when two phones hold different halves of the same months, the second
+      // one must still send its older messages (the server skips what it already has, by reference number).
+      const first = Math.max(localCursor ? localCursor - OVERLAP_MS : startMs, startMs);
       const messages = await readBankSms({ sinceMs: first, limit: 3000 });
-      const plan = planSync({ startDate: settings.startDate, serverCursor: settings.lastSmsAt, localCursor }, messages);
+      const plan = planSync({ startDate: settings.startDate, serverCursor: 0, localCursor }, messages);
       const total = { added: 0, flagged: 0, duplicates: 0, ignored: 0, unparsed: 0, sent: 0 };
       for (const batch of plan.batches) {
         const r = await money.sms(batch.map((m) => ({ address: m.address, body: m.body, date: m.date })));

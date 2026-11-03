@@ -91,7 +91,7 @@ export function SmsAccess({ settings, allowed, setAllowed, last, onSynced }) {
       </Row>
       {last.error ? <Bad>Last sync failed: {last.error}. It tries again when the internet is back.</Bad>
         : last.ran ? <Good>{`Up to date · last sync ${when(last.ran)}`}</Good> : <Dim>Not synced yet.</Dim>}
-      <Dim>Pressing Refresh on the Stashr website also asks this phone to sync.</Dim>
+      <Dim>Pressing Refresh on the Stashr website also asks this phone to sync. If you use Stashr on two phones, their messages are merged and repeats are skipped.</Dim>
       {r ? <Dim>{`Last result: ${r.added} added, ${r.flagged} need checking, ${r.duplicates} already there, ${r.ignored} ignored${r.unparsed ? `, ${r.unparsed} not understood` : ""}.`}</Dim> : null}
       {last.error ? <Bad>Last problem: {last.error}</Bad> : null}
     </Box>

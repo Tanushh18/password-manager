@@ -249,9 +249,17 @@ router.post("/expenses/sms", authenticate, smsLimiter, async (req, res) => {
         const saved = await st.append(fresh);
         duplicates += saved.duplicates;
         if (copy) copy.append(saved.stored);
+        // Messages from a second phone fill gaps in the balance chain: clear the flags that were only about those gaps.
+        let cleared = 0;
+        if (saved.added > 0 && existing.some((t) => t.status === "Flagged")) {
+            try {
+                const items = ex.reclearBalanceFlags([...existing, ...saved.stored]).filter((i) => existing.some((t) => String(t.index) === String(i.index)));
+                if (items.length) { await st.updateMany(items); if (copy) copy.update(items); cleared = items.length; }
+            } catch (e) { /* the entries stay flagged; the bank statement check still clears them */ }
+        }
         await Settings.updateOne({ owner }, { $set: { lastSmsAt: newest, lastSyncAt: new Date(), knownAccounts: accounts } });
         if (st.mode === "sheet") archiveOld(owner, { ...s, lastArchiveDay: s.lastArchiveDay }).catch(() => {});
-        return res.json({ added: saved.added, flagged: flaggedCount, duplicates, ignored, unparsed, lastSmsAt: newest });
+        return res.json({ added: saved.added, flagged: flaggedCount, cleared, duplicates, ignored, unparsed, lastSmsAt: newest });
     } catch (e) { return fail(res, e, "Could not save the messages."); }
 });
 
