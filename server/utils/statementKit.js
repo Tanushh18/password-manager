@@ -130,18 +130,27 @@ function nameMatch(a, b) {
     return wx.some((w) => wy.has(w)) ? 1 : 0;
 }
 
+/** A name a person would say ("Meesho Technologies"), as opposed to a phone number or a UPI id. */
+const readable = (s) => /[A-Za-z]{3}/.test(s) && !s.includes("@") && !/^\+?\d[\d\s-]{6,}$/.test(s);
+
 /**
- * The better headline for an entry the statement confirms. The statement wins when the message said "unknown", gave only a phone
- * number, or cut the name short; otherwise the name the SMS gave stays (it is usually the same).
+ * The headline for an entry the bank statement confirms, from the name the message gave and the name the statement gives.
+ *   - the message said "unknown" or only a phone number            -> the statement's name
+ *   - one name is just a longer form of the other ("Meesho Techn")  -> the longer, fuller one
+ *   - the entry already carries the statement's name                -> unchanged (so a second upload changes nothing)
+ *   - two really different names for the payee                      -> both, the readable one first: "Facebook India (Meta Verifie)"
  */
 function betterName(current, fromStatement) {
     const o = String(current || "").trim(), n = String(fromStatement || "").trim();
     if (!n) return o;
     if (!o || /^(unknown|\(.*\))$/i.test(o)) return n;
-    if (/^\+?\d{8,}$/.test(o) && !/^\+?\d{8,}$/.test(n)) return n;
+    if (/^\+?\d{8,}$/.test(o) && readable(n)) return n;
     const lo = norm(o), ln = norm(n);
-    if (ln.length > lo.length && ln.startsWith(lo)) return n;
-    return o;
+    if (lo.includes(ln)) return o;                       // already there
+    if (ln.includes(lo)) return n;                       // the statement has the fuller name
+    const nameFirst = readable(n) || !readable(o);        // the statement's name first, unless only the message's name is readable
+    const first = nameFirst ? n : o, second = nameFirst ? o : n;
+    return `${first} (${second})`.slice(0, 70);
 }
 
 module.exports = { sniffDelimiter, parseDelimited, money, describeLine, nameMatch, betterName, norm };

@@ -115,12 +115,18 @@ describe("headlines", () => {
         expect(h("ATM WDL 1234 SOME BRANCH")).toEqual({ method: "ATM", merchant: "ATM withdrawal" });
         expect(h("SMS CHARGES FOR OCT")).toEqual({ method: "Other", merchant: "Bank charges" });
     });
-    test("the statement fixes a poor headline but never replaces a good one", () => {
+    test("the statement fixes a poor headline, keeps a good one, and shows both when they really differ", () => {
         expect(kit.betterName("unknown", "Rahul K")).toBe("Rahul K");
         expect(kit.betterName("919310994032", "Parveen Chawla")).toBe("Parveen Chawla");
         expect(kit.betterName("Meesho Techn", "Meesho Technologies Private Limited")).toBe("Meesho Technologies Private Limited");
-        expect(kit.betterName("Meta", "Facebook India")).toBe("Meta");
         expect(kit.betterName("Swiggy", "")).toBe("Swiggy");
+        expect(kit.betterName("Meesho Technologies Private Limited", "Meesho Techn")).toBe("Meesho Technologies Private Limited");   // the message's name is the fuller one: kept
+        // two really different names for the payee: both are shown, so the owner can see which is better
+        expect(kit.betterName("Meta Verifie", "Facebook India")).toBe("Facebook India (Meta Verifie)");
+        expect(kit.betterName("9717621793@paytm", "Rahul K")).toBe("Rahul K (9717621793@paytm)");
+        expect(kit.betterName("Rahul K", "9717621793@paytm")).toBe("Rahul K (9717621793@paytm)");
+        // a second upload does not pile the name up again
+        expect(kit.betterName("Facebook India (Meta Verifie)", "Facebook India")).toBe("Facebook India (Meta Verifie)");
     });
 });
 
@@ -193,6 +199,17 @@ describe("the statement is the truth", () => {
         expect(again.additions.length).toBe(0);
         expect(again.report.notInStatement).toBe(0);
         expect(again.report.allMonthsMatch).toBe(true);
+    });
+
+    test("when the message and the statement name the payee differently, both names show, and a second upload leaves it alone", () => {
+        const one = ["Date,Particulars,Withdrawals,Deposits,Balance", "01-10-2026,UPI/DR/100000000009/FACEBOOK INDIA/UTIB/fb@ybl,150.00,,9850.00"].join("\n");
+        const rows = [entry(2, { date: "2026-10-01", amount: 150, merchant: "Meta Verifie", ref: "100000000009" })];
+        const first = ex.reconcile(rows, ex.statementRows(ex.parseCsv(one)), []);
+        expect(first.updates[0].fields.merchant).toBe("Facebook India (Meta Verifie)");
+        expect(first.updates[0].fields.category).toBe("Meta Ads");                      // either name finds the category
+        const again = ex.reconcile(apply(rows, first), ex.statementRows(ex.parseCsv(one)), []);
+        expect(again.updates[0].fields.merchant).toBe("Facebook India (Meta Verifie)");
+        expect(again.report.renamed).toBe(0);
     });
 
     test("a category the owner chose is kept; only 'Uncategorized' is filled in from the real name", () => {
