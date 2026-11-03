@@ -29,7 +29,13 @@ async function githubJson(url) {
 async function latestRelease() {
   if (cachedRelease && Date.now() - cachedAt < CACHE_MS) return cachedRelease;
 
-  const release = await githubJson(`https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest`);
+  let release;
+  try { release = await githubJson(`https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest`); }
+  catch (error) {
+    // GitHub is rate limiting this server (shared address, no token) or is down: keep serving the last good answer.
+    if (cachedRelease && error.status !== 404) { console.error(`[mobile-updates] ${error.message}; serving the last known release`); return cachedRelease; }
+    throw error;
+  }
   if (release.draft || release.prerelease) {
     const error = new Error("No stable Stashr Android release is published yet.");
     error.status = 404;
@@ -135,6 +141,8 @@ router.get("/android/download", async (_req, res) => {
     return Readable.fromWeb(response.body).pipe(res);
   } catch (error) {
     if (res.headersSent) return res.destroy(error);
+    // The release is public on GitHub: its own "latest" link needs no API call, so a rate-limited server still gives the APK.
+    if (error.status !== 404) return res.redirect(302, `https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/stashr-release.apk`);
     return res.status(error.status || 502).json({
       error: "The latest Android APK is not available yet.",
       detail: process.env.NODE_ENV === "production" ? undefined : error.message,
