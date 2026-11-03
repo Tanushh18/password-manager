@@ -208,7 +208,7 @@ describe("the statement is the truth", () => {
         expect(first.updates[0].fields.merchant).toBe("Facebook India (Meta Verifie)");
         expect(first.updates[0].fields.category).toBe("Meta Ads");                      // either name finds the category
         const again = ex.reconcile(apply(rows, first), ex.statementRows(ex.parseCsv(one)), []);
-        expect(again.updates[0].fields.merchant).toBe("Facebook India (Meta Verifie)");
+        expect(again.updates[0].fields.merchant).toBeUndefined();                       // nothing to change: the name is already there
         expect(again.report.renamed).toBe(0);
     });
 
