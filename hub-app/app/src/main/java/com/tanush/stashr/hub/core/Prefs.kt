@@ -52,6 +52,10 @@ class Prefs(ctx: Context) {
     var hideStatusBar: Boolean
         get() = p.getBoolean("hideStatusBar", true)
         set(v) = p.edit().putBoolean("hideStatusBar", v).apply()
+    /** Apps pinned on the Stashr home screen (package names). null = never changed: the defaults in LauncherActivity apply. */
+    var homeApps: Set<String>?
+        get() = p.getString("homeApps", null)?.split('\u0001')?.filter { it.isNotEmpty() }?.toSet()
+        set(v) = p.edit().apply { if (v == null) remove("homeApps") else putString("homeApps", v.joinToString("\u0001")) }.apply()
     var cameraSensitivity: Int
         get() = p.getInt("cameraSensitivity", 5)
         set(v) = p.edit().putInt("cameraSensitivity", v).apply()

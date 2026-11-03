@@ -23,6 +23,7 @@
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <queries>
+        <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
         <intent><action android:name="android.speech.RecognitionService" /></intent>
         <package android:name="com.google.android.apps.youtube.music" />
         <package android:name="com.google.android.youtube" />
@@ -44,6 +45,15 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!-- The Stashr home screen: pick Stashr Hub as the Home app in Settings and it replaces the tablet's launcher. -->
+        <activity android:name=".ui.LauncherActivity" android:exported="true" android:launchMode="singleTask" android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
         <activity android:name=".ui.SetupActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />

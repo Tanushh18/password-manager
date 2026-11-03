@@ -535,20 +535,7 @@ class DashboardActivity : Activity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) { super.onWindowFocusChanged(hasFocus); if (hasFocus) applyFullscreen() }
 
-    /** Hides or shows the system bars. A swipe from the top brings them back for a moment, then they hide again. */
-    @Suppress("DEPRECATION")
-    private fun applyFullscreen() {
-        val hide = prefs.hideStatusBar
-        if (Build.VERSION.SDK_INT >= 30) {
-            window.setDecorFitsSystemWindows(!hide)
-            window.insetsController?.let {
-                if (hide) { it.hide(android.view.WindowInsets.Type.statusBars()); it.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE }
-                else it.show(android.view.WindowInsets.Type.statusBars())
-            }
-        } else {
-            window.decorView.systemUiVisibility = if (hide) View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE else View.SYSTEM_UI_FLAG_VISIBLE
-        }
-    }
+    private fun applyFullscreen() = com.tanush.stashr.hub.core.SystemBars.apply(this, prefs.hideStatusBar)
 
     /** "Check": what is not set up on this tablet, red first, with where to switch it on. Nothing is shown when all is well. */
     private fun renderChecks() {
