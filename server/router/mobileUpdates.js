@@ -1,10 +1,13 @@
 const express = require("express");
 const { fetchWithHeaderTimeout, pipeUpstream } = require("../utils/upstreamStream");
+const { latestFromFeed } = require("../utils/releaseFeed");
 
 const router = express.Router();
 const GITHUB_REPOSITORY = process.env.STASHR_UPDATE_REPOSITORY || "Tanushh18/stashr-Home-Automation";
 const EXPECTED_PACKAGE = "com.tanush.stashr.com";
-const CACHE_MS = 60_000;
+// GitHub lets a server without a token call its API only 60 times an hour, and Render shares one address between many sites. A longer cache
+// (and one shared release list for the small apps) keeps this server far below that.
+const CACHE_MS = 5 * 60_000;
 let cachedRelease = null;
 let cachedAt = 0;
 
@@ -167,16 +170,28 @@ function ghHeaders(accept) {
   return { Accept: accept, "User-Agent": "Stashr-Android-Updater", ...(process.env.STASHR_UPDATE_GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.STASHR_UPDATE_GITHUB_TOKEN}` } : {}) };
 }
 
+let sideList = null, sideListAt = 0;
+/** One GitHub call for the release list, shared by Hub, TV, Cast and Location. */
+async function sideReleases() {
+  if (sideList && Date.now() - sideListAt < CACHE_MS) return sideList;
+  const list = await githubJson(`https://api.github.com/repos/${GITHUB_REPOSITORY}/releases?per_page=40`);
+  sideList = list; sideListAt = Date.now();
+  return list;
+}
+
 async function latestSideRelease(key) {
   const app = SIDE_APPS[key];
   const hit = sideCache[key];
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.value;
   let releases;
-  try { releases = await githubJson(`https://api.github.com/repos/${GITHUB_REPOSITORY}/releases?per_page=40`); }
+  try { releases = await sideReleases(); }
   catch (error) {
     // GitHub is rate limiting this server or is down: keep serving the last good answer instead of failing every update check.
     console.error(`[mobile-updates] ${app.label}: ${error.message}`);
     if (hit) return hit.value;
+    // No earlier answer to fall back on: ask GitHub's public release feed, which is not rate limited like the API.
+    const viaFeed = await latestFromFeed(GITHUB_REPOSITORY, app).catch(() => null);
+    if (viaFeed) { sideCache[key] = { value: viaFeed, at: Date.now() }; return viaFeed; }
     throw error;
   }
   const release = (Array.isArray(releases) ? releases : []).find((r) => !r.draft && !r.prerelease && String(r.tag_name || "").startsWith(app.prefix));
@@ -217,8 +232,12 @@ for (const key of Object.keys(SIDE_APPS)) {
 
   router.get(`/${key}/download`, async (_req, res) => {
     res.set("Cache-Control", "no-store");
+    let direct = "";
     try {
       const r = await latestSideRelease(key);
+      // The release is public: GitHub's own download link needs no API call, so it is the fallback whenever the proxy path cannot be used.
+      direct = r.directUrl || `https://github.com/${GITHUB_REPOSITORY}/releases/download/${encodeURIComponent(r.tagName)}/${app.apk}`;
+      if (!r.assetApiUrl) return res.redirect(302, direct);
       const response = await fetchWithHeaderTimeout(r.assetApiUrl, { headers: ghHeaders("application/octet-stream") }, 30_000);
       if (!response.ok || !response.body) throw Object.assign(new Error(`GitHub asset download returned HTTP ${response.status}`), { status: 502 });
       res.status(200);
@@ -229,10 +248,11 @@ for (const key of Object.keys(SIDE_APPS)) {
       return pipeUpstream(response, res);
     } catch (error) {
       if (res.headersSent) return res.destroy(error);
+      if (direct && error.status !== 404) return res.redirect(302, direct);
       return res.status(error.status || 502).json({ error: `The ${app.label} APK is not available yet.`, detail: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
   });
 }
 
-router._resetCache = () => { cachedRelease = null; cachedAt = 0; for (const k of Object.keys(sideCache)) delete sideCache[k]; };
+router._resetCache = () => { cachedRelease = null; cachedAt = 0; sideList = null; sideListAt = 0; for (const k of Object.keys(sideCache)) delete sideCache[k]; };
 module.exports = router;

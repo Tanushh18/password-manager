@@ -9,7 +9,8 @@ const router = express.Router();
 const GITHUB_REPOSITORY = process.env.STASHR_UPDATE_REPOSITORY || "Tanushh18/password-manager";
 const MANIFEST_ASSET = "ota-manifest.json";
 const ASSET_NAME_PATTERN = /^[A-Za-z0-9._-]+$/;
-const CACHE_MS = 60_000;
+// GitHub allows only 60 API calls an hour to a server without a token; a 5 minute cache keeps this server well below that.
+const CACHE_MS = 5 * 60_000;
 let cachedRelease = null;
 let cachedAt = 0;
 
@@ -30,7 +31,15 @@ function httpError(status, message) {
 
 async function latestRelease() {
   if (cachedRelease && Date.now() - cachedAt < CACHE_MS) return cachedRelease;
+  try { return await loadLatestRelease(); }
+  catch (error) {
+    // GitHub is rate limiting this server or is down: keep serving the last good release instead of failing every phone's update check.
+    if (cachedRelease && error.status !== 404) return cachedRelease;
+    throw error;
+  }
+}
 
+async function loadLatestRelease() {
   const response = await fetch(`https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest`, {
     headers: githubHeaders("application/vnd.github+json"),
     signal: AbortSignal.timeout(10_000),

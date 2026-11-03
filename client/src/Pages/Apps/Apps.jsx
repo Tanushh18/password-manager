@@ -4,7 +4,7 @@ import Ambience from "../../Components/Ambience/Ambience";
 import { publicApiBase } from "../../api/client";
 import "./Apps.css";
 
-const EXT = { file: "/apps/stashr-extension.zip", version: "1.0.1" };
+const EXT = { file: "/apps/stashr-extension.zip", version: "1.0.2" };
 // The main app is always the newest GitHub release, served by the API like the other apps (no old copy kept on this site).
 // If the API cannot reach GitHub, the direct GitHub link below still works.
 const APK = {
