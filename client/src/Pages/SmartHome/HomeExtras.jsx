@@ -2,14 +2,14 @@ import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
   makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, getHomeInsights, saveHomeHistory, deleteHomeHistory, saveHomeSpots, getLocationCode, rotateLocationCode, getHubCode, rotateHubCode, getHomeWhere, saveHomeScenes, runHomeScene,
-  getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, getHomeLiveFrame, testHomeBrief, setHomePhonePerson, removeHomeDevice, setHomeSyncPaused
+  getHomeShare, saveHomeShare, getHomePlaceTrail, getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, getHomeLiveFrame, testHomeBrief, setHomePhonePerson, removeHomeDevice, setHomeSyncPaused
 } from "../../api/client";
 import { Section, useConfirm } from "../Render/RenderUi";
 import { usePolling } from "../Render/renderHooks";
 import { errorMessage } from "../Render/renderUtils";
 import { ago, fmtBytes, fmtMinutes, daysLabel, stepLabel, STEP_CHOICES } from "../../lib/smartHome";
-import { TvTimeChart, SpeedChart, CommuteChart } from "./HomeCharts";
-import { MapPicker } from "./HomeMap";
+import { TvTimeChart, SpeedChart, CommuteChart, PlaceTrailChart } from "./HomeCharts";
+import { MapPicker, PlaceMap } from "./HomeMap";
 import { parseCoords, batteryOf, healthItems, healthReport } from "../../lib/smartHome";
 
 /** The settings every card here edits, loaded once. */
@@ -395,7 +395,7 @@ export function PlacesCard({ home, phones, hasSmartHub }) {
     try { const r = await saveHomePlaces(list); setSettings({ ...s, places: r.places }); setDraft(null); toast.success("Places saved."); }
     catch (e) { toast.error(errorMessage(e, "Could not save.")); }
   };
-  const blank = { name: "Office", lat: "", lon: "", radius: 150, phone: phones[0]?.id || "", group: "", arriveText: "Reached office", leaveText: "Leaving office", arriveFrom: "", arriveTo: "", leaveFrom: "", leaveTo: "", enabled: true };
+  const blank = { name: "Office", lat: "", lon: "", radius: 150, phone: phones[0]?.id || "", group: "", arriveText: "Reached office", leaveText: "Leaving office", arriveFrom: "", arriveTo: "", leaveFrom: "", leaveTo: "", strictWindow: false, enabled: true };
   const set = (patch) => setDraft({ ...draft, p: { ...draft.p, ...patch } });
   const here = () => {
     if (!navigator.geolocation) { toast.error("This browser cannot give your location."); return; }
@@ -419,10 +419,11 @@ export function PlacesCard({ home, phones, hasSmartHub }) {
       {places.length ? (
         <ul className="sh-lan">{places.map((pl, i) => (
           <li key={pl.id}>
-            <div className="sh-lan__main"><b>{pl.name} · {phoneName(pl.phone)}</b><span>{pl.group || "no group"} · “{pl.arriveText || "—"}” on arrive{pl.arriveFrom ? ` ${pl.arriveFrom}–${pl.arriveTo}` : ""} · “{pl.leaveText || "—"}” on leave{pl.leaveFrom ? ` ${pl.leaveFrom}–${pl.leaveTo}` : ""} · {pl.radius} m · now {pl.state === "in" ? "there" : pl.state === "out" ? "away" : "unknown"}</span></div>
+            <div className="sh-lan__main"><b>{pl.name} · {phoneName(pl.phone)}</b><span>{pl.group || "no group"} · “{pl.arriveText || "—"}” on arrive{pl.arriveFrom ? ` ${pl.arriveFrom}–${pl.arriveTo}` : ""} · “{pl.leaveText || "—"}” on leave{pl.leaveFrom ? ` ${pl.leaveFrom}–${pl.leaveTo}` : ""} · {pl.radius} m · now {pl.state === "in" ? "there" : pl.state === "out" ? "away" : "unknown"} · {pl.strictWindow ? "only inside these times" : "times are a guide"}</span></div>
             <label className="sh-switch"><input type="checkbox" checked={pl.enabled !== false} onChange={(e) => store(places.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)))} />On</label>
             <button className="rd-btn rd-btn--quiet" onClick={() => test(pl)} disabled={!pl.group}>Send test</button>
             <button className="rd-btn rd-btn--quiet" onClick={() => setDraft({ index: i, p: { ...pl } })}>Edit</button>
+            <div className="pl-trail"><PlaceTrail place={pl} /></div>
           </li>
         ))}</ul>
       ) : <p className="sh-dim">No places yet.</p>}
@@ -440,10 +441,11 @@ export function PlacesCard({ home, phones, hasSmartHub }) {
           <label className="sh-dim">Circle radius: {draft.p.radius} m<input type="range" min="50" max="1000" step="10" value={draft.p.radius} onChange={(e) => set({ radius: Number(e.target.value) })} aria-label="Radius in metres" /></label>
           <input value={draft.p.group} onChange={(e) => set({ group: e.target.value })} placeholder="WhatsApp group name, exactly as in WhatsApp" maxLength={80} aria-label="WhatsApp group" required />
           <div className="sh-row"><input value={draft.p.arriveText} onChange={(e) => set({ arriveText: e.target.value })} placeholder="Message on arriving" maxLength={500} aria-label="Arrive message" />
-            <span className="sh-dim">only between</span><input type="time" value={draft.p.arriveFrom} onChange={(e) => set({ arriveFrom: e.target.value })} aria-label="Arrive from" /><input type="time" value={draft.p.arriveTo} onChange={(e) => set({ arriveTo: e.target.value })} aria-label="Arrive to" /></div>
+            <span className="sh-dim">around</span><input type="time" value={draft.p.arriveFrom} onChange={(e) => set({ arriveFrom: e.target.value })} aria-label="Arrive from" /><input type="time" value={draft.p.arriveTo} onChange={(e) => set({ arriveTo: e.target.value })} aria-label="Arrive to" /></div>
           <div className="sh-row"><input value={draft.p.leaveText} onChange={(e) => set({ leaveText: e.target.value })} placeholder="Message on leaving" maxLength={500} aria-label="Leave message" />
-            <span className="sh-dim">only between</span><input type="time" value={draft.p.leaveFrom} onChange={(e) => set({ leaveFrom: e.target.value })} aria-label="Leave from" /><input type="time" value={draft.p.leaveTo} onChange={(e) => set({ leaveTo: e.target.value })} aria-label="Leave to" /></div>
-          <p className="sh-dim">Leave the times empty to send at any time. Leave a message empty to send nothing for that event.</p>
+            <span className="sh-dim">around</span><input type="time" value={draft.p.leaveFrom} onChange={(e) => set({ leaveFrom: e.target.value })} aria-label="Leave from" /><input type="time" value={draft.p.leaveTo} onChange={(e) => set({ leaveTo: e.target.value })} aria-label="Leave to" /></div>
+          <label className="sh-switch"><input type="checkbox" checked={draft.p.strictWindow === true} onChange={(e) => set({ strictWindow: e.target.checked })} />Send only inside these times</label>
+          <p className="sh-dim">The times are a guide: around them the phone looks closer (a real position every 3 minutes). The message goes whenever the phone leaves or reaches the circle, also before or after them, unless you tick the box above. Leave a message empty to send nothing for that event.</p>
           <div className="sh-row">
             <button className="rd-btn rd-btn--primary" type="submit">Save place</button>
             {draft.index >= 0 ? <button type="button" className="rd-btn rd-btn--danger-quiet" onClick={() => store(places.filter((_, i) => i !== draft.index))}>Delete</button> : null}
@@ -452,6 +454,75 @@ export function PlacesCard({ home, phones, hasSmartHub }) {
         </form>
       ) : <div className="sh-row"><button className="rd-btn rd-btn--quiet" disabled={!phones.length || places.length >= 10} onClick={() => setDraft({ index: -1, p: blank })}>New place</button></div>}
     </Section>
+  );
+}
+
+/* ───────── where the phone of a place is now, and the last 24 hours ───────── */
+
+const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const beyondText = (m) => (m > 0 ? `${m} m outside the circle` : `${-m} m inside the circle`);
+const STATE_TEXT = { in: "counts as there", between: "just outside the circle, not yet counted as left", out: "counts as left" };
+
+/** One place: the phone's position now, how far past the edge of the circle, the map, the whole day, and what Stashr decided. */
+function PlaceTrail({ place }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    try { setData(await getHomePlaceTrail(place.id)); setError(""); } catch (e) { setError(errorMessage(e, "Could not load the position.")); }
+  }, [place.id]);
+  useEffect(() => { if (open) load(); }, [open, load]);
+  usePolling(load, 30000, open);
+  const n = data && data.now;
+  const day = data && data.summary;
+  return (
+    <div className="pl">
+      <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? "Hide" : "Where is the phone? Today’s positions"}</button>
+      {open ? (
+        <div className="pl__body">
+          {error ? <p className="mn-bad" role="alert">{error}</p> : null}
+          {!data && !error ? <p className="sh-dim">Loading…</p> : null}
+          {data && !data.phone ? <p className="sh-bad">No phone is linked to this place any more. Edit the place and pick one.</p> : null}
+          {data && data.phone && !n ? <p className="sh-dim">{data.phone.name}’s phone has not sent a position yet.</p> : null}
+          {n ? (
+            <>
+              <p className="pl-status"><b>{data.phone.name}: {beyondText(n.beyondM)}</b>
+                <span> · {n.distanceM} m from the centre of {data.place.name} · ±{n.acc} m · {STATE_TEXT[n.state]}</span>
+                <span> · position from {n.ageSec < 90 ? "a moment" : ago(n.at)} ago{data.phone.battery != null ? ` · battery ${data.phone.battery}%` : ""}</span></p>
+              {n.ageSec > 900 ? <p className="sh-warn">The last position is {ago(n.at)} old. {data.checkInEverySec ? `This phone has been reporting about every ${Math.max(1, Math.round(data.checkInEverySec / 60))} min. ` : ""}Close to a place, the updated Stashr Location app asks for a real position every 3 to 5 minutes; an older app, or a phone with location switched off or the app stopped, reports much less often, and then leaving is noticed late.</p> : null}
+              <p className="sh-dim">The circle is {data.rule.radius} m. It counts as <b>left</b> from {data.rule.outBeyondM} m from the centre (the circle plus a margin of at least {data.rule.minMarginM} m, more when the phone’s own position is poor), confirmed by a second position unless the phone is far away. {data.rule.strictWindow ? `The message is sent only inside ${[data.rule.arrive && `arrive ${data.rule.arrive}`, data.rule.leave && `leave ${data.rule.leave}`].filter(Boolean).join(" and ") || "the times you set"}.` : "The message is sent whenever this happens, also outside the times you set."}</p>
+              {day && day.farthest ? <p className="sh-dim">Today: {day.points} position{day.points === 1 ? "" : "s"}; farthest {day.farthest.distanceM} m from the centre ({beyondText(day.farthest.beyondM)}) at {clock(day.farthest.at)}{day.lastInside ? `; last inside the circle at ${clock(day.lastInside)}` : ""}.</p> : null}
+            </>
+          ) : null}
+          {data ? <PlaceMap place={data.place} now={n} trail={data.trail} outBeyondM={data.rule.outBeyondM} /> : null}
+          {data ? <p className="sh-dim">Blue circle: the place ({data.rule.radius} m). Orange dashed ring: where it counts as left ({data.rule.outBeyondM} m). Dots: the last 24 hours (green inside, orange in between, red left). The small orange circle around “Now” is how accurate the position is.</p> : null}
+          {data ? <PlaceTrailChart points={data.trail} radius={data.rule.radius} outBeyondM={data.rule.outBeyondM} /> : null}
+          {data && data.events.length ? (
+            <>
+              <h4 className="sh-sub">What Stashr decided (last 24 hours)</h4>
+              <ul className="sh-events">{data.events.slice(0, 12).map((e) => <li key={e.at + e.kind}><b>{clock(e.at)}</b> {e.text}</li>)}</ul>
+            </>
+          ) : data ? <p className="sh-dim">No crossing of the circle in the last 24 hours.</p> : null}
+          {data && data.trail.length ? (
+            <details className="sh-table">
+              <summary>All positions of the last 24 hours with coordinates ({data.trail.length})</summary>
+              <table className="pl-table">
+                <thead><tr><th>Time</th><th>Latitude, longitude</th><th>From centre</th><th>Circle</th><th>±</th></tr></thead>
+                <tbody>{[...data.trail].reverse().slice(0, 120).map((p) => (
+                  <tr key={p.at} className={`is-${p.state}`}>
+                    <td>{clock(p.at)}{p.same ? " (check-in)" : ""}</td>
+                    <td>{p.lat.toFixed(6)}, {p.lon.toFixed(6)}</td>
+                    <td>{p.distanceM} m</td>
+                    <td>{beyondText(p.beyondM)}</td>
+                    <td>{p.acc} m</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </details>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -690,6 +761,42 @@ const whereText = (p) => {
   return "Waiting for the first location";
 };
 
+/* The secret link that shows the chosen phones live on a map, no login. */
+function LiveLinkCard({ people }) {
+  const [sh, setSh] = useState(null);
+  const confirm = useConfirm();
+  useEffect(() => { getHomeShare().then(setSh).catch(() => {}); }, []);
+  const save = async (body, ok) => { try { setSh(await saveHomeShare(body)); if (ok) toast.success(ok); } catch (e) { toast.error(errorMessage(e, "Could not save.")); } };
+  const copy = async (text) => { try { await navigator.clipboard.writeText(text); toast.success("Copied."); } catch { toast.error("Could not copy. Select the link and copy it."); } };
+  const toggle = (id) => { const cur = new Set(sh.phones); if (cur.has(id)) cur.delete(id); else cur.add(id); save({ phones: [...cur] }); };
+  const renew = async () => {
+    if (!(await confirm.ask({ title: "Make a new live link?", message: "The old link stops working at once. Send the new one only to people you trust.", confirmLabel: "New link", danger: true }))) return;
+    save({ rotate: true, enabled: true }, "New link ready.");
+  };
+  if (!sh) return null;
+  return (
+    <div className="sh-editor">
+      <b>Live location link (no login)</b>
+      <label className="sh-switch"><input type="checkbox" checked={sh.enabled} onChange={(e) => save({ enabled: e.target.checked }, e.target.checked ? "The live link is on." : "The live link is off.")} />Anyone with the link can see where the chosen phones are, live, on a map</label>
+      {sh.enabled ? (
+        <>
+          <div className="sh-row"><code className="sh-code" aria-label="Live page link">{sh.page}</code></div>
+          <div className="sh-row">
+            <a className="rd-btn rd-btn--quiet" href={sh.page} target="_blank" rel="noopener noreferrer">Open live map</a>
+            <button className="rd-btn rd-btn--quiet" onClick={() => copy(sh.page)}>Copy link</button>
+            <button className="rd-btn rd-btn--quiet" onClick={() => copy(sh.api)}>Copy API (JSON)</button>
+            <button className="rd-btn rd-btn--quiet" onClick={renew}>New link</button>
+          </div>
+          <p className="sh-dim">Phones shown ({sh.phones.length ? "only the ticked ones" : "all linked phones, since none is ticked"}):</p>
+          <div className="sh-row">{(people || []).map((p) => <label key={p.id} className="sh-switch"><input type="checkbox" checked={sh.phones.includes(p.id)} onChange={() => toggle(p.id)} />{p.name}</label>)}</div>
+          <p className="sh-dim">{sh.lastViewAt ? `Last opened ${ago(new Date(sh.lastViewAt).getTime())}. ` : "Not opened yet. "}While the page is open, phones that are away report every few seconds. The link is a long secret address: nobody can guess it, but anyone you give it to can see these phones until you switch it off or make a new link.</p>
+        </>
+      ) : <p className="sh-dim">Off. Turn it on to get a link you can open anywhere, or share with family, to see where the phones are right now.</p>}
+      {confirm.dialog}
+    </div>
+  );
+}
+
 export function LocationsCard() {
   const [code, setCode] = useState("");
   const [data, setData] = useState(null);
@@ -714,6 +821,7 @@ export function LocationsCard() {
         <div className="sh-row"><code className="sh-code" aria-label="Link code">{code || "…"}</code><button className="rd-btn rd-btn--quiet" onClick={copy} disabled={!code}>Copy</button><button className="rd-btn rd-btn--quiet" onClick={renew}>New code</button></div>
         <p className="sh-dim">Install Stashr Location from the Apps page on the family phone, type this code and the person’s name. It stays linked until you disconnect it here or they press Disconnect in the app.</p>
       </div>
+      <LiveLinkCard people={data ? data.people : []} />
       {st ? <label className="sh-switch"><input type="checkbox" checked={st.tvLive?.enabled !== false} onChange={(e) => saveSettings({ tvLive: { enabled: e.target.checked } }, e.target.checked ? "The TV can show the live map." : "The live map on the TV is off.")} />Allow the live map on the TV (phones that are out then update every few seconds while it is open)</label> : null}
       {data && !data.homeSet ? <p className="sh-bad">Home location is not set yet. Set it under Automations → Places so distances and arrival times can be worked out.</p> : null}
       {data && data.people.length ? (

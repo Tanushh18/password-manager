@@ -457,6 +457,9 @@ export const getHomeLive = (passive) => instance.get("/home/live" + (passive ? "
 export const searchPlace = (q) => instance.get("/home/geocode", { params: { q } }).then((r) => r.data);
 export const getHomeWhere = () => instance.get("/home/where").then((r) => r.data);
 export const saveHomePlaces = (places) => instance.put("/home/places", { places }).then((r) => r.data);
+export const getHomeShare = () => instance.get("/home/share").then((r) => r.data.share);
+export const saveHomeShare = (body) => instance.put("/home/share", body).then((r) => r.data.share);
+export const getHomePlaceTrail = (id) => instance.get(`/home/places/${id}/trail`).then((r) => r.data);
 export const testHomePlace = (id, text) => instance.post(`/home/places/${id}/test`, { text }).then((r) => r.data);
 export const saveHomeSchedules = (schedules) => instance.put("/home/schedules", { schedules }).then((r) => r.data);
 export const saveHomeScenes = (scenes) => instance.put("/home/scenes", { scenes }).then((r) => r.data);

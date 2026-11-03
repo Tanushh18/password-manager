@@ -29,6 +29,14 @@ class LogicTest {
         assertEquals(1800, Logic.clampDelay(9999, false))
     }
 
+    @Test fun preciseFlagIsParsed() {
+        // near one of the family's places during an arrive/leave time the server asks for a real fix every check
+        assertEquals(true, Logic.parseAnswer(JSONObject("""{"ok":true,"state":"away","precise":true,"nextCheckSec":180}""")).precise)
+        assertEquals(false, Logic.parseAnswer(JSONObject("""{"ok":true,"state":"away","nextCheckSec":900}""")).precise)
+        // an older server never sends it: that means no
+        assertEquals(false, Logic.parseAnswer(JSONObject("""{"ok":true,"state":"home"}""")).precise)
+    }
+
     @Test fun liveFlagIsParsed() {
         assertEquals(true, Logic.parseAnswer(JSONObject("""{"ok":true,"state":"coming","live":true,"nextCheckSec":8}""")).live)
         assertEquals(false, Logic.parseAnswer(JSONObject("""{"ok":true,"state":"home"}""")).live)

@@ -15,7 +15,8 @@ data class Answer(
     val nextCheckSec: Int?,
     val notices: List<Pair<String, String>>,   // (id, text)
     val homeSet: Boolean,
-    val live: Boolean = false   // a family TV is showing the live map: look every few seconds
+    val live: Boolean = false,  // a family TV is showing the live map: look every few seconds
+    val precise: Boolean = false // near one of the family's places during an arrive/leave time: a real, fresh fix every check, no "same Wi-Fi" shortcut
 )
 
 /** Pure helpers (no Android), so they can be unit-tested. */
@@ -50,7 +51,8 @@ object Logic {
             nextCheckSec = if (json.has("nextCheckSec") && !json.isNull("nextCheckSec")) json.optInt("nextCheckSec") else null,
             notices = notices,
             homeSet = json.optJSONObject("home")?.optBoolean("set", true) ?: (json.optString("state") != "unset"),
-            live = json.optBoolean("live", false)
+            live = json.optBoolean("live", false),
+            precise = json.optBoolean("precise", false)
         )
     }
 

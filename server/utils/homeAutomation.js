@@ -13,6 +13,7 @@ const home = require("./home");
 const weather = require("./homeWeather");
 const route = require("./homeRoute");
 const { record } = require("./homeEvents");
+const placeTrail = require("./placeTrail");
 
 const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 const USAGE_DAYS = 35;
@@ -208,7 +209,7 @@ async function geoTick(owner, now, settings, devices) {
         const loc = phone && phone.status && phone.status.location;
         if (!loc || !Number.isFinite(Number(loc.lat)) || !Number.isFinite(Number(loc.lon)) || now - Number(loc.at || 0) > LOC_FRESH_MS) continue;
         const dist = distanceM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: p.lat, lon: p.lon });
-        const slack = Math.min(Math.max(Number(loc.acc) || 0, 0), 200);
+        const locAt = Number(loc.at) || now;
         // A message that could not be sent earlier (the tablet was offline) is tried again while it is still recent.
         let sendState = "";
         let eventAt = Number(loc.at) || now;
@@ -216,7 +217,13 @@ async function geoTick(owner, now, settings, devices) {
         if (waiting) { sendState = waiting.state; eventAt = Number(waiting.at); }
         let next = p.state || "";
         if (dist <= p.radius) next = "in";
-        else if (dist > p.radius + Math.max(50, slack)) next = "out";
+        else if (dist > placeTrail.outBeyond(p, loc.acc)) next = "out";
+        // leaving needs a second reading (unless clearly far away), so one bad fix cannot send "Leaving office"
+        if (p.state === "in") {
+            const chk = placeTrail.leaveCheck({ dist, place: p, acc: loc.acc, seenAt: Number(p.outSeenAt) || 0, at: locAt });
+            if ((chk.seenAt || 0) !== (Number(p.outSeenAt) || 0)) await HomeSettings.updateOne({ owner }, chk.seenAt ? { $set: { [`places.${i}.outSeenAt`]: chk.seenAt } } : { $unset: { [`places.${i}.outSeenAt`]: 1 } });
+            if (next === "out" && !chk.confirmed) next = "in";                // not sure yet: stay "in" until the next reading
+        }
         // Two-way check for the home: the location AND the home Wi-Fi must agree. "In" needs the phone to answer on the Wi-Fi
         // (as the tablet's scan sees it), "out" needs it to be gone from it. When they disagree nothing changes yet.
         if (needsWifi(p, settings)) {
@@ -226,6 +233,8 @@ async function geoTick(owner, now, settings, devices) {
         }
         if (next !== (p.state || "")) {
             await HomeSettings.updateOne({ owner }, { $set: { [`places.${i}.state`]: next } });
+            const crossed = phone.person || phone.name;
+            await record({ owner, device: phone._id, deviceName: phone.name, kind: "place_state", text: `${crossed} is now ${next === "in" ? "inside" : "outside"} ${p.name} (${Math.round(dist)} m from the centre, the phone's own accuracy about ±${Math.round(Number(loc.acc) || 0)} m).` }).catch(() => {});
             if (!p.state) continue;                                   // first sighting: no message
             sendState = next; eventAt = Number(loc.at) || now;
         }
@@ -235,9 +244,17 @@ async function geoTick(owner, now, settings, devices) {
         const eventMins = localParts(eventAt, tz).minutes;
         const from = okTime(arrive ? p.arriveFrom : p.leaveFrom) ? toMinutes(arrive ? p.arriveFrom : p.leaveFrom) : null;
         const to = okTime(arrive ? p.arriveTo : p.leaveTo) ? toMinutes(arrive ? p.arriveTo : p.leaveTo) : null;
-        if (from !== null && to !== null && !home.inWindow(eventMins, from, to)) { if (waiting) await HomeSettings.updateOne({ owner }, { $unset: { [`places.${i}.pending`]: 1 } }); continue; }   // not at the time you set
+        if (p.strictWindow === true && from !== null && to !== null && !home.inWindow(eventMins, from, to)) {
+            if (waiting) await HomeSettings.updateOne({ owner }, { $unset: { [`places.${i}.pending`]: 1 } });
+            const hh = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+            await record({ owner, device: phone._id, deviceName: phone.name, kind: "place_skipped", text: `${phone.person || phone.name} ${arrive ? "reached" : "left"} ${p.name} at ${hh(eventMins)}, but the ${arrive ? "arrive" : "leave"} window you set is ${hh(from)}–${hh(to)}, so no message was sent.` }).catch(() => {});
+            continue;                                                  // this place is set to "only inside these times"
+        }   // not at the time you set
         const text = String((arrive ? p.arriveText : p.leaveText) || "").trim();
-        if (!text || !p.group) continue;
+        if (!text || !p.group) {
+            await record({ owner, device: phone._id, deviceName: phone.name, kind: "place_skipped", text: `${phone.person || phone.name} ${arrive ? "reached" : "left"} ${p.name}, but ${!text ? `there is no ${arrive ? "arrive" : "leave"} message` : "no WhatsApp group is set"}, so nothing was sent.` }).catch(() => {});
+            continue;
+        }
         const who = phone.person || phone.name;
         const key = `place:${owner}:${p.id}:${sendState}:${Math.floor(eventAt / (30 * 60000))}`;
         if (tablet && !await claim(key)) continue;                  // already sent for this crossing

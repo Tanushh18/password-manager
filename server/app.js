@@ -164,6 +164,7 @@ app.use("/api/mobile-updates", require("./router/mobileUpdates"));
 app.use("/api/ota", require("./router/ota"));
 
 // LINKING THE ROUTER FILES 
+app.use(require("./router/homeShare"));   // the public live-location link (no login; a secret address)
 app.use(require("./router/routing"));
 
 // 404 for anything unmatched

@@ -19,6 +19,8 @@ const home = require("../utils/home");
 const automation = require("../utils/homeAutomation");
 const { record } = require("../utils/homeEvents");
 const route = require("../utils/homeRoute");
+const placeTrail = require("../utils/placeTrail");
+const placeFixes = require("../utils/placeFixes");
 const homeRouter = require("./home");
 const insights = () => require("./homeInsights");
 
@@ -108,11 +110,17 @@ async function devicesOf(owner, now) {
 }
 const forgetDevices = (owner) => devCache.delete(String(owner));
 
-function answer(res, out, settings, where, now) {
+/** True when one of the owner's places uses this phone: only then is its 24 hour trail kept. */
+const hasPlace = (settings, deviceId) => (settings.places || []).some((p) => p && String(p.phone) === String(deviceId));
+
+function answer(res, out, settings, where, now, device, loc) {
     const liveOn = Boolean(settings.liveUntil && new Date(settings.liveUntil).getTime() > now) && settings.tvLive?.enabled !== false && where.state !== "home";
+    const watch = !liveOn && device ? placeTrail.watchFor(settings.places, device._id, loc, automation.localParts(now, settings.timezone || "Asia/Kolkata").minutes) : { near: false };
     return res.json({
         live: liveOn, ok: true, state: where.state, traffic: Boolean(where.traffic), distanceKm: where.distanceKm ?? null, etaMinutes: where.state === "home" ? 0 : where.etaMinutes ?? null,
-        nextCheckSec: liveOn ? 8 : automation.checkInterval(where), home: { set: where.state !== "unset" },
+        nextCheckSec: liveOn ? 8 : watch.near ? Math.min(automation.checkInterval(where), watch.sec) : automation.checkInterval(where), home: { set: where.state !== "unset" },
+        // near one of its places during an arrive/leave window: look closely (every 3 minutes, a real fix every time)
+        precise: watch.near,
         notices: (out.commands || []).filter((c) => c.type === "notice").map((c) => ({ id: c.id, text: (c.args || {}).text || "" })).filter((n) => n.text)
     });
 }
@@ -139,7 +147,8 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
             const notices = (fresh.commands || []).filter((c) => c.type === "notice" && c.status === "pending");
             if (notices.length) await HomeDevice.updateOne({ _id: d._id }, { $set: { "commands.$[c].status": "sent" } }, { arrayFilters: [{ "c.status": "pending", "c.type": "notice" }] });
             const where = automation.whereIs(settings, { ...d.toObject(), status: { ...(d.status || {}), location: { ...prev, at: now } } }, now);
-            return answer(res, { commands: notices.map((c) => ({ id: c.id, type: c.type, args: c.args })) }, settings, where, now);
+            if (hasPlace(settings, d._id)) void placeFixes.keep(d.owner, d._id, prev, { same: true, now }).catch(() => {});
+            return answer(res, { commands: notices.map((c) => ({ id: c.id, type: c.type, args: c.args })) }, settings, where, now, d, prev);
         }
 
         const lat = num(b.lat), lon = num(b.lon);
@@ -165,7 +174,8 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
         await insights().keepFix(d.owner, d, d.person || d.name, loc, settings).catch(() => {});
         const me = all.find((x) => String(x._id) === String(d._id)) || d;
         const where = automation.whereIs({ ...settings, etaState: state }, me, now);
-        return answer(res, out, settings, where, now);
+        if (hasPlace(settings, d._id)) void placeFixes.keep(d.owner, d._id, loc, { now }).catch(() => {});
+        return answer(res, out, settings, where, now, d, loc);
     } catch (e) { return fail(res, e, "Could not save the location."); }
 });
 

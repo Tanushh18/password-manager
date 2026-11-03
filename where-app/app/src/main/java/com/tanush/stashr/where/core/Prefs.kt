@@ -84,6 +84,8 @@ class Prefs(ctx: Context) {
     }
     /** The last answer said a family TV is showing the live map. */
     var live: Boolean get() = p.getBoolean("live", false); set(v) = p.edit().putBoolean("live", v).apply()
+    /** The last answer said this phone is near one of the family's places during an arrive/leave time: take a real, fresh fix every check. */
+    var precise: Boolean get() = p.getBoolean("precise", false); set(v) = p.edit().putBoolean("precise", v).apply()
     var lastDelaySec: Int get() = p.getInt("lastDelaySec", Logic.DEFAULT_DELAY_SEC); set(v) = p.edit().putInt("lastDelaySec", v).apply()
 
     /** Notice ids already shown, newest last (so a repeated notice is not shown twice). */

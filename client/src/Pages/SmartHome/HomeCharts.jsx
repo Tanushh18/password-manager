@@ -135,3 +135,37 @@ export function CommuteChart({ series, usual }) {
     </figure>
   );
 }
+
+/** Distance of the phone from a place over the last 24 hours, with the circle and the "counts as left" line. Points are coloured by state. */
+export function PlaceTrailChart({ points, radius, outBeyondM, now = Date.now() }) {
+  const [hover, setHover] = useState(null);
+  const real = points.filter((p) => !p.same);
+  if (real.length < 2) return <p className="sh-dim">{real.length ? "Only one position so far today." : "No positions in the last 24 hours yet."}</p>;
+  const t1 = now, t0 = now - 24 * 3600000;
+  const max = niceMax(Math.max(outBeyondM * 1.3, ...real.map((p) => p.distanceM)));
+  const x = (t) => PAD.l + ((Math.max(t, t0) - t0) / (t1 - t0)) * innerW;
+  const y = (m) => PAD.t + innerH - (Math.min(m, max) / max) * innerH;
+  const colour = { in: "var(--shc-ok, #1d7f4e)", between: "var(--shc-warn, #d4880b)", out: "var(--shc-bad, #d1343a)" };
+  const h = hover !== null ? real[hover] : null;
+  const hours = [0, 6, 12, 18, 24].map((k) => t0 + k * 3600000);
+  return (
+    <figure className="shc">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Distance from the place over the last 24 hours" onMouseLeave={() => setHover(null)}>
+        <Grid max={max} unit=" m" />
+        <line x1={PAD.l} x2={W - PAD.r} y1={y(radius)} y2={y(radius)} className="shc-limit" />
+        <text x={W - PAD.r + 4} y={y(radius) + 4} className="shc-axis">circle</text>
+        <line x1={PAD.l} x2={W - PAD.r} y1={y(outBeyondM)} y2={y(outBeyondM)} className="shc-limit" strokeDasharray="2 4" />
+        <text x={W - PAD.r + 4} y={y(outBeyondM) + 4} className="shc-axis">left</text>
+        <polyline points={real.map((p) => `${x(p.at)},${y(p.distanceM)}`).join(" ")} fill="none" stroke="currentColor" strokeOpacity="0.35" strokeWidth="1.5" />
+        {real.map((p, i) => (
+          <circle key={p.at} cx={x(p.at)} cy={y(p.distanceM)} r={hover === i ? 5 : 3} fill={colour[p.state]} onMouseEnter={() => setHover(i)} onFocus={() => setHover(i)} tabIndex={0} />
+        ))}
+        {hours.map((t) => <text key={t} x={x(t)} y={H - 6} textAnchor="middle" className="shc-axis">{new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</text>)}
+      </svg>
+      <figcaption className="sh-dim">
+        {h ? `${new Date(h.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${h.distanceM} m from the centre · ${h.beyondM > 0 ? `${h.beyondM} m outside the circle` : `${-h.beyondM} m inside`} · ±${h.acc} m`
+          : "Each dot is a position the phone sent. Green: inside the circle. Orange: outside the circle but not far enough to count as left. Red: counts as left."}
+      </figcaption>
+    </figure>
+  );
+}

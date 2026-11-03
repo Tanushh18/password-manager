@@ -37,6 +37,8 @@ object Reporter {
         val prefs = Prefs(app)
         if (!prefs.linked) return Result.Unlinked
         val liveMode = live || prefs.live
+        // near a place with an automation, at the time it matters: a real fix every time (no "same Wi-Fi" shortcut, no reusing a fix)
+        val precise = prefs.precise && !liveMode
         val now = System.currentTimeMillis()
         if (!online(app)) {
             // No internet is no reason to lose where the phone is: GPS works offline. Keep the newest fix and send it, with its real time, once back online.
@@ -65,20 +67,20 @@ object Reporter {
         }
 
         // 1) Same access point as at the last upload: the phone has not gone far. No fix at all.
-        if (given == null && !force && !liveMode && bssid.isNotEmpty() && bssid == prefs.upBssid &&
+        if (given == null && !force && !liveMode && !precise && bssid.isNotEmpty() && bssid == prefs.upBssid &&
             Logic.shouldSendSame(true, now - prefs.upAt, null, false, now - prefs.callAt)) {
             sameCall(app, prefs, pct, charging, liveMode)?.let { return it }
         }
 
         // 2) A fix that is only minutes old is reused instead of asking again.
         var fix = given
-        if (fix == null && !force && !liveMode) {
+        if (fix == null && !force && !liveMode && !precise) {
             val mine = if (prefs.fixAt > 0) Fix(prefs.fixLat, prefs.fixLon, prefs.fixAcc, prefs.fixAt, prefs.fixSpeed.takeIf { it >= 0 }) else null
             val pend = if (prefs.pendingAt > 0) Fix(prefs.pendingLat, prefs.pendingLon, prefs.pendingAcc, prefs.pendingAt, prefs.pendingSpeed.takeIf { it >= 0 }) else null
             val newest = listOfNotNull(mine, pend).maxByOrNull { it.at }
             if (newest != null && now - newest.at < Logic.REUSE_FIX_MS && !newest.lat.isNaN()) fix = newest
         }
-        if (fix == null) fix = Locator.one(app, liveMode, networkOnly = Logic.lowBattery(pct, charging, liveMode))
+        if (fix == null) fix = Locator.one(app, liveMode, networkOnly = Logic.lowBattery(pct, charging, liveMode), precise = precise)
         if (fix == null) {
             prefs.lastError = if (Locator.hasPermission(app)) "Could not get a location fix" else "Location is not allowed"
             Health.noteStreak("location", "No location fix in 3 checks in a row: ${prefs.lastError}")
@@ -89,7 +91,7 @@ object Reporter {
         prefs.fixLat = fix.lat; prefs.fixLon = fix.lon; prefs.fixAcc = fix.acc; prefs.fixAt = fix.at; prefs.fixSpeed = fix.speed ?: -1f
 
         // 3) Within 40 m of the last upload, recently: say "still here" instead of sending the position again.
-        if (!force && !liveMode && prefs.upAt > 0 && !prefs.upLat.isNaN()) {
+        if (!force && !liveMode && !precise && prefs.upAt > 0 && !prefs.upLat.isNaN()) {
             val moved = Logic.distanceM(prefs.upLat, prefs.upLon, fix.lat, fix.lon)
             if (Logic.shouldSendSame(false, now - prefs.upAt, moved, false, now - prefs.callAt)) sameCall(app, prefs, pct, charging, liveMode)?.let { return it }
         }
@@ -135,6 +137,7 @@ object Reporter {
         prefs.state = answer.state; prefs.distanceKm = answer.distanceKm?.toFloat() ?: -1f; prefs.etaMinutes = answer.etaMinutes ?: -1
         prefs.lastError = ""
         prefs.live = answer.live
+        prefs.precise = answer.precise
         val delay = Logic.batteryDelay(pct, charging, answer.live, Logic.clampDelay(answer.nextCheckSec, answer.live))
         prefs.lastDelaySec = delay
         Notices.show(app, answer.notices)

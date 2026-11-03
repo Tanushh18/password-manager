@@ -29,16 +29,18 @@ object Locator {
     fun toFix(l: Location) = Fix(l.latitude, l.longitude, if (l.hasAccuracy()) l.accuracy else 0f, if (l.time > 0) l.time else System.currentTimeMillis(), if (l.hasSpeed()) l.speed else null)
 
     @SuppressLint("MissingPermission")
-    suspend fun one(ctx: Context, live: Boolean = false, networkOnly: Boolean = false): Fix? {
+    suspend fun one(ctx: Context, live: Boolean = false, networkOnly: Boolean = false, precise: Boolean = false): Fix? {
         if (!hasPermission(ctx)) return null
         val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
         return try {
             var best: Location? = null
             val timeout = if (live) 15_000L else 20_000L
-            if (safeEnabled(lm, LocationManager.NETWORK_PROVIDER)) best = fresh(lm, LocationManager.NETWORK_PROVIDER, timeout, live)
+            // precise (near a place): the same strict rules as live mode, a fresh fix that is good enough to tell 50 metres apart
+            val strict = live || precise
+            if (safeEnabled(lm, LocationManager.NETWORK_PROVIDER)) best = fresh(lm, LocationManager.NETWORK_PROVIDER, timeout, strict)
             // Live mode wants a fix that is good enough to draw on a map: GPS when the network fix is worse than 100 m.
-            if (!networkOnly && (best == null || (best.hasAccuracy() && best.accuracy > (if (live) 100f else 300f))) && safeEnabled(lm, LocationManager.GPS_PROVIDER)) {
-                val gps = fresh(lm, LocationManager.GPS_PROVIDER, timeout, live)
+            if (!networkOnly && (best == null || (best.hasAccuracy() && best.accuracy > (if (strict) 100f else 300f))) && safeEnabled(lm, LocationManager.GPS_PROVIDER)) {
+                val gps = fresh(lm, LocationManager.GPS_PROVIDER, timeout, strict)
                 if (gps != null) best = gps
             }
             best?.let { toFix(it) }

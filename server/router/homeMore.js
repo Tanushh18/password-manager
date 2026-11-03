@@ -32,6 +32,8 @@ const weather = require("../utils/homeWeather");
 const news = require("../utils/homeNews");
 const movies = require("../utils/homeMovies");
 const { record } = require("../utils/homeEvents");
+const placeTrail = require("../utils/placeTrail");
+const placeFixes = require("../utils/placeFixes");
 const homeRouter = require("./home");
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: "Too many changes. Slow down." });
@@ -214,11 +216,47 @@ router.put("/home/places", authenticate, writeLimiter, async (req, res) => {
             if (!!p.arriveFrom !== !!p.arriveTo || !!p.leaveFrom !== !!p.leaveTo) return res.status(400).json({ error: "Give both a from and a to time, or neither." });
             const id = /^[a-f0-9]{12}$/.test(p.id || "") ? p.id : newId();
             clean.push({ id, name: String(p.name || "").trim().slice(0, 40) || "Place", lat, lon, radius, phone: String(p.phone), group, arriveText: txt(p.arriveText), leaveText: txt(p.leaveText),
-                arriveFrom: p.arriveFrom || "", arriveTo: p.arriveTo || "", leaveFrom: p.leaveFrom || "", leaveTo: p.leaveTo || "", enabled: p.enabled !== false, state: (old.get(id) || {}).state || "" });
+                arriveFrom: p.arriveFrom || "", arriveTo: p.arriveTo || "", leaveFrom: p.leaveFrom || "", leaveTo: p.leaveTo || "", enabled: p.enabled !== false, strictWindow: p.strictWindow === true, state: (old.get(id) || {}).state || "" });
         }
         await HomeSettings.updateOne({ owner }, { $set: { places: clean } });
         return res.json({ places: clean });
     } catch (e) { return fail(res, e, "Could not save the places."); }
+});
+
+// Where the phone of a place is right now, how far from the place, and the last 24 hours: what the Places card on the Automations page shows.
+router.get("/home/places/:id/trail", authenticate, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const owner = req.rootUser._id, now = Date.now();
+        const settings = await automation.settingsOf(owner);
+        const p = (settings.places || []).find((x) => x.id === req.params.id);
+        if (!p) return res.status(404).json({ error: "Place not found." });
+        const phone = mongoose.isValidObjectId(String(p.phone)) ? await HomeDevice.findOne({ _id: p.phone, owner, kind: "phone" }).lean() : null;
+        const fixes = phone ? await placeFixes.last24h(owner, phone._id, now) : [];
+        const loc = phone && phone.status && phone.status.location;
+        const have = loc && Number.isFinite(Number(loc.lat)) && Number.isFinite(Number(loc.lon));
+        const dist = have ? placeTrail.distanceM({ lat: Number(loc.lat), lon: Number(loc.lon) }, p) : null;
+        const all = placeTrail.trailOf(p, fixes);
+        const real = all.filter((x) => !x.same);
+        // how often the phone really reports: the typical gap between its last points (3 hours)
+        const recent = all.filter((x) => x.at > now - 3 * 3600000).map((x) => x.at);
+        const gaps = recent.slice(1).map((t, i) => t - recent[i]).sort((a, b) => a - b);
+        const tz = settings.timezone || "Asia/Kolkata";
+        const kinds = ["place", "place_failed", "place_skipped", "place_state"];
+        const escaped = String(p.name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const events = await HomeEvent.find({ owner, kind: { $in: kinds }, at: { $gte: new Date(now - 24 * 3600000) }, text: { $regex: escaped } }).sort({ at: -1 }).limit(30).lean();
+        return res.json({
+            place: { id: p.id, name: p.name, lat: p.lat, lon: p.lon, radius: p.radius, state: p.state || "", enabled: p.enabled !== false },
+            phone: phone ? { id: String(phone._id), name: phone.person || phone.name, lastSeen: phone.lastSeen || null, battery: (home.batteryOf(phone.status) || {}).pct ?? null } : null,
+            now: have ? { lat: Number(loc.lat), lon: Number(loc.lon), acc: Math.round(Number(loc.acc) || 0), at: Number(loc.at) || null, ageSec: Math.max(0, Math.round((now - Number(loc.at)) / 1000)),
+                distanceM: Math.round(dist), beyondM: Math.round(dist - p.radius), state: placeTrail.classify(dist, p, loc.acc) } : null,
+            summary: placeTrail.summarize(all),
+            rule: { radius: p.radius, outBeyondM: Math.round(placeTrail.outBeyond(p, have ? loc.acc : 0)), minMarginM: 20, strictWindow: p.strictWindow === true, watchingNow: placeTrail.watching(p, automation.localParts(now, tz).minutes), arrive: p.arriveFrom ? `${p.arriveFrom}–${p.arriveTo}` : "", leave: p.leaveFrom ? `${p.leaveFrom}–${p.leaveTo}` : "" },
+            checkInEverySec: gaps.length ? Math.round(gaps[Math.floor(gaps.length / 2)] / 1000) : null,
+            trail: placeTrail.downsample(all, 240),
+            events: events.map((e) => ({ at: new Date(e.at).getTime(), kind: e.kind, text: e.text }))
+        });
+    } catch (e) { return fail(res, e, "Could not load the place."); }
 });
 
 router.post("/home/places/:id/test", authenticate, writeLimiter, async (req, res) => {

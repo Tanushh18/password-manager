@@ -151,3 +151,13 @@
 .hm-live span { background: #eb6834; }
 .hm-old span { background: #7a8699; }
 .hm-home span { background: #1a8f4d; }
+
+.pl-trail { flex-basis: 100%; }
+.pl__body { display: grid; gap: .45rem; margin-top: .5rem; }
+.pl__body p { margin: 0; }
+.pl-status span { color: var(--text-muted); }
+.pl-table { width: 100%; border-collapse: collapse; font-size: .78rem; margin-top: .4rem; }
+.pl-table th, .pl-table td { text-align: left; padding: .25rem .4rem; border-top: 1px solid var(--line); white-space: nowrap; }
+.pl-table tr.is-in td:nth-child(4) { color: var(--ok, #1d7f4e); }
+.pl-table tr.is-out td:nth-child(4) { color: var(--danger, #d1343a); }
+.pl-table tr.is-between td:nth-child(4) { color: var(--rd-warn, #c49000); }

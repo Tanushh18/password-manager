@@ -83,6 +83,50 @@ export function MapPicker({ lat, lon, radius, onPick }) {
   );
 }
 
+const STATE_COLOUR = { in: "#1d7f4e", between: "#d4880b", out: "#d1343a" };
+const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+/**
+ * One place on the map: its circle (the "there" area), the wider dashed ring where the phone counts as having left, the phone now (with how
+ * accurate that fix is), and the last 24 hours as a path of points coloured by inside / outside / in between.
+ */
+export function PlaceMap({ place, now, trail, outBeyondM }) {
+  const box = useRef(null);
+  const live = useRef({});
+
+  useEffect(() => {
+    const map = makeMap(box.current, [place.lat, place.lon], 17);
+    live.current = { map, layer: L.layerGroup().addTo(map) };
+    return () => { map.remove(); live.current = {}; };
+  }, [place.lat, place.lon]);
+
+  useEffect(() => {
+    const { map, layer } = live.current;
+    if (!map) return;
+    layer.clearLayers();
+    const centre = [place.lat, place.lon];
+    const area = L.circle(centre, { radius: place.radius, color: "#2a78d6", weight: 2, fillOpacity: 0.12 }).addTo(layer);
+    const ring = L.circle(centre, { radius: outBeyondM, color: "#d4880b", weight: 1.5, dashArray: "6 6", fill: false }).addTo(layer);
+    L.marker(centre, { icon: pin(place.name, "hm-home"), keyboard: false }).addTo(layer);
+    const pts = (trail || []).filter((p) => !p.same);
+    if (pts.length > 1) L.polyline(pts.map((p) => [p.lat, p.lon]), { color: "#6b7280", weight: 2, opacity: 0.7 }).addTo(layer);
+    for (const p of pts) {
+      L.circleMarker([p.lat, p.lon], { radius: 3.5, color: STATE_COLOUR[p.state] || "#6b7280", weight: 1, fillOpacity: 0.9 })
+        .bindTooltip(`${clock(p.at)} · ${p.distanceM} m from the centre (${p.beyondM > 0 ? `${p.beyondM} m outside the circle` : `${-p.beyondM} m inside`}) · ±${p.acc} m`).addTo(layer);
+    }
+    const bounds = L.latLngBounds([area.getBounds().getSouthWest(), area.getBounds().getNorthEast(), ring.getBounds().getSouthWest(), ring.getBounds().getNorthEast()]);
+    for (const p of pts) bounds.extend([p.lat, p.lon]);
+    if (now) {
+      L.circle([now.lat, now.lon], { radius: Math.max(now.acc, 5), color: "#eb6834", weight: 1, fillOpacity: 0.12 }).addTo(layer);
+      L.marker([now.lat, now.lon], { icon: pin("Now", "hm-live"), keyboard: false }).addTo(layer);
+      bounds.extend([now.lat, now.lon]);
+    }
+    map.fitBounds(bounds.pad(0.12), { maxZoom: 18 });
+  }, [place, now, trail, outBeyondM]);
+
+  return <div ref={box} className="hm__map" role="application" aria-label={`Map of ${place.name}: the circle, the phone now and where it has been today`} />;
+}
+
 const when = (s) => (s < 60 ? `${s} s ago` : `${Math.round(s / 60)} min ago`);
 
 /** The family on a map: who is out, the road home, and how long. Only runs while it is switched on, so phones are not asked to hurry for nothing. */
