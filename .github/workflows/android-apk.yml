@@ -126,6 +126,12 @@ jobs:
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
           test -n "$APKSIGNER" || { echo "::error::Android apksigner was not found"; exit 1; }
           "$APKSIGNER" verify --verbose stashr-release.apk
+          # The release is shrunk with R8 (minify). If it ever stripped a class the app cannot start without, stop here:
+          # nothing is published and phones keep the last good build.
+          mkdir -p "$RUNNER_TEMP/dexcheck" && unzip -o -q stashr-release.apk 'classes*.dex' -d "$RUNNER_TEMP/dexcheck"
+          for CLASS in 'Lcom/tanush/stashr/com/MainApplication;' 'Lcom/tanush/stashr/com/MainActivity;' 'Lexpo/modules/stashrsms/StashrSmsModule;' 'Lcom/margelo/nitro/' 'Lcom/swmansion/reanimated/'; do
+            grep -a -q -F "$CLASS" "$RUNNER_TEMP"/dexcheck/classes*.dex || { echo "::error::Minifying removed $CLASS from the APK; not publishing this build"; exit 1; }
+          done
           SHA256=$(sha256sum stashr-release.apk | cut -d ' ' -f 1)
           SIZE=$(stat -c '%s' stashr-release.apk)
           export SHA256 SIZE

@@ -3,6 +3,15 @@ import { api, mediaSource, loadSavedToken } from "./api";
 
 const fc = require("./faceCluster");
 
+/**
+ * Face grouping ("People") is switched off in this build to keep the app small: its two native libraries (Google ML Kit face
+ * detection and TensorFlow Lite, about 10 MB, plus the 24 MB model) are no longer part of the app. The groups already found stay on the
+ * phone. To bring it back: `npm install @react-native-ml-kit/face-detection react-native-fast-tflite`, add "react-native-fast-tflite" to
+ * the plugins in app.json, restore the two require() lines marked RESTORE below, and set this to true.
+ */
+const FACES_ENABLED = false;
+export const facesAvailable = () => FACES_ENABLED;
+
 /*
  * On-device face grouping. For each photo: download the small preview, find faces (Google ML Kit, on the phone),
  * crop each face, turn it into a 128-number fingerprint with a small TFLite model (assets/models/facenet.tflite, 23.7 MB),
@@ -82,7 +91,7 @@ async function modelPath() {
 
 async function loadModel() {
   if (model) return model;
-  const { loadTensorflowModel } = require("react-native-fast-tflite");
+  const { loadTensorflowModel } = {}; // RESTORE: require("react-native-fast-tflite")
   let path;
   // fatal: the whole scan stops (no photo is marked as done) and the next run tries the download again.
   try { path = await modelPath(); }
@@ -115,7 +124,7 @@ async function fingerprint(uri) {
 const sizeOf = (uri) => new Promise((resolve, reject) => Image.getSize(uri, (width, height) => resolve({ width, height }), reject));
 
 async function facesIn(uri) {
-  const FaceDetection = require("@react-native-ml-kit/face-detection").default;
+  const FaceDetection = null; // RESTORE: require("@react-native-ml-kit/face-detection").default
   const { ImageManipulator, SaveFormat } = require("expo-image-manipulator");
   const { File } = require("expo-file-system");
   const found = (await FaceDetection.detect(uri, { performanceMode: "accurate", landmarkMode: "none", classificationMode: "none" })) || [];
@@ -156,6 +165,7 @@ async function chargingOrWifiOk(requireCharging) {
  */
 export async function scanFaces({ limit = 30, auto = false, onProgress } = {}) {
   if (busy) return { scanned: 0, remaining: null, busy: true };
+  if (!FACES_ENABLED) return { scanned: 0, remaining: null, disabled: true };
   busy = true;
   try {
     await loadStore();
