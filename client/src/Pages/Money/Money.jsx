@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, changeExpenseStart, removeUnmatchedExpenses, postExpenseSms, requestExpenseSync, getExpenses, setExpenseCategory, reviewExpense, uploadStatement
+  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, changeExpenseStart, removeUnmatchedExpenses, uploadStatementAsync, getStatementJob, postExpenseSms, requestExpenseSync, getExpenses, setExpenseCategory, reviewExpense, uploadStatement
 } from "../../api/client";
 import { Section, Skeleton, useConfirm } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
@@ -355,20 +355,56 @@ function TxList({ rows, categories, filter, onClear, onChanged, uncategorized })
 
 function StatementCard({ settings, onDone }) {
   const { ask, dialog } = useConfirm();
-  const [busy, setBusy] = useState(false);
+  const [sending, setSending] = useState(null);          // 0..100 while the file goes up
+  const [job, setJob] = useState(null);                  // the check running (or just finished) on the server
   const [report, setReport] = useState(null);
   const [error, setError] = useState("");
   const input = useRef(null);
+  const timer = useRef(null);
+  const doneRef = useRef(onDone);
+  doneRef.current = onDone;                              // the page reloads itself with whatever onDone is now, without restarting the polling
   const last = settings.lastStatement;
+  const running = Boolean(job && (job.status === "queued" || job.status === "running"));
+  const busy = sending !== null || running;
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  // follow a check on the server until it ends; the page can be left or reloaded meanwhile (the newest check is picked up again below)
+  const follow = useCallback((first) => {
+    clearTimeout(timer.current);
+    let current = first;
+    const tick = async () => {
+      try {
+        const { job: j } = await getStatementJob(current.id);
+        if (!j) { setJob(null); setError("The server was restarted while it was checking. Upload the statement again; nothing is added twice."); return; }
+        current = j; setJob(j);
+        if (j.status === "done") { setReport(j.report); toast.success("Statement checked."); doneRef.current(); return; }
+        if (j.status === "failed") { setError(j.error || "Could not check that statement."); return; }
+      } catch (e) { /* a missed look: try again */ }
+      timer.current = setTimeout(tick, 1200);
+    };
+    timer.current = setTimeout(tick, 600);
+  }, []);
+  useEffect(() => {                                       // a check already running when this page opens
+    let live = true;
+    getStatementJob().then(({ job: j }) => { if (live && j && (j.status === "queued" || j.status === "running")) { setJob(j); follow(j); } }).catch(() => {});
+    return () => { live = false; };
+  }, [follow]);
+
   const pick = async (e) => {
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
     if (!file) return;
     if (file.size > 8 * 1024 * 1024) { setError("That file is bigger than 8 MB."); return; }
-    setBusy(true); setError(""); setReport(null);
-    try { const r = await uploadStatement(file); setReport(r.report || r); toast.success("Statement checked."); onDone(); }
-    catch (err) { setError(errorMessage(err, "Could not read that statement.")); }
-    finally { setBusy(false); }
+    setSending(0); setError(""); setReport(null); setJob(null);
+    try {
+      const { job: j } = await uploadStatementAsync(file, (ev) => { if (ev.total) setSending(Math.round((100 * ev.loaded) / ev.total)); });
+      setSending(null); setJob(j); follow(j);
+    } catch (err) {
+      setSending(null);
+      const existing = err && err.response && err.response.data && err.response.data.job;
+      if (existing) { setJob(existing); follow(existing); setError("A statement is already being checked; showing that one."); }
+      else setError(errorMessage(err, "Could not read that statement."));
+    }
   };
   const r = report || last;
   const removeUnmatched = async () => {
@@ -380,8 +416,15 @@ function StatementCard({ settings, onDone }) {
       {dialog}
       <div className="mn-row">
         <input ref={input} type="file" accept=".csv,.xlsx,.xls,text/csv" onChange={pick} hidden />
-        <button className="rd-btn rd-btn--primary" onClick={() => input.current && input.current.click()} disabled={busy}>{busy ? "Checking…" : "Choose a statement (.csv or .xlsx)"}</button>
+        <button className="rd-btn rd-btn--primary" onClick={() => input.current && input.current.click()} disabled={busy}>{sending !== null ? `Uploading… ${sending}%` : running ? "Checking…" : "Choose a statement (.csv or .xlsx)"}</button>
       </div>
+      {sending !== null || running ? (
+        <div className="mn-progress" role="status" aria-live="polite">
+          <div className="mn-progress__bar"><span style={{ width: `${sending !== null ? Math.min(sending, 100) * 0.03 : job.pct}%` }} /></div>
+          <p className="mn-dim">{sending !== null ? "Sending the file…" : job.text}</p>
+          {running ? <p className="mn-dim">The file is safely received. The server is reading and matching it in the background; you can use the rest of Stashr or leave this page.</p> : null}
+        </div>
+      ) : null}
       {error ? <p className="mn-bad" role="alert">{error}</p> : null}
       {r ? (
         <div className="mn-report">

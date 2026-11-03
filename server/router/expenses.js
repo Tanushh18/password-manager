@@ -24,6 +24,7 @@ const ex = require("../utils/expenses");
 const sheets = require("../utils/sheets");
 const stores = require("../utils/expenseStore");
 const hub = require("../utils/syncHub");
+const jobs = require("../utils/statementJobs");
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 40, message: "Too many changes. Slow down." });
 const smsLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: "Too many syncs. Wait a minute." });
@@ -350,45 +351,48 @@ router.post("/expenses/remove-unmatched", authenticate, writeLimiter, async (req
     } catch (e) { return fail(res, e, "Could not remove them."); }
 });
 
+const { processStatement: runStatement } = require("../utils/statementRun");
+
+/** The statement check for this account, with its rules, the 4-month cut-off and where the result summary is saved. */
+const processStatement = ({ owner, s, st, copy, bytes, progress }) => runStatement({
+    s, st, copy, bytes, progress, rules: userRules(s), cutoff: cutoffDate(),
+    saveSummary: (summary) => Settings.updateOne({ owner }, { $set: { lastStatement: summary } })
+});
+
 router.post("/expenses/statement", authenticate, writeLimiter, express.raw({ type: "application/octet-stream", limit: "8mb" }), async (req, res) => {
     try {
         const owner = req.rootUser._id, s = await settingsOf(owner);
         const { st, copy } = await storeFor(req, s);
         if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: "Send the statement file." });
         const name = String(req.query.filename || "").toLowerCase();
-        let table;
+        // what can be refused without reading the file is refused at once, for both ways of calling this
         if (/\.pdf$/.test(name) || req.body.subarray(0, 4).toString() === "%PDF") return res.status(400).json({ error: "Download the statement as Excel or CSV from net banking (a PDF cannot be read reliably)." });
         if (/\.xls$/.test(name)) return res.status(400).json({ error: "Save the statement as .xlsx or .csv and send that." });
-        try { table = req.body.subarray(0, 2).toString() === "PK" ? ex.parseXlsx(req.body) : ex.parseCsv(req.body.toString("utf8")); }
-        catch (e) { return res.status(400).json({ error: e.message || "Could not read that file." }); }
-        let stmt;
-        try { stmt = ex.statementRows(table); } catch (e) { return res.status(400).json({ error: e.message }); }
-        // only as much of the statement as the limits allow: the start date, and (Stashr storage) the 4-month rule
-        const limited = ex.limitStatement(stmt, { startDate: s.startDate, cutoff: cutoffDate(), keepsOld: st.keepsOld });
-        stmt = limited.kept;
-        if (!stmt.length) return res.status(400).json({ error: "No transactions found in that statement (after your start date" + (st.keepsOld ? "" : " and within the last 4 months") + ")." });
-        const rows = await st.list();
-        const { updates, additions, report } = ex.reconcile(rows, stmt, userRules(s));
-        const items = [];
-        for (const u of updates) {
-            // the statement is the truth: whatever it says (date, amount, name, balance, status...) is written, but only where it differs
-            const cur = rows.find((t) => String(t.index) === String(u.index));
-            const fields = {};
-            for (const [k, v] of Object.entries(u.fields || { status: u.status, note: u.note })) {
-                if (JSON.stringify(cur ? cur[k] : undefined) !== JSON.stringify(v)) fields[k] = v;
-            }
-            if (Object.keys(fields).length) items.push({ index: u.index, fields, tx: cur });
+
+        if (req.query.async === "1") {
+            // the website: the file is in, so answer now; reading, matching and saving carry on in the background and /expenses/statement/status shows how far it is
+            const busy = jobs.running(owner);
+            if (busy) return res.status(409).json({ error: "A statement is already being checked. Wait for it to finish.", job: jobs.view(busy) });
+            const job = jobs.create(owner, { filename: name });
+            res.status(202).json({ job: jobs.view(job) });
+            setImmediate(() => {
+                processStatement({ owner, s, st, copy, bytes: req.body, progress: (p) => jobs.progress(job.id, p) })
+                    .then(({ report }) => jobs.finish(job.id, report))
+                    .catch((e) => { if (!Number.isInteger(e.status)) console.error("[expenses] statement check failed:", e && e.message); jobs.fail(job.id, Number.isInteger(e.status) ? e.message : "Could not check the statement. Try uploading it again."); });
+            });
+            return undefined;
         }
-        await st.updateMany(items);
-        if (copy) copy.update(items.filter((i) => i.tx));
-        const txs = additions.map((t) => ex.makeTx(t, t.category, "Statement", "Verified", "Added from your statement (no message was found)", 0, []));
-        const saved = await st.append(txs);
-        if (copy) copy.append(saved.stored);
-        report.skipped = { beforeStart: limited.beforeStart, tooOld: limited.tooOld, startDate: s.startDate || "", cutoff: st.keepsOld ? "" : cutoffDate() };
-        const summary = { at: new Date().toISOString(), skipped: report.skipped, from: report.from, to: report.to, lines: report.lines, verified: report.verified, mismatched: report.mismatched, added: report.added, renamed: report.renamed, notInStatement: report.notInStatement, months: report.months, allMonthsMatch: report.allMonthsMatch, closingBalance: report.closingBalance, balanceBreakCount: report.balanceBreakCount };
-        await Settings.updateOne({ owner }, { $set: { lastStatement: summary } });
+        // the mobile app (and anyone else who waits): the same work, answered when it is done
+        const { report } = await processStatement({ owner, s, st, copy, bytes: req.body });
         return res.json({ report });
     } catch (e) { return fail(res, e, "Could not check the statement."); }
+});
+
+// How far a statement check is: ?job=<id>, or the newest one of this account when no id is given.
+router.get("/expenses/statement/status", authenticate, (req, res) => {
+    const job = jobs.get(req.rootUser._id, String(req.query.job || ""));
+    res.set("Cache-Control", "no-store");
+    return res.json({ job: job ? jobs.view(job) : null });
 });
 
 router.idle = stores.idle;

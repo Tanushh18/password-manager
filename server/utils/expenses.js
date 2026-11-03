@@ -376,8 +376,10 @@ function reconcile(sheetRows, stmt, userRules = []) {
             if (c !== "Uncategorized") fields.category = c;
         }
         fields.status = "Verified"; fields.flags = [];
-        fields.note = notes.length ? `Corrected from the bank statement: ${notes.join(", ")}` : "";
-        updates.push({ index: t.index, status: "Verified", note: fields.note, fields });
+        // a note is only touched when there is something to say, or an old warning to clear; "Added from your statement" and the owner's own notes stay
+        if (notes.length) fields.note = `Corrected from the bank statement: ${notes.join(", ")}`;
+        else if (/^(Not found in the statement|Verified; balance|Statement says)/.test(t.note || "")) fields.note = "";
+        updates.push({ index: t.index, status: "Verified", note: fields.note !== undefined ? fields.note : t.note || "", fields });
         if (wrong) mismatched++; else verified++;
         finalRows.push({ ...t, ...fields });
     });

@@ -523,6 +523,15 @@ export const setExpenseCategory = (index, category, remember) => instance.put("/
 export const reviewExpense = (index, action) => instance.put("/expenses/review", { index, action }).then((r) => r.data);
 export const getExpenseRules = () => instance.get("/expenses/rules").then((r) => r.data);
 export const saveExpenseRules = (rules) => instance.put("/expenses/rules", { rules }).then((r) => r.data);
+// The statement goes up first (the answer comes at once); reading, matching and saving carry on in the background and are followed with getStatementJob.
+export const uploadStatementAsync = (file, onUploadProgress) => instance.post("/expenses/statement", file, {
+  params: { filename: file.name, async: 1 },
+  headers: { "Content-Type": "application/octet-stream" },
+  transformRequest: [(data) => data],
+  onUploadProgress,
+  timeout: 120000
+}).then((r) => r.data);
+export const getStatementJob = (id) => instance.get("/expenses/statement/status", { params: id ? { job: id } : {} }).then((r) => r.data);
 export const uploadStatement = (file) => instance.post("/expenses/statement", file, {
   params: { filename: file.name },
   headers: { "Content-Type": "application/octet-stream" },
