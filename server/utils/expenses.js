@@ -302,6 +302,22 @@ function statementRows(table) {
 }
 
 /**
+ * Which statement lines Stashr may take: nothing before the start date the owner chose, and, in Stashr storage, nothing older than
+ * the 4-month limit (a Google Sheet keeps older rows in its Archive tab, so only the start date applies there).
+ * -> { kept, beforeStart, tooOld }
+ */
+function limitStatement(stmt, { startDate = "", cutoff = "", keepsOld = false } = {}) {
+    let beforeStart = 0, tooOld = 0;
+    const kept = [];
+    for (const x of stmt) {
+        if (startDate && x.date < startDate) { beforeStart++; continue; }
+        if (!keepsOld && cutoff && x.date < cutoff) { tooOld++; continue; }
+        kept.push(x);
+    }
+    return { kept, beforeStart, tooOld };
+}
+
+/**
  * The bank statement is the truth. Every statement line is paired with one stored entry (the same reference, or failing that the same
  * type and amount within a day with the references not in conflict; the same day and a similar name win). The paired entry is made to
  * say what the statement says: its date, amount, type, running balance and, when the message said "unknown" or cut the name short, its
@@ -404,4 +420,4 @@ function reconcile(sheetRows, stmt, userRules = []) {
         closingBalance: stmt.length ? stmt[stmt.length - 1].balance : null, balanceBreaks: breaks.slice(0, 20), balanceBreakCount: breaks.length } };
 }
 
-module.exports = { makeTx, txToRow, assess, bankSender, ist, parseDate, parseSms, categorize, ruleKey, norm, DEFAULT_CATEGORIES, DEFAULT_RULES, HEADERS, rowFromTx, txFromRow, sameTx, reclearBalanceFlags, DOUBTFUL, summarize, parseCsv, parseXlsx, statementRows, reconcile, round2 };
+module.exports = { makeTx, txToRow, assess, bankSender, ist, parseDate, parseSms, categorize, ruleKey, norm, DEFAULT_CATEGORIES, DEFAULT_RULES, HEADERS, rowFromTx, txFromRow, sameTx, reclearBalanceFlags, DOUBTFUL, limitStatement, summarize, parseCsv, parseXlsx, statementRows, reconcile, round2 };

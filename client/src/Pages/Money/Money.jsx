@@ -393,6 +393,12 @@ function StatementCard({ settings, onDone }) {
             {r.renamed != null ? <div className="mn-tile"><span>Names fixed</span><b>{r.renamed}</b></div> : null}
             <div className={"mn-tile" + (r.notInStatement ? " is-warn" : "")}><span>Not in statement</span><b>{r.notInStatement}</b></div>
           </div>
+          {r.skipped && (r.skipped.beforeStart || r.skipped.tooOld) ? (
+            <p className="mn-dim">
+              {r.skipped.beforeStart ? `${r.skipped.beforeStart} older line${r.skipped.beforeStart === 1 ? "" : "s"} in the statement ${r.skipped.beforeStart === 1 ? "was" : "were"} skipped: before your start date (${r.skipped.startDate}). ` : ""}
+              {r.skipped.tooOld ? `${r.skipped.tooOld} line${r.skipped.tooOld === 1 ? "" : "s"} older than 4 months ${r.skipped.tooOld === 1 ? "was" : "were"} skipped (Stashr keeps 4 months).` : ""}
+            </p>
+          ) : null}
           {r.months && r.months.length ? (
             <div className="mn-months">
               <b>{r.allMonthsMatch ? "✓ Every month now adds up to your statement" : "⚠ Some months do not add up to your statement"}</b>

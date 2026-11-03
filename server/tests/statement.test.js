@@ -130,6 +130,25 @@ describe("headlines", () => {
     });
 });
 
+describe("how much of a statement is taken", () => {
+    const lines = [{ date: "2026-05-10" }, { date: "2026-07-20" }, { date: "2026-08-02" }, { date: "2026-08-03" }, { date: "2026-10-30" }];
+    test("nothing before the start date, and in Stashr storage nothing older than the 4-month limit", () => {
+        const r = ex.limitStatement(lines, { startDate: "2026-08-03", cutoff: "2026-07-06", keepsOld: false });
+        expect(r.kept.map((x) => x.date)).toEqual(["2026-08-03", "2026-10-30"]);
+        expect(r.beforeStart).toBe(3); expect(r.tooOld).toBe(0);
+        // the 4-month rule can be the tighter one when the start date is older
+        const tight = ex.limitStatement(lines, { startDate: "2026-01-01", cutoff: "2026-07-06", keepsOld: false });
+        expect(tight.kept.length).toBe(4); expect(tight.tooOld).toBe(1);
+    });
+    test("with the Google Sheet only the start date applies (older rows go to its Archive tab)", () => {
+        const r = ex.limitStatement(lines, { startDate: "2026-01-01", cutoff: "2026-07-06", keepsOld: true });
+        expect(r.kept.length).toBe(5); expect(r.tooOld).toBe(0);
+    });
+    test("no start date and nothing to cut: everything is taken", () => {
+        expect(ex.limitStatement(lines).kept.length).toBe(5);
+    });
+});
+
 describe("the statement is the truth", () => {
     const csv = ["Date,Particulars,Withdrawals,Deposits,Balance",
         "30-09-2026,UPI/DR/100000000001/MEESHO TECHNOLOGIES PRIVATE LIMITED/ICIC/m@ybl,100.00,,9900.00",

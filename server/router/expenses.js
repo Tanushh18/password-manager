@@ -363,9 +363,9 @@ router.post("/expenses/statement", authenticate, writeLimiter, express.raw({ typ
         catch (e) { return res.status(400).json({ error: e.message || "Could not read that file." }); }
         let stmt;
         try { stmt = ex.statementRows(table); } catch (e) { return res.status(400).json({ error: e.message }); }
-        if (s.startDate) stmt = stmt.filter((x) => x.date >= s.startDate);
-        const cut = cutoffDate();
-        if (!st.keepsOld) stmt = stmt.filter((x) => x.date >= cut);           // Stashr storage keeps 4 months only
+        // only as much of the statement as the limits allow: the start date, and (Stashr storage) the 4-month rule
+        const limited = ex.limitStatement(stmt, { startDate: s.startDate, cutoff: cutoffDate(), keepsOld: st.keepsOld });
+        stmt = limited.kept;
         if (!stmt.length) return res.status(400).json({ error: "No transactions found in that statement (after your start date" + (st.keepsOld ? "" : " and within the last 4 months") + ")." });
         const rows = await st.list();
         const { updates, additions, report } = ex.reconcile(rows, stmt, userRules(s));
@@ -384,7 +384,8 @@ router.post("/expenses/statement", authenticate, writeLimiter, express.raw({ typ
         const txs = additions.map((t) => ex.makeTx(t, t.category, "Statement", "Verified", "Added from your statement (no message was found)", 0, []));
         const saved = await st.append(txs);
         if (copy) copy.append(saved.stored);
-        const summary = { at: new Date().toISOString(), from: report.from, to: report.to, lines: report.lines, verified: report.verified, mismatched: report.mismatched, added: report.added, renamed: report.renamed, notInStatement: report.notInStatement, months: report.months, allMonthsMatch: report.allMonthsMatch, closingBalance: report.closingBalance, balanceBreakCount: report.balanceBreakCount };
+        report.skipped = { beforeStart: limited.beforeStart, tooOld: limited.tooOld, startDate: s.startDate || "", cutoff: st.keepsOld ? "" : cutoffDate() };
+        const summary = { at: new Date().toISOString(), skipped: report.skipped, from: report.from, to: report.to, lines: report.lines, verified: report.verified, mismatched: report.mismatched, added: report.added, renamed: report.renamed, notInStatement: report.notInStatement, months: report.months, allMonthsMatch: report.allMonthsMatch, closingBalance: report.closingBalance, balanceBreakCount: report.balanceBreakCount };
         await Settings.updateOne({ owner }, { $set: { lastStatement: summary } });
         return res.json({ report });
     } catch (e) { return fail(res, e, "Could not check the statement."); }
