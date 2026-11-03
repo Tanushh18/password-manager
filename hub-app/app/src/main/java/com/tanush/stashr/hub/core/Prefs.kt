@@ -44,6 +44,10 @@ class Prefs(ctx: Context) {
     var voiceOn: Boolean
         get() = p.getBoolean("voiceOn", true)
         set(v) = p.edit().putBoolean("voiceOn", v).apply()
+    /** Power saving (always on by default, plugged in or not): scans the Wi-Fi and tests the speed less, and lets the screen sleep dimmed. */
+    var batterySaver: Boolean
+        get() = p.getBoolean("batterySaver", true)
+        set(v) = p.edit().putBoolean("batterySaver", v).apply()
     var cameraSensitivity: Int
         get() = p.getInt("cameraSensitivity", 5)
         set(v) = p.edit().putInt("cameraSensitivity", v).apply()

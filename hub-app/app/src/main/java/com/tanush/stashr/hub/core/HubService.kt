@@ -52,6 +52,7 @@ class HubService : LifecycleService() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var firstFailAt = 0L
     private var lastDashboardAt = 0L
+    private var lastScanAt = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -103,11 +104,17 @@ class HubService : LifecycleService() {
             try {
                 if (!Prefs(this).paired) { stopSelf(); return }
                 val now = System.currentTimeMillis()
-                val withPorts = now - lastPortsAt > 30 * 60_000
-                lastScan = withContext(Dispatchers.IO) { LanScanner.scan(this@HubService, withPorts) }
-                if (withPorts) lastPortsAt = now
-                lastScan?.let { LocalMode.onScan(this@HubService, it) }
-                if (now - lastSpeedAt > 60 * 60_000) runSpeedTest()
+                // Battery saver: on battery the full Wi-Fi sweep, the port scan and the speed test are spaced out. The report still
+                // goes every minute (Stashr marks the tablet offline after 150 s of silence) and carries the last scan.
+                val saving = Power.saving(this)
+                val withPorts = now - lastPortsAt > (if (saving) 2 * 3600_000L else 30 * 60_000L)
+                if (lastScan == null || now - lastScanAt >= Power.scanEveryMs(this)) {
+                    lastScan = withContext(Dispatchers.IO) { LanScanner.scan(this@HubService, withPorts) }
+                    lastScanAt = now
+                    if (withPorts) lastPortsAt = now
+                    lastScan?.let { LocalMode.onScan(this@HubService, it) }
+                }
+                if (now - lastSpeedAt > (if (saving) 6 * 3600_000L else 60 * 60_000L)) runSpeedTest()
                 if (now - lastUpdateCheck > 6 * 3600_000) { lastUpdateCheck = now; lifecycleScope.launch { Updater.check(this@HubService, manual = false) } }
                 val report = buildReport()
                 val sentEvents = report.optJSONArray("localEvents")?.length() ?: 0
@@ -118,7 +125,7 @@ class HubService : LifecycleService() {
                 if (sentEvents > 0) LocalMode.eventsSent(this@HubService, sentEvents)
                 res.optJSONObject("local")?.optString("key")?.takeIf { it.length >= 16 }?.let { if (Prefs(this).localKey != it) Prefs(this).localKey = it; LocalServer.ensureStarted(this) }
                 if (LocalMode.offline) { LocalMode.setOffline(this, false); lifecycleScope.launch(Dispatchers.IO) { MediaQueue.flush(this@HubService) } }
-                else if (now - lastDashboardAt > 5 * 60_000) { lastDashboardAt = now; withContext(Dispatchers.IO) { try { LocalMode.saveDashboard(this@HubService, api.dashboard().toString()); MediaQueue.flush(this@HubService) } catch (e: Exception) { } } }
+                else if (now - lastDashboardAt > (if (saving) 15 * 60_000L else 5 * 60_000L)) { lastDashboardAt = now; withContext(Dispatchers.IO) { try { LocalMode.saveDashboard(this@HubService, api.dashboard().toString()); MediaQueue.flush(this@HubService) } catch (e: Exception) { } } }
                 lastReport = now
                 lastError = ""
                 Health.success("report")

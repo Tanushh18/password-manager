@@ -212,7 +212,11 @@ class DashboardActivity : Activity() {
             prefs.voiceOn = on
             if (on) VoiceListener.start(this) else VoiceListener.stop()
         }
-        ctl.addView(cameraSwitch); ctl.addView(voiceSwitch)
+        val saverSwitch = switch("Power saving (always): scan the Wi-Fi less often, dim the screen and let it sleep", prefs.batterySaver) { on ->
+            prefs.batterySaver = on
+            applyPower()
+        }
+        ctl.addView(cameraSwitch); ctl.addView(voiceSwitch); ctl.addView(saverSwitch)
         val buttons = ui.row(8)
         buttons.addView(ui.quiet("Slideshow") { startActivity(Intent(this, SlideshowActivity::class.java)) })
         buttons.addView(ui.quiet("Check for update") {
@@ -266,7 +270,17 @@ class DashboardActivity : Activity() {
 
     /* ───────── data ───────── */
 
+    /** Power saving on: the screen may sleep and is dimmed while it is on. Off: always on, normal brightness. */
+    private fun applyPower() {
+        val saving = com.tanush.stashr.hub.core.Power.saving(this)
+        if (saving) window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        val lp = window.attributes
+        val want = if (saving) 0.25f else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        if (lp.screenBrightness != want) { lp.screenBrightness = want; window.attributes = lp }
+    }
+
     private fun tick() {
+        applyPower()
         clock.text = clockFmt.format(Date())
         date.text = dateFmt.format(Date())
         val ago = if (HubService.lastReport > 0) agoText(HubService.lastReport) else "not yet"
