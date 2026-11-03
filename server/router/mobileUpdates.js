@@ -1,5 +1,5 @@
 const express = require("express");
-const { Readable } = require("node:stream");
+const { fetchWithHeaderTimeout, pipeUpstream } = require("../utils/upstreamStream");
 
 const router = express.Router();
 const GITHUB_REPOSITORY = process.env.STASHR_UPDATE_REPOSITORY || "Tanushh18/stashr-Home-Automation";
@@ -127,7 +127,7 @@ router.get("/android/download", async (_req, res) => {
       "User-Agent": "Stashr-Android-Updater",
       ...(process.env.STASHR_UPDATE_GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.STASHR_UPDATE_GITHUB_TOKEN}` } : {}),
     };
-    const response = await fetch(release.assetApiUrl, { headers, signal: AbortSignal.timeout(30_000) });
+    const response = await fetchWithHeaderTimeout(release.assetApiUrl, { headers }, 30_000);
     if (!response.ok || !response.body) {
       const error = new Error(`GitHub asset download returned HTTP ${response.status}`);
       error.status = 502;
@@ -138,7 +138,7 @@ router.get("/android/download", async (_req, res) => {
     res.set("Content-Disposition", `attachment; filename="Stashr-${release.version}-build-${release.versionCode}.apk"`);
     res.set("X-Content-Type-Options", "nosniff");
     if (release.sizeBytes > 0) res.set("Content-Length", String(release.sizeBytes));
-    return Readable.fromWeb(response.body).pipe(res);
+    return pipeUpstream(response, res);
   } catch (error) {
     if (res.headersSent) return res.destroy(error);
     // The release is public on GitHub: its own "latest" link needs no API call, so a rate-limited server still gives the APK.
@@ -219,14 +219,14 @@ for (const key of Object.keys(SIDE_APPS)) {
     res.set("Cache-Control", "no-store");
     try {
       const r = await latestSideRelease(key);
-      const response = await fetch(r.assetApiUrl, { headers: ghHeaders("application/octet-stream"), signal: AbortSignal.timeout(30_000) });
+      const response = await fetchWithHeaderTimeout(r.assetApiUrl, { headers: ghHeaders("application/octet-stream") }, 30_000);
       if (!response.ok || !response.body) throw Object.assign(new Error(`GitHub asset download returned HTTP ${response.status}`), { status: 502 });
       res.status(200);
       res.set("Content-Type", "application/vnd.android.package-archive");
       res.set("Content-Disposition", `attachment; filename="${app.file}-${r.version}-build-${r.versionCode}.apk"`);
       res.set("X-Content-Type-Options", "nosniff");
       if (r.sizeBytes > 0) res.set("Content-Length", String(r.sizeBytes));
-      return Readable.fromWeb(response.body).pipe(res);
+      return pipeUpstream(response, res);
     } catch (error) {
       if (res.headersSent) return res.destroy(error);
       return res.status(error.status || 502).json({ error: `The ${app.label} APK is not available yet.`, detail: process.env.NODE_ENV === "production" ? undefined : error.message });

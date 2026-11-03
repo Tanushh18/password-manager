@@ -1,6 +1,6 @@
 const crypto = require("node:crypto");
 const express = require("express");
-const { Readable } = require("node:stream");
+const { fetchWithHeaderTimeout, pipeUpstream } = require("../utils/upstreamStream");
 
 // Self-hosted Expo Updates endpoint. The GitHub Actions release workflow publishes
 // ota-manifest.json plus the content-addressed bundle/asset files next to the APK.
@@ -118,13 +118,13 @@ router.get("/asset/:name", async (req, res) => {
     const asset = assets.find((item) => item.name === name);
     if (!asset) return res.status(404).json({ error: "Asset not found." });
 
-    const response = await fetch(asset.url, { headers: githubHeaders("application/octet-stream"), signal: AbortSignal.timeout(30_000) });
+    const response = await fetchWithHeaderTimeout(asset.url, { headers: githubHeaders("application/octet-stream") }, 30_000);
     if (!response.ok || !response.body) throw httpError(502, `GitHub asset download returned HTTP ${response.status}`);
     res.status(200);
     res.set("Content-Type", "application/octet-stream");
     res.set("X-Content-Type-Options", "nosniff");
     if (asset.size > 0) res.set("Content-Length", String(asset.size));
-    return Readable.fromWeb(response.body).pipe(res);
+    return pipeUpstream(response, res);
   } catch (error) {
     if (res.headersSent) return res.destroy(error);
     return res.status(error.status || 502).json({

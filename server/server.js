@@ -37,6 +37,12 @@ process.on("unhandledRejection", (reason) =>
 // After an uncaught exception the process state is undefined: log, then exit so the host restarts it cleanly.
 process.on("uncaughtException", (error) =>
 {
+    // A timed-out or cancelled network request (a slow download, a closed browser tab) leaves the server in a good state: keep running.
+    if (error && (error.name === "TimeoutError" || error.name === "AbortError"))
+    {
+        console.error("Ignored an aborted network request:", error.message);
+        return;
+    }
     console.error("Uncaught exception:", error);
     server.close(() => process.exit(1));
     setTimeout(() => process.exit(1), 5000).unref();
