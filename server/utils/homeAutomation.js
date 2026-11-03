@@ -174,6 +174,12 @@ async function autoCamera(owner, settings, devices, now) {
 }
 
 const LOC_FRESH_MS = 3 * 3600 * 1000;       // a fix this young still counts (a phone that was offline uploads its fix late)
+/**
+ * TESTING ONLY: while a phone is inside / outside a place, send that place's message again every minute, so the whole
+ * chain (location -> server -> tablet -> WhatsApp) can be watched working. Remove this block, TEST_EVERY_MINUTE and the
+ * two lines marked "TEST" in geoTick when the location-based sending is confirmed. Switch off now with PLACE_TEST_EVERY_MINUTE=0.
+ */
+const TEST_EVERY_MINUTE = process.env.PLACE_TEST_EVERY_MINUTE !== "0";
 const PLACE_RETRY_MS = 2 * 3600 * 1000;    // a place message that could not go out (tablet offline) is retried for this long
 const distanceM = (a, b) => {
     const R = 6371000, rad = (x) => (x * Math.PI) / 180;
@@ -187,12 +193,20 @@ const distanceM = (a, b) => {
  * window you set, the tablet sends your message to the WhatsApp group. The first sighting only records where the phone
  * is; a place is "left" only when the phone is clearly outside (radius + its accuracy), so a GPS wobble is not a trip.
  */
+/** The home place is confirmed by the Wi-Fi as well as the location (set verifyWifi on a place to force it on or off). */
+function needsWifi(p, settings) {
+    if (typeof p.verifyWifi === "boolean") return p.verifyWifi;
+    const spot = settings && settings.homeSpot;
+    return Boolean(spot && Number.isFinite(spot.lat) && Number.isFinite(spot.lon) && distanceM({ lat: spot.lat, lon: spot.lon }, { lat: p.lat, lon: p.lon }) <= 300);
+}
+
 async function geoTick(owner, now, settings, devices) {
     const places = Array.isArray(settings.places) ? settings.places : [];
     if (!places.length) return;
     const tz = settings.timezone || "Asia/Kolkata";
     const mins = localParts(now, tz).minutes;
     const tablet = (devices || []).filter((d) => d.kind === "hub").find((d) => (d.status || {}).agent === "stashr-hub" && Boolean(d.online) && home.isOnline(d, now));
+    const people = home.presence((devices || []).filter((d) => d.kind === "hub"), (devices || []).filter((d) => d.kind === "phone"), now);
     for (let i = 0; i < places.length; i++) {
         const p = places[i];
         if (!p || p.enabled === false) continue;
@@ -209,11 +223,19 @@ async function geoTick(owner, now, settings, devices) {
         let next = p.state || "";
         if (dist <= p.radius) next = "in";
         else if (dist > p.radius + Math.max(50, slack)) next = "out";
+        // Two-way check for the home: the location AND the home Wi-Fi must agree. "In" needs the phone to answer on the Wi-Fi
+        // (as the tablet's scan sees it), "out" needs it to be gone from it. When they disagree nothing changes yet.
+        if (next !== (p.state || "") && needsWifi(p, settings)) {
+            const me = people.find((x) => x.person === String(phone.person || phone.name).trim());
+            const onWifi = Boolean(me && me.home);
+            if ((next === "in") !== onWifi) next = p.state || "";
+        }
         if (next !== (p.state || "")) {
             await HomeSettings.updateOne({ owner }, { $set: { [`places.${i}.state`]: next } });
             if (!p.state) continue;                                   // first sighting: no message
             sendState = next; eventAt = Number(loc.at) || now;
         }
+        if (!sendState && TEST_EVERY_MINUTE && p.state) { sendState = p.state; eventAt = now; }   // TEST
         if (!sendState) { if (p.pending && p.pending.state) await HomeSettings.updateOne({ owner }, { $unset: { [`places.${i}.pending`]: 1 } }); continue; }
         const arrive = sendState === "in";
         // The time window is judged at the moment the phone actually crossed the circle (its fix), not when the report finally arrived.
@@ -224,7 +246,7 @@ async function geoTick(owner, now, settings, devices) {
         const text = String((arrive ? p.arriveText : p.leaveText) || "").trim();
         if (!text || !p.group) continue;
         const who = phone.person || phone.name;
-        const key = `place:${owner}:${p.id}:${sendState}:${Math.floor(eventAt / (30 * 60000))}`;
+        const key = `place:${owner}:${p.id}:${sendState}:${TEST_EVERY_MINUTE ? "t" + Math.floor(now / 60000) : Math.floor(eventAt / (30 * 60000))}`;   // TEST: one per minute
         if (tablet && !await claim(key)) continue;                  // already sent for this crossing
         if (!tablet || !await queue(tablet, "send_whatsapp", { group: p.group, text })) {
             if (!waiting) {
@@ -523,4 +545,4 @@ const DEFAULT_SCENES = [
     { id: "goodnight", name: "Good night", steps: [{ kind: "tv", type: "media", args: { action: "play_pause" } }, { kind: "tv", type: "key", args: { key: "HOME" } }] }
 ];
 
-module.exports = { localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, movieNightOn, localKeyOf, autoCamera, geoTick, distanceM, etaTick, announce, whereIs, checkInterval, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };
+module.exports = { localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, movieNightOn, localKeyOf, autoCamera, geoTick, needsWifi, distanceM, etaTick, announce, whereIs, checkInterval, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };
