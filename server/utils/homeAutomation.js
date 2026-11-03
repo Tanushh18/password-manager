@@ -225,17 +225,20 @@ async function geoTick(owner, now, settings, devices) {
         else if (dist > p.radius + Math.max(50, slack)) next = "out";
         // Two-way check for the home: the location AND the home Wi-Fi must agree. "In" needs the phone to answer on the Wi-Fi
         // (as the tablet's scan sees it), "out" needs it to be gone from it. When they disagree nothing changes yet.
-        if (next !== (p.state || "") && needsWifi(p, settings)) {
+        let bothAgree = true;                                        // location and Wi-Fi say the same thing right now
+        if (needsWifi(p, settings)) {
             const me = people.find((x) => x.person === String(phone.person || phone.name).trim());
             const onWifi = Boolean(me && me.home);
-            if ((next === "in") !== onWifi) next = p.state || "";
+            bothAgree = (next === "in") === onWifi;
+            if (next !== (p.state || "") && !bothAgree) next = p.state || "";
         }
+        const locationSays = dist <= p.radius ? "in" : dist > p.radius + Math.max(50, slack) ? "out" : "";
         if (next !== (p.state || "")) {
             await HomeSettings.updateOne({ owner }, { $set: { [`places.${i}.state`]: next } });
             if (!p.state) continue;                                   // first sighting: no message
             sendState = next; eventAt = Number(loc.at) || now;
         }
-        if (!sendState && TEST_EVERY_MINUTE && p.state) { sendState = p.state; eventAt = now; }   // TEST
+        if (!sendState && TEST_EVERY_MINUTE && p.state && locationSays === p.state && bothAgree) { sendState = p.state; eventAt = now; }   // TEST
         if (!sendState) { if (p.pending && p.pending.state) await HomeSettings.updateOne({ owner }, { $unset: { [`places.${i}.pending`]: 1 } }); continue; }
         const arrive = sendState === "in";
         // The time window is judged at the moment the phone actually crossed the circle (its fix), not when the report finally arrived.
