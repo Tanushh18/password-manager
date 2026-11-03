@@ -89,6 +89,16 @@ export class ApiError extends Error {
 
 const isDown = (status) => status === 0 || status === 502 || status === 503 || status === 504;
 
+/** Why one server did not answer, in a few words: "no connection or DNS", "timed out after 25 s", "HTTP 503". */
+function reasonOf(res, timeoutMs) {
+  if (res.status) return `HTTP ${res.status}`;
+  const e = res.error;
+  if (e && (e.name === "AbortError" || /abort/i.test(String(e.message)))) return `no answer in ${Math.round((timeoutMs || TIMEOUT_MS) / 1000)} s`;
+  const text = String((e && e.message) || "").replace(/\s+/g, " ").trim();
+  return text ? `no connection (${text.slice(0, 60)})` : "no connection";
+}
+const hostOf = (url) => String(url).replace(/^https?:\/\//, "").replace(/\.onrender\.com.*$/, "").replace(/^password-manager-server-/, "");
+
 async function once(base, path, { method = "GET", body, auth = true, timeout = TIMEOUT_MS } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -122,10 +132,12 @@ async function once(base, path, { method = "GET", body, auth = true, timeout = T
 
 export async function request(path, options = {}) {
   let last = null;
+  const attempts = [];
   for (let tries = 0; tries < SERVERS.length; tries += 1) {
     const index = (active + tries) % SERVERS.length;
     const res = await once(SERVERS[index], path, options);
     last = res;
+    if (isDown(res.status)) attempts.push(`${hostOf(SERVERS[index])}: ${reasonOf(res, options.timeout)}`);
     if (!isDown(res.status)) {
       active = index;
       if (res.status >= 200 && res.status < 300) return res.data;
@@ -138,10 +150,12 @@ export async function request(path, options = {}) {
     // Token/session lives on one server; only fail over for unauthenticated calls
     // or when every server shares the same database (they do in our Render setup).
   }
-  throw new ApiError(
-    "Can't reach the vault right now. The free server may be waking up — try again in a moment.",
+  const err = new ApiError(
+    `Can't reach the vault right now. The free server may be waking up — try again in a moment.${attempts.length ? `\n${attempts.join("\n")}` : ""}`,
     last?.status || 0
   );
+  err.attempts = attempts;
+  throw err;
 }
 
 async function onceBytes(base, path, bytes, timeout) {
@@ -181,9 +195,9 @@ export async function requestBytes(path, bytes, { timeout = 90000 } = {}) {
 
 export const api = {
   health: () => request("/health", { auth: false, timeout: 15000 }),
-  login: (body) => request("/login", { method: "POST", body: { ...body, client: "mobile" }, auth: false }),
+  login: (body) => request("/login", { method: "POST", body: { ...body, client: "mobile" }, auth: false, timeout: 45000 }),
   register: (data) => request("/register", { method: "POST", body: data, auth: false }),
-  me: () => request("/authenticate"),
+  me: () => request("/authenticate", { timeout: 45000 }),
   vaultChanges: (since) => request(`/vault/changes${since ? `?since=${encodeURIComponent(since)}` : ""}`, { timeout: 30000 }),
   logout: () => request("/logout"),
 
