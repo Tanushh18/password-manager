@@ -206,8 +206,9 @@ object CameraWatch {
         val p = provider ?: return
         if (bound) return
         val selector = when {
-            safeHas(p, CameraSelector.DEFAULT_BACK_CAMERA) -> CameraSelector.DEFAULT_BACK_CAMERA
+            // The front (selfie) camera first: the tablet stands facing the room. The back camera is only the fallback.
             safeHas(p, CameraSelector.DEFAULT_FRONT_CAMERA) -> CameraSelector.DEFAULT_FRONT_CAMERA
+            safeHas(p, CameraSelector.DEFAULT_BACK_CAMERA) -> CameraSelector.DEFAULT_BACK_CAMERA
             else -> { error = "This device has no camera"; return }
         }
         val a = ImageAnalysis.Builder()
