@@ -22,7 +22,9 @@ class Prefs(ctx: Context) {
     /** Both servers, the one that worked last first. */
     val servers: List<String>
         get() {
-            val all = listOf(server, server2).filter { it.startsWith("https://") }.distinct()
+            // The built-in addresses always come after the saved ones: an address saved by an older version of the app (say, only the old
+            // server) must never hide the current servers. The one that answered last is tried first.
+            val all = listOf(server, server2, com.tanush.stashr.tv.BuildConfig.DEFAULT_SERVER, com.tanush.stashr.tv.BuildConfig.DEFAULT_SERVER2).filter { it.startsWith("https://") }.distinct()
             return if (good in all) listOf(good) + all.filter { it != good } else all
         }
 
