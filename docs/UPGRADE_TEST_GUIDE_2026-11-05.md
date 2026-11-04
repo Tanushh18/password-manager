@@ -1,0 +1,168 @@
+# Upgrade test guide: 2026-11-05
+
+Yeh doc batata hai ki is baar Stashr mein kya upgrade hua aur kal tumhe kya test karna hai. Do hisse hain:
+
+- **Part A:** tablet Hub (naya assistant UI, Home + Apps, screen band), TV launcher aur notification, WhatsApp message, website.
+- **Part B:** location tracking, Telegram, battery sync, camera health, tablet screen off.
+
+Sab kuch `main` par hai. Android apps (Hub, TV, Location, Cast) GitHub ke release ke baad server se khud update hoti hain. Jo "verified" likha hai woh asli device par dekha gaya; "not verified" ka matlab sirf code likha hai.
+
+**Kal ka sabse pehle ka checklist (5 minute):**
+1. Tablet par Hub kholo: Home page par mausam, who's home, TV aaye. Kisi aur app se Home dabao: Hub wapas aaye.
+2. TV on karo, video chalao, TV Settings > Test on-screen message: patti video ke upar dikhe.
+3. Telegram par `/who` aur `/coming` bhejo: sach batayein (ghar se bahar ho to "Out" dikhe).
+4. Website > Smart home > Devices: "Linked now" list dekho, purani entries par Disconnect.
+
+---
+
+## Part A: Tablet Hub, TV, WhatsApp, website
+
+Yeh hissa batata hai ki tablet Hub, TV, WhatsApp aur website par kya badla, aur kal kaise test karna hai.
+"Verified" ka matlab maine asli device par dekha. "Not verified" ka matlab sirf code likha hai.
+
+### 1. Tablet Hub: naya assistant hub UI  (verified on the tablet)
+- Dark glass design, Stashr ka teal background (har ~1 second mein ek baar redraw, battery ke liye).
+- Baayein taraf rail: **Home, Updates, Control, Settings**, aur neeche baayein **Apps** button.
+- **Yeh tablet ka permanent home screen hai.** Tablet ka Home button isi ko kholta hai (Stashr Hub ko Home app chuna gaya hai; `adb shell cmd package set-home-activity com.tanush.stashr.hub/.ui.DashboardActivity`). Back dabane se yeh band nahi hota.
+- **Apps button:** pinned apps (Settings, WhatsApp, YouTube, YT Music) aur Slideshow/Today. "All apps" se tablet ki saari apps; kisi app par dabaye rakho to pin/unpin. Back se wapas Home.
+- **Home:** greeting, bada ghadi, mausam, "Connected · reported …" chip, **Ask Stashr** (mic, type, suggestion buttons), Scenes, Who is home (avatars), TV card + chhote TV buttons.
+- **Updates:** What happened (timeline), TV time + internet speed, **Tablet health** (battery, Wi-Fi, camera, voice, Hub version), Today's news.
+- **Control:** TV remote (prev, play/pause, next, volume, mute, TV home, Back, Netflix/YouTube/Prime/JioHotstar), Scenes, **Screen off now**, Photo, Live camera, Slideshow, Speed test, Today's news, 4 quick switches.
+- **Settings:** status, Check list, fullscreen, Check for update, Unpair, WhatsApp setup.
+- Har button wahi sentence bhejta hai jo assistant pehle se samajhta hai, isliye server par kuch naya nahi chahiye.
+
+**Kal test karo:**
+1. Hub kholo. Home par mausam, who's home aur TV dikhna chahiye.
+2. "Who is home" chip dabao: jawab "Home: … Out: …".
+3. Control > Quiet scene dabao: neeche "Quiet: sent 1 command." aana chahiye.
+4. Control > Live camera: neeche "Live view is on for 2 minutes". Website par Smart home > Camera mein dikhna chahiye.
+5. Control > **Screen off now**: screen 3-4 second mein band.
+6. Kisi bhi app (jaise Settings) mein jao, Home dabao: Hub ka Home page khulna chahiye.
+7. Home > neeche baayein **Apps**: Pinned apps dikhein, "All apps" dabao to saari apps, ek app dabao to khule.
+
+### 2. Screen band rakhna (battery)  (verified)
+- Hub ka dashboard ab screen ko hamesha on nahi rakhta. Screen tablet ke apne timeout se sleep hoti hai. Camera, voice aur live view screen band hone par bhi chalte hain.
+- WhatsApp message ya announcement ke baad (agar screen pehle band thi) screen wapas band ho jaati hai. Tablet use kar rahe ho to lock nahi hota.
+- Control > Quick switches > "Keep the screen off" se band/on kar sakte ho.
+- `scripts/install-home-devices.sh` ab tablet ko "charge hote waqt screen on" nahi karti (pehle karti thi, jo battery bachat se takrata tha).
+- Zaroori: tablet ka lock **None ya Swipe** ho, aur Hub ki **Accessibility** on ho.
+
+**Kal test karo:** tablet ko 1-2 minute chhod do. Screen khud sleep honi chahiye. Phir website se kuch bhejo (jaise WhatsApp test) aur dekho ki kaam ke baad screen wapas band ho.
+**Not verified:** WhatsApp message ke baad screen ka wapas band hona (asli message bhejna padta).
+
+### 3. WhatsApp message automation  (user ne "worked" kaha)
+- Naye WhatsApp mein chat ki row "clickable" nahi dikhti. Ab Hub us par asli tap karta hai, aur group nahi chuna gaya to 3 baar dobara koshish karta hai.
+- Send ke do steps ho sakte hain (chat patti, phir preview). Hub dono ka intezaar karta hai aur ek hi button 1.5 second mein do baar nahi dabata.
+- Website par test: Smart home > Automations > "Places and WhatsApp messages" > place banao > **Send test**.
+
+**Kal test karo:** place banao (office, radius 150 m, group ka naam, "Reached office"), Send test dabao. Tablet par WhatsApp khulke message jana chahiye, group mein "Reached office".
+
+### 4. TV: naya launcher, notification, Live location  (verified on the TV)
+- Naya design: ghadi, mausam/news/family cards, teen rows (**Entertainment**: Netflix, Prime, JioHotstar, YouTube, YouTube Music; **News**: NDTV, ABP, News18, CNBC; **Stashr TV**: Family location, Show phone on TV, Stashr settings), patle icons.
+- Upar chaar buttons: Wi-Fi, Bluetooth, **Live location (pin)**, Settings; USB drive lagi ho to uska naam.
+- **On-screen notice** kisi bhi app ke upar aata hai (YouTube video par dekha). TV Settings mein **Test on-screen message** button hai.
+- Server se notice bhi TV tak pahuncha (website login se "notify" command bheja, ~11 second mein screen par aaya).
+- Arrival notices ab 15, 10, 5, 3, 2, 1 minute par aate hain (pehle sirf 15 aur 5).
+- TV ko server se link karne ke liye home-device code chahiye (website > Smart home > Link the home tablet or TV).
+
+**Kal test karo:**
+1. TV on karo, video chalao. Settings > Test on-screen message dabao. Patti video ke upar 12 second dikhni chahiye.
+2. Header ka pin dabao: Live location khulna chahiye.
+3. Asli arrival: phone ghar ki taraf aaye to TV par "X is arriving in N mins" dikhna chahiye (TV on aur screen on ho).
+**Not verified:** asli phone se arrival ka poora raasta.
+
+### 5. Website  (verified on the site)
+- **Linked now** list: "Link the home tablet or TV" ke neeche, har tablet/TV/phone online-offline ke saath, aur tablet/TV ke liye **Disconnect**.
+- **Remove/Disconnect/New code buttons** pehle chup-chaap fail hote the (ek bug). Theek kiya.
+- Servers: `g305` pehle, `xxdr` fallback (xxdr Render par band hai; Resume karna ho to Render dashboard).
+
+**Kal test karo:** Smart home > Devices > Link the home tablet or TV > Linked now. Purani entries par **Disconnect** dabao (asli "Living room TV" aur "Home tablet Hub" mat hatana, jo online hai).
+
+### 6. Ek logo har jagah  (verified for TV and website)
+- Hub, TV, Location, Cast ke launcher icons ab Stashr ka wahi logo hain jo website aur mobile app mein hai.
+
+### 7. Install / update kaise hota hai
+- Hub, TV, Location, Cast ke naye build `main` par push hote hi GitHub banata hai. Ye apps server se khud update le leti hain (Android ek baar tap maang sakta hai).
+- Tablet ya TV par `adb` se lagana ho: `scripts/install-home-devices.sh --tablet usb` ya `--tv auto`.
+
+### Known gaps
+- Asli arrival (phone location se "arriving in 15 mins" ka poora raasta) maine nahi chalaya.
+- WhatsApp ke baad screen ka wapas band hona asli message ke saath test nahi hua.
+- Hub ka debug build asli (signed) Hub ke upar install nahi hota; test ke liye alag package chahiye.
+- Who is home mein agar ek hi insaan ke do phone hain to dono naam poore dikhte hain ("Tanush F21", "Tanush Oppo A38").
+
+### CI / tests jo theek kiye
+- `link.test.js`: do-ank ke number ko poore JSON text mein dhundhta tha, isliye kabhi-kabhi fail hota tha. Ab sirf `number` field dekhta hai.
+- `homeMore.test.js` (place + time window): raat 00:00-01:00 (IST) mein fail hota tha. Ab window ghante door rakhi hai aur `strictWindow` on hai.
+
+---
+
+## Part B: Location tracking, Telegram aur battery
+
+
+## Kya upgrade hua (simple Hinglish mein)
+
+### 1. "Ghar par hain" ab sach bolta hai (/who, /coming, website)
+- Pehle: koi ghar se nikal jaye to bhi Wi-Fi ki purani report ki wajah se 15 se 30 minute tak "ghar par" dikhta tha, aur `/coming` "sab ghar par hain" jaisa bol deta tha.
+- Ab: **Wi-Fi aur location dono** milkar tay karte hain.
+  - Phone ka taza location (12 minute se purana nahi) ghar ke circle ke andar hai to ghar par; bahar hai to bahar, chahe laptop jaisa koi device ghar ke Wi-Fi par ho.
+  - Phone ghar ke Wi-Fi par khud dikh raha ho to ghar par (jab tak location 2 km se door na ho).
+  - Location purani ho aur Wi-Fi bhi na dikhe to "location update nahi hua" likhta hai, "sab ghar par hain" nahi.
+- `/who`: "Out: Papa (6 km away, updated 3 min ago)". `/coming`: "Papa bahar hain, 6 km door (3 min pehle update)" ya "Papa 11 minute mein aa rahe hain".
+
+### 2. Saath chalne wale phone ek gine jate hain
+- Do phone 250 m ke andar saath hon (aur dono ghar se bahar) to sirf **major phone** (jo pehle link hua) ka update aata hai: "Papa (with Mom) is arriving in 10 mins".
+- 400 m se door hote hi dono ke alag updates. Agar major phone ka location purana ho to dusre phone ko jodta nahi.
+- Ghar pahunchne par bhi ek hi "Open the door: Papa (with Mom) arrived home".
+
+### 3. Battery ke hisaab se sync
+- Phone charging mein ya 60% se upar: jaldi poochta hai (ghar par ~6 minute, bahar ~6 minute).
+- 40-60%: normal. 20-40%: dheere. 20% ya kam (charging nahi): bahut dheere.
+- **20% ya kam par**: phone ek baar aakhri sahi location turant bhej deta hai. Server sab ko batata hai (TV, tablet, doosre phone, Telegram): "Papa's phone battery is 19%. Location may stop soon. Last location: 4.1 km from home, just now."
+- Phone 45 minute chup rahe aur battery <= 20% ho to: "Papa's location stopped (battery 18%). Last seen ... " (har 6 ghante mein ek baar).
+- Website par aisa phone "Location stopped (battery low) - last seen 4 km from home, 50 min ago" dikhata hai.
+
+### 4. Ghar chhodna / pahunchna turant pakadna
+- Phone ab Wi-Fi jude/hate to khud turant naya location bhejta hai (battery low ho to nahi). Isse "ghar se nikla" 20-30 minute baad nahi, kuch second mein pata chalta hai.
+
+### 5. Refresh / Sync location
+- Website: Smart home -> Devices -> Family locations -> **"Refresh location"** button. Telegram: **/locate**.
+- 90 second tak har phone har 8 second mein location bhejta hai. Website har 4 second mein check karti hai aur "Locations are fresh" dikhati hai.
+- Phone ko ye tab pata chalta hai jab woh server se agli baar poochta hai (high battery par 5-6 minute se zyada nahi).
+
+### 6. Time wale place par tez polling (office / ghar WhatsApp message)
+- Agar place par arrive/leave ka time set hai, to us time se 5 minute pehle se time khatam hone tak, aur phone place se 2 km ke andar ho to phone **har 30 second** mein real location bhejta hai, taaki WhatsApp message mein deri na ho.
+- Time ke baahar place ke paas har 5 minute (bina time wale place par har 3 minute). Battery 20% ya kam ho to ye tez polling band.
+
+### 7. Telegram
+- Har command par "typing..." dikhta hai. 2 second se zyada lage to "Working on it..." message aata hai jo jawab aate hi usi message mein badal jata hai. Galti ho to saaf message: "That did not work...". Koi command chup nahi rehta.
+- Shortcuts sort kiye: Home mein `/who`, `/coming`, `/locate`, `/today`, `/phones`, `/devices`... Naye: **/locate** (location refresh), **/screenoff** (tablet screen band, confirmation ke saath).
+- `/devices` mein tablet ke camera ki halat dikhti hai (watching / off / error).
+- /help ya /menu dabane par commands ki list Telegram mein dobara refresh hoti hai.
+
+### 8. Tablet ki screen band karna
+- Website: tablet ke card mein **"Turn screen off"**. Telegram: **/screenoff**. Hub Accessibility ke "lock screen" se screen band karta hai.
+
+### 9. Camera ki health
+- Tablet ke camera ka error (jaise "Allow the camera for Stashr Hub") ab website ke Security camera card mein laal likha dikhta hai, aur Telegram `/devices` mein bhi.
+
+## Kal kaise test karein (checklist)
+
+Pehle: Location app (phone) aur Hub (tablet) naye build par update ho jayein. Android apps GitHub release ke baad server se khud update lete hain; ya `scripts/install-home-devices.sh --phone usb` / `--tablet usb` chalao.
+
+1. **Ghar se nikalna**: phone ka Wi-Fi band karo ya ghar se bahar jao. Dekho: 1-2 minute mein Telegram `/who` mein "Out: <naam> (… km away, … min ago)" aaye, aur `/coming` "bahar hain" bole, "Sab ghar par hain" nahi.
+2. **Refresh**: website par "Refresh location" dabao. Dekho: 1-5 minute mein "Locations are fresh". Telegram par `/locate` bhejo: "Asking the family phones..." jawab aaye.
+3. **Saath chalna**: do phone saath leke ghar ki taraf aao. Dekho: ETA sirf ek hi naam se aaye ("Papa (with Mom) is arriving in N mins"). Ek phone door karo (400 m+): dusre ko alag update mile.
+4. **Battery 20%**: phone ko 20% tak le jao (ya charging hata ke 19% par). Dekho: sab ko "battery is 19%" ka message ek baar. Phone band/airplane mode karke 45 minute ruko: "location stopped" ka message.
+5. **Time wala place**: Office place par arrive ka time set karo (abhi se 10 minute baad). Phone ko office ke 2 km ke andar rakho. Dekho: time se pehle se location har ~30 second mein badal rahi ho (website ya `/who`), aur office pahunchte hi WhatsApp message turant jaye.
+6. **Telegram typing**: koi bhi command bhejo (jaise `/status`). Dekho: "typing..." nishan; dheere command par "Working on it..." jo jawab mein badal jaye.
+7. **Screen off**: website par tablet ke card mein "Turn screen off" dabao, ya Telegram `/screenoff` bhejke Confirm dabao. Tablet ki screen sleep ho jani chahiye (Hub ki Accessibility on honi chahiye).
+8. **Camera error**: tablet ka camera permission band karo, website ke Security camera card mein laal error aana chahiye.
+
+## Jo abhi pakka nahi / known gaps
+
+- Phone ko "abhi location bhejo" kehne ke liye push notification (FCM) nahi hai. Refresh ka asar phone ke agle check par hi dikhta hai (charged phone par kuch minute).
+- Phone ke 30 second ke check WorkManager se chalte hain; Android Doze mein thodi der late kar sakta hai.
+- Phone-app ke naye hisse (Wi-Fi trigger, 20% par aakhri location) ka logic unit test hua hai, par asli phone par chalke maine nahi dekha.
+- Tablet ka "screen off" asli tablet par maine test nahi kiya (Accessibility chahiye, Android 9+).
+- Telegram ka typing nishan asli bot par dekhna baaki hai; tests mein sirf API calls check hui hain.
