@@ -511,11 +511,11 @@ async function tickOwner(owner, now = Date.now()) {
     // 6. The morning brief and the weekly report.
     if (settings.brief && settings.brief.enabled && settings.brief.time === local.hhmm && settings.brief.lastSent !== local.date && await claim(`brief:${owner}:${local.date}`)) {
         await HomeSettings.updateOne({ owner }, { $set: { "brief.lastSent": local.date } });
-        await sendTelegram(owner, await briefText(owner, settings, now));
+        await require("./homeReport").sendReport(owner, { hours: 24, now });
     }
     if (settings.weekly && settings.weekly.enabled && local.weekday === 0 && local.hhmm === "20:00" && settings.weekly.lastSent !== local.date && await claim(`weekly:${owner}:${local.date}`)) {
         await HomeSettings.updateOne({ owner }, { $set: { "weekly.lastSent": local.date } });
-        await sendTelegram(owner, await weeklyText(owner, settings, now));
+        await require("./homeReport").sendReport(owner, { hours: 168, now });
     }
 }
 
@@ -557,4 +557,4 @@ const DEFAULT_SCENES = [
     { id: "goodnight", name: "Good night", steps: [{ kind: "tv", type: "media", args: { action: "play_pause" } }, { kind: "tv", type: "key", args: { key: "HOME" } }] }
 ];
 
-module.exports = { localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, movieNightOn, localKeyOf, autoCamera, geoTick, needsWifi, distanceM, etaTick, announce, whereIs, checkInterval, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };
+module.exports = { houseSummary, localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, movieNightOn, localKeyOf, autoCamera, geoTick, needsWifi, distanceM, etaTick, announce, whereIs, checkInterval, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };

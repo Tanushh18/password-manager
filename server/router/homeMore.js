@@ -574,9 +574,9 @@ router.put("/home/devices/:id/person", authenticate, writeLimiter, async (req, r
 router.post("/home/brief/test", authenticate, writeLimiter, async (req, res) => {
     try {
         const s = await automation.settingsOf(req.rootUser._id);
-        const text = req.body && req.body.which === "weekly" ? await automation.weeklyText(req.rootUser._id, s) : await automation.briefText(req.rootUser._id, s);
-        const sent = await automation.sendTelegram(req.rootUser._id, text);
-        return res.json({ sent, text });
+        const weekly = req.body && req.body.which === "weekly";
+        const sent = await require("../utils/homeReport").sendReport(req.rootUser._id, { hours: weekly ? 168 : 24 });
+        return res.json({ sent });
     } catch (e) { return fail(res, e, "Could not make the brief."); }
 });
 
