@@ -135,7 +135,7 @@ setup_tablet() {
   for p in CAMERA RECORD_AUDIO POST_NOTIFICATIONS; do dsh pm grant "$pkg" "android.permission.$p" 2>/dev/null || true; done
   dsh appops set "$pkg" SYSTEM_ALERT_WINDOW allow 2>/dev/null || true       # announcements over other apps
   dsh dumpsys deviceidle whitelist "+$pkg" >/dev/null 2>&1 || true          # no battery optimisation
-  dsh settings put global stay_on_while_plugged_in 3 2>/dev/null || true    # screen stays on while charging
+  dsh settings put global stay_on_while_plugged_in 0 2>/dev/null || true    # the Hub lets the screen sleep (battery); it wakes the screen itself when it has work
   dsh monkey -p "$pkg" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
   echo "Tablet done. On the tablet: type the home-device code from the website (Smart home -> Devices -> Link the home tablet or TV)."
   echo "WhatsApp messages need Accessibility on (Hub dashboard -> WhatsApp messages) and a tablet lock of None/Swipe."

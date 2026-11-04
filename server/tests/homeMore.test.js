@@ -365,9 +365,12 @@ describe("places and WhatsApp", () => {
         const all = (await devices(auth)).devices;
         const hubId = all.find((d) => d.kind === "hub").id, phoneId = all.find((d) => d.kind === "phone").id;
         const owner = (await HomeDevice.findById(hubId)).owner;
+        // The leave window is a few hours from now, so it never contains the moment the test runs (a fixed 00:00-01:00 window made the test fail every night in that hour).
+        const nowMin = automation.localParts(Date.now(), "Asia/Kolkata").minutes;
+        const hhmm = (m) => { const x = ((m % 1440) + 1440) % 1440; return String(Math.floor(x / 60)).padStart(2, "0") + ":" + String(x % 60).padStart(2, "0"); };
         const bad = await request(app).put("/home/places").set(auth).send({ places: [{ name: "Office", lat: 91, lon: 77, radius: 150, phone: phoneId }] });
         expect(bad.status).toBe(400);
-        const ok = await request(app).put("/home/places").set(auth).send({ places: [{ name: "Office", lat: 28.6139, lon: 77.209, radius: 150, phone: phoneId, group: "Office team", arriveText: "Reached office", leaveText: "Leaving office", arriveFrom: "00:00", arriveTo: "23:59", leaveFrom: "00:00", leaveTo: "01:00" }] });
+        const ok = await request(app).put("/home/places").set(auth).send({ places: [{ name: "Office", lat: 28.6139, lon: 77.209, radius: 150, phone: phoneId, group: "Office team", arriveText: "Reached office", leaveText: "Leaving office", arriveFrom: "00:00", arriveTo: "23:59", leaveFrom: hhmm(nowMin + 180), leaveTo: hhmm(nowMin + 240), strictWindow: true }] });
         expect(ok.status).toBe(200);
         const at = async (lat, lon, when) => { await HomeDevice.updateOne({ _id: phoneId }, { $set: { "status.location": { lat, lon, acc: 20, at: when } } }); await automation.tickOwner(owner, when); };
         const cmds = async () => (await HomeDevice.findById(hubId).lean()).commands.filter((c) => c.type === "send_whatsapp").map((c) => c.args.text);
@@ -380,9 +383,8 @@ describe("places and WhatsApp", () => {
         await at(28.6139, 77.209, t0 + 120_000);     // still there: nothing new
         expect(await cmds()).toEqual(["Reached office"]);
         await HomeDevice.updateOne({ _id: hubId }, { $set: { lastSeen: new Date(t0 + 180_000), online: true } });   // the tablet is still reporting at the time the test pretends it is
-        await at(28.7, 77.3, t0 + 180_000);          // leaves, but the leave window (00:00-01:00) is not now unless it is that hour
-        const local = automation.localParts(t0 + 180_000, "Asia/Kolkata").minutes;
-        expect((await cmds()).length).toBe(local < 60 ? 2 : 1);
+        await at(28.7, 77.3, t0 + 180_000);          // leaves, but the leave window is hours away: no message
+        expect(await cmds()).toEqual(["Reached office"]);
     });
 });
 
