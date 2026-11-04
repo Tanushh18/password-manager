@@ -312,10 +312,16 @@ async function etaTick(owner, now, settings, devices) {
         if (old.locAt !== Number(loc.at)) next.still = old.d !== undefined && Math.abs(d - old.d) < 80 ? Math.min((old.still || 0) + 1, 20) : 0;
         if (newFix) {
             const dt = old.locAt ? (Number(loc.at) - old.locAt) / 1000 : 0;
-            let coming = Boolean(old.coming);
-            if (atHome) coming = false;
-            else if (old.d !== undefined && d < old.d - 30) coming = true;
-            else if (old.d !== undefined && d > old.d + 100) coming = false;
+            // "Coming home" needs a real trip, not GPS wobble at the office: at least two closer fixes in a row AND either the
+            // phone's own speed above walking pace or 400 m closed in total. A phone that is standing still is never coming.
+            let coming = Boolean(old.coming), approach = old.approach || 0, approachM = old.approachM || 0;
+            if (atHome) { coming = false; approach = 0; approachM = 0; }
+            else if (old.d !== undefined && d < old.d - 30) { approach += 1; approachM += old.d - d; }
+            else if (old.d !== undefined && d > old.d + 100) { coming = false; approach = 0; approachM = 0; }
+            const moving = Number(loc.speed) >= 2.5 || approachM >= 400;
+            if (!atHome && !coming && approach >= 2 && moving) coming = true;
+            if (coming && (next.still || 0) >= 2 && !(Number(loc.speed) >= 2.5)) { coming = false; approach = 0; approachM = 0; }
+            next.approach = approach; next.approachM = approachM;
             let v = Number(loc.speed) > 2 ? Number(loc.speed) : (old.d !== undefined && dt > 20 && old.d - d > 0 ? (old.d - d) / dt : 0);
             if (!(v > 1.5)) v = 7;                                        // 25 km/h
             v = Math.min(Math.max(v, 4), 25);
@@ -332,7 +338,7 @@ async function etaTick(owner, now, settings, devices) {
                 }
             }
         }
-        if (next.coming && fresh && !atHome) {
+        if (next.coming && now - Number(loc.at) < 10 * 60 * 1000 && !atHome) {
             const hit = milestones.filter((m) => next.minutes <= m && !(next.fired || []).includes(m));
             if (hit.length && await claim(`eta:${owner}:${key}:${Math.min(...hit)}:${Math.floor(now / (20 * 60000))}`)) {
                 next.fired = [...new Set([...(next.fired || []), ...hit])];
@@ -451,13 +457,6 @@ async function tickOwner(owner, now = Date.now()) {
     const devices = await HomeDevice.find({ owner }).lean();
     const tvs = devices.filter((d) => d.kind === "tv");
     const tvOn = (d) => Boolean(d.online) && home.isOnline(d, now) && (d.status || {}).screen !== "off";
-
-    // 0. Devices that stopped reporting (power cut, Wi-Fi gone, app closed): flag them offline once and tell Telegram.
-    for (const d of devices) {
-        if (!d.online || home.isOnline(d, now)) continue;
-        const r = await HomeDevice.updateOne({ _id: d._id, online: true }, { $set: { online: false } });
-        if (r.modifiedCount) await record({ owner, device: d._id, deviceName: d.name, kind: "offline", notify: true, text: `⚠️ ${d.name} disconnected (no signal since ${new Date(d.lastSeen).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz })})` });
-    }
 
     // 1. TV time: a minute for every minute a TV screen is on, by app.
     if (tvs.some(tvOn) && await claim(`usage:${owner}:${minuteKey}`)) {

@@ -22,7 +22,16 @@ const DIGEST_CHOICES = [5, 10, 15, 30, 60];
 const MODES = ["ask", "alerts", "timer"];
 /* When the bot messages on its own. Timed updates are off unless chosen ("timer"); older settings count as "alerts". */
 const modeOf = (s) => (MODES.includes(s?.updates) ? s.updates : "alerts");
-const COMMANDS = [["status", "Everything in one message"], ["servers", "Every server and its health"], ["incidents", "Open incidents"], ["projects", "Your projects"], ["project", "One project: /project name"], ["updates", "When I message you on my own"], ["home", "Control the house: /home pause the tv"], ["who", "Who is home"], ["camera", "/camera photo, on, off, clip, live"], ["today", "Today at home"], ["menu", "Show the buttons"], ["pass", "A password: /pass name PIN"], ["help", "What I can do"]];
+const COMMANDS = [["status", "Everything in one message"], ["report", "Full home report now"], ["who", "Who is home"], ["coming", "Who is on the way home"], ["photo", "Camera: take a photo now"], ["clip", "Camera: record a clip and send it"], ["watch", "Camera alerts on"], ["unwatch", "Camera alerts off"], ["live", "Camera live view"], ["pause", "Pause the TV"], ["play", "Play the TV"], ["next", "TV: next"], ["prev", "TV: previous"], ["mute", "TV: mute"], ["volume", "TV volume: /volume 30"], ["tvhome", "TV home screen"], ["netflix", "Open Netflix on the TV"], ["youtube", "Play on the TV: /youtube song"], ["music", "Play on the tablet: /music song"], ["scene", "Run a scene: /scene movie night"], ["speed", "Internet speed test"], ["scan", "Scan the Wi-Fi"], ["devices", "All devices and batteries"], ["events", "Last 10 things that happened"], ["week", "7-day report"], ["servers", "Every server and its health"], ["incidents", "Open incidents"], ["projects", "Your projects"], ["project", "One project: /project name"], ["updates", "When I message you on my own"], ["home", "Control the house: /home pause the tv"], ["today", "Today at home"], ["menu", "Show the buttons"], ["pass", "A password: /pass name PIN"], ["help", "What I can do"]];
+/* Shortcuts: a command becomes a sentence for the home assistant. */
+const SHORTCUTS = {
+  who: () => "kaun ghar par hai", coming: () => "kab aayenge", today: () => "today updates",
+  photo: () => "camera photo", clip: () => "camera clip", watch: () => "camera on", unwatch: () => "camera off", live: () => "camera live",
+  pause: () => "pause the tv", play: () => "play the tv", next: () => "next", prev: () => "previous", mute: () => "mute the tv",
+  volume: (a) => (a.length ? "volume " + a.join(" ") : ""), tvhome: () => "tv home", netflix: () => "open netflix",
+  youtube: (a) => (a.length ? a.join(" ") + " song on tv" : ""), music: (a) => (a.length ? "play " + a.join(" ") + " song" : ""),
+  scene: (a) => a.join(" "), speed: () => "speed test", scan: () => "scan wifi", sync: () => "sync movies", camera: (a) => "camera " + a.join(" "), tv: (a) => a.join(" ") + " tv"
+};
 const setCommands = (token) => tg(token, "setMyCommands", { commands: COMMANDS.map(([command, description]) => ({ command, description })) });
 
 async function tg(token, method, body) {
@@ -296,9 +305,16 @@ async function handleUpdate(hookId, secret, update) {
     if (!cmd && pend?.kind === "name") return void (await startPassword(user, state, text));
     if (cmd && cmd !== "pass" && pend) await setPending(user, state, null);
     if (cmd === "start" || cmd === "help" || cmd === "menu") return void (await send(token, chatId, T.HELP, { reply_markup: T.MENU_KEYBOARD }));
-    if (cmd === "home" || cmd === "who" || cmd === "camera" || cmd === "today" || cmd === "tv" || !cmd) {
-      const sentence = cmd === "who" ? "kaun ghar par hai" : cmd === "today" ? "today updates" : cmd === "camera" ? "camera " + args.join(" ") : cmd === "tv" ? args.join(" ") + " tv" : cmd ? args.join(" ") : text;
-      if (cmd && !sentence.trim()) return void (await send(token, chatId, "Say what to do, e.g. /home pause the tv, /camera photo, /who, /today."));
+    if (cmd === "report" || cmd === "week") {
+      await send(token, chatId, "📊 Building your report…");
+      const ok = await require("./homeReport").sendReport(user._id, { hours: cmd === "week" ? 168 : 24 });
+      return void (ok || await send(token, chatId, "⚠️ Could not build the report right now."));
+    }
+    if (cmd === "events") return void (await send(token, chatId, await eventsText(user)));
+    if (cmd === "devices" || cmd === "phones") return void (await send(token, chatId, await devicesText(user, cmd === "phones")));
+    if (cmd === "home" || SHORTCUTS[cmd] || !cmd) {
+      const sentence = cmd === "home" ? args.join(" ") : cmd ? SHORTCUTS[cmd](args) : text;
+      if (cmd && !sentence.trim()) return void (await send(token, chatId, cmd === "scene" ? "Which scene? e.g. /scene movie night" : "Say what to do, e.g. /home pause the tv, /photo, /who, /volume 30."));
       const said = await homeSay(user, sentence);
       if (said) return void (await send(token, chatId, said));
       if (!cmd) return void (await send(token, chatId, T.HELP, { reply_markup: T.MENU_KEYBOARD }));
@@ -325,6 +341,28 @@ async function handleUpdate(hookId, secret, update) {
  * Stashr Home from Telegram: the same assistant as the website and the tablet's microphone. Returns the reply text,
  * or null when this account has no home devices or the sentence was not understood (the caller then shows the help).
  */
+async function eventsText(user) {
+  const HomeEvent = require("../models/homeEvent");
+  const list = await HomeEvent.find({ owner: user._id }).sort({ at: -1 }).limit(10).lean();
+  if (!list.length) return "Nothing has happened at home yet.";
+  const clock = (at) => new Date(at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
+  return "<b>🕑 Last 10 things at home</b>\n" + list.map((e) => clock(e.at) + " " + T.esc(e.text.slice(0, 100))).join("\n");
+}
+
+async function devicesText(user, phonesOnly) {
+  const HomeDevice = require("../models/homeDevice");
+  const home = require("./home");
+  const list = (await HomeDevice.find({ owner: user._id }).lean()).filter((d) => !phonesOnly || d.kind === "phone");
+  if (!list.length) return "No devices added to Stashr Home yet.";
+  const icon = { tv: "📺", hub: "📟", phone: "📱" };
+  const lines = list.map((d) => {
+    const on = d.kind === "phone" ? Boolean(d.lastSeen) && Date.now() - new Date(d.lastSeen).getTime() < 75 * 60000 : Boolean(d.online) && home.isOnline(d);
+    const b = home.batteryOf(d.status);
+    return `${on ? "🟢" : "⚪"} ${icon[d.kind] || "▫️"} ${T.esc(d.person || d.name)}${b ? ` 🔋${b.pct}%${b.charging ? "⚡" : ""}` : ""}${on ? "" : " — not reporting"}`;
+  });
+  return "<b>" + (phonesOnly ? "📱 Phones" : "🏠 Devices") + "</b>\n" + lines.join("\n");
+}
+
 async function homeSay(user, sentence) {
   const HomeDevice = require("../models/homeDevice");
   if (!await HomeDevice.exists({ owner: user._id })) return null;

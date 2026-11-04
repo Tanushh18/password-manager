@@ -11,7 +11,7 @@ async function sweepOnce(now = Date.now()) {
     for (const d of stale) {
         const res = await HomeDevice.updateOne({ _id: d._id, online: true }, { $set: { online: false } });
         if (res.modifiedCount) {
-            await record({ owner: d.owner, device: d._id, deviceName: d.name, kind: "offline", text: `${d.name} stopped responding`, notify: d.kind === "tv" });
+            await record({ owner: d.owner, device: d._id, deviceName: d.name, kind: "offline", text: `⚠️ ${d.name} disconnected (no signal since ${new Date(d.lastSeen).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })})`, notify: true });
         }
     }
     const cut = new Date(now - COMMAND_WAIT_MS);

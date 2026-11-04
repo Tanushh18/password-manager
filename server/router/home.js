@@ -29,7 +29,7 @@ const HomeSpeed = require("../models/homeSpeed");
 
 const MAX_DEVICES = 20;
 // A family phone reports every 15 minutes (Android does not allow more often in the background).
-const PHONE_ONLINE_MS = 35 * 60 * 1000;
+const PHONE_ONLINE_MS = 75 * 60 * 1000; // the location app checks in as rarely as every 30 min, and phones doze
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: "Too many changes. Slow down." });
 const agentLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, message: "Too many reports." });
 
