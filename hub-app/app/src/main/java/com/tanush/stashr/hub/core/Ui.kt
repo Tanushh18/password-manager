@@ -42,8 +42,8 @@ class Palette(val dark: Boolean) {
 }
 
 /** Small builders so every screen looks the same. */
-class Ui(val ctx: Context) {
-    val c = Palette.of(ctx)
+class Ui(val ctx: Context, dark: Boolean? = null) {
+    val c = if (dark == null) Palette.of(ctx) else Palette(dark)
     fun dp(v: Number) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), ctx.resources.displayMetrics).toInt()
 
     fun rounded(fill: Int, stroke: Int? = null, radius: Number = 12) = GradientDrawable().apply {
@@ -117,6 +117,40 @@ class Ui(val ctx: Context) {
     fun divider() = View(ctx).apply { setBackgroundColor(c.line); layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)) }
 
     fun withAlpha(color: Int, a: Float) = Color.argb((a * 255).toInt(), Color.red(color), Color.green(color), Color.blue(color))
+
+    /* ───── glass look for the assistant hub: see-through white cards on the aurora background ───── */
+
+    fun glass(radius: Number = 22, strong: Boolean = false) =
+        rounded(Color.argb(if (strong) 52 else 30, 255, 255, 255), Color.argb(if (strong) 100 else 60, 255, 255, 255), radius)
+
+    /** A glass card: optional icon + title, optional subtitle, then content added by the caller. */
+    fun glassCard(title: String? = null, subtitle: String? = null, icon: String? = null): LinearLayout = column(12).apply {
+        background = glass(22)
+        setPadding(dp(20), dp(16), dp(20), dp(20))
+        if (title != null) {
+            val head = row(10)
+            if (icon != null) head.addView(android.widget.ImageView(ctx).apply { setImageDrawable(com.tanush.stashr.hub.ui.LineIcon(icon, 0xCCFFFFFF.toInt())); layoutParams = LinearLayout.LayoutParams(dp(22), dp(22)) })
+            head.addView(text(title, 17f, Color.WHITE, bold = true))
+            addView(head)
+        }
+        if (subtitle != null) addView(text(subtitle, 13f, 0xB3FFFFFF.toInt()))
+    }
+
+    /** A round or pill button made of an icon and an optional label, glass-styled, with a clear focus/press state. */
+    fun pill(label: String?, icon: String?, strong: Boolean = false, onClick: () -> Unit) = TextView(ctx).apply {
+        text = label ?: ""; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f); typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        gravity = Gravity.CENTER; isClickable = true; isFocusable = true; contentDescription = label ?: icon
+        if (icon != null) { compoundDrawablePadding = if (label.isNullOrEmpty()) 0 else dp(8); setCompoundDrawablesRelative(com.tanush.stashr.hub.ui.LineIcon(icon).apply { setBounds(0, 0, dp(22), dp(22)) }, null, null, null) }
+        val tint = if (strong) Color.argb(120, 14, 127, 109) else Color.argb(34, 255, 255, 255)
+        background = android.graphics.drawable.StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_pressed), rounded(Color.argb(110, 255, 255, 255), Color.WHITE, 999))
+            addState(intArrayOf(android.R.attr.state_focused), rounded(tint, Color.WHITE, 999))
+            addState(intArrayOf(), rounded(tint, Color.argb(70, 255, 255, 255), 999))
+        }
+        setPadding(dp(if (label.isNullOrEmpty()) 14 else 18), dp(12), dp(if (label.isNullOrEmpty()) 14 else 20), dp(12))
+        minHeight = dp(48)
+        setOnClickListener { onClick() }
+    }
 
     fun fill(v: View, weight: Float = 1f): View { v.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, weight); return v }
 }
