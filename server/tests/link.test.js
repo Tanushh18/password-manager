@@ -65,7 +65,8 @@ describe("link: push approval (phone as a hardware key)", () => {
         const list = (await request(app).get("/link/pending").set(phone)).body.requests;
         expect(list.length).toBe(1);
         expect(JSON.stringify(list)).not.toContain(s.secret);
-        expect(JSON.stringify(list)).not.toContain(s.number);   // the phone is not told the number
+        // the phone is not told the number (checked on the fields: a two-digit number can appear by chance inside an id or a time)
+        expect(list.every((r) => !Object.prototype.hasOwnProperty.call(r, "number") && !Object.values(r).some((v) => v === s.number))).toBe(true);
         const wrong = String((Number(s.number) % 90) + 10);
         expect((await request(app).post(`/link/${s.id}/approve`).set(phone).send({ number: wrong })).status).toBe(400);
         expect((await request(app).post(`/link/${s.id}/approve`).set(phone).send({ number: s.number })).status).toBe(200);
