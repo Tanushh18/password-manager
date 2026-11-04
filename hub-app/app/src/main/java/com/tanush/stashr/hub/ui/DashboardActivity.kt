@@ -570,7 +570,8 @@ class DashboardActivity : Activity() {
                     }
                 }
                 col.addView(av)
-                col.addView(ui.text(p.optString("person").substringBefore(" "), 13f, Color.WHITE, bold = true))
+                // Two phones can share a first name ("Tanush F21", "Tanush Oppo A38"): show the whole name, on up to two lines.
+                col.addView(ui.text(p.optString("person"), 13f, Color.WHITE, bold = true).apply { gravity = Gravity.CENTER; maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END; layoutParams = LinearLayout.LayoutParams(ui.dp(84), ViewGroup.LayoutParams.WRAP_CONTENT) })
                 col.addView(ui.text(if (home) "home" else "out", 11f, if (home) 0xFF7FE8B2.toInt() else 0x99FFFFFF.toInt()))
                 row.addView(col)
             }
