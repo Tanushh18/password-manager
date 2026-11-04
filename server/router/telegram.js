@@ -6,6 +6,7 @@ const bot = require("../utils/telegramBot");
 
 /* Telegram bot: connect / settings for the signed-in user, and the webhook Telegram calls (public, secret-checked). */
 const hookLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, message: "Too many updates." });
+const eventLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: "Too many Telegram events." });
 const fail = (res, error, fallback) => res.status(Number.isInteger(error.status) ? error.status : 500).json({ error: Number.isInteger(error.status) ? error.message : fallback });
 
 router.post("/telegram/webhook/:hookId", hookLimiter, (req, res) => {
@@ -24,6 +25,19 @@ router.post("/telegram/connect", authenticate, async (req, res) => {
 router.put("/telegram/settings", authenticate, async (req, res) => {
   try { return res.json(await bot.updateSettings(req.rootUser, req.body || {})); }
   catch (e) { return fail(res, e, "Could not save."); }
+});
+router.get("/telegram/notifications", authenticate, async (req, res) => {
+  try { res.set("Cache-Control", "no-store"); return res.json({ notifications: await bot.notificationHistory(req.rootUser) }); }
+  catch (e) { return fail(res, e, "Could not read notification history."); }
+});
+router.post("/telegram/events", authenticate, eventLimiter, async (req, res) => {
+  const category = String(req.body?.category || "system").toLowerCase();
+  const title = String(req.body?.title || "").slice(0, 120);
+  const text = String(req.body?.text || "").trim().slice(0, 3000);
+  const allowed = ["system", "servers", "projects", "github", "apps", "vault", "security", "home", "photos", "money", "hosting", "account"];
+  if (!allowed.includes(category) || !text) return res.status(400).json({ error: "A supported category and non-empty text are required." });
+  try { return res.json({ delivered: await bot.notifyEvent(req.rootUser, { category, title, text, html: false, dedupeKey: req.body?.dedupeKey }) }); }
+  catch (e) { return fail(res, e, "Could not deliver the Telegram event."); }
 });
 router.post("/telegram/test", authenticate, async (req, res) => {
   try { return res.json({ sent: await bot.sendTest(req.rootUser) }); }

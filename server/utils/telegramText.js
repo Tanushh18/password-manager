@@ -1,4 +1,5 @@
 /* Pure: Telegram message text for Stashr (HTML parse mode). No I/O. */
+const catalog = require("./telegramCatalog");
 const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const hhmm = (iso, tz) => { const d = new Date(iso || Date.now()); try { return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz || "Asia/Kolkata" }); } catch { return d.toISOString().slice(11, 16); } };
 const host = (u) => String(u || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
@@ -97,24 +98,7 @@ const UPDATE_MODES = {
   timer: "⏱ Alerts + a status update every few minutes"
 };
 
-const HELP = [
-  "<b>Stashr bot</b>",
-  "Use the buttons below the chat box, or:",
-  "/status — everything in one message",
-  "/servers — every server and its health",
-  "/incidents — open incidents",
-  "/projects — your projects",
-  "/project <i>name</i> — one project in detail",
-  "🔑 Passwords (or /pass <i>name</i>) — a saved login. I ask for your PIN; the PIN and the reply both delete themselves",
-  "<b>Home</b> — just write: <i>pause the tv</i>, <i>volume up</i>, <i>kaun ghar par hai</i>, <i>papa kab aayenge</i>. Or use:",
-  "📸 <b>Camera</b>: /photo (photo sent here) · /clip (records a short video and sends it here) · /watch · /unwatch · /live",
-  "📺 <b>TV</b>: /pause · /play · /next · /prev · /mute · /volume 30 · /tvhome · /netflix · /youtube <i>song</i>",
-  "🎵 /music <i>song</i> (on the tablet) · /scene <i>movie night</i> · /speed · /scan",
-  "👪 /who · /coming · /devices · /phones · /events · /today",
-  "📊 /report · /week",
-  "/updates — choose when I message you on my own",
-  "/menu — show the buttons again"
-].join("\n");
+const HELP = catalog.HELP_TEXT;
 
 /** Best matches for a name among items/projects: exact, then starts-with, then contains. */
 function findByName(list, query, field = "name") {

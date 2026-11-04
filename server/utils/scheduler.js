@@ -141,6 +141,10 @@ async function runTick(source = "internal") {
       };
       run.persisted = await persistRun(run);
       last = run;
+      if (status !== "success") {
+        const affected = steps.filter((step) => step.status !== "success").map((step) => step.name + ":" + step.status);
+        await require("./telegramBot").notifySystemEvent({ category: "system", title: "Stashr background scheduler needs attention", text: "Scheduler " + status + ". Affected steps: " + (affected.join(", ") || "unknown") + ". Completed " + completedAt, dedupeKey: "scheduler:" + status + ":" + affected.join(",") + ":" + completedAt.slice(0, 10), html: false }).catch(() => {});
+      }
       return run;
     } finally {
       clearInterval(heartbeat);
