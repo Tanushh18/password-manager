@@ -33,6 +33,8 @@ const COMMANDS = {
     },
     hub: {
         scan_now: () => ({}),
+        // Puts the tablet screen to sleep (the Accessibility lock-screen action), for a tablet that should stay dark.
+        screen_off: () => ({}),
         speed_test: () => ({}),
         check_update: () => ({}),
         // Wake-on-LAN: the tablet sends the magic packet on the home Wi-Fi.
@@ -233,10 +235,32 @@ const TAGS = ["mine", "family", "guest", "unknown"];
  * Who is at home. A person is home when one of their devices answers on the Wi-Fi: a Wi-Fi row you gave that person,
  * or their family phone (paired with Stashr) whose own address is answering on a tablet's scan.
  */
-function presence(hubs, phones, now = Date.now()) {
+/** A location fix older than this is not trusted to say where somebody is now. */
+const FIX_FRESH_MS = 12 * 60 * 1000;
+/** A phone's own Wi-Fi report (its address on the home network) older than this no longer proves it is home. */
+const PHONE_WIFI_MS = 8 * 60 * 1000;
+
+const rad = (x) => (x * Math.PI) / 180;
+function distM(a, b) {
+    const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+    return 2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/**
+ * Who is home, from the Wi-Fi and the phone's location together.
+ *  - a phone that reported its own address on the home network a moment ago is home (unless its fix says it is over 2 km away);
+ *  - otherwise a fresh location fix (12 minutes) decides: inside the circle is home, outside is away, even when the tablet
+ *    still sees another device of that person (a laptop left at home);
+ *  - with no fresh fix, a labelled Wi-Fi device the tablet saw within 15 minutes means home.
+ * Each person comes back with home, by ("wifi", "gps", "wifi+gps" or "") and, when the home spot is known, distanceKm,
+ * fixAt and stale (the phone has not reported a location for a while), so "everyone is home" is only said when it is true.
+ */
+function presence(hubs, phones, now = Date.now(), spot = null) {
     const people = new Map();
-    const touch = (name) => { const k = name.trim(); if (!people.has(k)) people.set(k, { person: k, home: false, lastSeen: 0, devices: [] }); return people.get(k); };
+    const touch = (name) => { const k = name.trim(); if (!people.has(k)) people.set(k, { person: k, home: false, lastSeen: 0, devices: [], wifi: false, by: "" }); return people.get(k); };
     const upIps = new Set();
+    const lanSeen = new Map();          // person -> a labelled Wi-Fi device was up recently
     for (const h of hubs || []) {
         const labels = h.lanLabels || {};
         for (const [key, d] of Object.entries(h.lanBook || {})) {
@@ -246,17 +270,42 @@ function presence(hubs, phones, now = Date.now()) {
             if (!who) continue;
             const p = touch(who);
             p.devices.push((labels[key] && labels[key].label) || d.name || d.ip);
-            if (up) p.home = true;
+            if (up) lanSeen.set(p.person, true);
             p.lastSeen = Math.max(p.lastSeen, d.lastSeen || 0);
         }
     }
+    const gps = new Map();              // person -> "in" | "out" (fresh fixes only)
+    const hasPhone = new Map();
+    const radius = spot && Number.isFinite(Number(spot.radius)) ? Number(spot.radius) : 200;
     for (const ph of phones || []) {
         const s = ph.status || {};
         const p = touch(ph.person || ph.name);
         p.devices.push(ph.name);
-        const recent = ph.lastSeen && now - new Date(ph.lastSeen).getTime() < 30 * 60 * 1000;
-        if (recent && s.wifi && s.ip && upIps.has(s.ip)) p.home = true;
-        if (recent && s.wifi && s.ip && upIps.has(s.ip)) p.lastSeen = Math.max(p.lastSeen, new Date(ph.lastSeen).getTime());
+        hasPhone.set(p.person, true);
+        const seenAt = ph.lastSeen ? new Date(ph.lastSeen).getTime() : 0;
+        const wifiNow = seenAt && now - seenAt < PHONE_WIFI_MS && s.wifi && s.ip && upIps.has(s.ip);
+        if (wifiNow) { p.wifi = true; p.lastSeen = Math.max(p.lastSeen, seenAt); }
+        const loc = s.location;
+        if (spot && Number.isFinite(Number(spot.lat)) && Number.isFinite(Number(spot.lon)) && loc && Number.isFinite(Number(loc.lat)) && Number.isFinite(Number(loc.lon)) && loc.at) {
+            const d = distM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: Number(spot.lat), lon: Number(spot.lon) });
+            const age = now - Number(loc.at);
+            const better = p.fixAt === undefined || Number(loc.at) > p.fixAt;
+            if (better) { p.fixAt = Number(loc.at); p.distanceKm = Math.round(d / 100) / 10; p.distanceM = Math.round(d); }
+            if (age <= FIX_FRESH_MS) {
+                const acc = Math.min(Math.max(Number(loc.acc) || 0, 0), 300);
+                const verdict = d <= radius + Math.min(acc, 100) ? "in" : d > radius + Math.max(120, acc) ? "out" : gps.get(p.person) || "";
+                if (verdict && gps.get(p.person) !== "in") gps.set(p.person, verdict);
+            }
+        }
+    }
+    for (const p of people.values()) {
+        const g = gps.get(p.person), w = p.wifi;
+        if (w && !(g === "out" && p.distanceM > 2000)) { p.home = true; p.by = g === "in" ? "wifi+gps" : "wifi"; }
+        else if (g === "in") { p.home = true; p.by = "gps"; }
+        else if (g === "out") { p.home = false; p.by = "gps"; }
+        else if (lanSeen.get(p.person) && !(hasPhone.get(p.person) && p.fixAt !== undefined && now - p.fixAt <= FIX_FRESH_MS)) { p.home = true; p.by = "wifi"; p.wifi = true; }
+        p.stale = Boolean(hasPhone.get(p.person) && spot && !g && !p.wifi);
+        if (p.fixAt !== undefined) p.fixAgeMin = Math.max(0, Math.round((now - p.fixAt) / 60000));
     }
     return [...people.values()].sort((a, b) => (b.home - a.home) || a.person.localeCompare(b.person));
 }
@@ -269,5 +318,5 @@ function inWindow(minutes, from, to) {
 
 module.exports = {
     ONLINE_MS, LAN_GONE_MS, MAX_COMMANDS, COMMANDS, KINDS, TAGS, RISKY_PORTS, hashToken, newToken, cleanCommand, cleanStatus,
-    cleanHealth, batteryOf, isOnline, lanKey, mergeLan, diffMovies, risksOf, presence, inWindow, okMac, normMac, slug
+    cleanHealth, batteryOf, isOnline, lanKey, mergeLan, diffMovies, risksOf, presence, distM, FIX_FRESH_MS, PHONE_WIFI_MS, inWindow, okMac, normMac, slug
 };

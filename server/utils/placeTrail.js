@@ -63,15 +63,27 @@ function watching(place, mins, pad = 15) {
  * is watched only inside them.
  * -> { near, sec, place }
  */
-function watchFor(places, deviceId, loc, mins) {
+/** A place with an arrive or leave time set: those are the minutes that must not be missed. */
+function hasWindow(place) {
+    return [[place.arriveFrom, place.arriveTo], [place.leaveFrom, place.leaveTo]].some(([a, b]) => minutesOf(a) !== null && minutesOf(b) !== null);
+}
+
+/**
+ * Inside the time of a place that has one (5 minutes ahead of it, to the end of it) and within 2 km of the place, the phone is
+ * asked every 30 seconds with a real fix, so the WhatsApp message goes the moment the circle is crossed. Near the place at other
+ * times it is every 3 minutes (a place without times) or 5 minutes. A phone at 20% battery or less, not charging, is left alone.
+ */
+function watchFor(places, deviceId, loc, mins, batt) {
     if (!loc || !Number.isFinite(Number(loc.lat)) || !Number.isFinite(Number(loc.lon))) return { near: false };
+    if (batt && Number.isFinite(Number(batt.pct)) && Number(batt.pct) <= 20 && batt.charging !== true) return { near: false };
     let best = { near: false };
     for (const p of places || []) {
         if (!p || p.enabled === false || String(p.phone) !== String(deviceId)) continue;
-        if (distanceM({ lat: Number(loc.lat), lon: Number(loc.lon) }, p) > Number(p.radius) + 400) continue;
-        const inWindow = watching(p, mins);
+        const dist = distanceM({ lat: Number(loc.lat), lon: Number(loc.lon) }, p);
+        const timed = hasWindow(p), inWindow = watching(p, mins), tight = timed && watching(p, mins, 5);
+        if (dist > Number(p.radius) + (tight ? 2000 : 400)) continue;
         if (!inWindow && p.strictWindow === true) continue;
-        const sec = inWindow ? 180 : 300;
+        const sec = tight ? 30 : inWindow ? 180 : 300;
         if (!best.near || sec < best.sec) best = { near: true, sec, place: p.name };
     }
     return best;

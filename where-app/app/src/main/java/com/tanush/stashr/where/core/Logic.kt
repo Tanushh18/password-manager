@@ -33,8 +33,13 @@ object Logic {
     const val LIVE_DEFAULT_DELAY_SEC = 8
 
     /** In live mode the server asks for a few seconds: keep it between 5 and 30 s (8 when it says nothing). Otherwise as above. */
-    fun clampDelay(sec: Int?, live: Boolean): Int =
-        if (!live) clampDelay(sec) else if (sec == null || sec <= 0) LIVE_DEFAULT_DELAY_SEC else sec.coerceIn(LIVE_MIN_DELAY_SEC, LIVE_MAX_DELAY_SEC)
+    /** Near a place with an arrive/leave time the server may ask for a check every 30 seconds (otherwise the minimum is 60). */
+    const val PRECISE_MIN_DELAY_SEC = 30
+
+    fun clampDelay(sec: Int?, live: Boolean, precise: Boolean = false): Int =
+        if (live) { if (sec == null || sec <= 0) LIVE_DEFAULT_DELAY_SEC else sec.coerceIn(LIVE_MIN_DELAY_SEC, LIVE_MAX_DELAY_SEC) }
+        else if (precise && sec != null && sec > 0) sec.coerceIn(PRECISE_MIN_DELAY_SEC, MAX_DELAY_SEC)
+        else clampDelay(sec)
 
     fun parseAnswer(json: JSONObject): Answer {
         val notices = ArrayList<Pair<String, String>>()
@@ -100,7 +105,16 @@ object Logic {
     }
 
     /** Battery 15% or less and not charging (not live): look half as often, at most every 30 minutes. */
-    fun lowBattery(pct: Int, charging: Boolean, live: Boolean) = !live && !charging && pct in 0..15
+    /** 20% or less and not charging: the phone is about to stop reporting, so it saves what it has left. */
+    fun lowBattery(pct: Int, charging: Boolean, live: Boolean) = !live && !charging && pct in 0..20
+
+    /** The last location before the battery dies goes out at once, one time per low-battery spell (it starts again after charging or 30%). */
+    fun finalFixDue(pct: Int, charging: Boolean, live: Boolean, alreadySent: Boolean) = lowBattery(pct, charging, live) && !alreadySent
+    fun lowSpellOver(pct: Int, charging: Boolean) = charging || pct >= 30
+
+    const val WIFI_DEBOUNCE_MS = 90_000L
+    /** A Wi-Fi change (left home, came back) asks for a real fix now, unless the battery is low or one just went out. */
+    fun wifiTriggerWorthIt(pct: Int, charging: Boolean, sinceUploadMs: Long) = !lowBattery(pct, charging, false) && sinceUploadMs >= WIFI_DEBOUNCE_MS
     fun batteryDelay(pct: Int, charging: Boolean, live: Boolean, delaySec: Int): Int =
         if (lowBattery(pct, charging, live)) (delaySec * 2).coerceAtMost(MAX_DELAY_SEC) else delaySec
 

@@ -234,6 +234,7 @@ class HubService : LifecycleService() {
                         else startActivity(Intent(this@HubService, SlideshowActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         "Slideshow ${args.optString("action")}"
                     }
+                    "screen_off" -> ScreenGuard.lockNow()
                     "send_whatsapp" -> com.tanush.stashr.hub.whatsapp.WhatsAppSender.send(this@HubService, args.optString("group"), args.optString("text"))
                     "announce" -> {
                         val text = args.optString("text").trim().take(200)

@@ -434,7 +434,7 @@ async function buildDashboardNow(owner) {
     });
     return {
         time: new Date().toISOString(), timezone: s.timezone, weather: w.value, tvs, tvMinutesToday: today,
-        people: home.presence(devices.filter((d) => d.kind === "hub"), devices.filter((d) => d.kind === "phone")),
+        people: home.presence(devices.filter((d) => d.kind === "hub"), devices.filter((d) => d.kind === "phone"), Date.now(), s.homeSpot),
         coming: automation.comingList(s),
         events: events.map((e) => ({ text: e.text, at: e.at })), speed: speed ? { down: speed.down, up: speed.up, ping: speed.ping, at: speed.at } : null,
         scenes: (s.scenes && s.scenes.length ? s.scenes : automation.DEFAULT_SCENES).map((x) => ({ id: x.id, name: x.name, steps: x.steps || [] })),

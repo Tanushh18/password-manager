@@ -33,6 +33,7 @@
 
         <receiver android:name=".work.PassiveReceiver" android:exported="false" />
         <receiver android:name=".work.LiveAlarmReceiver" android:exported="false" />
+        <receiver android:name=".work.NetworkReceiver" android:exported="false" />
         <receiver android:name=".work.BootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

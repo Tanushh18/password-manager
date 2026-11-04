@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, getHomeInsights, saveHomeHistory, deleteHomeHistory, saveHomeSpots, getLocationCode, rotateLocationCode, getHubCode, rotateHubCode, getHomeWhere, saveHomeScenes, runHomeScene,
+  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, getHomeInsights, saveHomeHistory, deleteHomeHistory, saveHomeSpots, getLocationCode, rotateLocationCode, getHubCode, rotateHubCode, getHomeWhere, locateNow, saveHomeScenes, runHomeScene,
   getHomeShare, saveHomeShare, getHomePlaceTrail, getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, getHomeLiveFrame, testHomeBrief, setHomePhonePerson, removeHomeDevice, setHomeSyncPaused
 } from "../../api/client";
 import { Section, useConfirm } from "../Render/RenderUi";
@@ -98,7 +98,7 @@ export function PeopleCard({ people }) {
         <ul className="sh-people">{people.map((p) => (
           <li key={p.person} className={p.home ? "is-home" : ""}>
             <span className="sh-avatar" aria-hidden="true">{p.person.slice(0, 1).toUpperCase()}</span>
-            <div><b>{p.person}</b><span>{p.home ? "Home" : "Out"}{p.lastSeen ? ` · seen ${ago(p.lastSeen)}` : ""} · {p.devices.join(", ")}</span></div>
+            <div><b>{p.person}</b><span>{p.home ? "Home" : p.stale ? "Location not updating" : "Out"}{p.by ? ` (${p.by === "wifi+gps" ? "Wi-Fi + location" : p.by === "gps" ? "location" : "Wi-Fi"})` : ""}{!p.home && p.distanceKm !== undefined ? ` · ${p.distanceKm} km away` : ""}{p.fixAgeMin !== undefined ? ` · location ${p.fixAgeMin < 1 ? "just now" : p.fixAgeMin + " min ago"}` : p.lastSeen ? ` · seen ${ago(p.lastSeen)}` : ""} · {p.devices.join(", ")}</span></div>
           </li>
         ))}</ul>
       ) : <p className="sh-dim">Nobody is set up yet. Open a Wi-Fi device's Name / room and type whose it is.</p>}
@@ -617,6 +617,7 @@ export function CameraCard({ hub, send, home }) {
         : <button className="rd-btn rd-btn--primary" onClick={() => send(hub.id, "camera", { action: "arm" }, "Security camera started. You get a photo and a clip on Telegram when someone moves in view.")}>Start security camera</button>) : null}>
       {hub ? (
         <>
+          {cam.error ? <p className="sh-bad" role="alert">The tablet camera has a problem: {cam.error}. Live view and photos will not work until it is fixed on the tablet (Hub → Health check).</p> : null}
           <p className="sh-dim">While it is on, the tablet watches its camera. When someone moves in view it sends a photo at once, then records while the movement lasts (up to a minute) and sends the clip. Everything is kept here for 14 days. The camera stays closed while it is off.</p>
           <div className="sh-row">
             <button className="rd-btn rd-btn--quiet" onClick={() => setLive(!live)} aria-pressed={live}>{live ? "Hide live view" : "👁 Live view"}</button>
@@ -754,6 +755,11 @@ export function FeaturesCard({ home, devices, goTo }) {
 /* ───────── family locations: Stashr Location app ───────── */
 
 const whereText = (p) => {
+  if (p.stale && (p.state === "home" || p.state === "away" || p.state === "coming")) {
+    const m = Math.round((p.ageSec || 0) / 60);
+    const low = p.battery?.pct != null && p.battery.pct <= 20 && !p.battery.charging;
+    return `${low ? "Location stopped (battery low)" : "Location not updating"} · last seen ${p.state === "home" ? "at home" : `${p.distanceKm} km from home`}, ${m < 60 ? `${m} min` : `${Math.round(m / 60)} h`} ago`;
+  }
   if (p.state === "home") return "At home";
   if (p.state === "coming") return `${p.etaMinutes <= 1 ? "Almost home" : `About ${p.etaMinutes} min away`} · ${p.distanceKm} km · heading home${p.traffic ? " · live traffic" : ""}`;
   if (p.state === "away") return `${p.distanceKm} km from home${p.etaMinutes ? ` · about ${p.etaMinutes} min if they head home now${p.traffic ? " (live traffic)" : ""}` : ""}`;
@@ -813,6 +819,25 @@ export function LocationsCard() {
     if (!(await confirm.ask({ title: `Disconnect ${p.name}?`, message: "Their phone stops being tracked here. They can link again with the code.", confirmLabel: "Disconnect", danger: true }))) return;
     try { await removeHomeDevice(p.id); load(); } catch (e) { toast.error(errorMessage(e, "Could not disconnect.")); }
   };
+  const [asking, setAsking] = useState(false);
+  const refresh = async () => {
+    if (asking) return;
+    setAsking(true);
+    try {
+      const r = await locateNow();
+      toast.info(r.phones ? "Asking the phones for their location…" : "No Stashr Location phone is linked yet.");
+      const started = Number(r.asked) || Date.now();
+      for (let i = 0; r.phones && i < 25; i++) {
+        await new Promise((res) => setTimeout(res, 4000));
+        const d = await getHomeWhere();
+        setData(d);
+        const phones = d.people.filter((p) => p.app === "Stashr Location");
+        if (phones.length && phones.every((p) => p.fixAt && p.fixAt >= started - 2000)) { toast.success("Locations are fresh."); setAsking(false); return; }
+      }
+      if (r.phones) toast.info("Some phones have not answered yet. A phone that is saving its battery answers within a few minutes; this page keeps updating.");
+    } catch (e) { toast.error(errorMessage(e, "Could not refresh the locations.")); }
+    setAsking(false);
+  };
   const { settings: st, save: saveSettings } = useHomeSettings();
   return (
     <Section title="Family locations" subtitle="Who is where, how far from home and when they will arrive. Phones run the separate Stashr Location app (it never sees your passwords).">
@@ -820,6 +845,10 @@ export function LocationsCard() {
         <b>Link code for Stashr Location</b>
         <div className="sh-row"><code className="sh-code" aria-label="Link code">{code || "…"}</code><button className="rd-btn rd-btn--quiet" onClick={copy} disabled={!code}>Copy</button><button className="rd-btn rd-btn--quiet" onClick={renew}>New code</button></div>
         <p className="sh-dim">Install Stashr Location from the Apps page on the family phone, type this code and the person’s name. It stays linked until you disconnect it here or they press Disconnect in the app.</p>
+      </div>
+      <div className="sh-row">
+        <button className="rd-btn rd-btn--primary" onClick={refresh} disabled={asking}>{asking ? "Asking the phones…" : "🔄 Refresh location"}</button>
+        <span className="sh-dim">Asks every family phone for a fresh location now. Phones with a high battery answer within a minute or two.</span>
       </div>
       <LiveLinkCard people={data ? data.people : []} />
       {st ? <label className="sh-switch"><input type="checkbox" checked={st.tvLive?.enabled !== false} onChange={(e) => saveSettings({ tvLive: { enabled: e.target.checked } }, e.target.checked ? "The TV can show the live map." : "The live map on the TV is off.")} />Allow the live map on the TV (phones that are out then update every few seconds while it is open)</label> : null}

@@ -54,6 +54,9 @@ function parse(sentence, devices, scenes = []) {
     // Who is home
     if (has(text, ["kaun ghar", "kon ghar", "who is home", "whos home", "ghar pe kaun", "ghar par kaun", "ghar me kaun", "ghar mein kaun", "anyone home"])) return { reply: "presence", presence: true };
 
+    // Ask the phones for a fresh location now
+    if (has(text, ["locate", "location refresh", "refresh location", "location sync", "sync location", "location update karo", "abhi kahan", "location kahan", "kahan hain abhi"]) && !has(text, ["tv", "map"])) return { reply: "locate", locate: true };
+
     // The live map of the family on the TV
     if (has(text, ["live location", "location live", "live map", "kaun kahan", "kahan hain sab", "sab kahan", "family kahan", "live dikhao"]) && tv) return toTv("live_location", {}, "Opening the live map on the TV.");
 
@@ -68,6 +71,7 @@ function parse(sentence, devices, scenes = []) {
     if (scene) return { reply: `Running “${scene.name}”.`, scene: scene.id };
 
     const toHub = (type, args, reply) => (hub ? { reply, commands: [{ kind: "hub", type, args }] } : { reply: "The tablet is not added to Stashr Home yet." });
+    if (has(text, ["screen"]) && has(text, ["off", "band", "bandh", "sleep", "dark"]) && !has(text, ["tv", "mirror", "cast"])) return toHub("screen_off", {}, "Putting the tablet screen to sleep.");
     if (has(text, ["speed test", "internet speed", "net speed", "speed check", "speedtest"])) return toHub("speed_test", {}, "Running an internet speed test on the tablet. The result shows up in a minute.");
     if (has(text, ["camera"])) {
         if (has(text, ["off", "band", "disarm", "stop", "bandh"])) return toHub("camera", { action: "disarm" }, "Turning the tablet camera alerts off.");
@@ -149,7 +153,14 @@ function statusLine(devices) {
 /** "Mom is home, Dad is out." */
 function presenceLine(people) {
     if (!people || !people.length) return "Nobody is set up yet. Give a Wi-Fi device a person (Name / room → Person), or pair a family phone.";
-    const home = people.filter((p) => p.home).map((p) => p.person), out = people.filter((p) => !p.home).map((p) => p.person);
+    const ago = (m) => (m === undefined ? "" : m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`);
+    const home = people.filter((p) => p.home).map((p) => p.person);
+    const out = people.filter((p) => !p.home).map((p) => {
+        const far = p.distanceKm !== undefined ? `${p.distanceKm} km away` : "";
+        if (p.stale) return `${p.person} (location not updating${p.fixAgeMin !== undefined ? ` for ${ago(p.fixAgeMin).replace(" ago", "")}` : ""}${far ? `, last ${far}` : ""})`;
+        const bits = [far, p.fixAgeMin !== undefined ? `updated ${ago(p.fixAgeMin)}` : ""].filter(Boolean).join(", ");
+        return bits ? `${p.person} (${bits})` : p.person;
+    });
     return [home.length ? `Home: ${home.join(", ")}.` : "Nobody is home.", out.length ? `Out: ${out.join(", ")}.` : ""].join(" ").trim();
 }
 

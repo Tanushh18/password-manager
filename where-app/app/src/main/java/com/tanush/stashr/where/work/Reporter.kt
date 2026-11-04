@@ -33,6 +33,10 @@ object Reporter {
      * force = the person pressed "Update my location now": a real fix is taken and sent.
      */
     suspend fun run(ctx: Context, given: Fix? = null, live: Boolean = false, force: Boolean = false): Result {
+        return runChecked(ctx, given, live, force)
+    }
+
+    private suspend fun runChecked(ctx: Context, given: Fix?, live: Boolean, force0: Boolean): Result {
         val app = ctx.applicationContext
         val prefs = Prefs(app)
         if (!prefs.linked) return Result.Unlinked
@@ -53,6 +57,10 @@ object Reporter {
         }
         val (pct, charging) = battery(app)
         val bssid = currentBssid(app)
+        if (Logic.lowSpellOver(pct, charging)) prefs.lowSent = false
+        // 20% or less: one real fix goes out now (the last known place), before the phone stops reporting.
+        val finalFix = given == null && Logic.finalFixDue(pct, charging, liveMode, prefs.lowSent)
+        val force = force0 || finalFix
 
         // 0) A fix kept while there was no connection goes first, so the server sees where the phone really was and when.
         if (prefs.offAt > 0 && !prefs.offLat.isNaN() && given == null) {
@@ -80,7 +88,7 @@ object Reporter {
             val newest = listOfNotNull(mine, pend).maxByOrNull { it.at }
             if (newest != null && now - newest.at < Logic.REUSE_FIX_MS && !newest.lat.isNaN()) fix = newest
         }
-        if (fix == null) fix = Locator.one(app, liveMode, networkOnly = Logic.lowBattery(pct, charging, liveMode), precise = precise)
+        if (fix == null) fix = Locator.one(app, liveMode, networkOnly = Logic.lowBattery(pct, charging, liveMode) && !finalFix, precise = precise)
         if (fix == null) {
             prefs.lastError = if (Locator.hasPermission(app)) "Could not get a location fix" else "Location is not allowed"
             Health.noteStreak("location", "No location fix in 3 checks in a row: ${prefs.lastError}")
@@ -99,6 +107,7 @@ object Reporter {
         return try {
             val answer = Logic.parseAnswer(Api(app).location(body(app, fix, pct, charging)))
             prefs.upLat = fix.lat; prefs.upLon = fix.lon; prefs.upAt = System.currentTimeMillis(); prefs.upBssid = bssid
+            if (finalFix) prefs.lowSent = true
             prefs.callAt = prefs.upAt; prefs.lastWasSame = false
             apply(app, prefs, answer, pct, charging)
         } catch (e: ApiError) {
@@ -138,7 +147,7 @@ object Reporter {
         prefs.lastError = ""
         prefs.live = answer.live
         prefs.precise = answer.precise
-        val delay = Logic.batteryDelay(pct, charging, answer.live, Logic.clampDelay(answer.nextCheckSec, answer.live))
+        val delay = Logic.batteryDelay(pct, charging, answer.live, Logic.clampDelay(answer.nextCheckSec, answer.live, answer.precise))
         prefs.lastDelaySec = delay
         Notices.show(app, answer.notices)
         Scheduler.next(app, delay, answer.live)
@@ -153,7 +162,7 @@ object Reporter {
         Scheduler.stop(ctx)
     }
 
-    private fun battery(ctx: Context): Pair<Int, Boolean> {
+    fun battery(ctx: Context): Pair<Int, Boolean> {
         val bat = ctx.registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val level = bat?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
         val scale = bat?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100

@@ -87,7 +87,7 @@ function lanAlerts(events, labels, settings, local) {
 async function houseSummary(owner, now = Date.now()) {
     const devices = await HomeDevice.find({ owner }).lean();
     const hubs = devices.filter((d) => d.kind === "hub"), phones = devices.filter((d) => d.kind === "phone");
-    const people = home.presence(hubs, phones, now);
+    const people = home.presence(hubs, phones, now, (await settingsOf(owner)).homeSpot);
     const up = new Set();
     for (const h of hubs) for (const [k, d] of Object.entries(h.lanBook || {})) if (d.up) up.add(h._id + k);
     return { devices, hubs, phones, people, wifiUp: up.size };
@@ -149,7 +149,7 @@ async function todayLines(owner, settings, now = Date.now()) {
  */
 async function autoCamera(owner, settings, devices, now) {
     const hubs = devices.filter((d) => d.kind === "hub");
-    const people = home.presence(hubs, devices.filter((d) => d.kind === "phone"), now);
+    const people = home.presence(hubs, devices.filter((d) => d.kind === "phone"), now, settings.homeSpot);
     if (!people.length) return;
     const anyoneHome = people.some((p) => p.home);
     const hub = hubs.find((d) => (d.status || {}).agent === "stashr-hub" && Boolean(d.online) && home.isOnline(d, now));
@@ -201,7 +201,7 @@ async function geoTick(owner, now, settings, devices) {
     const tz = settings.timezone || "Asia/Kolkata";
     const mins = localParts(now, tz).minutes;
     const tablet = (devices || []).filter((d) => d.kind === "hub").find((d) => (d.status || {}).agent === "stashr-hub" && Boolean(d.online) && home.isOnline(d, now));
-    const people = home.presence((devices || []).filter((d) => d.kind === "hub"), (devices || []).filter((d) => d.kind === "phone"), now);
+    const people = home.presence((devices || []).filter((d) => d.kind === "hub"), (devices || []).filter((d) => d.kind === "phone"), now, settings.homeSpot);
     for (let i = 0; i < places.length; i++) {
         const p = places[i];
         if (!p || p.enabled === false) continue;
@@ -283,6 +283,88 @@ async function announce(owner, text, { settings, devices, exceptDevice, urgent =
     if (eta.toPhones !== false) for (const ph of list.filter((d) => d.kind === "phone" && (d.status || {}).agent === "stashr-where" && String(d._id) !== String(exceptDevice) && d.lastSeen && now - new Date(d.lastSeen).getTime() < 3 * 3600 * 1000)) await queue(ph, "notice", { text });
 }
 
+/** Two phones this close (250 m, or 400 m once they were together) with fresh fixes are travelling together. */
+const TOGETHER_M = 250, APART_M = 400;
+
+/**
+ * Phones that stay together: returns Map(companionKey -> majorKey). The major phone is the oldest linked one; only it is announced
+ * for. They count as together only while both have a fresh fix, so a dead phone never hides a living one, and once they are
+ * more than 400 m apart each phone speaks for itself again.
+ */
+function groupTogether(phones, state, now, spot) {
+    // Only phones that are out count: two phones at home are not "travelling together".
+    const away = (l) => !spot || !Number.isFinite(Number(spot.lat)) || home.distM({ lat: Number(l.lat), lon: Number(l.lon) }, { lat: Number(spot.lat), lon: Number(spot.lon) }) > (Number(spot.radius) || 200) + 100;
+    const fresh = (phones || []).filter((ph) => {
+        const l = ph.status && ph.status.location;
+        return l && Number.isFinite(Number(l.lat)) && Number.isFinite(Number(l.lon)) && l.at && now - Number(l.at) <= home.FIX_FRESH_MS && away(l);
+    });
+    const parent = new Map(fresh.map((ph) => [String(ph._id), String(ph._id)]));
+    const find = (k) => { while (parent.get(k) !== k) k = parent.get(k); return k; };
+    for (let i = 0; i < fresh.length; i++) {
+        for (let j = i + 1; j < fresh.length; j++) {
+            const a = fresh[i], b = fresh[j], ka = String(a._id), kb = String(b._id);
+            const d = home.distM({ lat: Number(a.status.location.lat), lon: Number(a.status.location.lon) }, { lat: Number(b.status.location.lat), lon: Number(b.status.location.lon) });
+            const was = ((state[ka] || {}).tog === kb) || ((state[kb] || {}).tog === ka);
+            if (d <= TOGETHER_M || (was && d <= APART_M)) parent.set(find(ka), find(kb));
+        }
+    }
+    const groups = new Map();
+    for (const k of parent.keys()) { const r = find(k); groups.set(r, [...(groups.get(r) || []), k]); }
+    const out = new Map();
+    for (const members of groups.values()) {
+        if (members.length < 2) continue;
+        const major = members.slice().sort()[0];
+        for (const k of members) if (k !== major) out.set(k, major);
+    }
+    return out;
+}
+
+const agoText = (ms) => { const m = Math.max(0, Math.round(ms / 60000)); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
+
+/** For the Location routes: announce a low battery for one phone (its status as just received). */
+async function lowBatteryNow(owner, ph, settings, now) {
+    const devices = await HomeDevice.find({ owner }).lean();
+    return lowBatteryNotice(owner, ph, settings.homeSpot, settings, devices, now);
+}
+
+/** The phone's battery is 20% or less and not charging: tell everyone once (again after 6 hours) with the last place it was seen. */
+async function lowBatteryNotice(owner, ph, spot, settings, devices, now) {
+    const st = ph.status || {}, pct = Number(st.battery);
+    if (!(pct <= 20) || st.charging === true) return false;
+    const key = String(ph._id), person = ph.person || ph.name;
+    if (!await claim(`lowbatt:${owner}:${key}:${Math.floor(now / (6 * 3600000))}`)) return false;
+    const loc = st.location;
+    let where = "";
+    if (loc && Number.isFinite(Number(loc.lat)) && spot && Number.isFinite(Number(spot.lat))) {
+        const km = Math.round(home.distM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: spot.lat, lon: spot.lon }) / 100) / 10;
+        where = ` Last location: ${km < 0.3 ? "at home" : km + " km from home"}, ${agoText(now - Number(loc.at))}.`;
+    }
+    await announce(owner, `${person}'s phone battery is ${Math.round(pct)}%. Location may stop soon.${where}`, { settings, devices, exceptDevice: ph._id, kind: "battery_low", now });
+    return true;
+}
+
+/**
+ * Every minute: a phone that went quiet with a low battery has stopped sharing its location. Say so once (again after 6 hours),
+ * with the last place it was seen, so nobody keeps trusting an old "at home".
+ */
+async function locationWatch(owner, settings, devices, now) {
+    const spot = settings.homeSpot;
+    for (const ph of (devices || []).filter((d) => d.kind === "phone" && (d.status || {}).agent === "stashr-where")) {
+        const st = ph.status || {}, last = ph.lastSeen ? new Date(ph.lastSeen).getTime() : 0;
+        if (!last || now - last < 45 * 60000) continue;
+        if (!(Number(st.battery) <= 20) || st.charging === true) continue;
+        const key = String(ph._id), person = ph.person || ph.name;
+        if (!await claim(`stopped:${owner}:${key}:${Math.floor(now / (6 * 3600000))}`)) continue;
+        const loc = st.location;
+        let where = "";
+        if (loc && Number.isFinite(Number(loc.lat)) && spot && Number.isFinite(Number(spot.lat))) {
+            const km = Math.round(home.distM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: spot.lat, lon: spot.lon }) / 100) / 10;
+            where = ` Last seen ${km < 0.3 ? "at home" : km + " km from home"}, ${agoText(now - Number(loc.at || last))}.`;
+        }
+        await announce(owner, `${person}'s location stopped (battery ${Math.round(Number(st.battery))}%).${where}`, { settings, devices, exceptDevice: ph._id, kind: "location_stopped", now });
+    }
+}
+
 /**
  * Where each family phone running Stashr Location is: at home, on the way (and in how long), or just away.
  * "Papa is 10 minutes away": there is no routing service, so the distance is a straight line times 1.3 (roads wind), at
@@ -294,12 +376,15 @@ async function etaTick(owner, now, settings, devices) {
     const spot = settings.homeSpot, eta = settings.eta || {};
     if (!spot || !Number.isFinite(spot.lat) || !Number.isFinite(spot.lon) || eta.enabled === false) return settings.etaState || {};
     const radius = spot.radius || 200, state = { ...(settings.etaState || {}) };
-    const people = home.presence((devices || []).filter((d) => d.kind === "hub"), (devices || []).filter((d) => d.kind === "phone"), now);
-    const wifiHome = new Set(people.filter((p) => p.home).map((p) => p.person));
+    const people = home.presence((devices || []).filter((d) => d.kind === "hub"), (devices || []).filter((d) => d.kind === "phone"), now, spot);
+    const wifiHome = new Set(people.filter((p) => p.home && p.wifi).map((p) => p.person));
     // Tell the family at the chosen time (15 min by default) and then again as they get closer, so a notice is never far away.
     const base = Number(eta.notifyMinutes) || 15;
     const milestones = [...new Set([base, 10, 5, 3, 2, 1].filter((m) => m <= base))].sort((x, y) => y - x);
     let changed = false;
+    const together = groupTogether((devices || []).filter((d) => d.kind === "phone"), state, now, spot);
+    // Who is with this phone: the phones grouped with it now, or in the last check (two phones that arrive home together are one arrival).
+    const matesOf = (key) => [...new Set([...together.entries(), ...Object.entries(state).filter(([, e]) => e && e.tog).map(([k, e]) => [k, e.tog])].filter(([, major]) => major === key).map(([k]) => { const m = (devices || []).find((x) => String(x._id) === k); return m && (m.person || m.name); }).filter(Boolean))];
     for (const ph of (devices || []).filter((d) => d.kind === "phone")) {
         const loc = ph.status && ph.status.location;
         if (!loc || !Number.isFinite(Number(loc.lat)) || !Number.isFinite(Number(loc.lon)) || !loc.at) continue;
@@ -308,7 +393,9 @@ async function etaTick(owner, now, settings, devices) {
         const fresh = now - Number(loc.at) < 90 * 60 * 1000;
         const atHome = d <= radius || (wifiHome.has(person) && d <= 2000);
         const newFix = old.locAt !== Number(loc.at);
-        let next = { ...old, person, atHome, d, locAt: Number(loc.at) };
+        const tog = together.get(key) || "";
+        const mate = tog || old.tog || "";   // a companion, now or a moment ago, is not announced on its own
+        let next = { ...old, person, atHome, d, locAt: Number(loc.at), tog };
         if (old.locAt !== Number(loc.at)) next.still = old.d !== undefined && Math.abs(d - old.d) < 80 ? Math.min((old.still || 0) + 1, 20) : 0;
         if (newFix) {
             const dt = old.locAt ? (Number(loc.at) - old.locAt) / 1000 : 0;
@@ -338,11 +425,12 @@ async function etaTick(owner, now, settings, devices) {
                 }
             }
         }
-        if (next.coming && now - Number(loc.at) < 10 * 60 * 1000 && !atHome) {
+        if (next.coming && !tog && now - Number(loc.at) < 10 * 60 * 1000 && !atHome) {
             const hit = milestones.filter((m) => next.minutes <= m && !(next.fired || []).includes(m));
             if (hit.length && await claim(`eta:${owner}:${key}:${Math.min(...hit)}:${Math.floor(now / (20 * 60000))}`)) {
                 next.fired = [...new Set([...(next.fired || []), ...hit])];
-                const text = next.minutes <= 1 ? `${person} is about to arrive` : `${person} is arriving in ${next.minutes} mins`;
+                const mates = matesOf(key), who = mates.length ? `${person} (with ${mates.join(", ")})` : person;
+                const text = next.minutes <= 1 ? `${who} is about to arrive` : `${who} is arriving in ${next.minutes} mins`;
                 await announce(owner, text, { settings, devices, exceptDevice: ph._id, now });
             }
         }
@@ -354,10 +442,12 @@ async function etaTick(owner, now, settings, devices) {
                 if (f && Number(f.rainChance) >= 50) await queue(ph, "notice", { text: `Barish ki ${f.rainChance}% sambhavna hai aaj. Chhatri le lo ☔` });
             } catch (e) { /* no weather: stay quiet */ }
         }
-        if (atHome && old.atHome === false && fresh && await claim(`arrived:${owner}:${key}:${Math.floor(now / (20 * 60000))}`)) {
+        if (atHome && old.atHome === false && fresh && !mate && await claim(`arrived:${owner}:${key}:${Math.floor(now / (20 * 60000))}`)) {
             next.coming = false; next.fired = [];
-            await announce(owner, `Open the door: ${person} arrived home`, { settings, devices, exceptDevice: ph._id, urgent: true, kind: "arrived", now });
+            const mates = matesOf(key);
+            await announce(owner, `Open the door: ${person}${mates.length ? ` (with ${mates.join(", ")})` : ""} arrived home`, { settings, devices, exceptDevice: ph._id, urgent: true, kind: "arrived", now });
         }
+        await lowBatteryNotice(owner, ph, spot, settings, devices, now);
         if (JSON.stringify(next) !== JSON.stringify(old)) { state[key] = next; changed = true; }
     }
     if (changed) await HomeSettings.updateOne({ owner }, { $set: { etaState: state } });
@@ -372,28 +462,48 @@ function whereIs(settings, phone, now = Date.now()) {
     const e = (settings.etaState || {})[String(phone._id)] || {};
     const d = distanceM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: spot.lat, lon: spot.lon });
     const km = e.road && e.km ? e.km : Math.round(d / 100) / 10;
-    if (e.atHome || d <= (spot.radius || 200)) return { state: "home", distanceKm: km, still: e.still || 0, fixAt: Number(loc.at) };
-    return { state: e.coming ? "coming" : "away", distanceKm: km, etaMinutes: e.minutes || null, traffic: Boolean(e.road && e.traffic), still: e.still || 0, fixAt: Number(loc.at) };
+    const ageSec = Math.max(0, Math.round((now - Number(loc.at)) / 1000)), stale = now - Number(loc.at) > home.FIX_FRESH_MS;
+    if (e.atHome || d <= (spot.radius || 200)) return { state: "home", distanceKm: km, still: e.still || 0, fixAt: Number(loc.at), ageSec, stale };
+    return { state: e.coming ? "coming" : "away", distanceKm: km, etaMinutes: e.minutes || null, traffic: Boolean(e.road && e.traffic), still: e.still || 0, fixAt: Number(loc.at), ageSec, stale };
+}
+
+/**
+ * How much slower or faster to look, by the phone's battery: charging or above 60% is live-ish (x0.5 / x0.6), 40-60% normal,
+ * 20-40% slower (x1.8) and 20% or less much slower (x3), because that phone is about to stop reporting anyway.
+ */
+function batteryScale(batt) {
+    if (!batt || !Number.isFinite(Number(batt.pct))) return 1;
+    const pct = Number(batt.pct);
+    if (batt.charging) return 0.5;
+    if (pct >= 60) return 0.6;
+    if (pct >= 40) return 1;
+    if (pct > 20) return 1.8;
+    return 3;
 }
 
 /** How long the Stashr Location app should wait before it looks again: often when heading home, rarely when far away. */
-function checkInterval(where) {
+function checkInterval(where, batt) {
+    const scale = batteryScale(batt);
     // Not moving for 3 checks in a row (at home, at the office…): look half as often, at most every 30 minutes.
     const calm = (sec) => ((where.still || 0) >= 3 ? Math.min(sec * 2, 1800) : sec);
-    if (where.state === "coming") { const k = where.distanceKm; return k > 20 ? 600 : k > 10 ? 300 : k > 3 ? 120 : 60; }
-    if (where.state === "away") return calm(where.distanceKm < 10 ? 900 : 1800);
-    if (where.state === "home") return calm(1200);
-    return 900;
+    const fit = (sec, floor = 60) => Math.max(floor, Math.round(sec * scale));
+    if (where.state === "coming") { const k = where.distanceKm; const sec = k > 20 ? 600 : k > 10 ? 300 : k > 3 ? 120 : 60; return scale > 1 ? Math.round(sec * Math.min(scale, 1.5)) : sec; }
+    // Leaving home is noticed by the phone's Wi-Fi change; this is the safety net, so a charged phone looks every 5 minutes.
+    if (where.state === "away") return fit(calm(where.distanceKm < 10 ? 600 : 1500), 120);
+    if (where.state === "home") return fit(calm(600), 300);
+    return fit(900, 120);
 }
 
-/** Who is on the way home right now: [{ person, minutes, km }]. */
+/** Who is on the way home right now: [{ person, minutes, km, with }]. A phone travelling with another one is folded into it. */
 function comingList(settings, now = Date.now()) {
-    return Object.values(settings.etaState || {})
-        .filter((e) => e && e.coming && now - e.locAt < 40 * 60 * 1000)
-        .map((e) => ({ person: e.person, minutes: Math.max(1, e.minutes - Math.floor((now - e.locAt) / 60000)), km: e.km, traffic: Boolean(e.road && e.traffic) }))
+    const st = settings.etaState || {};
+    const mates = (key) => Object.entries(st).filter(([k, e]) => k !== key && e && e.tog === key).map(([, e]) => e.person).filter(Boolean);
+    return Object.entries(st)
+        .filter(([, e]) => e && e.coming && !e.tog && now - e.locAt < 40 * 60 * 1000)
+        .map(([key, e]) => ({ person: e.person, minutes: Math.max(1, e.minutes - Math.floor((now - e.locAt) / 60000)), km: e.km, traffic: Boolean(e.road && e.traffic), with: mates(key) }))
         .sort((a, b) => a.minutes - b.minutes);
 }
-const comingLine = (c) => (c.minutes <= 1 ? `${c.person} bas pahunchne wale hain` : `${c.person} ${c.minutes} minute mein aa rahe hain`);
+const comingLine = (c) => (c.minutes <= 1 ? `${c.person} bas pahunchne wale hain` : `${c.person} ${c.minutes} minute mein aa rahe hain`) + (c.with && c.with.length ? ` (${c.with.join(", ")} saath mein)` : "");
 
 /** The shared secret for local mode; made the first time it is needed. */
 async function localKeyOf(owner) {
@@ -403,9 +513,30 @@ async function localKeyOf(owner) {
     return (await settingsOf(owner)).localKey;
 }
 
+const agoHi = (m) => (m < 1 ? "abhi" : m < 60 ? `${m} min pehle` : `${Math.round(m / 60)} ghante pehle`);
+
+/**
+ * The answer to "kab aayenge" / /coming: who is on the way (with the time), who is out (how far and how fresh the fix is), and
+ * "Sab ghar par hain" only when every person is home by the Wi-Fi and the location together and no phone has gone quiet.
+ */
+function comingReply(settings, devices, now = Date.now()) {
+    const people = home.presence((devices || []).filter((d) => d.kind === "hub"), (devices || []).filter((d) => d.kind === "phone"), now, settings.homeSpot);
+    const list = comingList(settings, now);
+    const lines = [];
+    if (list.length) lines.push(list.map(comingLine).join(". ") + ".");
+    const onTheWay = new Set(list.flatMap((c) => [c.person, ...(c.with || [])]));
+    for (const p of people.filter((x) => !x.home && !onTheWay.has(x.person))) {
+        const km = p.distanceKm !== undefined ? `${p.distanceKm} km door` : "";
+        if (p.stale) lines.push(`${p.person} ka location ${p.fixAgeMin !== undefined ? agoHi(p.fixAgeMin) + " se" : ""} update nahi hua${km ? ` (aakhri baar ${km})` : ""}.`);
+        else lines.push(`${p.person} bahar hain${km ? `, ${km}` : ""}${p.fixAgeMin !== undefined ? ` (${agoHi(p.fixAgeMin)} update)` : ""}.`);
+    }
+    if (!lines.length) lines.push(people.length ? "Sab ghar par hain." : "Nobody is on the way home right now (no phone is sharing its location).");
+    return lines.join(" ");
+}
+
 /** Everyone with a person is home, and it is a weekend evening (Fri 17:00 on): the TV launcher then offers movie night. */
 function movieNightOn(settings, devices, now = Date.now()) {
-    const people = home.presence((devices || []).filter((d) => d.kind === "hub"), (devices || []).filter((d) => d.kind === "phone"), now);
+    const people = home.presence((devices || []).filter((d) => d.kind === "hub"), (devices || []).filter((d) => d.kind === "phone"), now, settings.homeSpot);
     if (!people.length || !people.every((p) => p.home)) return false;
     const l = localParts(now, settings.timezone || "Asia/Kolkata");
     return l.weekday === 6 || l.weekday === 0 ? l.minutes >= 16 * 60 : l.weekday === 5 && l.minutes >= 17 * 60;
@@ -457,6 +588,7 @@ async function tickOwner(owner, now = Date.now()) {
     const devices = await HomeDevice.find({ owner }).lean();
     const tvs = devices.filter((d) => d.kind === "tv");
     const tvOn = (d) => Boolean(d.online) && home.isOnline(d, now) && (d.status || {}).screen !== "off";
+    await locationWatch(owner, settings, devices, now).catch(() => {});
 
     // 1. TV time: a minute for every minute a TV screen is on, by app.
     if (tvs.some(tvOn) && await claim(`usage:${owner}:${minuteKey}`)) {
@@ -496,7 +628,7 @@ async function tickOwner(owner, now = Date.now()) {
 
     // 5. Nobody is home, but the TV is on.
     if (settings.alerts && settings.alerts.emptyHomeTv !== false) {
-        const people = home.presence(devices.filter((d) => d.kind === "hub"), devices.filter((d) => d.kind === "phone"), now);
+        const people = home.presence(devices.filter((d) => d.kind === "hub"), devices.filter((d) => d.kind === "phone"), now, settings.homeSpot);
         const anyoneHome = people.some((p) => p.home);
         if (people.length && !anyoneHome && tvs.some(tvOn) && !settings.emptyHomeNotifiedAt) {
             if (await claim(`empty:${owner}:${local.date}:${Math.floor(local.minutes / 30)}`)) {
@@ -563,4 +695,4 @@ const DEFAULT_SCENES = [
     { id: "goodnight", name: "Good night", steps: [{ kind: "tv", type: "media", args: { action: "play_pause" } }, { kind: "tv", type: "key", args: { key: "HOME" } }] }
 ];
 
-module.exports = { houseSummary, localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, movieNightOn, localKeyOf, autoCamera, geoTick, needsWifi, distanceM, etaTick, announce, whereIs, checkInterval, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };
+module.exports = { comingReply, groupTogether, batteryScale, checkInterval, lowBatteryNow, houseSummary, localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, movieNightOn, localKeyOf, autoCamera, geoTick, needsWifi, distanceM, etaTick, announce, whereIs, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };

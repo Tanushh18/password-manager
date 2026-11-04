@@ -379,6 +379,7 @@ describe("places and WhatsApp", () => {
         expect(await cmds()).toEqual(["Reached office"]);
         await at(28.6139, 77.209, t0 + 120_000);     // still there: nothing new
         expect(await cmds()).toEqual(["Reached office"]);
+        await HomeDevice.updateOne({ _id: hubId }, { $set: { lastSeen: new Date(t0 + 180_000), online: true } });   // the tablet is still reporting at the time the test pretends it is
         await at(28.7, 77.3, t0 + 180_000);          // leaves, but the leave window (00:00-01:00) is not now unless it is that hour
         const local = automation.localParts(t0 + 180_000, "Asia/Kolkata").minutes;
         expect((await cmds()).length).toBe(local < 60 ? 2 : 1);
@@ -450,11 +451,11 @@ describe("Stashr Location: the location-only app", () => {
         // no home yet
         const first = await loc(t, 28.70, Date.now());
         expect(first.body.state).toBe("unset");
-        expect(first.body.nextCheckSec).toBe(900);
+        expect(first.body.nextCheckSec).toBe(540);                          // 15 minutes, x0.6 for an 80% battery
         await request(app).put("/home/settings").set(auth).send({ homeSpot: { lat: 28.6139, lon: 77.209, radius: 200 } });
         const far = await loc(t, 28.9, Date.now());                        // ~32 km, first sighting with a home set
         expect(far.body.state).toBe("away");
-        expect(far.body.nextCheckSec).toBe(1800);                          // far and not heading home: rarely
+        expect(far.body.nextCheckSec).toBe(900);                           // far and not heading home: every 25 minutes, x0.6 for an 80% battery
         const near = await loc(t, 28.75, Date.now() + 1000);               // closer: heading home
         expect(near.body.state).toBe("coming");
         expect(near.body.nextCheckSec).toBe(300);                          // ~15 km: every 5 minutes
@@ -785,7 +786,7 @@ describe("fewer calls, less battery", () => {
         const t0 = Date.now();
         const first = await send({ lat: 28.70, lon: 77.209, acc: 20, at: t0, battery: { pct: 70, charging: false } });
         expect(first.body.state).toBe("away");
-        expect(first.body.nextCheckSec).toBe(900);                              // near and away: 15 min
+        expect(first.body.nextCheckSec).toBe(360);                              // near and away: 10 min, x0.6 for a 70% battery
         const before = await HomeDevice.findOne({ name: "Papa" }).lean();
         const same = await send({ same: true, battery: { pct: 69, charging: false }, wifi: { connected: true, ip: "192.168.1.9" } });
         expect(same.status).toBe(200);
@@ -798,7 +799,7 @@ describe("fewer calls, less battery", () => {
         // staying in the same place: after three still checks the answer says "wait twice as long"
         let last;
         for (let i = 1; i <= 4; i++) last = await send({ lat: 28.70, lon: 77.209, acc: 20, at: t0 + i * 60_000 });
-        expect(last.body.nextCheckSec).toBe(1800);
+        expect(last.body.nextCheckSec).toBe(1200);                              // 10 minutes, doubled once the phone stays put
         // 'same' before any location is just a normal (invalid) call
         const t2 = (await request(app).post("/home/agent/link").send({ code, name: "Mom" })).body.token;
         expect((await request(app).post("/home/agent/location").set(bearer(t2)).send({ same: true })).status).toBe(400);

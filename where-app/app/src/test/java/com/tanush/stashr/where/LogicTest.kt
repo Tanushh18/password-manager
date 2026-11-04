@@ -91,10 +91,37 @@ class LogicTest {
     @Test fun lowBatteryDoublesTheDelay() {
         assertEquals(1200, Logic.batteryDelay(15, false, false, 600))
         assertEquals(1800, Logic.batteryDelay(10, false, false, 1500))
-        assertEquals(600, Logic.batteryDelay(16, false, false, 600))
+        assertEquals(1200, Logic.batteryDelay(20, false, false, 600))      // 20% counts as low now
+        assertEquals(600, Logic.batteryDelay(21, false, false, 600))
         assertEquals(600, Logic.batteryDelay(10, true, false, 600))     // charging
         assertEquals(8, Logic.batteryDelay(5, false, true, 8))           // live mode is left alone
         assertEquals(600, Logic.batteryDelay(-1, false, false, 600))     // unknown level
+    }
+
+    @Test fun nearATimedPlaceTheServerMayAskEvery30Seconds() {
+        assertEquals(30, Logic.clampDelay(30, false, true))
+        assertEquals(60, Logic.clampDelay(30, false, false))      // normally 60 seconds is the least
+        assertEquals(30, Logic.clampDelay(5, false, true))
+        assertEquals(8, Logic.clampDelay(null, true, true))       // live mode is unchanged
+        assertEquals(Logic.DEFAULT_DELAY_SEC, Logic.clampDelay(null, false, true))
+    }
+
+    @Test fun lastLocationGoesOutOnceWhenTheBatteryIsLow() {
+        assertEquals(true, Logic.finalFixDue(20, false, false, false))
+        assertEquals(false, Logic.finalFixDue(20, false, false, true))      // already sent in this spell
+        assertEquals(false, Logic.finalFixDue(21, false, false, false))
+        assertEquals(false, Logic.finalFixDue(10, true, false, false))      // charging
+        assertEquals(false, Logic.finalFixDue(10, false, true, false))      // live mode
+        assertEquals(false, Logic.lowSpellOver(25, false))
+        assertEquals(true, Logic.lowSpellOver(30, false))
+        assertEquals(true, Logic.lowSpellOver(5, true))
+    }
+
+    @Test fun aWifiChangeAsksForAFixUnlessBatteryIsLowOrOneJustWentOut() {
+        assertEquals(true, Logic.wifiTriggerWorthIt(60, false, 120_000))
+        assertEquals(false, Logic.wifiTriggerWorthIt(60, false, 30_000))     // debounce: Wi-Fi flaps
+        assertEquals(false, Logic.wifiTriggerWorthIt(15, false, 600_000))    // low battery
+        assertEquals(true, Logic.wifiTriggerWorthIt(15, true, 600_000))      // charging
     }
 
     @Test fun bssidPlaceholdersAreIgnored() {

@@ -42,6 +42,8 @@ const homeSettingsSchema = new mongoose.Schema({
     // Live map on the TV: phones that are out check their location every few seconds while the TV shows it.
     tvLive: { enabled: { type: Boolean, default: true } },
     liveUntil: { type: Date },
+    // "Refresh location" on the page: until then every phone is asked for a fresh fix every few seconds.
+    locateUntil: { type: Date },
     // The secret "see where I am live" link: { enabled, token, phones: [device ids; empty = every phone], createdAt, lastViewAt }
     share: { type: mongoose.Schema.Types.Mixed, default: {} },
     homeSpot: { lat: Number, lon: Number, radius: { type: Number, default: 200 } },

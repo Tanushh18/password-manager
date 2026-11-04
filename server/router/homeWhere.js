@@ -113,12 +113,15 @@ const forgetDevices = (owner) => devCache.delete(String(owner));
 /** True when one of the owner's places uses this phone: only then is its 24 hour trail kept. */
 const hasPlace = (settings, deviceId) => (settings.places || []).some((p) => p && String(p.phone) === String(deviceId));
 
-function answer(res, out, settings, where, now, device, loc) {
-    const liveOn = Boolean(settings.liveUntil && new Date(settings.liveUntil).getTime() > now) && settings.tvLive?.enabled !== false && where.state !== "home";
-    const watch = !liveOn && device ? placeTrail.watchFor(settings.places, device._id, loc, automation.localParts(now, settings.timezone || "Asia/Kolkata").minutes) : { near: false };
+function answer(res, out, settings, where, now, device, loc, batt) {
+    const tvLiveOn = Boolean(settings.liveUntil && new Date(settings.liveUntil).getTime() > now) && settings.tvLive?.enabled !== false && where.state !== "home";
+    // "Refresh location" on the page: every phone, home or not, answers fast for a minute and a half.
+    const locateOn = Boolean(settings.locateUntil && new Date(settings.locateUntil).getTime() > now);
+    const liveOn = tvLiveOn || locateOn;
+    const watch = !liveOn && device ? placeTrail.watchFor(settings.places, device._id, loc, automation.localParts(now, settings.timezone || "Asia/Kolkata").minutes, batt) : { near: false };
     return res.json({
         live: liveOn, ok: true, state: where.state, traffic: Boolean(where.traffic), distanceKm: where.distanceKm ?? null, etaMinutes: where.state === "home" ? 0 : where.etaMinutes ?? null,
-        nextCheckSec: liveOn ? 8 : watch.near ? Math.min(automation.checkInterval(where), watch.sec) : automation.checkInterval(where), home: { set: where.state !== "unset" },
+        nextCheckSec: liveOn ? 8 : watch.near ? Math.min(automation.checkInterval(where, batt), watch.sec) : automation.checkInterval(where, batt), home: { set: where.state !== "unset" },
         // near one of its places during an arrive/leave window: look closely (every 3 minutes, a real fix every time)
         precise: watch.near,
         notices: (out.commands || []).filter((c) => c.type === "notice").map((c) => ({ id: c.id, text: (c.args || {}).text || "" })).filter((n) => n.text)
@@ -148,7 +151,10 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
             if (notices.length) await HomeDevice.updateOne({ _id: d._id }, { $set: { "commands.$[c].status": "sent" } }, { arrayFilters: [{ "c.status": "pending", "c.type": "notice" }] });
             const where = automation.whereIs(settings, { ...d.toObject(), status: { ...(d.status || {}), location: { ...prev, at: now } } }, now);
             if (hasPlace(settings, d._id)) void placeFixes.keep(d.owner, d._id, prev, { same: true, now }).catch(() => {});
-            return answer(res, { commands: notices.map((c) => ({ id: c.id, type: c.type, args: c.args })) }, settings, where, now, d, prev);
+            const same = { pct: b.battery && Number.isFinite(num(b.battery.pct)) ? num(b.battery.pct) : (d.status || {}).battery, charging: b.battery ? b.battery.charging === true : (d.status || {}).charging === true };
+            // A "still here" call carries the battery too: a phone sinking to 20% is announced even when it never moves.
+            if (Number(same.pct) <= 20 && !same.charging) void automation.lowBatteryNow(d.owner, { ...d.toObject(), status: { ...(d.status || {}), location: { ...prev, at: now }, battery: same.pct, charging: same.charging } }, settings, now).catch(() => {});
+            return answer(res, { commands: notices.map((c) => ({ id: c.id, type: c.type, args: c.args })) }, settings, where, now, d, prev, same);
         }
 
         const lat = num(b.lat), lon = num(b.lon);
@@ -175,7 +181,7 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
         const me = all.find((x) => String(x._id) === String(d._id)) || d;
         const where = automation.whereIs({ ...settings, etaState: state }, me, now);
         if (hasPlace(settings, d._id)) void placeFixes.keep(d.owner, d._id, loc, { now }).catch(() => {});
-        return answer(res, out, settings, where, now, d, loc);
+        return answer(res, out, settings, where, now, d, loc, { pct: status.battery, charging: status.charging === true });
     } catch (e) { return fail(res, e, "Could not save the location."); }
 });
 
@@ -257,6 +263,16 @@ router.get("/home/geocode", authenticate, geoLimiter, async (req, res) => {
 });
 
 // The page: who is where, how far from home, and how long they will take.
+// "Refresh location": for the next 90 seconds every phone that checks in is told to report right away and every few seconds.
+router.post("/home/locate-now", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const owner = req.rootUser._id, now = Date.now(), until = new Date(now + 90 * 1000);
+        await HomeSettings.updateOne({ owner }, { $set: { locateUntil: until } });
+        const phones = (await HomeDevice.find({ owner, kind: "phone" }).lean()).filter((p) => (p.status || {}).agent === "stashr-where");
+        return res.json({ ok: true, until: until.toISOString(), phones: phones.length, asked: now });
+    } catch (e) { return fail(res, e, "Could not ask the phones for their location."); }
+});
+
 router.get("/home/where", authenticate, async (req, res) => {
     try {
         res.set("Cache-Control", "no-store");
@@ -265,6 +281,7 @@ router.get("/home/where", authenticate, async (req, res) => {
         const phones = (await HomeDevice.find({ owner, kind: "phone" }).lean()).filter((p) => (p.status || {}).location || (p.status || {}).agent === "stashr-where");
         return res.json({
             homeSet: Boolean(s.homeSpot && Number.isFinite(s.homeSpot.lat)),
+            locating: Boolean(s.locateUntil && new Date(s.locateUntil).getTime() > now),
             people: phones.map((p) => {
                 const w = automation.whereIs(s, p, now), st = p.status || {};
                 return { id: String(p._id), name: p.person || p.name, app: st.agent === "stashr-where" ? "Stashr Location" : "Stashr Hub", ...w,

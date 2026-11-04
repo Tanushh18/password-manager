@@ -224,6 +224,7 @@ function HubCard({ device, send, onChanged }) {
       <div className="sh-row">
         <button className="rd-btn rd-btn--quiet" onClick={() => send(device.id, "scan_now", {}, "Scanning the Wi-Fi…")}>Scan now</button>
         {smart ? <button className="rd-btn rd-btn--quiet" onClick={() => send(device.id, "check_update", {}, "Checking for a Stashr Hub update…")}>Check for update</button> : null}
+        {smart ? <button className="rd-btn rd-btn--quiet" onClick={() => send(device.id, "screen_off", {}, "Putting the tablet screen to sleep…")}>Turn screen off</button> : null}
       </div>
       {groups.length ? groups.map(([room, rows]) => (
         <div className="sh-block" key={room}>

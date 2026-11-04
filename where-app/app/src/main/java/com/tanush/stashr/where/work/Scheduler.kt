@@ -6,6 +6,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.location.LocationManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.os.Build
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -31,6 +35,7 @@ object Scheduler {
     private const val PERIODIC = "where-periodic"
     private const val PASSIVE_WORK = "where-passive"
     private const val LIVE_NOW = "where-live-now"
+    private const val WIFI_CHANGED = "where-wifi-changed"
 
     fun start(ctx: Context) {
         val app = ctx.applicationContext
@@ -39,6 +44,7 @@ object Scheduler {
         wm.enqueueUniquePeriodicWork(PERIODIC, ExistingPeriodicWorkPolicy.KEEP, PeriodicWorkRequestBuilder<LocationWorker>(15, TimeUnit.MINUTES).build())
         if (wm.getWorkInfosForUniqueWork(NEXT).get().none { !it.state.isFinished }) next(app, 60)
         registerPassive(app)
+        registerWifi(app)
     }
 
     /**
@@ -90,6 +96,35 @@ object Scheduler {
         wm.cancelUniqueWork(NEXT); wm.cancelUniqueWork(PERIODIC); wm.cancelUniqueWork(PASSIVE_WORK); wm.cancelUniqueWork(LIVE_NOW)
         cancelAlarm(app)
         unregisterPassive(app)
+        unregisterWifi(app)
+        wm.cancelUniqueWork(WIFI_CHANGED)
+    }
+
+    private fun wifiIntent(ctx: Context): PendingIntent =
+        PendingIntent.getBroadcast(ctx, 11, Intent(ctx, NetworkReceiver::class.java).setPackage(ctx.packageName), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
+
+    /**
+     * Wi-Fi coming or going wakes the app (no service, no battery cost while nothing changes): leaving home drops the home Wi-Fi, so the
+     * server hears about it within seconds instead of at the next 5 to 30 minute check, and arriving home is noticed the same way.
+     */
+    fun registerWifi(ctx: Context) {
+        if (Build.VERSION.SDK_INT < 26) return
+        try {
+            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            cm.registerNetworkCallback(NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(), wifiIntent(ctx))
+        } catch (e: Exception) { /* the timed checks still run */ }
+    }
+
+    private fun unregisterWifi(ctx: Context) {
+        if (Build.VERSION.SDK_INT < 26) return
+        try { (ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager).unregisterNetworkCallback(wifiIntent(ctx)) } catch (e: Exception) { }
+    }
+
+    /** The Wi-Fi changed: a real check in a few seconds (the worker drops it when the battery is low or one just went out). */
+    fun wifiChanged(ctx: Context) {
+        val req = OneTimeWorkRequestBuilder<LocationWorker>().setInitialDelay(5, TimeUnit.SECONDS).setInputData(workDataOf("wifi" to true))
+            .setConstraints(Constraints.Builder().build()).build()
+        WorkManager.getInstance(ctx.applicationContext).enqueueUniqueWork(WIFI_CHANGED, ExistingWorkPolicy.REPLACE, req)
     }
 
     private fun passiveIntent(ctx: Context): PendingIntent =
@@ -119,6 +154,11 @@ class LocationWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
             if (prefs.pendingAt > 0 && Logic.passiveWorthUploading(moved, System.currentTimeMillis() - prefs.upAt)) {
                 Reporter.run(applicationContext, Fix(prefs.pendingLat, prefs.pendingLon, prefs.pendingAcc, prefs.pendingAt, prefs.pendingSpeed.takeIf { it >= 0 }))
             }
+            return Result.success()
+        }
+        if (inputData.getBoolean("wifi", false)) {
+            val (pct, charging) = Reporter.battery(applicationContext)
+            if (Logic.wifiTriggerWorthIt(pct, charging, System.currentTimeMillis() - prefs.upAt)) Reporter.run(applicationContext, force = true)
             return Result.success()
         }
         if (inputData.getBoolean("live", false)) {

@@ -27,7 +27,7 @@ const MODES = ["ask", "alerts", "timer"];
 const modeOf = (s) => (MODES.includes(s?.updates) ? s.updates : "alerts");
 const COMMANDS = catalog.BOT_COMMANDS;
 const SHORTCUTS = {
-  who: () => "kaun ghar par hai", coming: () => "kab aayenge", today: () => "today updates",
+  who: () => "kaun ghar par hai", coming: () => "kab aayenge", locate: () => "location refresh", screenoff: () => "tablet screen off", today: () => "today updates",
   photo: () => "camera photo", clip: () => "camera clip", watch: () => "camera on", unwatch: () => "camera off", live: () => "camera live",
   pause: () => "pause the tv", play: () => "play the tv", next: () => "next", prev: () => "previous", mute: () => "mute the tv",
   volume: (a) => (a.length ? "volume " + a.join(" ") : ""), tvhome: () => "tv home", netflix: () => "open netflix",
@@ -44,7 +44,49 @@ async function tg(token, method, body) {
     return json.ok ? { ok: true, result: json.result } : { ok: false, error: json.description || "Telegram error " + res.status };
   } catch { return { ok: false, error: "Telegram did not answer." }; }
 }
-const send = (token, chatId, text, extra = {}) => tg(token, "sendMessage", { chat_id: chatId, text: String(text).slice(0, 4000), parse_mode: "HTML", disable_web_page_preview: true, ...extra });
+const { AsyncLocalStorage } = require("node:async_hooks");
+/** The command being answered right now: its "working on it" note, so the first reply can replace it. */
+const progress = new AsyncLocalStorage();
+
+const send = async (token, chatId, text, extra = {}) => {
+  const p = progress.getStore();
+  if (p && !p.used && String(p.chatId) === String(chatId)) {
+    await p.ready;
+    // An inline keyboard can be put on an edited message; the big menu keyboard needs a message of its own.
+    if (p.noteId && !(extra.reply_markup && !extra.reply_markup.inline_keyboard)) {
+      p.used = true;
+      const r = await tg(token, "editMessageText", { chat_id: chatId, message_id: p.noteId, text: String(text).slice(0, 4000), parse_mode: "HTML", disable_web_page_preview: true, ...(extra.reply_markup ? { reply_markup: extra.reply_markup } : {}) });
+      if (r.ok) return r;
+      p.used = false;      // Telegram refused the edit (same text, too old…): send it as a new message below
+    }
+  }
+  return tg(token, "sendMessage", { chat_id: chatId, text: String(text).slice(0, 4000), parse_mode: "HTML", disable_web_page_preview: true, ...extra });
+};
+
+/**
+ * Runs one command so that the person can SEE the server working: the "typing…" sign from the first moment, and when it takes
+ * more than about 2 seconds a "⏳ Working on it…" message that the answer then replaces (an error replaces it too). A command never
+ * ends silently: a note nobody used is turned into "✅ Done".
+ */
+async function withProgress(token, chatId, work) {
+  const p = { chatId, used: false, noteId: null, done: false, ready: Promise.resolve() };
+  const typing = () => { tg(token, "sendChatAction", { chat_id: chatId, action: "typing" }); };
+  typing();
+  const keep = setInterval(typing, 4000);
+  const slow = setTimeout(() => {
+    p.ready = (async () => {
+      if (p.done) return;
+      const r = await tg(token, "sendMessage", { chat_id: chatId, text: "⏳ Working on it…" });
+      if (r.ok && r.result) p.noteId = r.result.message_id;
+    })();
+  }, 1800);
+  try { return await progress.run(p, work); }
+  finally {
+    p.done = true; clearTimeout(slow); clearInterval(keep);
+    await p.ready;
+    if (p.noteId && !p.used) await tg(token, "editMessageText", { chat_id: chatId, message_id: p.noteId, text: "✅ Done." });
+  }
+}
 
 /* ---------- state ---------- */
 async function readState(user) {
@@ -341,6 +383,7 @@ async function handleUpdate(hookId, secret, update) {
   }
   if (String(chatId) !== String(state.chatId)) { await send(token, chatId, "This bot is private."); return; }
 
+  await withProgress(token, chatId, async () => {
   try {
     // Plain text while the bot is waiting for something: a PIN, or the name of a login.
     const text = msg.text.trim();
@@ -352,7 +395,7 @@ async function handleUpdate(hookId, secret, update) {
     }
     if (!cmd && pend?.kind === "name") return void (await startPassword(user, state, text));
     if (cmd && cmd !== "pass" && pend) await setPending(user, state, null);
-    if (cmd === "start" || cmd === "help" || cmd === "menu") return void (await send(token, chatId, T.HELP, { reply_markup: T.MENU_KEYBOARD }));
+    if (cmd === "start" || cmd === "help" || cmd === "menu") { setCommands(token); return void (await send(token, chatId, T.HELP, { reply_markup: T.MENU_KEYBOARD })); }
     if (cmd === "notifications") return void (await send(token, chatId, "<b>Telegram notifications</b>\\nEnabled categories: " + catalog.normalizeNotificationCategories(state.notificationCategories).map(T.esc).join(", ") + "\\nChange category preferences in Stashr → Settings → Telegram."));
     if (cmd === "report" || cmd === "week") {
       await send(token, chatId, "📊 Building your report…");
@@ -387,7 +430,11 @@ async function handleUpdate(hookId, secret, update) {
     if (readReply) return void (await send(token, chatId, readReply));
     if (cmd === "pass") return void (await handlePassword(user, state, msg, args));
     await send(token, chatId, "I don't know that command.\n\n" + T.HELP);
-  } catch { await send(token, chatId, "Something went wrong reading your data. Try again in a minute."); }
+  } catch (err) {
+    console.error("[telegram] command failed:", cmd || "(text)", err && err.message);
+    await send(token, chatId, "⚠️ <b>That did not work.</b>\nThe server answered with an error" + (cmd ? " for /" + T.esc(cmd) : "") + ". Try again in a minute; /status tells you if the server itself is healthy.");
+  }
+  });
 }
 
 /**
@@ -411,7 +458,8 @@ async function devicesText(user, phonesOnly) {
   const lines = list.map((d) => {
     const on = d.kind === "phone" ? Boolean(d.lastSeen) && Date.now() - new Date(d.lastSeen).getTime() < 75 * 60000 : Boolean(d.online) && home.isOnline(d);
     const b = home.batteryOf(d.status);
-    return `${on ? "🟢" : "⚪"} ${icon[d.kind] || "▫️"} ${T.esc(d.person || d.name)}${b ? ` 🔋${b.pct}%${b.charging ? "⚡" : ""}` : ""}${on ? "" : " — not reporting"}`;
+    const cam = d.kind === "hub" && d.status && d.status.camera ? ` · 📷 ${d.status.camera.error ? "⚠️ " + T.esc(String(d.status.camera.error).slice(0, 80)) : d.status.camera.armed ? "watching" : "off"}` : "";
+    return `${on ? "🟢" : "⚪"} ${icon[d.kind] || "▫️"} ${T.esc(d.person || d.name)}${b ? ` 🔋${b.pct}%${b.charging ? "⚡" : ""}` : ""}${cam}${on ? "" : " — not reporting"}`;
   });
   return "<b>" + (phonesOnly ? "📱 Phones" : "🏠 Devices") + "</b>\n" + lines.join("\n");
 }
@@ -639,4 +687,4 @@ async function notifyUserMedia(user, { kind, buffer, filename, caption, contentT
   } catch { return false; }
 }
 
-module.exports = { homeSay, notifyUser, notifyEvent, notifySystemEvent, notificationHistory, notifyUserMedia, modeOf, MODES, connect, disconnect, updateSettings, readState, publicState, handleUpdate, runAllDigests, sendTest, DIGEST_CHOICES, isValidHookId: (id) => mongoose.isValidObjectId(id) || /^[a-f0-9]{32}$/.test(String(id)) };
+module.exports = { homeSay, notifyUser, notifyEvent, notifySystemEvent, notificationHistory, notifyUserMedia, modeOf, MODES, connect, disconnect, updateSettings, readState, publicState, handleUpdate, runAllDigests, sendTest, DIGEST_CHOICES, isValidHookId: (id) => mongoose.isValidObjectId(id) || /^[a-f0-9]{32}$/.test(String(id)), withProgress, send };

@@ -55,9 +55,13 @@ describe("when to look closely", () => {
     });
     test("near its own place the phone is asked often: every 3 minutes in the times, every 5 outside them (they are a reference)", () => {
         const at = (m) => ({ ...north(m), acc: 10 });
-        expect(t.watchFor([office], "ph1", at(60), 18 * 60 + 40)).toMatchObject({ near: true, sec: 180 });     // leave window
-        expect(t.watchFor([office], "ph1", at(450), 18 * 60 + 40).near).toBe(true);                           // 450 m = radius + 400
-        expect(t.watchFor([office], "ph1", at(600), 18 * 60 + 40).near).toBe(false);                          // too far
+        expect(t.watchFor([office], "ph1", at(60), 18 * 60 + 40)).toMatchObject({ near: true, sec: 30 });      // leave window: every 30 s
+        expect(t.watchFor([office], "ph1", at(1500), 18 * 60 + 40)).toMatchObject({ near: true, sec: 30 });   // 1.5 km away, still in the window
+        expect(t.watchFor([office], "ph1", at(2300), 18 * 60 + 40).near).toBe(false);                         // beyond radius + 2 km
+        expect(t.watchFor([office], "ph1", at(60), 9 * 60 + 21).sec).toBe(30);                                 // 4 minutes before the arrive window
+        expect(t.watchFor([office], "ph1", at(60), 9 * 60 + 12).sec).toBe(180);                                // 13 minutes before: the 15-minute margin, every 3 minutes
+        expect(t.watchFor([office], "ph1", at(450), 13 * 60).near).toBe(true);                                // 450 m = radius + 400 (lunchtime)
+        expect(t.watchFor([office], "ph1", at(600), 13 * 60).near).toBe(false);                               // too far outside the window
         expect(t.watchFor([office], "ph1", at(60), 13 * 60)).toMatchObject({ near: true, sec: 300 });         // lunchtime: still watched, a little less often
         expect(t.watchFor([office], "other-phone", at(60), 18 * 60 + 40).near).toBe(false);
         expect(t.watchFor([{ ...office, enabled: false }], "ph1", at(60), 18 * 60 + 40).near).toBe(false);
@@ -66,7 +70,18 @@ describe("when to look closely", () => {
     test("a place set to 'only inside these times' is watched only inside them", () => {
         const strict = { ...office, strictWindow: true };
         expect(t.watchFor([strict], "ph1", { ...north(60), acc: 10 }, 13 * 60).near).toBe(false);
-        expect(t.watchFor([strict], "ph1", { ...north(60), acc: 10 }, 18 * 60 + 40)).toMatchObject({ near: true, sec: 180 });
+        expect(t.watchFor([strict], "ph1", { ...north(60), acc: 10 }, 18 * 60 + 40)).toMatchObject({ near: true, sec: 30 });
+    });
+    test("a phone at 20% battery or less (not charging) is not watched closely; a charging one is", () => {
+        const at = { ...north(60), acc: 10 };
+        expect(t.watchFor([office], "ph1", at, 18 * 60 + 40, { pct: 20, charging: false }).near).toBe(false);
+        expect(t.watchFor([office], "ph1", at, 18 * 60 + 40, { pct: 12, charging: true }).sec).toBe(30);
+        expect(t.watchFor([office], "ph1", at, 18 * 60 + 40, { pct: 55, charging: false }).sec).toBe(30);
+    });
+    test("a place without times is watched every 3 minutes near it", () => {
+        const free = { ...office, arriveFrom: "", arriveTo: "", leaveFrom: "", leaveTo: "" };
+        expect(t.watchFor([free], "ph1", { ...north(60), acc: 10 }, 13 * 60)).toMatchObject({ near: true, sec: 180 });
+        expect(t.watchFor([free], "ph1", { ...north(1500), acc: 10 }, 13 * 60).near).toBe(false);
     });
 });
 

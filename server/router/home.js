@@ -18,6 +18,7 @@ const mongoose = require("mongoose");
 const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
 const HomeDevice = require("../models/homeDevice");
+const HomeSettings = require("../models/homeSettings");
 const HomeEvent = require("../models/homeEvent");
 const home = require("../utils/home");
 const assistant = require("../utils/homeAssistant");
@@ -78,7 +79,7 @@ router.get("/home/devices", authenticate, async (req, res) => {
         res.set("Cache-Control", "no-store");
         const list = await HomeDevice.find({ owner: req.rootUser._id }).sort({ createdAt: 1 }).lean();
         const devices = linkPhones(list.map((d) => publicDevice(d)));
-        const people = home.presence(list.filter((d) => d.kind === "hub"), list.filter((d) => d.kind === "phone"));
+        const people = home.presence(list.filter((d) => d.kind === "hub"), list.filter((d) => d.kind === "phone"), Date.now(), (await automation.settingsOf(req.rootUser._id)).homeSpot);
         return res.json({ devices, people });
     } catch (e) { return fail(res, e, "Could not load your devices."); }
 });
@@ -219,10 +220,11 @@ async function runSentence(owner, sentence, opts = {}) {
     const devices = linkPhones(owned.map((d) => publicDevice(d)));
     const out = assistant.parse(sentence, devices, scenes);
     if (out.status) return { reply: assistant.statusLine(devices), sent: [] };
-    if (out.presence) return { reply: assistant.presenceLine(home.presence(owned.filter((d) => d.kind === "hub"), owned.filter((d) => d.kind === "phone"))), sent: [] };
-    if (out.coming) {
-        const list = automation.comingList(settings);
-        return { reply: list.length ? list.map(automation.comingLine).join(". ") + "." : "Nobody is on the way home right now (or no phone is sharing its location).", sent: [] };
+    if (out.presence) return { reply: assistant.presenceLine(home.presence(owned.filter((d) => d.kind === "hub"), owned.filter((d) => d.kind === "phone"), Date.now(), settings.homeSpot)), sent: [] };
+    if (out.coming) return { reply: automation.comingReply(settings, owned), sent: [] };
+    if (out.locate) {
+        await HomeSettings.updateOne({ owner }, { $set: { locateUntil: new Date(Date.now() + 90 * 1000) } });
+        return { reply: "Asking the family phones for a fresh location. A phone that is saving battery answers within a few minutes; ask /coming again then.", sent: [] };
     }
     if (out.today) {
         if (opts.fromHub) return { reply: out.reply, open: "today", sent: [] };
