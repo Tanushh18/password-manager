@@ -452,6 +452,13 @@ async function tickOwner(owner, now = Date.now()) {
     const tvs = devices.filter((d) => d.kind === "tv");
     const tvOn = (d) => Boolean(d.online) && home.isOnline(d, now) && (d.status || {}).screen !== "off";
 
+    // 0. Devices that stopped reporting (power cut, Wi-Fi gone, app closed): flag them offline once and tell Telegram.
+    for (const d of devices) {
+        if (!d.online || home.isOnline(d, now)) continue;
+        const r = await HomeDevice.updateOne({ _id: d._id, online: true }, { $set: { online: false } });
+        if (r.modifiedCount) await record({ owner, device: d._id, deviceName: d.name, kind: "offline", notify: true, text: `⚠️ ${d.name} disconnected (no signal since ${new Date(d.lastSeen).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz })})` });
+    }
+
     // 1. TV time: a minute for every minute a TV screen is on, by app.
     if (tvs.some(tvOn) && await claim(`usage:${owner}:${minuteKey}`)) {
         const tv = tvs.find(tvOn);

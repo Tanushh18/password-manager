@@ -294,7 +294,7 @@ async function ingest(d, body, seenAt = new Date()) {
     // The device is switching itself off (TV standby): show it as off at once instead of after a timeout.
     if (body.leaving === true) {
         await HomeDevice.updateOne({ _id: d._id }, { $set: { online: false, "status.screen": "off" } });
-        if (wasOnline) await record({ ...base, kind: "offline", text: `${d.name} switched off`, notify: d.kind === "tv" });
+        if (wasOnline) await record({ ...base, kind: "offline", text: `${d.name} switched off`, notify: true });
         return { commands: [] };
     }
 
@@ -337,9 +337,11 @@ async function ingest(d, body, seenAt = new Date()) {
         else if (screenOn && !wasScreenOn) events.push({ kind: "online", text: `${d.name} turned on`, notify: true });
         else if (!screenOn && wasScreenOn) events.push({ kind: "standby", text: `${d.name} went to standby`, notify: true });
     } else if (!wasOnline && d.kind === "hub") {
-        events.push({ kind: "online", text: `${d.name} is back online`, notify: false });
+        events.push({ kind: "online", text: `${d.name} is back online`, notify: true });
     }
-    for (const e of events.slice(0, 30)) await record({ ...base, ...e });
+    // Every small change at home reaches Telegram: movies, uploads, devices joining or leaving, TV on/standby.
+    const LOUD = new Set(["movie_added", "movie_removed", "upload", "paired", "unpaired"]);
+    for (const e of events.slice(0, 30)) await record({ ...base, ...e, notify: e.notify === undefined ? LOUD.has(e.kind) : e.notify });
     // Things the tablet noticed while the server could not be reached (local mode), with the time they happened.
     if (d.kind === "hub" && Array.isArray(body.localEvents)) {
         const nowMs = now.getTime();

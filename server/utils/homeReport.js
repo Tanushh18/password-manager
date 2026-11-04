@@ -170,10 +170,13 @@ async function sendReport(owner, { headline = "", hours = 24, now = Date.now() }
         const data = await collectReport({ owner, settings, summary, now, hours, localParts: automation.localParts });
         data.headline = headline;
         data.periodLabel = hours === 168 ? "Last 7 days" : `Last ${hours} hours`;
-        return await automation.sendTelegram(owner, renderReport(data));
+        if (await automation.sendTelegram(owner, renderReport(data))) return true;
+        throw new Error("Telegram did not accept the report");
     } catch (e) {
         console.log("[home] report failed:", e.message);
-        return false;
+        // Never stay silent: fall back to the plain update.
+        if (!headline) return false;
+        try { return await require("./homeAutomation").sendTelegram(owner, `🏠 <b>STASHR HOME</b>\n📣 ${esc(headline)}`); } catch (e2) { console.log("[home] fallback failed:", e2.message); return false; }
     }
 }
 
