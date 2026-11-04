@@ -50,6 +50,7 @@ class LineIcon(private val name: String, tint: Int = 0xF2FFFFFF.toInt()) : Drawa
             "speed" -> { arc(3f, 5f, 21f, 23f, 180f, 180f); poly(12f, 14f, 16f, 9f); c.drawCircle(12f, 14f, 1.1f, fill) }
             "image" -> { box(3f, 5f, 21f, 19f, 2f); c.drawCircle(9f, 10f, 1.6f, paint); poly(4f, 18f, 10f, 13f, 14f, 17f, 17f, 14f, 20f, 17f) }
             "chat" -> { box(3f, 4f, 21f, 16f, 3f); poly(8f, 16f, 8f, 20f, 12f, 16f) }
+            "apps" -> { box(4f, 4f, 10.5f, 10.5f, 1.8f); box(13.5f, 4f, 20f, 10.5f, 1.8f); box(4f, 13.5f, 10.5f, 20f, 1.8f); box(13.5f, 13.5f, 20f, 20f, 1.8f) }
             "check" -> poly(5f, 12f, 10f, 17f, 19f, 7f)
             "pin" -> {
                 p.reset(); p.moveTo(12f, 21.5f); p.cubicTo(7f, 15.5f, 5f, 12.5f, 5f, 9.5f); p.arcTo(RectF(5f, 2.5f, 19f, 16.5f), 180f, 180f); p.cubicTo(19f, 12.5f, 17f, 15.5f, 12f, 21.5f); p.close()

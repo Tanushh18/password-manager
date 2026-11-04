@@ -47,8 +47,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <!-- The Stashr home screen: pick Stashr Hub as the Home app in Settings and it replaces the tablet's launcher. -->
-        <activity android:name=".ui.LauncherActivity" android:exported="true" android:launchMode="singleTask" android:excludeFromRecents="true"
+        <!-- The apps list: opened from the Apps button of the Stashr home screen (the dashboard). -->
+        <activity android:name=".ui.LauncherActivity" android:exported="false" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+        <activity android:name=".ui.SetupActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <!-- The Stashr home screen: it is also a launcher, so the Home button of the tablet opens it once Stashr Hub is the Home app. -->
+        <activity android:name=".ui.DashboardActivity" android:exported="true" android:launchMode="singleTask" android:excludeFromRecents="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -56,9 +59,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
-        <activity android:name=".ui.SetupActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
-        <activity android:name=".ui.DashboardActivity" android:exported="false" android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
         <activity android:name=".ui.SlideshowActivity" android:exported="false" android:theme="@style/Theme.StashrHub.Fullscreen"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
         <activity android:name=".ui.PhoneActivity" android:exported="false" />

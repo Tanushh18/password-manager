@@ -118,6 +118,8 @@ class DashboardActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // This is the tablet's home screen now, so it can be opened before the tablet is set up: send it to the setup first.
+        if (!prefs.paired || prefs.role != "hub") { startActivity(Intent(this, MainActivity::class.java)); finish(); return }
         if (!prefs.screenOffAfter) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         ui = Ui(this, dark = true)
         HubService.start(this)
@@ -172,6 +174,16 @@ class DashboardActivity : Activity() {
             railItems.add(item)
             col.addView(item, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
+        // Bottom left: the list of every other app on the tablet.
+        col.addView(View(this), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        col.addView(ui.column(2).apply {
+            gravity = Gravity.CENTER; isClickable = true; isFocusable = true; contentDescription = "Apps"
+            setPadding(ui.dp(4), ui.dp(12), ui.dp(4), ui.dp(10))
+            background = ui.rounded(Color.argb(40, 255, 255, 255), Color.argb(90, 255, 255, 255), 18)
+            addView(ImageView(context).apply { setImageDrawable(LineIcon("apps")); layoutParams = LinearLayout.LayoutParams(ui.dp(26), ui.dp(26)) })
+            addView(ui.text("Apps", 11f, Color.WHITE).apply { gravity = Gravity.CENTER })
+            setOnClickListener { startActivity(Intent(this@DashboardActivity, LauncherActivity::class.java)) }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         return col
     }
 
@@ -785,6 +797,13 @@ class DashboardActivity : Activity() {
             checkBox.addView(ui.text(p.fix, 12f, 0xB3FFFFFF.toInt()))
         }
     }
+    /** The Home button while this is the home app: back to the first page. */
+    override fun onNewIntent(intent: Intent?) { super.onNewIntent(intent); if (pages.isNotEmpty()) select(0) }
+
+    /** A home screen has nowhere to go back to. */
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() { if (pages.isNotEmpty() && pageIndex != 0) select(0) }
+
     override fun onPause() { resumed = false; super.onPause() }
 
     override fun onDestroy() {
