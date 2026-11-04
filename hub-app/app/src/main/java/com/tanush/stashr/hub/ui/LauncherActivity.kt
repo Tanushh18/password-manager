@@ -156,7 +156,7 @@ class LauncherActivity : Activity() {
         for (r in tiles.chunked(cols)) {
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             for (k in 0 until cols) {
-                val v = r.getOrNull(k) ?: View(this)
+                val v = r.getOrNull(k) ?: android.widget.Space(this)   // a plain View with wrap_content would fill the whole screen height
                 row.addView(v, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(ui.dp(5), 0, ui.dp(5), 0) })
             }
             col.addView(row)
