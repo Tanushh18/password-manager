@@ -312,14 +312,14 @@ async function etaTick(owner, now, settings, devices) {
         if (old.locAt !== Number(loc.at)) next.still = old.d !== undefined && Math.abs(d - old.d) < 80 ? Math.min((old.still || 0) + 1, 20) : 0;
         if (newFix) {
             const dt = old.locAt ? (Number(loc.at) - old.locAt) / 1000 : 0;
-            // "Coming home" needs a real trip, not GPS wobble at the office: at least two closer fixes in a row AND either the
-            // phone's own speed above walking pace or 400 m closed in total. A phone that is standing still is never coming.
+            // "Coming home" needs a real trip, not GPS wobble at the office: the phone's own speed above walking pace and one closer fix, or two closer fixes
+            // that add up to 400 m. A phone that is standing still is never coming.
             let coming = Boolean(old.coming), approach = old.approach || 0, approachM = old.approachM || 0;
             if (atHome) { coming = false; approach = 0; approachM = 0; }
             else if (old.d !== undefined && d < old.d - 30) { approach += 1; approachM += old.d - d; }
             else if (old.d !== undefined && d > old.d + 100) { coming = false; approach = 0; approachM = 0; }
-            const moving = Number(loc.speed) >= 2.5 || approachM >= 400;
-            if (!atHome && !coming && approach >= 2 && moving) coming = true;
+            const driving = Number(loc.speed) >= 2.5;
+            if (!atHome && !coming && ((driving && approach >= 1) || (approach >= 2 && approachM >= 400))) coming = true;
             if (coming && (next.still || 0) >= 2 && !(Number(loc.speed) >= 2.5)) { coming = false; approach = 0; approachM = 0; }
             next.approach = approach; next.approachM = approachM;
             let v = Number(loc.speed) > 2 ? Number(loc.speed) : (old.d !== undefined && dt > 20 && old.d - d > 0 ? (old.d - d) / dt : 0);
