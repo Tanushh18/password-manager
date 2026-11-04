@@ -370,6 +370,7 @@ router.use(require("./homeWhere"));
 router.use(require("./homeInsights"));
 router.use(require("./expenses"));
 router.use(require("./mpin"));
+router.use(require("./link"));
 router.use(require("./photoCloud"));
 router.use(require("./photoUpload"));
 router.use(require("./photoWorker"));
