@@ -37,6 +37,10 @@ const homeDeviceSchema = new mongoose.Schema({
     commands: { type: [commandSchema], default: [] },
     // Phone only: its Firebase push address (so the server can ask it to report where it is), and when it was last asked.
     // fcmFixAt is the phone's fix time at the last ask: if it has not moved since, the phone did not answer (off, killed, no signal).
+    // Phone only: the person turned "room location" on for this phone (it then sends Wi-Fi/Bluetooth scans, and Stashr says which room it is in).
+    roomOn: { type: Boolean, default: false },
+    // Room location, measured in real life: how often the person said the room was right ("Sahi hai") or wrong ("Galat hai, main X mein hoon").
+    roomStats: { type: mongoose.Schema.Types.Mixed, default: {} },
     fcmToken: { type: String, default: "", select: false },
     fcmSet: { type: Boolean, default: false },     // the token above exists (the token itself is never sent to a page)
     fcmSeenAt: { type: Date },

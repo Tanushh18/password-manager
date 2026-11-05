@@ -452,6 +452,14 @@ export const rotateHubCode = () => instance.post("/home/hub-code/rotate").then((
 export const getHomeInsights = () => instance.get("/home/insights").then((r) => r.data);
 export const getHomeMap = () => instance.get("/home/map").then((r) => r.data);
 export const saveHomeMap = (body) => instance.put("/home/map", body).then((r) => r.data);
+export const getAppRollout = () => instance.get("/api/app-rollout").then((r) => r.data);
+export const saveAppRollout = (app, body) => instance.put(`/api/app-rollout/${app}`, body).then((r) => r.data);
+export const getRoomLive = () => instance.get("/home/room/live").then((r) => r.data);
+export const setRoomModel = (on) => instance.post("/home/room/model", { on }).then((r) => r.data);
+export const getHomeRooms = () => instance.get("/home/rooms").then((r) => r.data);
+export const saveHomeRooms = (rooms) => instance.put("/home/rooms", { rooms }).then((r) => r.data);
+export const setRoomPhone = (id, on) => instance.put(`/home/rooms/phone/${id}`, { on }).then((r) => r.data);
+export const deleteRoomSamples = (body) => instance.delete("/home/rooms/samples", { data: body }).then((r) => r.data);
 export const getHomeTrail = () => instance.get("/home/trail").then((r) => r.data);
 export const getTelegramDiagnose = () => instance.get("/telegram/diagnose").then((r) => r.data);
 export const repairTelegram = () => instance.post("/telegram/repair").then((r) => r.data);

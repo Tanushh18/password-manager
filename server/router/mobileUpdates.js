@@ -2,6 +2,8 @@ const express = require("express");
 const { fetchWithHeaderTimeout, pipeUpstream } = require("../utils/upstreamStream");
 const { latestFromFeed } = require("../utils/releaseFeed");
 
+const rollout = require("../utils/rollout");
+
 const router = express.Router();
 const GITHUB_REPOSITORY = process.env.STASHR_UPDATE_REPOSITORY || "Tanushh18/stashr-Home-Automation";
 const EXPECTED_PACKAGE = "com.tanush.stashr.com";
@@ -110,7 +112,7 @@ router.get("/android/latest", async (req, res) => {
       releaseNotes: release.releaseNotes,
       publishedAt: release.publishedAt,
       tagName: release.tagName,
-      updateAvailable: currentVersionCode < release.versionCode,
+      updateAvailable: currentVersionCode < release.versionCode && await rollout.offered("android", release.versionCode, req),
       downloadUrl: `${origin}/api/mobile-updates/android/download`,
     });
   } catch (error) {
@@ -224,7 +226,7 @@ for (const key of Object.keys(SIDE_APPS)) {
       const current = Number.parseInt(String(req.query.currentVersionCode || "0"), 10) || 0;
       const origin = `${req.protocol}://${req.get("host")}`;
       return res.json({ appId: app.pkg, version: r.version, versionCode: r.versionCode, sha256: r.sha256, sizeBytes: r.sizeBytes, releaseNotes: r.releaseNotes,
-        publishedAt: r.publishedAt, tagName: r.tagName, updateAvailable: current < r.versionCode, downloadUrl: `${origin}/api/mobile-updates/${key}/download` });
+        publishedAt: r.publishedAt, tagName: r.tagName, updateAvailable: current < r.versionCode && (key === "cast" || await rollout.offered(key, r.versionCode, req)), downloadUrl: `${origin}/api/mobile-updates/${key}/download` });
     } catch (error) {
       return res.status(error.status || 502).json({ error: `${app.label} update information is temporarily unavailable.`, detail: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
@@ -254,5 +256,7 @@ for (const key of Object.keys(SIDE_APPS)) {
   });
 }
 
-router._resetCache = () => { cachedRelease = null; cachedAt = 0; sideList = null; sideListAt = 0; for (const k of Object.keys(sideCache)) delete sideCache[k]; };
+// For the rollout page: the newest release of each app, as the update check sees it.
+router._latest = { main: (...a) => latestRelease(...a), side: (...a) => latestSideRelease(...a) };
+router._resetCache = () => { rollout.forget("android"); rollout.forget("where"); rollout.forget("hub"); rollout.forget("tv"); cachedRelease = null; cachedAt = 0; sideList = null; sideListAt = 0; for (const k of Object.keys(sideCache)) delete sideCache[k]; };
 module.exports = router;

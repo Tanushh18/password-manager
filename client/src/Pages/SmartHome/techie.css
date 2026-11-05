@@ -1,0 +1,68 @@
+/*
+ * "Developer console" look for the model, map, trail and app-update pages: GitHub Dark colours, monospace type, status LEDs, prompt lines.
+ * Scoped to .dev, so the rest of the site keeps its own look. Palette: base #0d1117, panel #161b22, border #30363d, text #c9d1d9,
+ * muted #8b949e, blue #58a6ff, green #3fb950, amber #d29922, red #f85149, purple #a371f7.
+ */
+.dev {
+  --d-bg: #0d1117; --d-panel: #161b22; --d-panel2: #1c2128; --d-line: #30363d; --d-text: #c9d1d9; --d-muted: #8b949e;
+  --d-blue: #58a6ff; --d-green: #3fb950; --d-amber: #d29922; --d-red: #f85149; --d-purple: #a371f7;
+  background-color: var(--d-bg); color: var(--d-text); border: 1px solid var(--d-line); border-radius: 12px; padding: 1.1rem; margin: 1rem 0;
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .85rem; line-height: 1.5;
+  background-image: linear-gradient(rgba(88, 166, 255, .035) 1px, transparent 1px), linear-gradient(90deg, rgba(88, 166, 255, .035) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.dev * { box-sizing: border-box; }
+.dev a { color: var(--d-blue); }
+.dev h1, .dev h2, .dev h3, .dev h4 { color: var(--d-text); font-family: inherit; letter-spacing: -.01em; }
+.dev .sh-dim, .dev .dev-muted { color: var(--d-muted); }
+.dev .sh-bad { color: var(--d-red); } .dev .sh-ok { color: var(--d-green); } .dev .sh-warn { color: var(--d-amber); }
+.dev .sh-editor, .dev .dev-card { background: var(--d-panel); border: 1px solid var(--d-line); border-radius: 8px; padding: .85rem 1rem; margin-top: .75rem; display: grid; gap: .45rem; }
+.dev .sh-lan li { border-top-color: var(--d-line); }
+.dev .sh-lan__main span { color: var(--d-muted); }
+.dev input[type="text"], .dev input:not([type]), .dev input[type="number"], .dev select { background: var(--d-bg); color: var(--d-text); border: 1px solid var(--d-line); border-radius: 6px; padding: .4rem .6rem; font: inherit; }
+.dev input:focus-visible, .dev select:focus-visible, .dev button:focus-visible { outline: 2px solid var(--d-blue); outline-offset: 1px; }
+.dev .rd-btn { font: inherit; border-radius: 6px; border: 1px solid var(--d-line); background: var(--d-panel2); color: var(--d-text); padding: .4rem .8rem; cursor: pointer; }
+.dev .rd-btn:hover:not(:disabled) { border-color: var(--d-blue); }
+.dev .rd-btn:disabled { opacity: .45; cursor: not-allowed; }
+.dev .rd-btn--primary { background: #238636; border-color: #2ea043; color: #fff; }
+.dev .rd-btn--primary:hover:not(:disabled) { background: #2ea043; border-color: #3fb950; }
+.dev .rd-btn--danger-quiet { color: var(--d-red); border-color: rgba(248, 81, 73, .45); }
+.dev .sh-chip { background: var(--d-bg); border-color: var(--d-line); }
+.dev .sh-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.dev .sh-table th { color: var(--d-muted); font-weight: 500; text-align: left; border-bottom: 1px solid var(--d-line); padding: .25rem .5rem; }
+.dev .sh-table td { padding: .25rem .5rem; border-bottom: 1px solid rgba(48, 54, 61, .6); }
+.dev details > summary { cursor: pointer; color: var(--d-muted); }
+
+.dev-prompt { color: var(--d-muted); }
+.dev-prompt::before { content: "$ "; color: var(--d-green); }
+.dev-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin: .35rem 0; }
+.dev-title { font-size: 1.15rem; font-weight: 700; letter-spacing: .04em; }
+.dev-led { width: .8rem; height: .8rem; border-radius: 50%; background: #484f58; box-shadow: 0 0 0 2px rgba(110, 118, 129, .3); }
+.dev-led.on { background: var(--d-green); box-shadow: 0 0 0 2px rgba(63, 185, 80, .3), 0 0 12px rgba(63, 185, 80, .8); animation: dev-pulse 1.6s ease-in-out infinite; }
+@keyframes dev-pulse { 50% { box-shadow: 0 0 0 2px rgba(63, 185, 80, .3), 0 0 4px rgba(63, 185, 80, .4); } }
+@media (prefers-reduced-motion: reduce) { .dev-led.on { animation: none; } }
+.dev-state { padding: .05rem .5rem; border-radius: 999px; border: 1px solid var(--d-line); font-size: .75rem; }
+.dev-state.on { color: var(--d-green); border-color: rgba(63, 185, 80, .5); } .dev-state.off { color: var(--d-muted); }
+.dev-sum { color: var(--d-blue); }
+.dev-room { font-size: 1.6rem; font-weight: 700; color: var(--d-green); }
+.dev-room.unsure { color: var(--d-amber); } .dev-room.off { color: var(--d-muted); }
+.dev-bar { display: grid; grid-template-columns: 7rem 1fr 3.2rem; align-items: center; gap: .5rem; }
+.dev-bar i { display: block; height: .55rem; border-radius: 999px; background: var(--d-line); overflow: hidden; }
+.dev-bar i b { display: block; height: 100%; background: var(--d-muted); transition: width .5s ease; }
+.dev-bar.top i b { background: linear-gradient(90deg, #238636, #3fb950); box-shadow: 0 0 8px rgba(63, 185, 80, .5); }
+.dev-bar span:last-child { text-align: right; color: var(--d-muted); }
+.dev-kv { display: grid; grid-template-columns: minmax(9rem, 14rem) 1fr; gap: .15rem .9rem; }
+.dev-kv dt { color: var(--d-muted); } .dev-kv dd { margin: 0; color: var(--d-text); }
+.dev-warn { color: var(--d-red); }
+.dev-warn::before { content: "! "; }
+
+/* the house map inside .dev */
+.dev .hm-zone, .dev .hm-label { fill: rgba(63, 185, 80, .07); stroke: #3fb950; stroke-width: 1.5; }
+.dev .hm-label { fill: rgba(139, 148, 158, .07); stroke: #484f58; stroke-dasharray: 5 4; }
+.dev .hm-zone-top { fill: rgba(63, 185, 80, .16); stroke: #3fb950; } .dev .hm-zone-left { fill: rgba(63, 185, 80, .30); stroke: #3fb950; } .dev .hm-zone-right { fill: rgba(63, 185, 80, .44); stroke: #3fb950; }
+.dev .hm-label-top { fill: rgba(139, 148, 158, .12); stroke: #484f58; } .dev .hm-label-left { fill: rgba(139, 148, 158, .22); stroke: #484f58; } .dev .hm-label-right { fill: rgba(139, 148, 158, .32); stroke: #484f58; }
+.dev .hm-t-title, .dev .hm-t-title-c { fill: #c9d1d9; font-family: inherit; } .dev .hm-t-hint { fill: #8b949e; font-family: inherit; }
+.dev .hm-t-person { fill: #58a6ff; font: 600 10px "JetBrains Mono", ui-monospace, monospace; text-anchor: middle; }
+.dev .hm-dot { stroke: #0d1117; }
+.dev .hm-svg { filter: drop-shadow(0 0 18px rgba(63, 185, 80, .08)); }
+.dev .tm-map { border-color: var(--d-line); }

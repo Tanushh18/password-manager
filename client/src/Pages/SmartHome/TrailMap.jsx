@@ -4,6 +4,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { getHomeTrail, getHomeAddress } from "../../api/client";
 import { Section } from "../Render/RenderUi";
+import "./techie.css";
 import { errorMessage } from "../Render/renderUtils";
 import { colourFor, pointsSince, itemsSince, coordKey, placeLabel, mapsLink, kmOf } from "../../lib/trailView";
 
@@ -101,6 +102,7 @@ export function TrailCard() {
   const label = (lat, lon, name) => placeLabel({ name, address: (addr[coordKey(lat, lon)] || {}).address }, lat, lon);
 
   return (
+    <div className="dev"><div className="dev-prompt">stashr trail --last 24h</div>
     <Section title="Where everyone went (last 24 hours)" subtitle="Pick whose phones to show. The line goes through every stored location in time order; click any point for its address and exact coordinates. Each point is deleted automatically 24 hours after it is stored. Shown only here and in your own Telegram chat.">
       <div className="sh-row">
         {people.map((p) => (
@@ -142,6 +144,6 @@ export function TrailCard() {
           </div>
         );
       })}
-    </Section>
+    </Section></div>
   );
 }

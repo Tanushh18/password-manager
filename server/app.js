@@ -161,6 +161,7 @@ app.get("/", (req, res) =>
 
 // Mobile update endpoints: release metadata and APK download redirect.
 app.use("/api/mobile-updates", require("./router/mobileUpdates"));
+app.use("/api/app-rollout", require("./router/appRollout"));
 app.use("/api/ota", require("./router/ota"));
 
 // LINKING THE ROUTER FILES 

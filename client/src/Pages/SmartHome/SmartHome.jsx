@@ -10,6 +10,7 @@ import { errorMessage } from "../Render/renderUtils";
 import { stateOf, STATE_LABEL, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName, splitStale, TAG_LABEL, batteryOf } from "../../lib/smartHome";
 import { LiveMapCard } from "./HomeMap";
 import { HouseMapCard } from "./HouseMap";
+import { RoomLabCard } from "./RoomLab";
 import { TrailCard } from "./TrailMap";
 import { TelegramCheckCard } from "./TelegramCheck";
 import { HealthCard, healthCounts, InsightsCard, LocationsCard, HomeScreenCard, FeaturesCard, PairCard, PeopleCard, PhonesCard, AlertsCard, TvTimeCard, ScenesCard, SchedulesCard, PlacesCard, SpeedCard, CameraCard, SlideshowCard, useHomeSettings } from "./HomeExtras";
@@ -461,6 +462,7 @@ export default function SmartHome() {
       </></CardBoundary>) : null}
       {tab === "insights" ? (<CardBoundary key="insights"><>
         <HouseMapCard />
+        <RoomLabCard />
         <TrailCard />
         <InsightsCard />
       </></CardBoundary>) : null}

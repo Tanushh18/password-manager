@@ -1,5 +1,7 @@
 # Kamre ki location (Room Location): poora plan
 
+> **Status:** Phase 1 (Room Lab), 2 (accuracy), 3 (server par pehchan), 4 (map, Telegram) aur 5 (galat hai + naye samples) ban chuke hain. Kaise kaam karta hai: `docs/ROOM_LOCATION_HOW_IT_WORKS.md`. Baaki: tablet par local pehchan, Bluetooth beacons, magnetometer.
+
 Maqsad: phone ya banda ghar ke **kaun se kamre mein hai** (Kitchen, Bedroom, Hall…), Wi-Fi aur Bluetooth ke patterns se, aur wo **khud behtar hota rahe**.
 Ye **kamre tak** ki pehchan hai, meter tak ki exact location nahi. Neeche jo accuracy ke aankde hain wo **target** hain, vaade nahi: asli ghar par napna padega.
 
