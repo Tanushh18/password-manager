@@ -50,6 +50,8 @@ class HealthTest {
         assertEquals("whileInUse", j.getString("location")); assertTrue(j.getBoolean("gpsEnabled")); assertFalse(j.getBoolean("batteryUnrestricted"))
         assertFalse(j.has("notifications"))
         assertTrue(j.isNull("lastError"))
+        assertFalse(j.has("brand"))                                     // not sent when unknown
+        assertEquals("OPPO", HealthLogic.build("1.6.0", 1, 34, "CPH2557", null, Flags(), "OPPO").getString("brand"))
         val e = HealthLogic.build("1.5.0", 1, 34, "m", LastError(7L, "report", "y".repeat(900)), Flags())
         assertEquals("report", e.getJSONObject("lastError").getString("where"))
         assertEquals(HealthLogic.MAX_TEXT, e.getJSONObject("lastError").getString("text").length)

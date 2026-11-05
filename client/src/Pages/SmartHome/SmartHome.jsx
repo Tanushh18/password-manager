@@ -9,7 +9,7 @@ import { usePolling } from "../Render/renderHooks";
 import { errorMessage } from "../Render/renderUtils";
 import { stateOf, STATE_LABEL, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName, splitStale, TAG_LABEL, batteryOf } from "../../lib/smartHome";
 import { LiveMapCard } from "./HomeMap";
-import { HealthCard, healthCounts, InsightsCard, LocationsCard, HomeScreenCard, FeaturesCard, PairCard, PeopleCard, PhonesCard, AlertsCard, TvTimeCard, ScenesCard, SchedulesCard, PlacesCard, SpeedCard, CameraCard, SlideshowCard, useHomeSettings } from "./HomeExtras";
+import { HealthCard, healthCounts, TrailCard, InsightsCard, LocationsCard, HomeScreenCard, FeaturesCard, PairCard, PeopleCard, PhonesCard, AlertsCard, TvTimeCard, ScenesCard, SchedulesCard, PlacesCard, SpeedCard, CameraCard, SlideshowCard, useHomeSettings } from "./HomeExtras";
 import "../Render/RenderDashboard.css";
 import "./SmartHome.css";
 
@@ -456,6 +456,7 @@ export default function SmartHome() {
         <HealthCard devices={list} />
       </></CardBoundary>) : null}
       {tab === "insights" ? (<CardBoundary key="insights"><>
+        <TrailCard />
         <InsightsCard />
       </></CardBoundary>) : null}
       {tab === "media" ? (<CardBoundary key="media"><>

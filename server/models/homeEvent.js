@@ -5,6 +5,7 @@ const homeEventSchema = new mongoose.Schema({
     owner: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
     device: { type: mongoose.Schema.Types.ObjectId, index: true },
     deviceName: { type: String, default: "" },
+    person: { type: String, default: "" },      // who it is about (reached home, left home, late), so habits and questions can follow a person
     kind: { type: String, required: true },
     text: { type: String, required: true, maxlength: 300 },
     at: { type: Date, default: Date.now }

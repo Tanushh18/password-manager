@@ -216,7 +216,7 @@ router.put("/home/places", authenticate, writeLimiter, async (req, res) => {
             if (!!p.arriveFrom !== !!p.arriveTo || !!p.leaveFrom !== !!p.leaveTo) return res.status(400).json({ error: "Give both a from and a to time, or neither." });
             const id = /^[a-f0-9]{12}$/.test(p.id || "") ? p.id : newId();
             clean.push({ id, name: String(p.name || "").trim().slice(0, 40) || "Place", lat, lon, radius, phone: String(p.phone), group, arriveText: txt(p.arriveText), leaveText: txt(p.leaveText),
-                arriveFrom: p.arriveFrom || "", arriveTo: p.arriveTo || "", leaveFrom: p.leaveFrom || "", leaveTo: p.leaveTo || "", enabled: p.enabled !== false, strictWindow: p.strictWindow === true, state: (old.get(id) || {}).state || "" });
+                arriveFrom: p.arriveFrom || "", arriveTo: p.arriveTo || "", leaveFrom: p.leaveFrom || "", leaveTo: p.leaveTo || "", tgArrive: p.tgArrive === true, tgLeave: p.tgLeave === true, enabled: p.enabled !== false, strictWindow: p.strictWindow === true, state: (old.get(id) || {}).state || "" });
         }
         await HomeSettings.updateOne({ owner }, { $set: { places: clean } });
         return res.json({ places: clean });

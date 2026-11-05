@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, getHomeInsights, saveHomeHistory, deleteHomeHistory, saveHomeSpots, getLocationCode, rotateLocationCode, getHubCode, rotateHubCode, getHomeWhere, locateNow, saveHomeScenes, runHomeScene,
+  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, getHomeInsights, getHomeTrail, saveHomeHistory, deleteHomeHistory, saveHomeSpots, getLocationCode, rotateLocationCode, getHubCode, rotateHubCode, getHomeWhere, locateNow, saveHomeScenes, runHomeScene,
   getHomeShare, saveHomeShare, getHomePlaceTrail, getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, getHomeLiveFrame, testHomeBrief, setHomePhonePerson, removeHomeDevice, setHomeSyncPaused
 } from "../../api/client";
 import { Section, useConfirm } from "../Render/RenderUi";
@@ -396,7 +396,7 @@ export function PlacesCard({ home, phones, hasSmartHub }) {
     try { const r = await saveHomePlaces(list); setSettings({ ...s, places: r.places }); setDraft(null); toast.success("Places saved."); }
     catch (e) { toast.error(errorMessage(e, "Could not save.")); }
   };
-  const blank = { name: "Office", lat: "", lon: "", radius: 150, phone: phones[0]?.id || "", group: "", arriveText: "Reached office", leaveText: "Leaving office", arriveFrom: "", arriveTo: "", leaveFrom: "", leaveTo: "", strictWindow: false, enabled: true };
+  const blank = { name: "Office", lat: "", lon: "", radius: 150, phone: phones[0]?.id || "", group: "", arriveText: "Reached office", leaveText: "Leaving office", arriveFrom: "", arriveTo: "", leaveFrom: "", leaveTo: "", strictWindow: false, enabled: true, tgLeave: true, tgArrive: true };
   const set = (patch) => setDraft({ ...draft, p: { ...draft.p, ...patch } });
   const here = () => {
     if (!navigator.geolocation) { toast.error("This browser cannot give your location."); return; }
@@ -407,20 +407,26 @@ export function PlacesCard({ home, phones, hasSmartHub }) {
       { enableHighAccuracy: true, timeout: 15000 }
     );
   };
+  const phoneFix = () => {
+    const l = phones.find((p) => p.id === draft.p.phone)?.status?.location;
+    if (!l || !Number.isFinite(Number(l.lat))) { toast.error("This phone has not sent a location yet."); return; }
+    set({ lat: Number(Number(l.lat).toFixed(6)), lon: Number(Number(l.lon).toFixed(6)) });
+    toast.success("Set to where this phone is right now. Check the circle, then save.");
+  };
   const test = async (pl) => {
     try { await testHomePlace(pl.id, pl.arriveText); toast.success("Sent to the tablet: WhatsApp should open and send."); }
     catch (e) { toast.error(errorMessage(e, "Could not send.")); }
   };
   const phoneName = (id) => phones.find((p) => p.id === id)?.name || "phone";
   return (
-    <Section title="Places and WhatsApp messages" subtitle="When a family phone reaches or leaves a place (and the time fits), the tablet opens WhatsApp and sends your message to a group.">
+    <Section title="Places: work, school and more" subtitle="Pick a person's phone and a place (their office, school…). Stashr can tell you on Telegram when they leave or reach it, and the tablet can also send a WhatsApp message to a group. You can ask Telegram “Papa office se nikle ya nahi?” any time.">
       <HomeSpotBlock home={home} />
       {!phones.length ? <p className="sh-dim">Link a family phone first (Family locations card on the Devices tab).</p> : null}
       {!hasSmartHub ? <p className="sh-dim">The tablet needs Stashr Hub, with its Accessibility switch on (the WhatsApp card on the tablet’s dashboard).</p> : null}
       {places.length ? (
         <ul className="sh-lan">{places.map((pl, i) => (
           <li key={pl.id}>
-            <div className="sh-lan__main"><b>{pl.name} · {phoneName(pl.phone)}</b><span>{pl.group || "no group"} · “{pl.arriveText || "—"}” on arrive{pl.arriveFrom ? ` ${pl.arriveFrom}–${pl.arriveTo}` : ""} · “{pl.leaveText || "—"}” on leave{pl.leaveFrom ? ` ${pl.leaveFrom}–${pl.leaveTo}` : ""} · {pl.radius} m · now {pl.state === "in" ? "there" : pl.state === "out" ? "away" : "unknown"} · {pl.strictWindow ? "only inside these times" : "times are a guide"}</span></div>
+            <div className="sh-lan__main"><b>{pl.name} · {phoneName(pl.phone)}</b><span>{pl.tgLeave || pl.tgArrive ? `Telegram: ${pl.tgLeave && pl.tgArrive ? "leave + arrive" : pl.tgLeave ? "leave" : "arrive"} · ` : ""}{pl.group || "no WhatsApp group"} · “{pl.arriveText || "—"}” on arrive{pl.arriveFrom ? ` ${pl.arriveFrom}–${pl.arriveTo}` : ""} · “{pl.leaveText || "—"}” on leave{pl.leaveFrom ? ` ${pl.leaveFrom}–${pl.leaveTo}` : ""} · {pl.radius} m · now {pl.state === "in" ? "there" : pl.state === "out" ? "away" : "unknown"} · {pl.strictWindow ? "only inside these times" : "times are a guide"}</span></div>
             <label className="sh-switch"><input type="checkbox" checked={pl.enabled !== false} onChange={(e) => store(places.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)))} />On</label>
             <button className="rd-btn rd-btn--quiet" onClick={() => test(pl)} disabled={!pl.group}>Send test</button>
             <button className="rd-btn rd-btn--quiet" onClick={() => setDraft({ index: i, p: { ...pl } })}>Edit</button>
@@ -437,10 +443,15 @@ export function PlacesCard({ home, phones, hasSmartHub }) {
           <div className="sh-row">
             <input type="number" step="any" value={draft.p.lat} onChange={(e) => set({ lat: e.target.value })} placeholder="Latitude" aria-label="Latitude" required />
             <input type="number" step="any" value={draft.p.lon} onChange={(e) => set({ lon: e.target.value })} placeholder="Longitude" aria-label="Longitude" required />
+            <button type="button" className="rd-btn rd-btn--quiet" onClick={phoneFix}>Use this phone’s location now</button>
             <button type="button" className="rd-btn rd-btn--quiet" onClick={here} disabled={locating}>{locating ? "Locating…" : "Use this device’s location"}</button>
           </div>
           <label className="sh-dim">Circle radius: {draft.p.radius} m<input type="range" min="50" max="1000" step="10" value={draft.p.radius} onChange={(e) => set({ radius: Number(e.target.value) })} aria-label="Radius in metres" /></label>
-          <input value={draft.p.group} onChange={(e) => set({ group: e.target.value })} placeholder="WhatsApp group name, exactly as in WhatsApp" maxLength={80} aria-label="WhatsApp group" required />
+          <div className="sh-row">
+            <label className="sh-switch"><input type="checkbox" checked={draft.p.tgLeave === true} onChange={(e) => set({ tgLeave: e.target.checked })} />Telegram: tell me when they leave</label>
+            <label className="sh-switch"><input type="checkbox" checked={draft.p.tgArrive === true} onChange={(e) => set({ tgArrive: e.target.checked })} />Telegram: tell me when they reach</label>
+          </div>
+          <input value={draft.p.group} onChange={(e) => set({ group: e.target.value })} placeholder={draft.p.tgLeave || draft.p.tgArrive ? "WhatsApp group name (optional: only if the tablet should also send a message)" : "WhatsApp group name, exactly as in WhatsApp"} maxLength={80} aria-label="WhatsApp group" required={!draft.p.tgLeave && !draft.p.tgArrive} />
           <div className="sh-row"><input value={draft.p.arriveText} onChange={(e) => set({ arriveText: e.target.value })} placeholder="Message on arriving" maxLength={500} aria-label="Arrive message" />
             <span className="sh-dim">around</span><input type="time" value={draft.p.arriveFrom} onChange={(e) => set({ arriveFrom: e.target.value })} aria-label="Arrive from" /><input type="time" value={draft.p.arriveTo} onChange={(e) => set({ arriveTo: e.target.value })} aria-label="Arrive to" /></div>
           <div className="sh-row"><input value={draft.p.leaveText} onChange={(e) => set({ leaveText: e.target.value })} placeholder="Message on leaving" maxLength={500} aria-label="Leave message" />
@@ -872,6 +883,47 @@ export function LocationsCard() {
 /* ───────── family insights: places, trips, commute, driving ───────── */
 
 const tripTime = (ms) => new Date(ms).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
+
+/** Every phone's last 24 hours: where each person stayed and for how long, and every stored point with its coordinates. */
+export function TrailCard() {
+  const [d, setD] = useState(null);
+  const load = useCallback(async () => { try { setD(await getHomeTrail()); } catch (e) { toast.error(errorMessage(e, "Could not load the last 24 hours.")); } }, []);
+  useEffect(() => { load(); }, [load]);
+  if (!d) return null;
+  const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const dur = (m) => (m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min` : `${m} min`);
+  const map = (lat, lon) => `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=17/${lat}/${lon}`;
+  return (
+    <Section title="Where everyone went (last 24 hours)" subtitle="Every family phone's location for the last 24 hours, with the exact coordinates. Each point is deleted automatically 24 hours after it is stored. Shown only here and in your own Telegram chat.">
+      <div className="sh-row"><button type="button" className="rd-btn rd-btn--quiet" onClick={load}>Refresh</button></div>
+      {!d.people.length ? <p className="sh-dim">No family phone is linked yet.</p> : (
+        <ul className="sh-lan">{d.people.map((t) => (
+          <li key={t.phone}>
+            <div className="sh-lan__main">
+              <b>{t.person}</b>
+              <span>{t.count ? `${t.count} locations · ${t.km} km${t.last ? ` · last ${clock(t.last.at)}${t.last.name ? " at " + t.last.name : ""}` : ""}` : "No location in the last 24 hours yet (the phone has to report once)."}</span>
+              {t.timeline.length ? (
+                <ol className="sh-dim" style={{ margin: "6px 0 0 18px" }}>
+                  {t.timeline.map((e, i) => e.type === "stay"
+                    ? <li key={i}>📍 {clock(e.from)}–{e.here ? "now" : clock(e.to)} · <b>{e.name || "Somewhere"}</b> · {dur(e.minutes)} · <a href={map(e.lat, e.lon)} target="_blank" rel="noreferrer">{e.lat}, {e.lon}</a></li>
+                    : <li key={i} style={{ listStyle: "none" }}>↪ {dur(e.minutes)} on the way · {e.km} km</li>)}
+                </ol>
+              ) : null}
+              {t.points.length ? (
+                <details style={{ marginTop: 6 }}>
+                  <summary className="sh-dim">All {t.points.length} points with coordinates</summary>
+                  <table className="sh-table"><thead><tr><th>Time</th><th>Latitude</th><th>Longitude</th><th>Accuracy</th></tr></thead>
+                    <tbody>{[...t.points].reverse().map((x) => <tr key={x.at}><td>{clock(x.at)}</td><td><a href={map(x.lat, x.lon)} target="_blank" rel="noreferrer">{x.lat}</a></td><td>{x.lon}</td><td>±{x.acc} m</td></tr>)}</tbody>
+                  </table>
+                </details>
+              ) : null}
+            </div>
+          </li>
+        ))}</ul>
+      )}
+    </Section>
+  );
+}
 
 export function InsightsCard() {
   const [d, setD] = useState(null);
