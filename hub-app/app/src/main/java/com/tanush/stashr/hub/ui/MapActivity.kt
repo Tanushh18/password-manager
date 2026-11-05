@@ -36,6 +36,7 @@ class MapActivity : Activity() {
         bar.addView(ui.primary("2D") { view.threeD = false })
         bar.addView(ui.quiet("3D") { view.threeD = true })
         bar.addView(ui.quiet("Refresh") { refresh() })
+        bar.addView(ui.quiet("Room model") { startActivity(Intent(this, RoomModelActivity::class.java)) })
         col.addView(bar)
         view = HouseMapView(this)
         view.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(440))

@@ -9,6 +9,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LogicTest {
+    @Test fun theServerCanStartAndStopTheRoomModelThroughAnAnswer() {
+        assertEquals(true, Logic.parseAnswer(JSONObject("""{"state":"home","roomOn":true}""")).roomOn)
+        assertEquals(false, Logic.parseAnswer(JSONObject("""{"state":"home","roomOn":false}""")).roomOn)
+        assertNull(Logic.parseAnswer(JSONObject("""{"state":"home"}""")).roomOn)          // an older server says nothing: the phone keeps its own choice
+    }
+
     @Test fun pushIsDroppedOnlyWhenTheServerWasJustCalled() {
         assertTrue(Logic.pushWorthIt(5 * 60_000, false))
         assertFalse(Logic.pushWorthIt(30_000, false))
