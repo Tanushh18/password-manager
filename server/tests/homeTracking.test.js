@@ -356,6 +356,15 @@ describe("tracking through the server", () => {
         expect((await HomeDevice.findOne({ kind: "hub" }).lean()).commands.find((c) => c.id === cmd.id).status).toBe("done");
     });
 
+    test("'ghar ka map dikhao' opens the house map on the tablet", async () => {
+        const auth = await signUp();
+        const tab = await pair(auth, "hub", "Hall tablet");
+        await report(tab.token, { status: { agent: "stashr-hub" } });
+        const r = await request(app).post("/home/assistant").set(auth).send({ text: "ghar ka map dikhao" });
+        expect(r.body.reply).toMatch(/house map on the tablet/);
+        expect((await HomeDevice.findOne({ kind: "hub" }).lean()).commands.some((c) => c.type === "show_map")).toBe(true);
+    });
+
     test("once they are apart, the second phone gets its own updates", async () => {
         const auth = await signUp();
         const tab = await pair(auth, "hub");

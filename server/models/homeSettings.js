@@ -54,7 +54,9 @@ const homeSettingsSchema = new mongoose.Schema({
     hubCode: { type: String, default: "", index: true },
     etaState: { type: mongoose.Schema.Types.Mixed, default: {} },
     emptyHomeNotifiedAt: { type: Date },
-    presenceState: { type: mongoose.Schema.Types.Mixed, default: {} }
+    presenceState: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // The house map: names you gave the learned zones, the optional floor-plan picture, and what the last learning pass found (to tell you about a new zone).
+    map: { type: mongoose.Schema.Types.Mixed, default: {} }
 }, { minimize: false });
 
 homeSettingsSchema.index({ "share.token": 1 }, { sparse: true });

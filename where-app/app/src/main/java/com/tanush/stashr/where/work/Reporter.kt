@@ -174,7 +174,7 @@ object Reporter {
     private fun extras(ctx: Context, json: JSONObject, pct: Int, charging: Boolean): JSONObject {
         val (wifi, ip) = wifi(ctx)
         json.put("battery", JSONObject().put("pct", if (pct >= 0) pct else JSONObject.NULL).put("charging", charging))
-        json.put("wifi", JSONObject().put("connected", wifi).put("ip", ip))
+        json.put("wifi", JSONObject().put("connected", wifi).put("ip", ip).put("bssid", if (wifi) currentBssid(ctx) else ""))
         json.put("health", Health.collect(ctx))
         Prefs(ctx).fcmToken.takeIf { it.isNotEmpty() }?.let { json.put("fcm", it) }
         return json

@@ -191,7 +191,7 @@ class HubService : LifecycleService() {
             .put("agent", "stashr-hub").put("version", BuildConfig.VERSION_NAME).put("versionCode", BuildConfig.VERSION_CODE)
             .put("model", DeviceInfo.model())
             .put("battery", JSONObject().put("pct", bat.opt("pct")).put("charging", bat.optBoolean("charging")))
-            .put("wifi", JSONObject().put("rssi", DeviceInfo.wifiRssi(this)).put("ip", DeviceInfo.localIp()))
+            .put("wifi", JSONObject().put("rssi", DeviceInfo.wifiRssi(this)).put("ip", DeviceInfo.localIp()).put("bssid", DeviceInfo.wifiBssid(this)))
             .put("camera", CameraWatch.status())
             .put("voice", VoiceListener.status())
             .put("updateWaiting", Updater.waiting)
@@ -242,6 +242,10 @@ class HubService : LifecycleService() {
                         if (text.isEmpty()) throw IllegalArgumentException("Nothing to show")
                         com.tanush.stashr.hub.ui.AnnounceActivity.show(this@HubService, text, args.optBoolean("speak", true), args.optBoolean("urgent", false))
                         "Shown"
+                    }
+                    "show_map" -> {
+                        startActivity(Intent(this@HubService, com.tanush.stashr.hub.ui.MapActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                        "Showing the house map"
                     }
                     "show_today" -> {
                         startActivity(Intent(this@HubService, com.tanush.stashr.hub.ui.TodayActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))

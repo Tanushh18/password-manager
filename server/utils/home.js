@@ -46,6 +46,7 @@ const COMMANDS = {
         camera: (a) => (["arm", "disarm", "snapshot", "clip", "live"].includes(a.action) ? { action: a.action } : null),
         slideshow: (a) => (["start", "stop"].includes(a.action) ? { action: a.action } : null),
         show_today: () => ({}),
+        show_map: () => ({}),
         announce: (a) => (okText(a.text, 200) ? { text: a.text.trim(), speak: a.speak !== false, urgent: a.urgent === true } : null),
         send_whatsapp: (a) => (okText(a.group, 80) && okText(a.text, 500) ? { group: a.group.trim(), text: a.text.trim() } : null)
     },

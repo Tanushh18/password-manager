@@ -311,6 +311,7 @@ async function ingest(d, body, seenAt = new Date()) {
     const set = { lastSeen: now, online: true };
     if (!wasOnline) set.onlineSince = now;
     const events = [];
+    if (d.kind === "hub" && status.wifi && status.wifi.bssid) void require("../utils/homeMap").noteAp(d, status.wifi.bssid, now.getTime());
 
     if (d.kind === "hub") {
         const labels = { ...(d.lanLabels || {}) };
