@@ -9,6 +9,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LogicTest {
+    @Test fun pushIsDroppedOnlyWhenTheServerWasJustCalled() {
+        assertTrue(Logic.pushWorthIt(5 * 60_000, false))
+        assertFalse(Logic.pushWorthIt(30_000, false))
+        assertTrue(Logic.pushWorthIt(30_000, true))
+        assertFalse(Logic.pushWorthIt(5_000, true))
+    }
+
     @Test fun delayIsClamped() {
         assertEquals(900, Logic.clampDelay(null))
         assertEquals(900, Logic.clampDelay(0))

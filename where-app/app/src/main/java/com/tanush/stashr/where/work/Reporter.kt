@@ -176,6 +176,7 @@ object Reporter {
         json.put("battery", JSONObject().put("pct", if (pct >= 0) pct else JSONObject.NULL).put("charging", charging))
         json.put("wifi", JSONObject().put("connected", wifi).put("ip", ip))
         json.put("health", Health.collect(ctx))
+        Prefs(ctx).fcmToken.takeIf { it.isNotEmpty() }?.let { json.put("fcm", it) }
         return json
     }
 

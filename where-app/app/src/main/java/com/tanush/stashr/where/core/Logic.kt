@@ -112,6 +112,12 @@ object Logic {
     fun finalFixDue(pct: Int, charging: Boolean, live: Boolean, alreadySent: Boolean) = lowBattery(pct, charging, live) && !alreadySent
     fun lowSpellOver(pct: Int, charging: Boolean) = charging || pct >= 30
 
+    /**
+     * The server asked this phone for its location by push. A normal ask is dropped when the phone talked to the server in the last
+     * minute (the ask crossed a check that was already on its way); "Refresh location" (force) only needs 15 seconds.
+     */
+    fun pushWorthIt(sinceLastCallMs: Long, force: Boolean): Boolean = sinceLastCallMs >= (if (force) 15_000L else 60_000L)
+
     const val WIFI_DEBOUNCE_MS = 90_000L
     /** A Wi-Fi change (left home, came back) asks for a real fix now, unless the battery is low or one just went out. */
     fun wifiTriggerWorthIt(pct: Int, charging: Boolean, sinceUploadMs: Long) = !lowBattery(pct, charging, false) && sinceUploadMs >= WIFI_DEBOUNCE_MS

@@ -240,6 +240,9 @@ const FIX_FRESH_MS = 12 * 60 * 1000;
 /** A phone's own Wi-Fi report (its address on the home network) older than this no longer proves it is home. */
 const PHONE_WIFI_MS = 8 * 60 * 1000;
 
+/** A last known location inside the home circle keeps a person "home" (flagged stale) for up to this long. */
+const LAST_IN_MAX_MS = 24 * 3600 * 1000;
+
 const rad = (x) => (x * Math.PI) / 180;
 function distM(a, b) {
     const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
@@ -290,7 +293,7 @@ function presence(hubs, phones, now = Date.now(), spot = null) {
             const d = distM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: Number(spot.lat), lon: Number(spot.lon) });
             const age = now - Number(loc.at);
             const better = p.fixAt === undefined || Number(loc.at) > p.fixAt;
-            if (better) { p.fixAt = Number(loc.at); p.distanceKm = Math.round(d / 100) / 10; p.distanceM = Math.round(d); }
+            if (better) { p.fixAt = Number(loc.at); p.distanceKm = Math.round(d / 100) / 10; p.distanceM = Math.round(d); p.lastIn = d <= radius + Math.min(Math.max(Number(loc.acc) || 0, 0), 100); }
             if (age <= FIX_FRESH_MS) {
                 const acc = Math.min(Math.max(Number(loc.acc) || 0, 0), 300);
                 const verdict = d <= radius + Math.min(acc, 100) ? "in" : d > radius + Math.max(120, acc) ? "out" : gps.get(p.person) || "";
@@ -304,6 +307,9 @@ function presence(hubs, phones, now = Date.now(), spot = null) {
         else if (g === "in") { p.home = true; p.by = "gps"; }
         else if (g === "out") { p.home = false; p.by = "gps"; }
         else if (lanSeen.get(p.person) && !(hasPhone.get(p.person) && p.fixAt !== undefined && now - p.fixAt <= FIX_FRESH_MS)) { p.home = true; p.by = "wifi"; p.wifi = true; }
+        // No fresh fix and no Wi-Fi proof, but the last known fix (under 24 h old) was inside the circle: still shown as home
+        // (the phone has not said it left), flagged stale so the page says the location is not updating.
+        else if (!g && p.lastIn && p.fixAt !== undefined && now - p.fixAt <= LAST_IN_MAX_MS) { p.home = true; p.by = "last"; }
         p.stale = Boolean(hasPhone.get(p.person) && spot && !g && !p.wifi);
         if (p.fixAt !== undefined) p.fixAgeMin = Math.max(0, Math.round((now - p.fixAt) / 60000));
     }

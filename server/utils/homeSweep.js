@@ -2,6 +2,7 @@ const HomeDevice = require("../models/homeDevice");
 const { ONLINE_MS } = require("./home");
 const { record } = require("./homeEvents");
 const automation = require("./homeAutomation");
+const phonePush = require("./phonePush");
 
 const COMMAND_WAIT_MS = 10 * 60 * 1000;
 
@@ -26,6 +27,7 @@ function startHomeSweep() {
     const timer = setInterval(() => {
         sweepOnce().catch((e) => console.log("[home] sweep failed:", e.message));
         automation.tickAll().catch((e) => console.log("[home] automations failed:", e.message));
+        phonePush.nudgeStale().catch((e) => console.log("[home] phone push failed:", e.message));
     }, 60 * 1000);
     if (typeof timer.unref === "function") timer.unref();
 }

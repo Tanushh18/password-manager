@@ -19,6 +19,7 @@ const home = require("../utils/home");
 const automation = require("../utils/homeAutomation");
 const { record } = require("../utils/homeEvents");
 const route = require("../utils/homeRoute");
+const phonePush = require("../utils/phonePush");
 const placeTrail = require("../utils/placeTrail");
 const placeFixes = require("../utils/placeFixes");
 const homeRouter = require("./home");
@@ -95,6 +96,8 @@ router.post("/home/agent/link", linkLimiter, async (req, res) => {
     } catch (e) { return fail(res, e, "Could not link."); }
 });
 
+/** A Firebase registration token as the phone sends it (letters, digits, - _ : and a few more), or "". */
+const cleanFcm = (v) => (typeof v === "string" && /^[A-Za-z0-9_:\-.]{50,4096}$/.test(v) ? v : "");
 const num = (v) => (v === undefined || v === null || v === "" ? NaN : Number(v));
 
 // Short-lived memory so a phone's upload does not re-read every device of the home each time (a tablet's Wi-Fi book is big).
@@ -144,6 +147,7 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
             const health = home.cleanHealth(b.health);
             if (health) set["status.health"] = health;
             if (b.wifi) { set["status.wifi"] = Boolean(b.wifi.connected); if (/^\d{1,3}(\.\d{1,3}){3}$/.test(String(b.wifi.ip || ""))) set["status.ip"] = String(b.wifi.ip); }
+            const fcm = cleanFcm(b.fcm); if (fcm) set.fcmToken = fcm;
             await HomeDevice.updateOne({ _id: d._id }, { $set: set });
             const settings = await automation.settingsOf(d.owner);
             const fresh = await HomeDevice.findById(d._id).select("commands").lean();
@@ -172,6 +176,7 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
         status.ip = b.wifi && /^\d{1,3}(\.\d{1,3}){3}$/.test(String(b.wifi.ip || "")) ? String(b.wifi.ip) : "";
         const out = await homeRouter.ingest(d, { status });
         if (out.error) return res.status(400).json({ error: out.error });
+        const fcm = cleanFcm(b.fcm); if (fcm) await HomeDevice.updateOne({ _id: d._id }, { $set: { fcmToken: fcm } }).catch(() => {});
         // Work out the trip now (the Wi-Fi sees this phone too) and answer with where it is and when to look again.
         const settings = await automation.settingsOf(d.owner);
         const list = await devicesOf(d.owner, now);
@@ -269,6 +274,8 @@ router.post("/home/locate-now", authenticate, writeLimiter, async (req, res) => 
         const owner = req.rootUser._id, now = Date.now(), until = new Date(now + 90 * 1000);
         await HomeSettings.updateOne({ owner }, { $set: { locateUntil: until } });
         const phones = (await HomeDevice.find({ owner, kind: "phone" }).lean()).filter((p) => (p.status || {}).agent === "stashr-where");
+        // A phone that is asleep will not call in for minutes: wake the ones that can be woken (Firebase push).
+        void phonePush.nudgeOwner(owner, now).catch(() => {});
         return res.json({ ok: true, until: until.toISOString(), phones: phones.length, asked: now });
     } catch (e) { return fail(res, e, "Could not ask the phones for their location."); }
 });

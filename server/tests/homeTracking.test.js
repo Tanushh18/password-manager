@@ -56,13 +56,28 @@ describe("who is home: the Wi-Fi and the location decide together", () => {
         expect(home.presence([hub()], [quiet], now, spot).find((x) => x.person === "Papa").home).toBe(true);
     });
 
-    test("an old fix and no Wi-Fi is not home and is flagged stale, so nobody says 'everyone is home'", () => {
+    test("an old fix inside the circle and no Wi-Fi: still home (last known location), flagged stale", () => {
         const lost = phone({ lastSeen: new Date(now - 3 * 3600_000), status: { wifi: false, ip: "", location: { lat: north(30), lon: 77.209, acc: 20, at: now - 3 * 3600_000 } } });
         const none = { lanBook: {}, lanLabels: {} };
         const p = home.presence([none], [lost], now, spot).find((x) => x.person === "Papa");
+        expect(p.home).toBe(true);
+        expect(p.by).toBe("last");
+        expect(p.stale).toBe(true);
+    });
+
+    test("an old fix OUTSIDE the circle and no Wi-Fi is not home and is flagged stale", () => {
+        const lost = phone({ lastSeen: new Date(now - 3 * 3600_000), status: { wifi: false, ip: "", location: { lat: north(4000), lon: 77.209, acc: 20, at: now - 3 * 3600_000 } } });
+        const p = home.presence([{ lanBook: {}, lanLabels: {} }], [lost], now, spot).find((x) => x.person === "Papa");
         expect(p.home).toBe(false);
         expect(p.stale).toBe(true);
         expect(assistant.presenceLine([p])).toMatch(/location not updating/);
+    });
+
+    test("a last known location inside the circle older than 24 h no longer counts as home", () => {
+        const lost = phone({ lastSeen: new Date(now - 30 * 3600_000), status: { wifi: false, ip: "", location: { lat: north(30), lon: 77.209, acc: 20, at: now - 30 * 3600_000 } } });
+        const p = home.presence([{ lanBook: {}, lanLabels: {} }], [lost], now, spot).find((x) => x.person === "Papa");
+        expect(p.home).toBe(false);
+        expect(p.stale).toBe(true);
     });
 
     test("the circle margin: a fix just outside the edge with poor accuracy is not called away", () => {
@@ -207,6 +222,20 @@ describe("tracking through the server", () => {
         const r = await request(app).post("/home/assistant").set(auth).send({ text: "papa kab aayenge" });
         expect(r.body.reply).toMatch(/Papa \d+ minute mein aa rahe hain \(Mom saath mein\)/);
         expect(r.body.reply).not.toMatch(/Mom \d+ minute/);
+    });
+
+    test("a phone's push address is stored, never shown on the page, and a bad one is ignored", async () => {
+        const auth = await signUp();
+        const [a] = await link(auth, ["Papa"]);
+        const good = "f".repeat(60) + ":APA91b" + "x".repeat(100);
+        await loc(a.token, north(10), Date.now(), { fcm: good });
+        expect((await HomeDevice.findById(a.deviceId).select("+fcmToken").lean()).fcmToken).toBe(good);
+        await loc(a.token, north(10), Date.now(), { fcm: "short" });
+        expect((await HomeDevice.findById(a.deviceId).select("+fcmToken").lean()).fcmToken).toBe(good);
+        await request(app).post("/home/agent/location").set(bearer(a.token)).send({ same: true, fcm: good + "2" });
+        expect((await HomeDevice.findById(a.deviceId).select("+fcmToken").lean()).fcmToken).toBe(good + "2");
+        const list = await request(app).get("/home/devices").set(auth);
+        expect(JSON.stringify(list.body)).not.toContain(good);
     });
 
     test("once they are apart, the second phone gets its own updates", async () => {
