@@ -39,6 +39,11 @@ class Prefs(ctx: Context) {
 
     val linked get() = token.isNotEmpty()
 
+    /** This phone's Firebase push address, sent to Stashr with every report so the server can ask for a location when this phone goes quiet. */
+    var fcmToken: String
+        get() = p.getString("fcmToken", "") ?: ""
+        set(v) = p.edit().putString("fcmToken", v).apply()
+
     /** The last fix the phone took (shown on the main screen). */
     var fixLat: Double get() = Double.fromBits(p.getLong("fixLat", Double.NaN.toRawBits())); set(v) = p.edit().putLong("fixLat", v.toRawBits()).apply()
     var fixLon: Double get() = Double.fromBits(p.getLong("fixLon", Double.NaN.toRawBits())); set(v) = p.edit().putLong("fixLon", v.toRawBits()).apply()

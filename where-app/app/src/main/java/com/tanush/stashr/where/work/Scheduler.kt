@@ -36,6 +36,7 @@ object Scheduler {
     private const val PASSIVE_WORK = "where-passive"
     private const val LIVE_NOW = "where-live-now"
     private const val WIFI_CHANGED = "where-wifi-changed"
+    private const val PUSHED = "where-pushed"
 
     fun start(ctx: Context) {
         val app = ctx.applicationContext
@@ -45,6 +46,23 @@ object Scheduler {
         if (wm.getWorkInfosForUniqueWork(NEXT).get().none { !it.state.isFinished }) next(app, 60)
         registerPassive(app)
         registerWifi(app)
+        fetchPushToken(app)
+    }
+
+    /** Asks Firebase for this phone's push address and keeps it; it goes to Stashr with the next report. A failure only means no push yet. */
+    fun fetchPushToken(ctx: Context) {
+        try {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnSuccessListener { t ->
+                if (!t.isNullOrEmpty()) Prefs(ctx.applicationContext).fcmToken = t
+            }
+        } catch (e: Exception) { /* Firebase not available: the timed checks still run */ }
+    }
+
+    /** The server's push arrived ("locate" when this phone went quiet, "now" for Refresh location): report soon. */
+    fun pushed(ctx: Context, force: Boolean) {
+        val req = OneTimeWorkRequestBuilder<LocationWorker>().setInputData(workDataOf("push" to true, "force" to force))
+            .setConstraints(Constraints.Builder().build()).build()
+        WorkManager.getInstance(ctx.applicationContext).enqueueUniqueWork(PUSHED, if (force) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP, req)
     }
 
     /**
@@ -98,6 +116,7 @@ object Scheduler {
         unregisterPassive(app)
         unregisterWifi(app)
         wm.cancelUniqueWork(WIFI_CHANGED)
+        wm.cancelUniqueWork(PUSHED)
     }
 
     private fun wifiIntent(ctx: Context): PendingIntent =
@@ -154,6 +173,11 @@ class LocationWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
             if (prefs.pendingAt > 0 && Logic.passiveWorthUploading(moved, System.currentTimeMillis() - prefs.upAt)) {
                 Reporter.run(applicationContext, Fix(prefs.pendingLat, prefs.pendingLon, prefs.pendingAcc, prefs.pendingAt, prefs.pendingSpeed.takeIf { it >= 0 }))
             }
+            return Result.success()
+        }
+        if (inputData.getBoolean("push", false)) {
+            val force = inputData.getBoolean("force", false)
+            if (Logic.pushWorthIt(System.currentTimeMillis() - prefs.callAt, force)) Reporter.run(applicationContext, force = force)
             return Result.success()
         }
         if (inputData.getBoolean("wifi", false)) {

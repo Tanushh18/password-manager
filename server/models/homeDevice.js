@@ -35,6 +35,12 @@ const homeDeviceSchema = new mongoose.Schema({
     // Hub only: names and rooms you gave to devices, keyed the same way.
     lanLabels: { type: mongoose.Schema.Types.Mixed, default: {} },
     commands: { type: [commandSchema], default: [] },
+    // Phone only: its Firebase push address (so the server can ask it to report where it is), and when it was last asked.
+    // fcmFixAt is the phone's fix time at the last ask: if it has not moved since, the phone did not answer (off, killed, no signal).
+    fcmToken: { type: String, default: "", select: false },
+    fcmPushedAt: { type: Date },
+    fcmFixAt: { type: Number },
+    fcmMisses: { type: Number, default: 0 },
     createdAt: { type: Date, default: Date.now }
 }, { minimize: false });
 

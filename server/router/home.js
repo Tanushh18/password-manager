@@ -224,6 +224,7 @@ async function runSentence(owner, sentence, opts = {}) {
     if (out.coming) return { reply: automation.comingReply(settings, owned), sent: [] };
     if (out.locate) {
         await HomeSettings.updateOne({ owner }, { $set: { locateUntil: new Date(Date.now() + 90 * 1000) } });
+        void require("../utils/phonePush").nudgeOwner(owner, Date.now()).catch(() => {});
         return { reply: "Asking the family phones for a fresh location. A phone that is saving battery answers within a few minutes; ask /coming again then.", sent: [] };
     }
     if (out.today) {

@@ -224,6 +224,20 @@ describe("tracking through the server", () => {
         expect(r.body.reply).not.toMatch(/Mom \d+ minute/);
     });
 
+    test("a phone's push address is stored, never shown on the page, and a bad one is ignored", async () => {
+        const auth = await signUp();
+        const [a] = await link(auth, ["Papa"]);
+        const good = "f".repeat(60) + ":APA91b" + "x".repeat(100);
+        await loc(a.token, north(10), Date.now(), { fcm: good });
+        expect((await HomeDevice.findById(a.deviceId).select("+fcmToken").lean()).fcmToken).toBe(good);
+        await loc(a.token, north(10), Date.now(), { fcm: "short" });
+        expect((await HomeDevice.findById(a.deviceId).select("+fcmToken").lean()).fcmToken).toBe(good);
+        await request(app).post("/home/agent/location").set(bearer(a.token)).send({ same: true, fcm: good + "2" });
+        expect((await HomeDevice.findById(a.deviceId).select("+fcmToken").lean()).fcmToken).toBe(good + "2");
+        const list = await request(app).get("/home/devices").set(auth);
+        expect(JSON.stringify(list.body)).not.toContain(good);
+    });
+
     test("once they are apart, the second phone gets its own updates", async () => {
         const auth = await signUp();
         const tab = await pair(auth, "hub");
