@@ -20,6 +20,7 @@ const automation = require("../utils/homeAutomation");
 const { record } = require("../utils/homeEvents");
 const route = require("../utils/homeRoute");
 const phonePush = require("../utils/phonePush");
+const houseMap = require("../utils/homeMap");
 const placeTrail = require("../utils/placeTrail");
 const placeFixes = require("../utils/placeFixes");
 const homeRouter = require("./home");
@@ -146,7 +147,11 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
             if (b.battery && Number.isFinite(num(b.battery.pct))) { set["status.battery"] = Math.min(Math.max(Math.round(num(b.battery.pct)), 0), 100); set["status.charging"] = b.battery.charging === true; }
             const health = home.cleanHealth(b.health);
             if (health) set["status.health"] = health;
-            if (b.wifi) { set["status.wifi"] = Boolean(b.wifi.connected); if (/^\d{1,3}(\.\d{1,3}){3}$/.test(String(b.wifi.ip || ""))) set["status.ip"] = String(b.wifi.ip); }
+            if (b.wifi) {
+                set["status.wifi"] = Boolean(b.wifi.connected); if (/^\d{1,3}(\.\d{1,3}){3}$/.test(String(b.wifi.ip || ""))) set["status.ip"] = String(b.wifi.ip);
+                set["status.bssid"] = b.wifi.connected ? houseMap.normBssid(b.wifi.bssid) : "";
+                if (set["status.bssid"]) void houseMap.noteAp({ _id: d._id, owner: d.owner, kind: "phone", status: { ...(d.status || {}), ip: set["status.ip"] || (d.status || {}).ip } }, set["status.bssid"], now);
+            }
             const fcm = cleanFcm(b.fcm); if (fcm) { set.fcmToken = fcm; set.fcmSet = true; set.fcmSeenAt = new Date(now); }
             await HomeDevice.updateOne({ _id: d._id }, { $set: set });
             const settings = await automation.settingsOf(d.owner);
@@ -174,6 +179,8 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
         if (health) status.health = health;
         status.wifi = Boolean(b.wifi && b.wifi.connected);
         status.ip = b.wifi && /^\d{1,3}(\.\d{1,3}){3}$/.test(String(b.wifi.ip || "")) ? String(b.wifi.ip) : "";
+        status.bssid = b.wifi && b.wifi.connected ? houseMap.normBssid(b.wifi.bssid) : "";
+        if (status.bssid) void houseMap.noteAp({ _id: d._id, owner: d.owner, kind: "phone", status: { ...(d.status || {}), ip: status.ip } }, status.bssid, now);
         const out = await homeRouter.ingest(d, { status });
         if (out.error) return res.status(400).json({ error: out.error });
         const fcm = cleanFcm(b.fcm); if (fcm) await HomeDevice.updateOne({ _id: d._id }, { $set: { fcmToken: fcm, fcmSet: true, fcmSeenAt: new Date(now) } }).catch(() => {});
@@ -188,6 +195,12 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
         void placeFixes.keep(d.owner, d._id, loc, { now }).catch(() => {});
         return answer(res, out, settings, where, now, d, loc, { pct: status.battery, charging: status.charging === true });
     } catch (e) { return fail(res, e, "Could not save the location."); }
+});
+
+// The tablet draws the house map itself from this.
+router.get("/home/agent/map", agentLimiter, (req, res, next) => homeRouter.agentAuth(req, res, next), async (req, res) => {
+    try { res.set("Cache-Control", "no-store"); const m = await houseMap.build(req.device.owner); return res.json({ ...m, plan: "" }); }
+    catch (e) { return fail(res, e, "Could not build the map."); }
 });
 
 router.post("/home/agent/unlink", agentLimiter, (req, res, next) => homeRouter.agentAuth(req, res, next), async (req, res) => {

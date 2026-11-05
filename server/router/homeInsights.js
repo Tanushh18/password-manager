@@ -16,6 +16,8 @@ const HomeTrack = require("../models/homeTrack");
 const automation = require("../utils/homeAutomation");
 const ins = require("../utils/homeInsights");
 const trail = require("../utils/homeTrail");
+const geocode = require("../utils/geocode");
+const houseMap = require("../utils/homeMap");
 const route = require("../utils/homeRoute");
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: "Too many changes. Slow down." });
@@ -112,6 +114,46 @@ router.get("/home/trail", authenticate, async (req, res) => {
         const phones = (await HomeDevice.find({ owner, kind: "phone" }).lean()).filter((p) => (p.status || {}).agent === "stashr-where");
         return res.json({ hours: 24, homeSet: Boolean(s.homeSpot && Number.isFinite(s.homeSpot.lat)), people: await trail.dayTrail(owner, s, phones, now), at: now });
     } catch (e) { return fail(res, e, "Could not load the last 24 hours."); }
+});
+
+// The house map: zones learned from the Wi-Fi access points, who is where, and the optional floor-plan picture.
+router.get("/home/map", authenticate, async (req, res) => {
+    try { res.set("Cache-Control", "no-store"); return res.json(await houseMap.build(req.rootUser._id)); }
+    catch (e) { return fail(res, e, "Could not build the map."); }
+});
+router.put("/home/map", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const owner = req.rootUser._id, b = req.body || {}, cur = (await automation.settingsOf(owner)).map || {};
+        const next = { ...cur };
+        if (b.zoneNames && typeof b.zoneNames === "object") {
+            next.zoneNames = { ...(cur.zoneNames || {}) };
+            for (const [id, name] of Object.entries(b.zoneNames)) {
+                if (!/^[0-9a-f:]{14}$/.test(id)) continue;
+                const n = String(name || "").trim().slice(0, 30);
+                if (n) next.zoneNames[id] = n; else delete next.zoneNames[id];
+            }
+        }
+        if (b.plan !== undefined) {
+            const plan = String(b.plan || "");
+            if (plan && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(plan)) return res.status(400).json({ error: "The floor plan must be a PNG, JPG or WEBP picture." });
+            if (plan.length > 2_500_000) return res.status(400).json({ error: "The floor plan picture is too big (2 MB at most)." });
+            next.plan = plan;
+        }
+        await HomeSettings.updateOne({ owner }, { $set: { map: next } });
+        return res.json(await houseMap.build(owner));
+    } catch (e) { return fail(res, e, "Could not save the map."); }
+});
+
+// One address for one point: your own names first (Home, a named place), then the street address.
+const geoLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, message: "Too many address lookups. Slow down." });
+router.get("/home/address", authenticate, geoLimiter, async (req, res) => {
+    try {
+        const lat = Number(req.query.lat), lon = Number(req.query.lon);
+        if (!(lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180)) return res.status(400).json({ error: "Give a latitude and a longitude." });
+        const named = trail.placeName({ lat, lon }, await automation.settingsOf(req.rootUser._id));
+        const found = await geocode.reverse(lat, lon);
+        return res.json({ name: named, address: found ? found.address : "", full: found ? found.full : "" });
+    } catch (e) { return fail(res, e, "Could not look up the address."); }
 });
 
 router.put("/home/history", authenticate, writeLimiter, async (req, res) => {

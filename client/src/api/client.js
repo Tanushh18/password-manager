@@ -450,7 +450,12 @@ export const rotateLocationCode = () => instance.post("/home/location-code/rotat
 export const getHubCode = () => instance.get("/home/hub-code").then((r) => r.data);
 export const rotateHubCode = () => instance.post("/home/hub-code/rotate").then((r) => r.data);
 export const getHomeInsights = () => instance.get("/home/insights").then((r) => r.data);
+export const getHomeMap = () => instance.get("/home/map").then((r) => r.data);
+export const saveHomeMap = (body) => instance.put("/home/map", body).then((r) => r.data);
 export const getHomeTrail = () => instance.get("/home/trail").then((r) => r.data);
+export const getTelegramDiagnose = () => instance.get("/telegram/diagnose").then((r) => r.data);
+export const repairTelegram = () => instance.post("/telegram/repair").then((r) => r.data);
+export const getHomeAddress = (lat, lon) => instance.get("/home/address", { params: { lat, lon } }).then((r) => r.data);
 export const saveHomeHistory = (body) => instance.put("/home/history", body).then((r) => r.data);
 export const deleteHomeHistory = () => instance.delete("/home/history").then((r) => r.data);
 export const saveHomeSpots = (spots) => instance.put("/home/spots", { spots }).then((r) => r.data);

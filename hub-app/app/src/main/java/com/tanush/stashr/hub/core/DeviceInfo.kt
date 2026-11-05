@@ -62,6 +62,12 @@ object DeviceInfo {
     } catch (e: Exception) { "" }
 
     /** Wi-Fi signal in dBm (closer to 0 is stronger), or 0 when unknown. */
+    /** The access point the tablet is connected to, or "" (Android hides it without location permission and shows 02:00:00:00:00:00). */
+    @Suppress("DEPRECATION")
+    fun wifiBssid(ctx: Context): String = try {
+        ctx.applicationContext.getSystemService(WifiManager::class.java)?.connectionInfo?.bssid?.lowercase()?.takeIf { it.length == 17 && it != "02:00:00:00:00:00" && it != "00:00:00:00:00:00" } ?: ""
+    } catch (e: Exception) { "" }
+
     @Suppress("DEPRECATION")
     fun wifiRssi(ctx: Context): Int = try { ctx.applicationContext.getSystemService(WifiManager::class.java)?.connectionInfo?.rssi ?: 0 } catch (e: Exception) { 0 }
 

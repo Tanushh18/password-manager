@@ -161,3 +161,36 @@
 .pl-table tr.is-in td:nth-child(4) { color: var(--ok, #1d7f4e); }
 .pl-table tr.is-out td:nth-child(4) { color: var(--danger, #d1343a); }
 .pl-table tr.is-between td:nth-child(4) { color: var(--rd-warn, #c49000); }
+
+/* ───────── the house map (HouseMap.jsx) ───────── */
+.hm-wrap { overflow-x: auto; margin: .5rem 0; }
+.hm-svg { width: 100%; height: auto; display: block; margin: 0 auto; }
+.hm-zone { fill: color-mix(in srgb, var(--accent) 14%, var(--surface)); stroke: var(--accent); stroke-width: 2; }
+.hm-label { fill: color-mix(in srgb, var(--text-faint) 12%, var(--surface)); stroke: var(--line-strong); stroke-width: 2; stroke-dasharray: 6 5; }
+.hm-over { fill-opacity: .35; }
+.hm-zone-top { fill: color-mix(in srgb, var(--accent) 22%, var(--surface)); stroke: var(--accent); stroke-width: 1.5; }
+.hm-zone-left { fill: color-mix(in srgb, var(--accent) 40%, var(--surface)); stroke: var(--accent); stroke-width: 1.5; }
+.hm-zone-right { fill: color-mix(in srgb, var(--accent) 56%, var(--surface)); stroke: var(--accent); stroke-width: 1.5; }
+.hm-label-top { fill: color-mix(in srgb, var(--text-faint) 14%, var(--surface)); stroke: var(--line-strong); stroke-width: 1.5; }
+.hm-label-left { fill: color-mix(in srgb, var(--text-faint) 26%, var(--surface)); stroke: var(--line-strong); stroke-width: 1.5; }
+.hm-label-right { fill: color-mix(in srgb, var(--text-faint) 38%, var(--surface)); stroke: var(--line-strong); stroke-width: 1.5; }
+.hm-t-title, .hm-t-title-c { fill: var(--text); font: 600 14px system-ui, sans-serif; }
+.hm-t-title-c { text-anchor: middle; }
+.hm-t-hint { fill: var(--text-faint); font: 11px system-ui, sans-serif; }
+.hm-dot { stroke: var(--surface); stroke-width: 2; }
+.hm-dot--person { fill: #3b82f6; }
+.hm-dot--hub { fill: #a855f7; }
+.hm-dot--device-up { fill: #22c55e; }
+.hm-dot--device-down { fill: #9ca3af; }
+.hm-key { display: inline-block; width: .7rem; height: .7rem; border-radius: 50%; vertical-align: -1px; }
+.hm-key.hm-dot--person { background: #3b82f6; } .hm-key.hm-dot--hub { background: #a855f7; }
+.hm-key.hm-dot--device-up { background: #22c55e; } .hm-key.hm-dot--device-down { background: #9ca3af; }
+
+/* ───────── where everyone went: the map (TrailMap.jsx) ───────── */
+.tm-map { height: 420px; border-radius: var(--r-md); border: 1px solid var(--line-strong); margin: .5rem 0; z-index: 0; }
+.tm-swatch { display: inline-block; width: .7rem; height: .7rem; border-radius: 50%; margin-right: .3rem; vertical-align: -1px; }
+.tm-badge span { position: absolute; transform: translate(-50%, -50%); color: #fff; font: 600 11px system-ui, sans-serif; padding: 2px 6px; border-radius: 999px; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.tm-badge.tm-up span { transform: translate(-50%, -150%); }
+.tm-badge.tm-down span { transform: translate(-50%, 55%); }
+.tm-pop { font: 13px/1.4 system-ui, sans-serif; color: #111; }
+.tm-addr { color: #666; }

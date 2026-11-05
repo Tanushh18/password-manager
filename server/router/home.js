@@ -311,6 +311,7 @@ async function ingest(d, body, seenAt = new Date()) {
     const set = { lastSeen: now, online: true };
     if (!wasOnline) set.onlineSince = now;
     const events = [];
+    if (d.kind === "hub" && status.wifi && status.wifi.bssid) void require("../utils/homeMap").noteAp(d, status.wifi.bssid, now.getTime());
 
     if (d.kind === "hub") {
         const labels = { ...(d.lanLabels || {}) };
@@ -367,6 +368,9 @@ async function ingest(d, body, seenAt = new Date()) {
     // Results of earlier commands.
     for (const a of (Array.isArray(body.acks) ? body.acks.slice(0, 20) : [])) {
         if (!a || typeof a.id !== "string") continue;
+        // The Wi-Fi motion test takes two minutes: its result goes to the timeline and to Telegram when it arrives.
+        const ran = (d.commands || []).find((c) => c.id === a.id && c.type === "wifi_motion_test" && (c.status === "pending" || c.status === "sent"));
+        if (ran) await record({ owner: d.owner, device: d._id, deviceName: d.name, kind: "wifi_test", text: `📡 ${String(a.message || "").slice(0, 200)}`, notify: false });
         await HomeDevice.updateOne({ _id: d._id }, {
             $set: { "commands.$[c].status": a.ok ? "done" : "failed", "commands.$[c].result": String(a.message || "").slice(0, 200), "commands.$[c].doneAt": new Date() }
         }, { arrayFilters: [{ "c.id": a.id, "c.status": { $in: ["pending", "sent"] } }] });

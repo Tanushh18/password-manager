@@ -83,13 +83,16 @@ async function dayTrail(owner, settings, phones, now = Date.now()) {
 const mapLink = (lat, lon) => `https://maps.google.com/?q=${lat},${lon}`;
 
 /** A person's day as text lines (Telegram and the assistant). */
-function describe(t, tz = "Asia/Kolkata") {
+function describe(t, tz = "Asia/Kolkata", addresses = {}) {
     const clock = (ms) => new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz });
     const dur = (m) => (m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`);
     if (!t.count) return [`${t.person}: pichle 24 ghante ka koi location nahi mila.`];
     const lines = [`${t.person} — pichle 24 ghante (${t.km} km)`];
     for (const e of t.timeline) {
-        if (e.type === "stay") lines.push(`📍 ${clock(e.from)}–${e.here ? "abhi" : clock(e.to)} ${e.name || "ek jagah"} (${dur(e.minutes)}) ${e.name ? "" : mapLink(e.lat, e.lon)}`.trim());
+        if (e.type === "stay") {
+            const a = e.name ? "" : addresses[`${Number(e.lat).toFixed(4)},${Number(e.lon).toFixed(4)}`];
+            lines.push(`📍 ${clock(e.from)}–${e.here ? "abhi" : clock(e.to)} ${e.name || a || "ek jagah"} (${dur(e.minutes)}) ${e.name ? "" : mapLink(e.lat, e.lon)}`.trim());
+        }
         else lines.push(`   ↪ ${dur(e.minutes)} safar, ${e.km} km`);
     }
     if (!t.timeline.length && t.last) lines.push(`Ek hi jagah ke aas paas: ${t.last.name || mapLink(t.last.lat, t.last.lon)} (aakhri location ${clock(t.last.at)})`);

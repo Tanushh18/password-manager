@@ -666,6 +666,8 @@ async function tickOwner(owner, now = Date.now()) {
     await locationWatch(owner, settings, devices, now).catch(() => {});
     await presenceWatch(owner, settings, devices, now).catch(() => {});
     await habitWatch(owner, settings, devices, now).catch(() => {});
+    // The house map improves itself: once an hour it looks for a new zone and says so.
+    if (local.minutes % 60 === 7 && await claim(`mapimp:${owner}:${minuteKey}`)) await require("./homeMap").selfImprove(owner, now).catch(() => {});
 
     // 1. TV time: a minute for every minute a TV screen is on, by app.
     if (tvs.some(tvOn) && await claim(`usage:${owner}:${minuteKey}`)) {

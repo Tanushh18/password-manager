@@ -36,6 +36,8 @@ const COMMANDS = {
         // Puts the tablet screen to sleep (the Accessibility lock-screen action), for a tablet that should stay dark.
         screen_off: () => ({}),
         speed_test: () => ({}),
+        // An experiment: can the tablet see somebody walking between it and the router from the Wi-Fi signal strength alone? (2 minutes)
+        wifi_motion_test: () => ({}),
         check_update: () => ({}),
         // Wake-on-LAN: the tablet sends the magic packet on the home Wi-Fi.
         wake: (a) => (okMac(a.mac) ? { mac: normMac(a.mac) } : null),
@@ -44,6 +46,7 @@ const COMMANDS = {
         camera: (a) => (["arm", "disarm", "snapshot", "clip", "live"].includes(a.action) ? { action: a.action } : null),
         slideshow: (a) => (["start", "stop"].includes(a.action) ? { action: a.action } : null),
         show_today: () => ({}),
+        show_map: () => ({}),
         announce: (a) => (okText(a.text, 200) ? { text: a.text.trim(), speak: a.speak !== false, urgent: a.urgent === true } : null),
         send_whatsapp: (a) => (okText(a.group, 80) && okText(a.text, 500) ? { group: a.group.trim(), text: a.text.trim() } : null)
     },

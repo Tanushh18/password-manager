@@ -337,6 +337,34 @@ describe("tracking through the server", () => {
         expect(await ask("kab aayenge")).not.toMatch(/mein koi|record nahi/);       // future questions still go to the arrival logic
     });
 
+    test("'wifi motion test' queues the tablet experiment, and its result reaches the timeline and Telegram", async () => {
+        const auth = await signUp();
+        const tab = await pair(auth, "hub", "Hall tablet");
+        await report(tab.token, { status: { agent: "stashr-hub" } });
+        const r = await request(app).post("/home/assistant").set(auth).send({ text: "wifi motion test karo" });
+        expect(r.body.reply).toMatch(/Wi-Fi motion test/);
+        const hubDoc = await HomeDevice.findOne({ kind: "hub" }).lean();
+        const cmd = hubDoc.commands.find((c) => c.type === "wifi_motion_test");
+        expect(cmd).toBeTruthy();
+        const lines = [];
+        const real = automation.sendTelegram;
+        automation.sendTelegram = async (o, text) => { lines.push(text); return true; };
+        try {
+            await request(app).post("/home/agent/report").set(bearer(tab.token)).send({ status: { agent: "stashr-hub" }, acks: [{ id: cmd.id, ok: true, message: "Wi-Fi motion test: WEAK · walking seen 52%, false alarms 8% · 2.4 GHz" }] });
+        } finally { automation.sendTelegram = real; }
+        expect(lines.some((l) => /Wi-Fi motion test: WEAK/.test(l))).toBe(true);
+        expect((await HomeDevice.findOne({ kind: "hub" }).lean()).commands.find((c) => c.id === cmd.id).status).toBe("done");
+    });
+
+    test("'ghar ka map dikhao' opens the house map on the tablet", async () => {
+        const auth = await signUp();
+        const tab = await pair(auth, "hub", "Hall tablet");
+        await report(tab.token, { status: { agent: "stashr-hub" } });
+        const r = await request(app).post("/home/assistant").set(auth).send({ text: "ghar ka map dikhao" });
+        expect(r.body.reply).toMatch(/house map on the tablet/);
+        expect((await HomeDevice.findOne({ kind: "hub" }).lean()).commands.some((c) => c.type === "show_map")).toBe(true);
+    });
+
     test("once they are apart, the second phone gets its own updates", async () => {
         const auth = await signUp();
         const tab = await pair(auth, "hub");

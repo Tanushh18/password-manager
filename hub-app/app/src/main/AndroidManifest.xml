@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Android shows a Wi-Fi access point's address only to apps that may see the location: the house map uses it to know which zone the tablet is in. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
@@ -65,6 +67,7 @@
         <activity android:name=".ui.AnnounceActivity" android:exported="false" android:launchMode="singleTop" android:showWhenLocked="true" android:turnScreenOn="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
         <activity android:name=".ui.TodayActivity" android:exported="false" android:launchMode="singleTop" />
+        <activity android:name=".ui.MapActivity" android:exported="false" android:launchMode="singleTop" />
 
         <service android:name=".core.HubService" android:exported="false"
             android:foregroundServiceType="dataSync|camera|microphone" />

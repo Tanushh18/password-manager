@@ -650,6 +650,50 @@ async function notifyEvent(user, event = {}) {
     return result.ok;
   } catch { return false; }
 }
+/**
+ * Why Telegram updates may not be arriving, one line per thing that has to be true. notifyEvent itself stays silent when one of
+ * them is not (so an alert never throws); this is where the person can see which one it is. Never throws.
+ */
+async function diagnose(user) {
+  const checks = [];
+  const add = (id, ok, text, fix = "") => checks.push({ id, ok, text, fix });
+  try {
+    const entry = (user.telegram || [])[0];
+    if (!entry) { add("connected", false, "No Telegram bot is connected", "Settings → Telegram → paste the token from @BotFather, then press the link and Start in Telegram."); return { ready: false, checks }; }
+    const state = await readState(user);
+    if (!state) { add("readable", false, "The saved Telegram settings cannot be read", "Disconnect the bot in Settings → Telegram and connect it again."); return { ready: false, checks }; }
+    add("connected", Boolean(state.chatId && state.botToken), state.chatId && state.botToken ? `Bot ${state.botUsername ? "@" + state.botUsername : ""} is connected to the chat ${state.chatName || ""}`.trim() : "The bot has no chat yet", "Open the bot in Telegram and press Start (Settings → Telegram shows the link).");
+    const mode = modeOf(state);
+    add("mode", mode !== "ask", mode === "ask" ? "Automatic messages are OFF (mode “ask”: the bot only answers when you write)" : `Automatic messages are on (mode “${mode}”)`, "Send /updates to the bot and choose “alerts”, or press “Fix it”.");
+    const home = catalog.notificationsEnabled(state, "home");
+    add("category", home, home ? "The “home” category is on" : "The “home” category is switched off", "Settings → Telegram → Notifications → turn on Home, or press “Fix it”.");
+    if (state.botToken) {
+      const me = await tg(state.botToken, "getMe");
+      add("token", me.ok, me.ok ? "Telegram accepts the bot token" : `Telegram rejects the bot token: ${me.error}`, "Create a new token with @BotFather (/token) and connect again.");
+    }
+    const HomeSettings = require("../models/homeSettings");
+    const hs = await HomeSettings.findOne({ owner: user._id }).select("alerts.everything").lean();
+    const every = !(hs && hs.alerts && hs.alerts.everything === false);
+    add("everything", every, every ? "“Anything changes at home” is on (every update goes to Telegram)" : "“Anything changes at home” is switched off", "Smart home → Camera & alerts → Tell me when → turn it on, or press “Fix it”.");
+    const rows = await TelegramNotification.find({ owner: user._id }).sort({ createdAt: -1 }).limit(20).select("status lastError attempts").lean();
+    const failed = rows.filter((r) => r.status !== "sent");
+    add("delivery", !failed.length, rows.length ? `Last ${rows.length} messages: ${rows.length - failed.length} delivered, ${failed.length} not delivered${failed[0] && failed[0].lastError ? " (" + failed[0].lastError + ")" : ""}` : "No message has been tried yet", failed.length ? "Telegram refused or did not answer: check that you pressed Start in the bot chat and did not block the bot." : "");
+  } catch (e) { add("error", false, "The check itself failed: " + String(e && e.message || e).slice(0, 120), "Try again in a minute."); }
+  return { ready: checks.every((c) => c.ok), checks };
+}
+
+/** Turns on everything a Home update needs and sends one test message, then shows the check again. */
+async function repair(user) {
+  const state = await readState(user);
+  if (!state?.chatId) throw Object.assign(new Error("Connect the bot first, then press Start in its chat."), { status: 400 });
+  const cats = catalog.normalizeNotificationCategories(state.notificationCategories);
+  await updateSettings(user, { ...(modeOf(state) === "ask" ? { updates: "alerts" } : {}), notificationCategories: cats.includes("home") ? cats : [...cats, "home"] });
+  await require("../models/homeSettings").updateOne({ owner: user._id }, { $set: { "alerts.everything": true } }, { upsert: false });
+  const fresh = await User.findById(user._id);
+  const sent = await notifyEvent(fresh || user, { category: "home", text: "✅ <b>STASHR HOME</b>\nTelegram updates are on: you will get every change at home here.", html: true });
+  return { sent, ...(await diagnose(fresh || user)) };
+}
+
 async function notifyUser(user, text, options = {}) { return notifyEvent(user, { category: options.category || "home", text, html: true, dedupeKey: options.dedupeKey }); }
 async function notifySystemEvent(event = {}) {
   try { const users = await User.find({ telegramHookId: { $type: "string" } }, without("passwords","projects","renderMetricHistory","renderIncidents","renderAudit","usageHistory")).limit(500); let sent = 0; for (const user of users) if (await notifyEvent(user, event)) sent += 1; return { sent, users: users.length }; }
@@ -687,4 +731,4 @@ async function notifyUserMedia(user, { kind, buffer, filename, caption, contentT
   } catch { return false; }
 }
 
-module.exports = { homeSay, notifyUser, notifyEvent, notifySystemEvent, notificationHistory, notifyUserMedia, modeOf, MODES, connect, disconnect, updateSettings, readState, publicState, handleUpdate, runAllDigests, sendTest, DIGEST_CHOICES, isValidHookId: (id) => mongoose.isValidObjectId(id) || /^[a-f0-9]{32}$/.test(String(id)), withProgress, send };
+module.exports = { diagnose, repair, homeSay, notifyUser, notifyEvent, notifySystemEvent, notificationHistory, notifyUserMedia, modeOf, MODES, connect, disconnect, updateSettings, readState, publicState, handleUpdate, runAllDigests, sendTest, DIGEST_CHOICES, isValidHookId: (id) => mongoose.isValidObjectId(id) || /^[a-f0-9]{32}$/.test(String(id)), withProgress, send };
