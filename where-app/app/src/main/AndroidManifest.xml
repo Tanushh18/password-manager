@@ -4,6 +4,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Room Lab: ask Android for a fresh Wi-Fi scan, and hear nearby Bluetooth devices (their signal strength tells which room the phone is in). -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
@@ -30,6 +36,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".ui.SetupActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".ui.RoomLabActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
 
         <receiver android:name=".work.PassiveReceiver" android:exported="false" />
         <receiver android:name=".work.LiveAlarmReceiver" android:exported="false" />

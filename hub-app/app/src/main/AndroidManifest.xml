@@ -68,6 +68,7 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
         <activity android:name=".ui.TodayActivity" android:exported="false" android:launchMode="singleTop" />
         <activity android:name=".ui.MapActivity" android:exported="false" android:launchMode="singleTop" />
+        <activity android:name=".ui.RoomModelActivity" android:exported="false" android:launchMode="singleTop" />
 
         <service android:name=".core.HubService" android:exported="false"
             android:foregroundServiceType="dataSync|camera|microphone" />

@@ -99,7 +99,7 @@ class Api(ctx: Context) {
     fun tvLive(): JSONObject = get("/home/agent/tv-live", auth = true, timeoutMs = 8000)
 
     /** GET /api/mobile-updates/tv/latest. */
-    fun latest(currentVersionCode: Int): JSONObject = get("/api/mobile-updates/tv/latest?currentVersionCode=$currentVersionCode", auth = false)
+    fun latest(currentVersionCode: Int): JSONObject = get("/api/mobile-updates/tv/latest?currentVersionCode=$currentVersionCode", auth = true)   // the device token tells Stashr which TV is asking
 
     fun download(url: String, into: File) {
         val c = URL(url).openConnection() as HttpURLConnection

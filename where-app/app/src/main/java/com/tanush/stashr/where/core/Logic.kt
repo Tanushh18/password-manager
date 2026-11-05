@@ -16,7 +16,8 @@ data class Answer(
     val notices: List<Pair<String, String>>,   // (id, text)
     val homeSet: Boolean,
     val live: Boolean = false,  // a family TV is showing the live map: look every few seconds
-    val precise: Boolean = false // near one of the family's places during an arrive/leave time: a real, fresh fix every check, no "same Wi-Fi" shortcut
+    val precise: Boolean = false, // near one of the family's places during an arrive/leave time: a real, fresh fix every check, no "same Wi-Fi" shortcut
+    val roomOn: Boolean? = null   // the server's Start / Stop of the room model for this phone (null: an older server that does not say)
 )
 
 /** Pure helpers (no Android), so they can be unit-tested. */
@@ -57,7 +58,8 @@ object Logic {
             notices = notices,
             homeSet = json.optJSONObject("home")?.optBoolean("set", true) ?: (json.optString("state") != "unset"),
             live = json.optBoolean("live", false),
-            precise = json.optBoolean("precise", false)
+            precise = json.optBoolean("precise", false),
+            roomOn = if (json.has("roomOn") && !json.isNull("roomOn")) json.optBoolean("roomOn") else null
         )
     }
 

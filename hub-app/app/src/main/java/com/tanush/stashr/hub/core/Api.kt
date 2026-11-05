@@ -82,6 +82,9 @@ class Api(ctx: Context) {
     fun runScene(id: String): JSONObject = post("/home/agent/scene/" + URLEncoder.encode(id, "UTF-8"), JSONObject())
     fun today(): JSONObject = get("/home/agent/today")
     fun houseMap(): JSONObject = get("/home/agent/map")
+    /** The room model: everything it knows now (GET), and Start / Stop (POST). The website shows the same numbers. */
+    fun roomLive(): JSONObject = get("/home/agent/room/live")
+    fun roomModel(on: Boolean): JSONObject = post("/home/agent/room/model", JSONObject().put("on", on))
     fun slideshow(): JSONObject = get("/home/agent/slideshow")
 
     /** A slideshow photo's bytes. */
@@ -118,7 +121,7 @@ class Api(ctx: Context) {
     }
 
     /** GET /api/mobile-updates/hub/latest. */
-    fun hubLatest(currentVersionCode: Int): JSONObject = get("/api/mobile-updates/hub/latest?currentVersionCode=$currentVersionCode", auth = false)
+    fun hubLatest(currentVersionCode: Int): JSONObject = get("/api/mobile-updates/hub/latest?currentVersionCode=$currentVersionCode", auth = true)   // the device token tells Stashr which tablet is asking
 
     /** Downloads a URL into a file (the update APK). */
     fun download(url: String, into: File) {

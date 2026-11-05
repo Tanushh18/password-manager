@@ -57,6 +57,8 @@ object Reporter {
         }
         val (pct, charging) = battery(app)
         val bssid = currentBssid(app)
+        // Room location on: what this phone hears goes along with the check (Wi-Fi Android already measured; Bluetooth only if allowed).
+        val roomScan = if (prefs.roomOn && !liveMode) RoomScan.light(app, prefs.roomBle) else null
         if (Logic.lowSpellOver(pct, charging)) prefs.lowSent = false
         // 20% or less: one real fix goes out now (the last known place), before the phone stops reporting.
         val finalFix = given == null && Logic.finalFixDue(pct, charging, liveMode, prefs.lowSent)
@@ -77,7 +79,7 @@ object Reporter {
         // 1) Same access point as at the last upload: the phone has not gone far. No fix at all.
         if (given == null && !force && !liveMode && !precise && bssid.isNotEmpty() && bssid == prefs.upBssid &&
             Logic.shouldSendSame(true, now - prefs.upAt, null, false, now - prefs.callAt)) {
-            sameCall(app, prefs, pct, charging, liveMode)?.let { return it }
+            sameCall(app, prefs, pct, charging, liveMode, roomScan)?.let { return it }
         }
 
         // 2) A fix that is only minutes old is reused instead of asking again.
@@ -101,11 +103,11 @@ object Reporter {
         // 3) Within 40 m of the last upload, recently: say "still here" instead of sending the position again.
         if (!force && !liveMode && !precise && prefs.upAt > 0 && !prefs.upLat.isNaN()) {
             val moved = Logic.distanceM(prefs.upLat, prefs.upLon, fix.lat, fix.lon)
-            if (Logic.shouldSendSame(false, now - prefs.upAt, moved, false, now - prefs.callAt)) sameCall(app, prefs, pct, charging, liveMode)?.let { return it }
+            if (Logic.shouldSendSame(false, now - prefs.upAt, moved, false, now - prefs.callAt)) sameCall(app, prefs, pct, charging, liveMode, roomScan)?.let { return it }
         }
 
         return try {
-            val answer = Logic.parseAnswer(Api(app).location(body(app, fix, pct, charging)))
+            val answer = Logic.parseAnswer(Api(app).location(body(app, fix, pct, charging, roomScan)))
             prefs.upLat = fix.lat; prefs.upLon = fix.lon; prefs.upAt = System.currentTimeMillis(); prefs.upBssid = bssid
             if (finalFix) prefs.lowSent = true
             prefs.callAt = prefs.upAt; prefs.lastWasSame = false
@@ -124,9 +126,9 @@ object Reporter {
     }
 
     /** The small "still here" call. Returns null when the server has no earlier location for this phone (then a normal upload follows). */
-    private fun sameCall(app: Context, prefs: Prefs, pct: Int, charging: Boolean, live: Boolean): Result? {
+    private fun sameCall(app: Context, prefs: Prefs, pct: Int, charging: Boolean, live: Boolean, scan: JSONObject? = null): Result? {
         return try {
-            val answer = Logic.parseAnswer(Api(app).location(sameBody(app, pct, charging)))
+            val answer = Logic.parseAnswer(Api(app).location(sameBody(app, pct, charging, scan)))
             prefs.callAt = System.currentTimeMillis(); prefs.lastWasSame = true
             apply(app, prefs, answer, pct, charging)
         } catch (e: ApiError) {
@@ -147,6 +149,7 @@ object Reporter {
         prefs.lastError = ""
         prefs.live = answer.live
         prefs.precise = answer.precise
+        answer.roomOn?.let { prefs.roomOn = it }          // the model was started or stopped on the website or the tablet: follow it
         val delay = Logic.batteryDelay(pct, charging, answer.live, Logic.clampDelay(answer.nextCheckSec, answer.live, answer.precise))
         prefs.lastDelaySec = delay
         Notices.show(app, answer.notices)
@@ -171,22 +174,23 @@ object Reporter {
         return (if (level >= 0 && scale > 0) level * 100 / scale else -1) to charging
     }
 
-    private fun extras(ctx: Context, json: JSONObject, pct: Int, charging: Boolean): JSONObject {
+    private fun extras(ctx: Context, json: JSONObject, pct: Int, charging: Boolean, scan: JSONObject? = null): JSONObject {
         val (wifi, ip) = wifi(ctx)
         json.put("battery", JSONObject().put("pct", if (pct >= 0) pct else JSONObject.NULL).put("charging", charging))
         json.put("wifi", JSONObject().put("connected", wifi).put("ip", ip).put("bssid", if (wifi) currentBssid(ctx) else ""))
         json.put("health", Health.collect(ctx))
         Prefs(ctx).fcmToken.takeIf { it.isNotEmpty() }?.let { json.put("fcm", it) }
+        if (scan != null) json.put("scan", scan)
         return json
     }
 
-    private fun body(ctx: Context, fix: Fix, pct: Int, charging: Boolean): JSONObject {
+    private fun body(ctx: Context, fix: Fix, pct: Int, charging: Boolean, scan: JSONObject? = null): JSONObject {
         val json = JSONObject().put("lat", fix.lat).put("lon", fix.lon).put("acc", fix.acc.toDouble()).put("at", fix.at)
         if (fix.speed != null) json.put("speed", fix.speed.toDouble())
-        return extras(ctx, json, pct, charging)
+        return extras(ctx, json, pct, charging, scan)
     }
 
-    private fun sameBody(ctx: Context, pct: Int, charging: Boolean) = extras(ctx, JSONObject().put("same", true), pct, charging)
+    private fun sameBody(ctx: Context, pct: Int, charging: Boolean, scan: JSONObject? = null) = extras(ctx, JSONObject().put("same", true), pct, charging, scan)
 
     /** True when the phone has any network at all. */
     private fun online(ctx: Context): Boolean = try {

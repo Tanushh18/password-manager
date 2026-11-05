@@ -39,6 +39,10 @@ class Prefs(ctx: Context) {
 
     val linked get() = token.isNotEmpty()
 
+    /** Room location: the checks also carry what this phone hears (Wi-Fi networks, optionally Bluetooth), so Stashr can say which room it is in. */
+    var roomOn: Boolean get() = p.getBoolean("roomOn", false); set(v) = p.edit().putBoolean("roomOn", v).apply()
+    var roomBle: Boolean get() = p.getBoolean("roomBle", true); set(v) = p.edit().putBoolean("roomBle", v).apply()
+
     /** This phone's Firebase push address, sent to Stashr with every report so the server can ask for a location when this phone goes quiet. */
     var fcmToken: String
         get() = p.getString("fcmToken", "") ?: ""

@@ -243,6 +243,10 @@ class HubService : LifecycleService() {
                         com.tanush.stashr.hub.ui.AnnounceActivity.show(this@HubService, text, args.optBoolean("speak", true), args.optBoolean("urgent", false))
                         "Shown"
                     }
+                    "show_room" -> {
+                        startActivity(Intent(this@HubService, com.tanush.stashr.hub.ui.RoomModelActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                        "Showing the room model"
+                    }
                     "show_map" -> {
                         startActivity(Intent(this@HubService, com.tanush.stashr.hub.ui.MapActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
                         "Showing the house map"

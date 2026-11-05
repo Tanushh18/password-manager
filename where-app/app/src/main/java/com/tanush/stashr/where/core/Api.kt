@@ -71,8 +71,20 @@ class Api(ctx: Context) {
     /** POST /home/agent/location. */
     fun location(body: JSONObject): JSONObject = post("/home/agent/location", body, auth = true, timeoutMs = 30000)
 
+    /** Room Lab: the rooms, whether room location is on for this phone, how many scans each room has, and the room now. */
+    fun roomConfig(): JSONObject = get("/home/agent/room/config", auth = true)
+    fun roomAdd(name: String): JSONObject = post("/home/agent/room/add", JSONObject().put("name", name), auth = true)
+    fun roomOn(on: Boolean): JSONObject = post("/home/agent/room/on", JSONObject().put("on", on), auth = true)
+    /** The scans of one tap, saved under a room (training). */
+    fun roomSample(room: String, session: String, scans: List<JSONObject>): JSONObject = post("/home/agent/room/sample", JSONObject().put("room", room).put("session", session).put("scans", org.json.JSONArray(scans)), auth = true, timeoutMs = 40000)
+    /** "That was wrong, I am in <room>": the scans are saved as a correction. */
+    fun roomFix(room: String, scans: List<JSONObject>): JSONObject = post("/home/agent/room/fix", JSONObject().put("room", room).put("session", "fix" + System.currentTimeMillis()).put("scans", org.json.JSONArray(scans)), auth = true, timeoutMs = 40000)
+    fun roomReport(): JSONObject = get("/home/agent/room/report", auth = true)
+    /** "Sahi hai": the room Stashr showed was right (counted for the real-life accuracy). */
+    fun roomConfirm(): JSONObject = post("/home/agent/room/confirm", JSONObject(), auth = true)
+
     /** GET /api/mobile-updates/where/latest. */
-    fun latest(currentVersionCode: Int): JSONObject = get("/api/mobile-updates/where/latest?currentVersionCode=$currentVersionCode", auth = false)
+    fun latest(currentVersionCode: Int): JSONObject = get("/api/mobile-updates/where/latest?currentVersionCode=$currentVersionCode", auth = true)   // the device token tells Stashr which phone is asking, so an update can be offered to chosen devices only
 
     fun download(url: String, into: File) {
         val c = URL(url).openConnection() as HttpURLConnection
