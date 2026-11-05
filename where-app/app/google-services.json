@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "760924229326",
+    "project_id": "stashr-where",
+    "storage_bucket": "stashr-where.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:760924229326:android:940c7c6a50d65de4460a9f",
+        "android_client_info": {
+          "package_name": "com.tanush.stashr.where"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAGZtc7Znsy7Drk613LTzOq1HejIqqDN-4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
