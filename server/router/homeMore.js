@@ -110,7 +110,7 @@ router.put("/home/settings", authenticate, writeLimiter, async (req, res) => {
             for (const t of ["nightFrom", "nightTo"]) if (a[t] !== undefined && !automation.okTime(a[t])) return res.status(400).json({ error: "Times look like 23:30." });
             set.alerts = {
                 newDevice: bool(a.newDevice, c.newDevice !== false), night: bool(a.night, c.night !== false), emptyHomeTv: bool(a.emptyHomeTv, c.emptyHomeTv !== false),
-                camera: bool(a.camera, c.camera !== false), presence: bool(a.presence, c.presence === true),
+                camera: bool(a.camera, c.camera !== false), presence: bool(a.presence, c.presence === true), everything: bool(a.everything, c.everything !== false),
                 nightFrom: a.nightFrom || c.nightFrom || "00:00", nightTo: a.nightTo || c.nightTo || "05:00"
             };
         }

@@ -568,6 +568,38 @@ async function weeklyText(owner, settings, now = Date.now()) {
     return lines.join("\n");
 }
 
+/**
+ * Says, once, when somebody reaches home or leaves it, whether the Wi-Fi or the phone's location noticed first. A change has to hold for two
+ * checks in a row (about a minute) before it is announced, so one odd fix does not send a message. The first look only remembers who is where.
+ * presenceState: { person: { home, pending? } }.
+ */
+async function presenceWatch(owner, settings, devices, now = Date.now()) {
+    const phones = devices.filter((d) => d.kind === "phone");
+    if (!phones.length) return;
+    const people = home.presence(devices.filter((d) => d.kind === "hub"), phones, now, settings.homeSpot);
+    const old = settings.presenceState || {}, next = {};
+    const said = [];
+    for (const p of people) {
+        const was = old[p.person];
+        if (!was || typeof was.home !== "boolean") { next[p.person] = { home: p.home }; continue; }
+        if (p.home === was.home) { next[p.person] = { home: was.home }; continue; }
+        if (was.pending === p.home) {
+            next[p.person] = { home: p.home };
+            const far = !p.home && p.distanceKm !== undefined && p.distanceKm >= 0.3 ? ` (${p.distanceKm} km away)` : "";
+            said.push(p.home ? `🟢 ${p.person} reached home` : `⚪ ${p.person} left home${far}`);
+        } else next[p.person] = { home: was.home, pending: p.home };
+    }
+    if (JSON.stringify(next) !== JSON.stringify(old)) await HomeSettings.updateOne({ owner }, { $set: { presenceState: next } });
+    for (const text of said) {
+        // The arrival logic ("Papa is arriving in 5 mins", "Open the door: Papa arrived home") may have just said it: do not say it twice.
+        if (text.startsWith("🟢")) {
+            const who = text.slice(2).replace(/ reached home$/, "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            if (await HomeEvent.exists({ owner, at: { $gte: new Date(now - 6 * 60_000) }, text: new RegExp(`${who}.*(arrived|about to arrive)`, "i") })) continue;
+        }
+        await record({ owner, kind: text.startsWith("🟢") ? "presence_home" : "presence_away", text });
+    }
+}
+
 async function sendTelegram(owner, text) {
     const User = require("../models/schema");
     const bot = require("./telegramBot");
@@ -589,6 +621,7 @@ async function tickOwner(owner, now = Date.now()) {
     const tvs = devices.filter((d) => d.kind === "tv");
     const tvOn = (d) => Boolean(d.online) && home.isOnline(d, now) && (d.status || {}).screen !== "off";
     await locationWatch(owner, settings, devices, now).catch(() => {});
+    await presenceWatch(owner, settings, devices, now).catch(() => {});
 
     // 1. TV time: a minute for every minute a TV screen is on, by app.
     if (tvs.some(tvOn) && await claim(`usage:${owner}:${minuteKey}`)) {
@@ -695,4 +728,4 @@ const DEFAULT_SCENES = [
     { id: "goodnight", name: "Good night", steps: [{ kind: "tv", type: "media", args: { action: "play_pause" } }, { kind: "tv", type: "key", args: { key: "HOME" } }] }
 ];
 
-module.exports = { comingReply, groupTogether, batteryScale, checkInterval, lowBatteryNow, houseSummary, localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, movieNightOn, localKeyOf, autoCamera, geoTick, needsWifi, distanceM, etaTick, announce, whereIs, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };
+module.exports = { presenceWatch, comingReply, groupTogether, batteryScale, checkInterval, lowBatteryNow, houseSummary, localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, movieNightOn, localKeyOf, autoCamera, geoTick, needsWifi, distanceM, etaTick, announce, whereIs, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };
