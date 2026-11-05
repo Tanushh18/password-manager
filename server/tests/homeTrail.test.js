@@ -30,6 +30,14 @@ describe("the last 24 hours of one phone", () => {
         expect(lines.some((l) => /https:\/\/maps\.google\.com\/\?q=/.test(l))).toBe(true);
     });
 
+    test("an unnamed stay shows the street address when it is known, and the map link as well", () => {
+        const tl = trail.timeline(points, settings, now);
+        const stay = tl.find((e) => e.type === "stay" && e.name === null) || { lat: north(4500), lon: 77.209 };
+        const key = `${Number(stay.lat).toFixed(4)},${Number(stay.lon).toFixed(4)}`;
+        const lines = trail.describe({ person: "Papa", count: 3, km: 4.5, last: null, timeline: [{ type: "stay", from: T0, to: T0 + 40 * MIN, minutes: 40, lat: stay.lat, lon: stay.lon, name: null, here: false }] }, "Asia/Kolkata", { [key]: "12 MG Road, Gurugram" });
+        expect(lines[1]).toMatch(/12 MG Road, Gurugram \(40m\) https:\/\/maps\.google\.com/);
+    });
+
     test("no points says so; distance ignores GPS wobble under 50 m", () => {
         expect(trail.describe({ person: "Papa", count: 0, timeline: [] })[0]).toMatch(/koi location nahi/);
         expect(trail.kmOf([pt(0, 0), pt(1, 20), pt(2, 5), pt(3, 30)])).toBe(0);

@@ -39,6 +39,15 @@ router.post("/telegram/events", authenticate, eventLimiter, async (req, res) => 
   try { return res.json({ delivered: await bot.notifyEvent(req.rootUser, { category, title, text, html: false, dedupeKey: req.body?.dedupeKey }) }); }
   catch (e) { return fail(res, e, "Could not deliver the Telegram event."); }
 });
+// Why updates may not be arriving, and a one-press fix (turns on what a Home update needs and sends a test message).
+router.get("/telegram/diagnose", authenticate, async (req, res) => {
+  try { res.set("Cache-Control", "no-store"); return res.json(await bot.diagnose(req.rootUser)); }
+  catch (e) { return fail(res, e, "Could not check Telegram."); }
+});
+router.post("/telegram/repair", authenticate, async (req, res) => {
+  try { return res.json(await bot.repair(req.rootUser)); }
+  catch (e) { return fail(res, e, "Could not fix Telegram."); }
+});
 router.post("/telegram/test", authenticate, async (req, res) => {
   try { return res.json({ sent: await bot.sendTest(req.rootUser) }); }
   catch (e) { return fail(res, e, "Could not send."); }

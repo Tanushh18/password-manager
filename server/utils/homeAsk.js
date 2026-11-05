@@ -92,7 +92,14 @@ async function answer(owner, sentence, now = Date.now()) {
         if (!ph.length) return "Kis ka phone? Naam bolo, jaise “Papa kahan kahan gaye”.";
         const people = await trail.dayTrail(owner, settings, ph, now);
         const old = win.from < now - 24 * 3600000 - 60000 ? ["(Location ka detail sirf pichle 24 ghante ka rakha jaata hai, isliye wahi dikha raha hoon.)"] : [];
-        return [...old, ...people.flatMap((t) => trail.describe(t, tz))].join("\n");
+        // Street addresses for the unnamed stays (at most 5, one a second, and never more than 7 seconds of waiting).
+        const geocode = require("./geocode"), addresses = {};
+        const todo = people.flatMap((t) => t.timeline.filter((e) => e.type === "stay" && !e.name)).slice(0, 5);
+        await Promise.race([
+            (async () => { for (const e of todo) { const r = await geocode.reverse(e.lat, e.lon); if (r && r.address) addresses[geocode.keyOf(e.lat, e.lon)] = r.address; } })(),
+            new Promise((r) => setTimeout(r, 7000))
+        ]);
+        return [...old, ...people.flatMap((t) => trail.describe(t, tz, addresses))].join("\n");
     }
 
     // 3. person events: how many times / when

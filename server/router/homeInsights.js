@@ -16,6 +16,7 @@ const HomeTrack = require("../models/homeTrack");
 const automation = require("../utils/homeAutomation");
 const ins = require("../utils/homeInsights");
 const trail = require("../utils/homeTrail");
+const geocode = require("../utils/geocode");
 const houseMap = require("../utils/homeMap");
 const route = require("../utils/homeRoute");
 
@@ -141,6 +142,18 @@ router.put("/home/map", authenticate, writeLimiter, async (req, res) => {
         await HomeSettings.updateOne({ owner }, { $set: { map: next } });
         return res.json(await houseMap.build(owner));
     } catch (e) { return fail(res, e, "Could not save the map."); }
+});
+
+// One address for one point: your own names first (Home, a named place), then the street address.
+const geoLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, message: "Too many address lookups. Slow down." });
+router.get("/home/address", authenticate, geoLimiter, async (req, res) => {
+    try {
+        const lat = Number(req.query.lat), lon = Number(req.query.lon);
+        if (!(lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180)) return res.status(400).json({ error: "Give a latitude and a longitude." });
+        const named = trail.placeName({ lat, lon }, await automation.settingsOf(req.rootUser._id));
+        const found = await geocode.reverse(lat, lon);
+        return res.json({ name: named, address: found ? found.address : "", full: found ? found.full : "" });
+    } catch (e) { return fail(res, e, "Could not look up the address."); }
 });
 
 router.put("/home/history", authenticate, writeLimiter, async (req, res) => {

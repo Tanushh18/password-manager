@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, getHomeInsights, getHomeTrail, saveHomeHistory, deleteHomeHistory, saveHomeSpots, getLocationCode, rotateLocationCode, getHubCode, rotateHubCode, getHomeWhere, locateNow, saveHomeScenes, runHomeScene,
+  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, getHomeInsights, saveHomeHistory, deleteHomeHistory, saveHomeSpots, getLocationCode, rotateLocationCode, getHubCode, rotateHubCode, getHomeWhere, locateNow, saveHomeScenes, runHomeScene,
   getHomeShare, saveHomeShare, getHomePlaceTrail, getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, getHomeLiveFrame, testHomeBrief, setHomePhonePerson, removeHomeDevice, setHomeSyncPaused
 } from "../../api/client";
 import { Section, useConfirm } from "../Render/RenderUi";
@@ -883,47 +883,6 @@ export function LocationsCard() {
 /* ───────── family insights: places, trips, commute, driving ───────── */
 
 const tripTime = (ms) => new Date(ms).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
-
-/** Every phone's last 24 hours: where each person stayed and for how long, and every stored point with its coordinates. */
-export function TrailCard() {
-  const [d, setD] = useState(null);
-  const load = useCallback(async () => { try { setD(await getHomeTrail()); } catch (e) { toast.error(errorMessage(e, "Could not load the last 24 hours.")); } }, []);
-  useEffect(() => { load(); }, [load]);
-  if (!d) return null;
-  const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const dur = (m) => (m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min` : `${m} min`);
-  const map = (lat, lon) => `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=17/${lat}/${lon}`;
-  return (
-    <Section title="Where everyone went (last 24 hours)" subtitle="Every family phone's location for the last 24 hours, with the exact coordinates. Each point is deleted automatically 24 hours after it is stored. Shown only here and in your own Telegram chat.">
-      <div className="sh-row"><button type="button" className="rd-btn rd-btn--quiet" onClick={load}>Refresh</button></div>
-      {!d.people.length ? <p className="sh-dim">No family phone is linked yet.</p> : (
-        <ul className="sh-lan">{d.people.map((t) => (
-          <li key={t.phone}>
-            <div className="sh-lan__main">
-              <b>{t.person}</b>
-              <span>{t.count ? `${t.count} locations · ${t.km} km${t.last ? ` · last ${clock(t.last.at)}${t.last.name ? " at " + t.last.name : ""}` : ""}` : "No location in the last 24 hours yet (the phone has to report once)."}</span>
-              {t.timeline.length ? (
-                <ol className="sh-dim" style={{ margin: "6px 0 0 18px" }}>
-                  {t.timeline.map((e, i) => e.type === "stay"
-                    ? <li key={i}>📍 {clock(e.from)}–{e.here ? "now" : clock(e.to)} · <b>{e.name || "Somewhere"}</b> · {dur(e.minutes)} · <a href={map(e.lat, e.lon)} target="_blank" rel="noreferrer">{e.lat}, {e.lon}</a></li>
-                    : <li key={i} style={{ listStyle: "none" }}>↪ {dur(e.minutes)} on the way · {e.km} km</li>)}
-                </ol>
-              ) : null}
-              {t.points.length ? (
-                <details style={{ marginTop: 6 }}>
-                  <summary className="sh-dim">All {t.points.length} points with coordinates</summary>
-                  <table className="sh-table"><thead><tr><th>Time</th><th>Latitude</th><th>Longitude</th><th>Accuracy</th></tr></thead>
-                    <tbody>{[...t.points].reverse().map((x) => <tr key={x.at}><td>{clock(x.at)}</td><td><a href={map(x.lat, x.lon)} target="_blank" rel="noreferrer">{x.lat}</a></td><td>{x.lon}</td><td>±{x.acc} m</td></tr>)}</tbody>
-                  </table>
-                </details>
-              ) : null}
-            </div>
-          </li>
-        ))}</ul>
-      )}
-    </Section>
-  );
-}
 
 export function InsightsCard() {
   const [d, setD] = useState(null);

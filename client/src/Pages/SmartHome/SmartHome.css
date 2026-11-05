@@ -185,3 +185,12 @@
 .hm-key { display: inline-block; width: .7rem; height: .7rem; border-radius: 50%; vertical-align: -1px; }
 .hm-key.hm-dot--person { background: #3b82f6; } .hm-key.hm-dot--hub { background: #a855f7; }
 .hm-key.hm-dot--device-up { background: #22c55e; } .hm-key.hm-dot--device-down { background: #9ca3af; }
+
+/* ───────── where everyone went: the map (TrailMap.jsx) ───────── */
+.tm-map { height: 420px; border-radius: var(--r-md); border: 1px solid var(--line-strong); margin: .5rem 0; z-index: 0; }
+.tm-swatch { display: inline-block; width: .7rem; height: .7rem; border-radius: 50%; margin-right: .3rem; vertical-align: -1px; }
+.tm-badge span { position: absolute; transform: translate(-50%, -50%); color: #fff; font: 600 11px system-ui, sans-serif; padding: 2px 6px; border-radius: 999px; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.tm-badge.tm-up span { transform: translate(-50%, -150%); }
+.tm-badge.tm-down span { transform: translate(-50%, 55%); }
+.tm-pop { font: 13px/1.4 system-ui, sans-serif; color: #111; }
+.tm-addr { color: #666; }
