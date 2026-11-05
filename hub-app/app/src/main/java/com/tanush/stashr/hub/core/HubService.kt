@@ -217,6 +217,7 @@ class HubService : LifecycleService() {
             try {
                 val msg: String = when (c.optString("type")) {
                     "scan_now" -> { wake.trySend(Unit); "Scanning" }
+                    "wifi_motion_test" -> WifiProbe.run(this@HubService)
                     "speed_test" -> { runSpeedTest(); wake.trySend(Unit); lastSpeed?.let { "${it.down} Mbit/s down, ${it.up} up" } ?: "Speed test failed" }
                     "check_update" -> Updater.check(this@HubService, manual = true)
                     "wake" -> withContext(Dispatchers.IO) { WakeOnLan.send(this@HubService, args.optString("mac")) }

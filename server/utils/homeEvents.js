@@ -8,7 +8,7 @@ const HomeEvent = require("../models/homeEvent");
 const TIMELINE_ONLY = new Set(["lan_joined", "lan_left", "home_arrived", "home_left", "place_state"]);
 
 /** Said whatever the "every update" switch is: the person asked for these on a place ("tell me when they leave"). */
-const ALWAYS = new Set(["place_left", "place_arrived"]);
+const ALWAYS = new Set(["place_left", "place_arrived", "wifi_test"]);
 
 const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 

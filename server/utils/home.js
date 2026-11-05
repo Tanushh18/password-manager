@@ -36,6 +36,8 @@ const COMMANDS = {
         // Puts the tablet screen to sleep (the Accessibility lock-screen action), for a tablet that should stay dark.
         screen_off: () => ({}),
         speed_test: () => ({}),
+        // An experiment: can the tablet see somebody walking between it and the router from the Wi-Fi signal strength alone? (2 minutes)
+        wifi_motion_test: () => ({}),
         check_update: () => ({}),
         // Wake-on-LAN: the tablet sends the magic packet on the home Wi-Fi.
         wake: (a) => (okMac(a.mac) ? { mac: normMac(a.mac) } : null),

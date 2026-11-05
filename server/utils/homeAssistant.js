@@ -72,6 +72,7 @@ function parse(sentence, devices, scenes = []) {
 
     const toHub = (type, args, reply) => (hub ? { reply, commands: [{ kind: "hub", type, args }] } : { reply: "The tablet is not added to Stashr Home yet." });
     if (has(text, ["screen"]) && has(text, ["off", "band", "bandh", "sleep", "dark"]) && !has(text, ["tv", "mirror", "cast"])) return toHub("screen_off", {}, "Putting the tablet screen to sleep.");
+    if (has(text, ["wifi", "wi-fi", "wi fi"]) && has(text, ["motion", "halchal", "movement", "sensing", "walk"]) && has(text, ["test", "check", "try"])) return toHub("wifi_motion_test", {}, "Starting the Wi-Fi motion test on the tablet. It takes about 2 minutes: first one minute of nobody moving, then one minute of somebody walking between the tablet and the router. The tablet tells you what to do.");
     if (has(text, ["speed test", "internet speed", "net speed", "speed check", "speedtest"])) return toHub("speed_test", {}, "Running an internet speed test on the tablet. The result shows up in a minute.");
     if (has(text, ["camera"])) {
         if (has(text, ["off", "band", "disarm", "stop", "bandh"])) return toHub("camera", { action: "disarm" }, "Turning the tablet camera alerts off.");
