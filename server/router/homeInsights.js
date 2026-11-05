@@ -121,6 +121,18 @@ router.get("/home/map", authenticate, async (req, res) => {
     try { res.set("Cache-Control", "no-store"); return res.json(await houseMap.build(req.rootUser._id)); }
     catch (e) { return fail(res, e, "Could not build the map."); }
 });
+// The house layout you edit on the map: where each room's block sits, its size and its height. Only for rooms made in Room Lab.
+router.put("/home/map/layout", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const owner = req.rootUser._id, b = req.body || {};
+        const rooms = await require("../utils/roomLive").roomsOf(owner);
+        if (!rooms.length) return res.status(400).json({ error: "Make the rooms first (Room Lab), then arrange them." });
+        const layout = b.reset === true ? {} : houseMap.cleanLayout(b.layout, rooms);
+        if (b.reset !== true && !Object.keys(layout).length) return res.status(400).json({ error: "Nothing usable in that layout: use { \"Room name\": { x, y, w, h, z } } with the names of your rooms." });
+        await HomeSettings.updateOne({ owner }, { $set: { "map.layout": layout } });
+        return res.json(await houseMap.build(owner));
+    } catch (e) { return fail(res, e, "Could not save the layout."); }
+});
 router.put("/home/map", authenticate, writeLimiter, async (req, res) => {
     try {
         const owner = req.rootUser._id, b = req.body || {}, cur = (await automation.settingsOf(owner)).map || {};

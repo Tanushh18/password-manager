@@ -56,8 +56,11 @@ router.put("/home/rooms", authenticate, writeLimiter, async (req, res) => {
         const owner = req.rootUser._id;
         const names = [...new Set((Array.isArray(req.body && req.body.rooms) ? req.body.rooms : []).map(live.clean).filter((n) => n.length >= 2))];
         if (names.length > live.MAX_ROOMS) return res.status(400).json({ error: `Up to ${live.MAX_ROOMS} rooms.` });
+        await live.ensureSettings(owner);
         const old = await live.roomsOf(owner);
-        await HomeSettings.updateOne({ owner }, { $set: { "map.rooms": names } });
+        const cur = (await HomeSettings.findOne({ owner }).select("map.layout").lean()) || {};
+        const keepLayout = Object.fromEntries(Object.entries((cur.map && cur.map.layout) || {}).filter(([n]) => names.includes(n)));
+        await HomeSettings.updateOne({ owner }, { $set: { "map.rooms": names, "map.layout": keepLayout } });
         const gone = old.filter((r) => !names.includes(r));
         if (gone.length) { await HomeRoomSample.deleteMany({ owner, room: { $in: gone } }); (await HomeDevice.find({ owner, kind: "phone" }).select("_id").lean()).forEach((p) => live.forget(p._id)); }
         return res.json({ rooms: names });
@@ -100,6 +103,7 @@ router.post("/home/agent/room/add", agentLimiter, agent, async (req, res) => {
         const rooms = await live.roomsOf(d.owner);
         if (!rooms.includes(name)) {
             if (rooms.length >= live.MAX_ROOMS) return res.status(400).json({ error: `Up to ${live.MAX_ROOMS} rooms.` });
+            await live.ensureSettings(d.owner);
             await HomeSettings.updateOne({ owner: d.owner }, { $set: { "map.rooms": [...rooms, name] } });
         }
         return res.json({ rooms: await live.roomsOf(d.owner) });

@@ -82,6 +82,57 @@ function layout(zones, edges = [], extra = []) {
 
 const same = (a, b) => { const x = String(a).toLowerCase().trim(), y = String(b).toLowerCase().trim(); return x && y && (x === y || x.includes(y) || y.includes(x)); };
 
+/* ───────── the house layout you edit (rooms only) ───────── */
+
+const STEP = 0.5, MAX_XY = 40, MIN_SIZE = 1, MAX_SIZE = 8, MIN_Z = 0.3, MAX_Z = 3, DEFAULT_Z = 0.55;
+const snap = (v) => Math.round(v / STEP) * STEP;
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+/**
+ * What you may save as the layout: { "Bedroom": { x, y, w, h, z } } for rooms that exist. Positions and sizes snap to half a grid unit
+ * and are kept inside sane limits; z is the height of the block in 3D. Unknown rooms and non-numbers are dropped.
+ */
+function cleanLayout(raw, roomNames) {
+    const out = {};
+    if (!raw || typeof raw !== "object") return out;
+    for (const name of roomNames) {
+        const r = raw[name];
+        if (!r || typeof r !== "object") continue;
+        const x = Number(r.x), y = Number(r.y), w = Number(r.w), h = Number(r.h), z = r.z === undefined ? DEFAULT_Z : Number(r.z);
+        if (![x, y, w, h, z].every(Number.isFinite)) continue;
+        out[name] = { x: clamp(snap(x), 0, MAX_XY), y: clamp(snap(y), 0, MAX_XY), w: clamp(snap(w), MIN_SIZE, MAX_SIZE), h: clamp(snap(h), MIN_SIZE, MAX_SIZE), z: Math.round(clamp(z, MIN_Z, MAX_Z) * 100) / 100 };
+    }
+    return out;
+}
+
+const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/** The first free place (scanning rows, half a unit at a time, with half a unit of gap) for a block of size w x h next to the others. */
+function freeSpot(others, w, h) {
+    const gap = STEP;
+    for (let y = 0; y <= MAX_XY; y += STEP) for (let x = 0; x <= MAX_XY; x += STEP) {
+        const box = { x: x - gap, y: y - gap, w: w + gap * 2, h: h + gap * 2 };
+        if (!others.some((o) => overlaps(box, o))) return { x, y };
+    }
+    return { x: 0, y: 0 };
+}
+
+/** Puts saved geometry on the blocks and moves every other block to a free place, so a new room never lands on top of a saved one. */
+function applyLayout(blocks, saved) {
+    const placed = blocks.filter((b) => saved[b.name]).map((b) => ({ ...b, ...saved[b.name] }));
+    const rest = blocks.filter((b) => !saved[b.name]);
+    const taken = placed.map((b) => ({ x: b.x, y: b.y, w: b.w, h: b.h }));
+    const moved = rest.map((b) => {
+        const clash = taken.some((t) => overlaps({ x: b.x, y: b.y, w: b.w, h: b.h }, t));
+        const spot = clash ? freeSpot(taken, b.w, b.h) : { x: b.x, y: b.y };
+        const nb = { ...b, ...spot, z: DEFAULT_Z };
+        taken.push({ x: nb.x, y: nb.y, w: nb.w, h: nb.h });
+        return nb;
+    });
+    const byName = new Map([...placed, ...moved].map((b) => [b.name, b]));
+    return blocks.map((b) => byName.get(b.name) || b);
+}
+
 /** The rooms you gave the tablet's Wi-Fi devices (Name / room): { room: [{ label, tag, up }] }. */
 function roomsFromLabels(hubs, now = Date.now(), goneMs = 15 * 60 * 1000) {
     const out = {};
@@ -164,7 +215,10 @@ async function build(owner, now = Date.now(), { rooms: useRooms = true } = {}) {
     if (roomMode) {
         const blocks = roomNames.map((n, i) => ({ id: "r:" + n, name: n, auto: false, hint: "", bssids: [], observations: roomNames.length - i, days: 0, confidence: 1, roomBlock: true, devices: Object.entries(rooms).filter(([room]) => same(room, n)).flatMap(([, items]) => items) }));
         const others = Object.entries(rooms).filter(([room]) => !roomNames.some((n) => same(room, n))).map(([room, items]) => ({ id: "room:" + room, name: room, auto: false, hint: "from your device labels", bssids: [], observations: 0, days: 0, confidence: 0, labelOnly: true, devices: items }));
-        placed = layout(blocks, [], others);
+        const auto = layout(blocks, [], others);
+        const saved = cleanLayout(map.layout, roomNames);
+        const geometry = applyLayout(auto.filter((b) => b.roomBlock), saved);
+        placed = [...geometry.map((b) => ({ ...b, z: b.z || DEFAULT_Z })), ...auto.filter((b) => !b.roomBlock)];
     } else placed = layout(zones.map((z) => ({ ...z, devices: attach.get(z.id) })), edges.map((e) => ({ a: e.a, b: e.b, count: e.count })), extra);
 
     // People and the tablet: where each is connected right now.
@@ -187,7 +241,7 @@ async function build(owner, now = Date.now(), { rooms: useRooms = true } = {}) {
         : !zones.length ? "No zone learned yet: phones and the tablet must report their Wi-Fi access point (update Stashr Location to 1.6.2 and Stashr Hub to 1.9.1), and the phones must be on the home Wi-Fi a while."
         : zones.length === 1 ? "Only one Wi-Fi access point seen so far, so the house is one zone. Rooms appear as separate zones only when the house has more than one access point (a mesh or an extender)."
         : `${zones.length} zones learned from ${rows.reduce((s, r) => s + (r.count || 0), 0)} sightings over ${days} day${days === 1 ? "" : "s"}; the map keeps improving as more come in.`;
-    return { zones: [...inZone.values()], homeNoZone, away, plan: map.plan || "", stats: { rooms: roomNames.length, zones: zones.length, aps: new Set(rows.map((r) => r.ap)).size, days, sightings: rows.reduce((s, r) => s + (r.count || 0), 0) }, note, at: now };
+    return { zones: [...inZone.values()], homeNoZone, away, plan: map.plan || "", layoutSaved: roomMode && Object.keys(cleanLayout(map.layout, roomNames)).length > 0, stats: { rooms: roomNames.length, zones: zones.length, aps: new Set(rows.map((r) => r.ap)).size, days, sightings: rows.reduce((s, r) => s + (r.count || 0), 0) }, note, at: now };
 }
 
 /** Hourly: if a new zone has appeared since last time, say so once (Telegram, through the timeline). */
@@ -205,4 +259,4 @@ async function selfImprove(owner, now = Date.now()) {
     return fresh;
 }
 
-module.exports = { normBssid, apOf, subnetOf, learn, layout, roomsFromLabels, noteAp, build, selfImprove };
+module.exports = { cleanLayout, applyLayout, freeSpot, overlaps, normBssid, apOf, subnetOf, learn, layout, roomsFromLabels, noteAp, build, selfImprove };

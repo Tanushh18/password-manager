@@ -73,3 +73,9 @@ Location ka naya version **kisi ko bhi apne aap offer nahi hota** (server par Lo
 5. Jab bharosa ho: **Settings → App updates** (`/app-updates`) mein Location ko "Sab ko" ya chune hue devices par kholo. Hub aur TV ke liye bhi wahin se.
 
 Dhyan: training (step 3) ke bina model kuch nahi bata sakta. Wo ek baar karna hi padta hai; use skip karne ka koi tareeka nahi.
+
+## Ghar ka layout edit karna (3D map)
+- Web par House map > Edit: kamre ko drag karo (jagah), kone ke handle se size badlo, "height" se 3D unchai.
+- Kamre jitne room list mein hain utne hi blocks bante hain; naya kamra khali jagah par aata hai, hataya hua kamra layout se bhi hat jaata hai.
+- Save layout (`PUT /home/map/layout`), Auto-arrange (reset), Export/Import layout (JSON file).
+- Tablet ko x, y, w, h wahi milte hain; height (z) tablet par abhi nahi dikhti (Hub ke naye release mein aayegi).
