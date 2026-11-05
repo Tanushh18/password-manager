@@ -184,6 +184,7 @@ async function noteAp(device, bssidRaw, now = Date.now()) {
 
 /** Everything the website and the tablet draw: zones with their place on the grid, who is where, the plan picture, what it has learned so far. */
 async function build(owner, now = Date.now(), { rooms: useRooms = true } = {}) {
+    const HomeModel3d = require("../models/homeModel3d");
     const HomeDevice = require("../models/homeDevice");
     const { HomeApSeen, HomeApEdge } = require("../models/homeApSeen");
     const automation = require("./homeAutomation");
@@ -241,7 +242,8 @@ async function build(owner, now = Date.now(), { rooms: useRooms = true } = {}) {
         : !zones.length ? "No zone learned yet: phones and the tablet must report their Wi-Fi access point (update Stashr Location to 1.6.2 and Stashr Hub to 1.9.1), and the phones must be on the home Wi-Fi a while."
         : zones.length === 1 ? "Only one Wi-Fi access point seen so far, so the house is one zone. Rooms appear as separate zones only when the house has more than one access point (a mesh or an extender)."
         : `${zones.length} zones learned from ${rows.reduce((s, r) => s + (r.count || 0), 0)} sightings over ${days} day${days === 1 ? "" : "s"}; the map keeps improving as more come in.`;
-    return { zones: [...inZone.values()], homeNoZone, away, plan: map.plan || "", layoutSaved: roomMode && Object.keys(cleanLayout(map.layout, roomNames)).length > 0, stats: { rooms: roomNames.length, zones: zones.length, aps: new Set(rows.map((r) => r.ap)).size, days, sightings: rows.reduce((s, r) => s + (r.count || 0), 0) }, note, at: now };
+    const model = await HomeModel3d.findOne({ owner }).select("name size at").lean();
+    return { zones: [...inZone.values()], homeNoZone, away, plan: map.plan || "", model: model ? { name: model.name, size: model.size, at: model.at } : null, layoutSaved: roomMode && Object.keys(cleanLayout(map.layout, roomNames)).length > 0, stats: { rooms: roomNames.length, zones: zones.length, aps: new Set(rows.map((r) => r.ap)).size, days, sightings: rows.reduce((s, r) => s + (r.count || 0), 0) }, note, at: now };
 }
 
 /** Hourly: if a new zone has appeared since last time, say so once (Telegram, through the timeline). */

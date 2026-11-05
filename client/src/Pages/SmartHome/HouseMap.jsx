@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { Section } from "../Render/RenderUi";
 import "./techie.css";
 import { errorMessage } from "../Render/renderUtils";
-import { getHomeMap, saveHomeMap, saveHouseLayout } from "../../api/client";
+import { getHomeMap, saveHomeMap, saveHouseLayout, getHouseModel, saveHouseModel, deleteHouseModel } from "../../api/client";
+import { buildGlb, glbPartNames, matchParts } from "../../lib/houseGlb";
 import { shapes, awayLine, SCALE_2D, moveBlock, resizeBlock, clampBlock, overlapping, layoutOf, exportText, parseLayoutFile } from "../../lib/homeMap";
 
 /** A picture from a phone scan app, shrunk so it fits the 2 MB the server accepts. */
@@ -25,6 +26,8 @@ function shrink(file, max = 1400) {
 }
 
 /** The house, drawn from what Stashr has learned by itself (Wi-Fi access points = zones), in 2D or 3D. */
+const HouseModelView = lazy(() => import("./HouseModelView"));
+
 export function HouseMapCard() {
   const [map, setMap] = useState(null);
   const [mode, setMode] = useState("2d");
@@ -32,12 +35,17 @@ export function HouseMapCard() {
   const [edit, setEdit] = useState(false);          // the layout editor: drag a room, pull its corner, set its height
   const [draft, setDraft] = useState([]);
   const [sel, setSel] = useState("");
+  const [glb, setGlb] = useState(null);          // the imported 3D model: ArrayBuffer
+  const [glbInfo, setGlbInfo] = useState(null);
+  const modelFile = useRef(null);
   const file = useRef(null);
   const layoutFile = useRef(null);
   const svgRef = useRef(null);
   const drag = useRef(null);
   const load = useCallback(async () => { try { setMap(await getHomeMap()); } catch (e) { toast.error(errorMessage(e, "Could not load the map.")); } }, []);
   useEffect(() => { load(); const t = setInterval(load, 30000); return () => clearInterval(t); }, [load]);
+  const hasModel = !!(map && map.model);
+  useEffect(() => { if (mode !== "model" || !hasModel) return undefined; let live = true; getHouseModel().then((b) => { if (live) setGlb(b); }).catch((e) => toast.error(errorMessage(e, "Could not load the 3D model."))); return () => { live = false; }; }, [mode, hasModel, map && map.model && map.model.at]);
   if (!map) return null;
   const save = async (body, ok) => { setBusy(true); try { setMap(await saveHomeMap(body)); if (ok) toast.success(ok); } catch (e) { toast.error(errorMessage(e, "Could not save.")); } finally { setBusy(false); } };
   const pick = async (e) => {
@@ -79,23 +87,66 @@ export function HouseMapCard() {
     setDraft((cur) => cur.map((b) => (r.layout[b.name] ? clampBlock({ ...b, ...r.layout[b.name] }) : b)));
     toast.success(`${r.used.length} room(s) imported${r.ignored.length ? `; ${r.ignored.length} not in your rooms: ${r.ignored.join(", ")}` : ""}. Save karo.`);
   };
+  const roomNames = roomBlocks.map((z) => z.name);
+  const importModel = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    if (f.size > 12 * 1024 * 1024) { toast.error("Model 12 MB se chhota rakho."); return; }
+    const buf = await f.arrayBuffer();
+    const parts = glbPartNames(buf);
+    if (!parts) { toast.error("Ye .glb file nahi hai: Blender mein File > Export > glTF 2.0 > Binary (.glb) chuno."); return; }
+    setBusy(true);
+    try {
+      await saveHouseModel(buf, f.name);
+      setGlb(null); await load(); setMode("model");
+      const m = matchParts(parts, roomNames);
+      toast.success(`Model import ho gaya. ${Object.keys(m.matched).length}/${roomNames.length} kamre naam se mile${m.missing.length ? `; nahi mile: ${m.missing.join(", ")}` : ""}.`);
+    } catch (err) { toast.error(errorMessage(err, "Could not import the model.")); } finally { setBusy(false); }
+  };
+  const removeModel = async () => { setBusy(true); try { await deleteHouseModel(); setGlb(null); setMode("3d"); await load(); toast.success("3D model hata diya."); } catch (err) { toast.error(errorMessage(err, "Could not remove it.")); } finally { setBusy(false); } };
+  const sampleModel = () => {
+    const url = URL.createObjectURL(new Blob([buildGlb(roomBlocks.map((z) => ({ name: z.name, x: z.x, y: z.y, w: z.w, h: z.h, z: z.z || 0.55 })))], { type: "model/gltf-binary" }));
+    const a = document.createElement("a"); a.href = url; a.download = "stashr-house-sample.glb"; a.click(); URL.revokeObjectURL(url);
+  };
   const stacked = edit ? overlapping(draft) : [];
   const picked = draft.find((b) => b.name === sel);
   const learned = map.zones.filter((z) => !z.labelOnly);
   return (
-    <div className="dev"><div className="dev-prompt">stashr house-map --{mode}</div>
+    <div className="dev"><div className="dev-prompt">stashr house-map --{mode === "model" ? "glb" : mode}</div>
     <Section title="Ghar ka map" subtitle="Stashr learns the zones of the house by itself from the Wi-Fi access point each phone and the tablet connects to, and keeps improving it as more data comes in. It is a diagram, not a measured floor plan.">
       <div className="sh-row">
         <div role="group" aria-label="View">
           <button type="button" className={`rd-btn ${mode === "2d" ? "rd-btn--primary" : "rd-btn--quiet"}`} onClick={() => setMode("2d")} aria-pressed={mode === "2d"}>2D</button>{" "}
-          <button type="button" className={`rd-btn ${mode === "3d" ? "rd-btn--primary" : "rd-btn--quiet"}`} onClick={() => setMode("3d")} aria-pressed={mode === "3d"}>3D</button>
+          <button type="button" className={`rd-btn ${mode === "3d" ? "rd-btn--primary" : "rd-btn--quiet"}`} onClick={() => setMode("3d")} aria-pressed={mode === "3d"}>3D</button>{" "}
+          {hasModel ? <button type="button" className={`rd-btn ${mode === "model" ? "rd-btn--primary" : "rd-btn--quiet"}`} onClick={() => { setEdit(false); setMode("model"); }} aria-pressed={mode === "model"}>3D model</button> : null}
         </div>
         <button type="button" className="rd-btn rd-btn--quiet" onClick={load}>Refresh</button>
         {roomBlocks.length && !edit ? <button type="button" className="rd-btn rd-btn--quiet" onClick={startEdit}>Edit layout</button> : null}
       </div>
+      {roomBlocks.length && !edit ? (
+        <div className="sh-row" style={{ flexWrap: "wrap" }}>
+          <input ref={modelFile} type="file" accept=".glb,model/gltf-binary" onChange={importModel} hidden />
+          <button type="button" className="rd-btn rd-btn--quiet" disabled={busy} onClick={() => modelFile.current && modelFile.current.click()}>{hasModel ? "Naya 3D model import (.glb)" : "3D model import karo (.glb)"}</button>
+          <button type="button" className="rd-btn rd-btn--quiet" onClick={sampleModel}>Sample .glb download (mere kamron se)</button>
+          {hasModel ? <button type="button" className="rd-btn rd-btn--danger-quiet" disabled={busy} onClick={removeModel}>Model hatao</button> : null}
+        </div>
+      ) : null}
       {!roomBlocks.length ? <p className="sh-dim">Layout edit tab hoga jab kamre ban jayenge (Room Lab mein kamre banao): phir har kamre ka block aap drag, resize aur ऊँचा-नीचा kar sakoge.</p> : null}
       <p className="sh-dim">{map.note}</p>
-      {map.zones.length ? (
+      {mode === "model" && hasModel && !edit ? (
+        <div>
+          {glb ? (
+            <Suspense fallback={<p className="sh-dim">3D load ho raha hai…</p>}>
+              <HouseModelView buffer={glb} rooms={roomBlocks.map((z) => ({ name: z.name, people: z.people || [] }))} onInfo={setGlbInfo} />
+            </Suspense>
+          ) : <p className="sh-dim">Model load ho raha hai…</p>}
+          <p className="sh-dim">{map.model.name} · {(map.model.size / 1048576).toFixed(1)} MB · ghumane ke liye drag, zoom ke liye scroll. Jis hisse ka naam kamre ke naam se milta hai (jaise “Bedroom”, “Bedroom_wall”) wo kamra jagta hai aur uske log label mein dikhte hain.</p>
+          {glbInfo && glbInfo.missing.length ? <p className="dev-warn">In kamron ka model mein koi hissa nahi mila (naam milao): {glbInfo.missing.join(", ")}</p> : null}
+          {glbInfo && glbInfo.extra.length ? <p className="sh-dim">Kisi kamre se nahi mile (sajawat): {glbInfo.extra.join(", ")}</p> : null}
+        </div>
+      ) : null}
+      {map.zones.length && !(mode === "model" && hasModel && !edit) ? (
         <div className="hm-wrap">
           <svg ref={svgRef} className={`hm-svg${edit ? " hm-edit" : ""}`} viewBox={`0 0 ${view.width} ${view.height}`} role="img" aria-label="Map of the house" style={{ maxWidth: view.width, touchAction: edit ? "none" : undefined }} onPointerMove={edit ? pointerMove : undefined} onPointerUp={edit ? pointerUp : undefined} onPointerCancel={edit ? pointerUp : undefined}>
             {view.items.map((it, i) => {

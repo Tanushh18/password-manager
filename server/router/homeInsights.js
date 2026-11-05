@@ -19,6 +19,8 @@ const trail = require("../utils/homeTrail");
 const geocode = require("../utils/geocode");
 const houseMap = require("../utils/homeMap");
 const route = require("../utils/homeRoute");
+const HomeModel3d = require("../models/homeModel3d");
+const glb = require("../utils/glb");
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: "Too many changes. Slow down." });
 const fail = (res, error, fallback) => res.status(Number.isInteger(error.status) ? error.status : 500).json({ error: Number.isInteger(error.status) ? error.message : fallback });
@@ -120,6 +122,28 @@ router.get("/home/trail", authenticate, async (req, res) => {
 router.get("/home/map", authenticate, async (req, res) => {
     try { res.set("Cache-Control", "no-store"); return res.json(await houseMap.build(req.rootUser._id)); }
     catch (e) { return fail(res, e, "Could not build the map."); }
+});
+// The imported 3D model of the house (.glb): one per account. Parts whose names match your rooms light up and show who is inside.
+router.get("/home/map/model", authenticate, async (req, res) => {
+    try {
+        const m = await HomeModel3d.findOne({ owner: req.rootUser._id });
+        if (!m) return res.status(404).json({ error: "No 3D model imported yet." });
+        res.set({ "Cache-Control": "no-store", "Content-Type": "model/gltf-binary", "X-Model-Name": encodeURIComponent(m.name) });
+        return res.send(Buffer.from(m.data));
+    } catch (e) { return fail(res, e, "Could not read the 3D model."); }
+});
+router.put("/home/map/model", authenticate, writeLimiter, express.raw({ type: "*/*", limit: glb.MAX_BYTES + 1024 }), async (req, res) => {
+    try {
+        const r = glb.check(req.body);
+        if (!r.ok) return res.status(400).json({ error: r.error });
+        const name = String(req.query.name || "house.glb").replace(/[^\w .()-]/g, "").slice(0, 80) || "house.glb";
+        await HomeModel3d.updateOne({ owner: req.rootUser._id }, { $set: { name, data: req.body, size: req.body.length, at: new Date() } }, { upsert: true });
+        return res.json({ ok: true, name, size: req.body.length, parts: r.parts });
+    } catch (e) { return fail(res, e, "Could not save the 3D model."); }
+});
+router.delete("/home/map/model", authenticate, writeLimiter, async (req, res) => {
+    try { await HomeModel3d.deleteOne({ owner: req.rootUser._id }); return res.json({ ok: true }); }
+    catch (e) { return fail(res, e, "Could not remove the 3D model."); }
 });
 // The house layout you edit on the map: where each room's block sits, its size and its height. Only for rooms made in Room Lab.
 router.put("/home/map/layout", authenticate, writeLimiter, async (req, res) => {

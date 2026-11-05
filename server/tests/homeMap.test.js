@@ -105,11 +105,12 @@ describe("the map through the server", () => {
     let mongo;
     const User = require("../models/schema"), HomeDevice = require("../models/homeDevice"), HomeSettings = require("../models/homeSettings"), HomeEvent = require("../models/homeEvent");
     const { HomeApSeen } = require("../models/homeApSeen");
+    const HomeModel3d = require("../models/homeModel3d");
     const app = require("../app");
     const automation = require("../utils/homeAutomation");
     beforeAll(async () => { mongo = await MongoMemoryServer.create(); await mongoose.connect(mongo.getUri()); });
     afterAll(async () => { await mongoose.disconnect(); await mongo.stop(); });
-    beforeEach(async () => { for (const M of [User, HomeDevice, HomeSettings, HomeEvent, HomeApSeen]) await M.deleteMany({}); });
+    beforeEach(async () => { for (const M of [User, HomeDevice, HomeSettings, HomeEvent, HomeApSeen, HomeModel3d]) await M.deleteMany({}); });
     const signUp = async () => {
         await request(app).post("/register").send({ name: "Ana", email: "ana@example.com", password: "master-pass", cpassword: "master-pass" });
         const res = await request(app).post("/login").send({ email: "ana@example.com", password: "master-pass", client: "mobile" });
@@ -139,6 +140,35 @@ describe("the map through the server", () => {
         expect(reset.layoutSaved).toBe(false);
         expect(reset.zones[0]).toMatchObject({ x: 0, y: 0, w: 2, h: 2 });                                         // the automatic grid again
         expect((await request(app).put("/home/map/layout").send({ reset: true })).status).toBe(401);
+    });
+
+    // a tiny valid .glb: one box-less triangle mesh node per part name
+    const tinyGlb = (names) => {
+        const json = Buffer.from(JSON.stringify({ asset: { version: "2.0" }, scenes: [{ nodes: names.map((_, i) => i) }], scene: 0, nodes: names.map((n, i) => ({ name: n, mesh: 0 })), meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }] }));
+        const pad = (4 - (json.length % 4)) % 4, body = Buffer.concat([json, Buffer.alloc(pad, 0x20)]);
+        const head = Buffer.alloc(20); head.write("glTF", 0, "latin1"); head.writeUInt32LE(2, 4); head.writeUInt32LE(20 + body.length, 8); head.writeUInt32LE(body.length, 12); head.writeUInt32LE(0x4e4f534a, 16);
+        return Buffer.concat([head, body]);
+    };
+
+    test("a 3D model (.glb) can be imported, read back and removed; anything else is refused", async () => {
+        const auth = await signUp();
+        expect((await request(app).get("/home/map/model").set(auth)).status).toBe(404);
+        expect((await request(app).get("/home/map").set(auth)).body.model).toBe(null);
+        const bad = await request(app).put("/home/map/model").set(auth).set("Content-Type", "application/octet-stream").send(Buffer.from("this is not a model at all, sorry"));
+        expect(bad.status).toBe(400);
+        const cut = tinyGlb(["Bedroom"]).subarray(0, 40);
+        expect((await request(app).put("/home/map/model?name=x.glb").set(auth).set("Content-Type", "application/octet-stream").send(cut)).status).toBe(400);
+        const good = tinyGlb(["Bedroom", "Kitchen"]);
+        const put = await request(app).put("/home/map/model?name=my%20house.glb").set(auth).set("Content-Type", "application/octet-stream").send(good);
+        expect(put.status).toBe(200);
+        expect(put.body).toMatchObject({ ok: true, name: "my house.glb", size: good.length, parts: ["Bedroom", "Kitchen"] });
+        const back = await request(app).get("/home/map/model").set(auth).buffer(true).parse((r, cb) => { const c = []; r.on("data", (d) => c.push(d)); r.on("end", () => cb(null, Buffer.concat(c))); });
+        expect(back.status).toBe(200);
+        expect(Buffer.compare(back.body, good)).toBe(0);
+        expect((await request(app).get("/home/map").set(auth)).body.model).toMatchObject({ name: "my house.glb", size: good.length });
+        expect((await request(app).put("/home/map/model").send(good)).status).toBe(401);
+        expect((await request(app).delete("/home/map/model").set(auth)).status).toBe(200);
+        expect((await request(app).get("/home/map/model").set(auth)).status).toBe(404);
     });
 
     test("the tablet and a phone on the home Wi-Fi teach it two zones; an office Wi-Fi is ignored; names and the plan are saved", async () => {

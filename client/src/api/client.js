@@ -558,3 +558,6 @@ export const uploadStatement = (file) => instance.post("/expenses/statement", fi
   transformRequest: [(data) => data],
   timeout: 120000
 }).then((r) => r.data);
+export const getHouseModel = () => instance.get("/home/map/model", { responseType: "arraybuffer" }).then((r) => r.data);
+export const saveHouseModel = (buffer, name) => instance.put("/home/map/model", buffer, { params: { name }, headers: { "Content-Type": "application/octet-stream" }, transformRequest: [(d) => d] }).then((r) => r.data);
+export const deleteHouseModel = () => instance.delete("/home/map/model").then((r) => r.data);
