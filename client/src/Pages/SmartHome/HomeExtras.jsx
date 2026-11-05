@@ -175,6 +175,7 @@ export function AlertsCard({ home }) {
       <div className="sh-grid2">
         <div className="sh-controls">
           <h4 className="sh-h">Tell me when</h4>
+          <Toggle checked={a.everything !== false} onChange={(v) => setA("everything", v)}>Anything changes at home (every update goes to Telegram at once)</Toggle>
           <Toggle checked={a.newDevice} onChange={(v) => setA("newDevice", v)}>A new device joins the Wi-Fi</Toggle>
           <Toggle checked={a.night} onChange={(v) => setA("night", v)}>An unknown device joins at night</Toggle>
           <div className="sh-row sh-indent">
@@ -711,6 +712,7 @@ export function FeaturesCard({ home, devices, goTo }) {
       ["Movement alerts (photo and clip)", a.camera !== false ? "on" : "off", "", "security"],
       ["New device on the Wi-Fi", a.newDevice !== false ? "on" : "off", "", "security"],
       ["Unknown device at night", a.night !== false ? "on" : "off", `${a.nightFrom || "00:00"}–${a.nightTo || "05:00"}`, "security"],
+      ["Every update to Telegram", a.everything !== false ? "on" : "off", "", "security"],
       ["Someone came home or left", a.presence ? "on" : "off", "", "security"],
       ["Nobody home but the TV is on", a.emptyHomeTv !== false ? "on" : "off", "", "security"],
       ["Morning brief", s.brief?.enabled ? "on" : "off", s.brief?.enabled ? `at ${s.brief.time}` : "", "security"],

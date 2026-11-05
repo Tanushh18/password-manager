@@ -11,7 +11,8 @@ const homeSettingsSchema = new mongoose.Schema({
         nightTo: { type: String, default: "05:00" },
         emptyHomeTv: { type: Boolean, default: true },   // nobody is home and the TV is on
         camera: { type: Boolean, default: true },        // the tablet camera saw movement
-        presence: { type: Boolean, default: false }      // someone came home or left
+        presence: { type: Boolean, default: false },     // someone came home or left (the full report)
+        everything: { type: Boolean, default: true }     // every event on the Home timeline also goes to Telegram as one short line
     },
     weather: { city: { type: String, default: "" }, lat: Number, lon: Number },
     brief: { enabled: { type: Boolean, default: false }, time: { type: String, default: "08:00" }, lastSent: { type: String, default: "" } },

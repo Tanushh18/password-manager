@@ -238,6 +238,59 @@ describe("tracking through the server", () => {
         expect(JSON.stringify(list.body)).not.toContain(good);
     });
 
+    test("every home event goes to Telegram as one short line, unless switched off; Wi-Fi flaps stay on the timeline only", async () => {
+        const auth = await signUp();
+        const tab = await pair(auth, "hub");
+        const owner = (await HomeDevice.findOne({ kind: "hub" })).owner;
+        const { record } = require("../utils/homeEvents");
+        const lines = [];
+        const real = automation.sendTelegram;
+        automation.sendTelegram = async (o, text) => { lines.push(text); return true; };
+        try {
+            await record({ owner, kind: "movie_added", text: "Movie on the USB drive: Dune" });
+            await record({ owner, kind: "lan_joined", text: "Phone joined the Wi-Fi" });
+            await record({ owner, kind: "home_arrived", text: "Papa came home" });
+            expect(lines).toHaveLength(1);
+            expect(lines[0]).toMatch(/STASHR HOME/);
+            expect(lines[0]).toMatch(/Movie on the USB drive: Dune/);
+            await request(app).put("/home/settings").set(auth).send({ alerts: { everything: false } });
+            await record({ owner, kind: "movie_added", text: "Another movie" });
+            expect(lines).toHaveLength(1);
+        } finally { automation.sendTelegram = real; }
+        expect(tab.token).toBeTruthy();
+    });
+
+    test("somebody reaching home or leaving is announced once, after the change holds for two checks", async () => {
+        const auth = await signUp();
+        const tab = await pair(auth, "hub");
+        await report(tab.token, { status: { agent: "stashr-hub" } });
+        const [a] = await link(auth, ["Papa"]);
+        await request(app).put("/home/settings").set(auth).send({ homeSpot: spot });
+        const owner = (await HomeDevice.findOne({ kind: "hub" })).owner;
+        const lines = [];
+        const real = automation.sendTelegram;
+        automation.sendTelegram = async (o, text) => { lines.push(text); return true; };
+        const now = Date.now();
+        const watch = async (at) => { const st = await HomeSettings.findOne({ owner }).lean(); await automation.presenceWatch(owner, st, await HomeDevice.find({ owner }).lean(), at); };
+        try {
+            await loc(a.token, north(20), now - 60_000);          // at home
+            await watch(now);                                      // first look: only remembered
+            expect(lines).toHaveLength(0);
+            await loc(a.token, north(4000), now + 30_000);         // gone
+            await watch(now + 40_000);                             // first sighting: waits
+            expect(lines).toHaveLength(0);
+            await watch(now + 100_000);                            // second: announced
+            expect(lines).toHaveLength(1);
+            expect(lines[0]).toMatch(/Papa left home \(4 km away\)/);
+            await watch(now + 160_000);                            // nothing new
+            expect(lines).toHaveLength(1);
+            await loc(a.token, north(20), now + 200_000);          // back
+            await watch(now + 210_000); await watch(now + 270_000);
+            expect(lines).toHaveLength(2);
+            expect(lines[1]).toMatch(/Papa arrived home/);   // the arrival logic already said it: no second "reached home"
+        } finally { automation.sendTelegram = real; }
+    });
+
     test("once they are apart, the second phone gets its own updates", async () => {
         const auth = await signUp();
         const tab = await pair(auth, "hub");
