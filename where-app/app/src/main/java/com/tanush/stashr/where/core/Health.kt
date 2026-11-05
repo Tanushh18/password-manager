@@ -54,8 +54,9 @@ object HealthLogic {
     /** Flags are null when not known; the website shows "unknown" for those. */
     data class Flags(val location: String? = null, val gpsEnabled: Boolean? = null, val notifications: Boolean? = null, val batteryUnrestricted: Boolean? = null)
 
-    fun build(appVersion: String, versionCode: Int, sdk: Int, model: String, err: LastError?, flags: Flags): JSONObject {
+    fun build(appVersion: String, versionCode: Int, sdk: Int, model: String, err: LastError?, flags: Flags, brand: String = ""): JSONObject {
         val j = JSONObject().put("appVersion", appVersion).put("versionCode", versionCode).put("sdk", sdk).put("model", clip(model, 40))
+        if (brand.isNotBlank()) j.put("brand", clip(brand, 30))
         flags.location?.let { j.put("location", it) }
         flags.gpsEnabled?.let { j.put("gpsEnabled", it) }
         flags.notifications?.let { j.put("notifications", it) }
@@ -149,7 +150,7 @@ object Health {
 
     /** The `health` object sent with every location call. */
     fun collect(ctx: Context): JSONObject =
-        HealthLogic.build(com.tanush.stashr.where.BuildConfig.VERSION_NAME, com.tanush.stashr.where.BuildConfig.VERSION_CODE, Build.VERSION.SDK_INT, Build.MODEL ?: "", lastError(ctx), flags(ctx))
+        HealthLogic.build(com.tanush.stashr.where.BuildConfig.VERSION_NAME, com.tanush.stashr.where.BuildConfig.VERSION_CODE, Build.VERSION.SDK_INT, Build.MODEL ?: "", lastError(ctx), flags(ctx), Build.MANUFACTURER ?: "")
 }
 
 /** Starts the crash handler before anything else runs. */

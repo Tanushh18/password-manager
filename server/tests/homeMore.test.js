@@ -388,6 +388,56 @@ describe("places and WhatsApp", () => {
     });
 });
 
+describe("a place with Telegram updates (work location)", () => {
+    test("leaving and reaching the place is sent to Telegram with no WhatsApp group; 'office se nikle ya nahi' is answered from the live location", async () => {
+        const auth = await signUp();
+        await pair(auth, "phone", "Papa");
+        const all = (await devices(auth)).devices;
+        const phoneId = all.find((d) => d.kind === "phone").id;
+        const owner = (await HomeDevice.findById(phoneId)).owner;
+        const ok = await request(app).put("/home/places").set(auth).send({ places: [{ name: "Office", lat: 28.6139, lon: 77.209, radius: 150, phone: phoneId, tgLeave: true, tgArrive: true }] });
+        expect(ok.status).toBe(200);
+        expect(ok.body.places[0].tgLeave).toBe(true);
+        const lines = [];
+        const real = automation.sendTelegram;
+        automation.sendTelegram = async (o, text) => { lines.push(text); return true; };
+        try {
+            const at = async (lat, lon, when) => { await HomeDevice.updateOne({ _id: phoneId }, { $set: { "status.location": { lat, lon, acc: 20, at: when } } }); await automation.tickOwner(owner, when); };
+            const t0 = Date.now() - 120_000;
+            await at(28.7, 77.3, t0);                    // first sighting: far, only remembered
+            expect(lines).toHaveLength(0);
+            await at(28.6139, 77.209, t0 + 30_000);      // reaches the office
+            expect(lines.filter((l) => /Papa Office pahunch gaye/.test(l))).toHaveLength(1);
+            await at(28.6139, 77.209, t0 + 60_000);      // still there: nothing new
+            expect(lines.filter((l) => /pahunch gaye/.test(l))).toHaveLength(1);
+            const ask = async (text) => (await request(app).post("/home/assistant").set(auth).send({ text })).body.reply;
+            expect(await ask("Papa office mein abhi hai ya nahi")).toMatch(/Papa abhi Office mein hain/);
+            await at(28.7, 77.3, t0 + 90_000);           // far away: left
+            expect(lines.filter((l) => /Papa Office se nikal gaye/.test(l))).toHaveLength(1);
+            expect(lines.filter((l) => /nothing was sent|no WhatsApp group/.test(l))).toHaveLength(0);
+            expect(await ask("Papa office se nikle ya nahi")).toMatch(/Papa Office se nikal chuke hain: abhi .* km door/);
+        } finally { automation.sendTelegram = real; }
+    });
+
+    test("with the place's Telegram boxes off, nothing is sent for it", async () => {
+        const auth = await signUp();
+        await pair(auth, "phone", "Papa");
+        const phoneId = (await devices(auth)).devices.find((d) => d.kind === "phone").id;
+        const owner = (await HomeDevice.findById(phoneId)).owner;
+        await request(app).put("/home/settings").set(auth).send({ alerts: { everything: false } });
+        await request(app).put("/home/places").set(auth).send({ places: [{ name: "Office", lat: 28.6139, lon: 77.209, radius: 150, phone: phoneId }] });
+        const lines = [];
+        const real = automation.sendTelegram;
+        automation.sendTelegram = async (o, text) => { lines.push(text); return true; };
+        try {
+            const at = async (lat, lon, when) => { await HomeDevice.updateOne({ _id: phoneId }, { $set: { "status.location": { lat, lon, acc: 20, at: when } } }); await automation.tickOwner(owner, when); };
+            const t0 = Date.now() - 120_000;
+            await at(28.7, 77.3, t0); await at(28.6139, 77.209, t0 + 30_000); await at(28.7, 77.3, t0 + 90_000);
+            expect(lines.filter((l) => /Office/.test(l) && /pahunch|nikal/.test(l))).toHaveLength(0);
+        } finally { automation.sendTelegram = real; }
+    });
+});
+
 describe("on the way home, and Telegram control", () => {
     test("a phone heading home gets an ETA, announced at each milestone once, and the assistant answers", async () => {
         const auth = await signUp();

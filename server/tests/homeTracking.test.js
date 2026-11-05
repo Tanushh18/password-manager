@@ -291,6 +291,52 @@ describe("tracking through the server", () => {
         } finally { automation.sendTelegram = real; }
     });
 
+    test("every phone's last 24 hours are kept, with coordinates, and shown on /home/trail (a phone with no place too)", async () => {
+        const auth = await signUp();
+        const [a, b] = await link(auth, ["Papa", "Mom"]);
+        await request(app).put("/home/settings").set(auth).send({ homeSpot: spot });
+        const now = Date.now();
+        await loc(a.token, north(10), now - 50 * 60_000);
+        await loc(a.token, north(3000), now - 10 * 60_000);
+        await loc(b.token, north(20), now - 5 * 60_000);
+        await new Promise((r) => setTimeout(r, 300));          // the trail is written without holding up the phone's answer
+        const res = await request(app).get("/home/trail").set(auth);
+        expect(res.status).toBe(200);
+        const papa = res.body.people.find((p) => p.person === "Papa");
+        const mom = res.body.people.find((p) => p.person === "Mom");
+        expect(papa.count).toBe(2);
+        expect(papa.points[1].lat).toBe(Math.round(north(3000) * 1e6) / 1e6);
+        expect(papa.points[1].lon).toBe(77.209);
+        expect(mom.count).toBe(1);
+        expect(papa.last.name === null || papa.last.name === "Home").toBe(true);
+        expect((await request(app).get("/home/trail")).status).toBe(401);
+    });
+
+    test("questions about the past are answered from the timeline, and commands are never run by them", async () => {
+        const HomeEventM = require("../models/homeEvent");
+        const auth = await signUp();
+        const tab = await pair(auth, "hub", "Hall tablet");
+        await report(tab.token, { status: { agent: "stashr-hub" } });
+        const [a] = await link(auth, ["Papa"]);
+        const owner = (await HomeDevice.findOne({ kind: "hub" })).owner;
+        const now = Date.now();
+        const today0 = now - automation.localParts(now, "Asia/Kolkata").minutes * 60000;
+        const yday = (h, m) => new Date(today0 - 86400000 + (h * 60 + m) * 60000);
+        await HomeEventM.create({ owner, person: "Papa", kind: "presence_away", text: "⚪ Papa left home (3 km away)", at: yday(7, 10) });
+        await HomeEventM.create({ owner, person: "Papa", kind: "presence_home", text: "🟢 Papa reached home", at: yday(18, 40) });
+        await HomeEventM.create({ owner, kind: "offline", text: "Hall tablet switched off", at: yday(23, 10) });
+        const ask = async (text) => (await request(app).post("/home/assistant").set(auth).send({ text })).body.reply;
+        expect(await ask("Papa kab nikle kal")).toMatch(/07:10.*Papa left home/);
+        expect(await ask("kal Papa kitni baar nikle")).toMatch(/Papa kal mein 1 baar ghar se nikle/);
+        expect(await ask("kal raat tablet kab band hua")).toMatch(/23:10.*Hall tablet switched off/);
+        expect((await HomeDevice.findOne({ kind: "hub" }).lean()).commands.filter((c) => c.type === "screen_off")).toHaveLength(0);
+        await loc(a.token, north(10), now - 20 * 60_000);
+        await new Promise((r) => setTimeout(r, 300));
+        expect(await ask("Papa kahan kahan gaya")).toMatch(/Papa — pichle 24 ghante|Papa:/);
+        expect(await ask("Papa ka usual time kya hai")).toMatch(/Papa — /);
+        expect(await ask("kab aayenge")).not.toMatch(/mein koi|record nahi/);       // future questions still go to the arrival logic
+    });
+
     test("once they are apart, the second phone gets its own updates", async () => {
         const auth = await signUp();
         const tab = await pair(auth, "hub");

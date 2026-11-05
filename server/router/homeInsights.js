@@ -15,6 +15,7 @@ const HomeSettings = require("../models/homeSettings");
 const HomeTrack = require("../models/homeTrack");
 const automation = require("../utils/homeAutomation");
 const ins = require("../utils/homeInsights");
+const trail = require("../utils/homeTrail");
 const route = require("../utils/homeRoute");
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: "Too many changes. Slow down." });
@@ -100,6 +101,17 @@ router.get("/home/insights", authenticate, async (req, res) => {
             candidates: ins.candidates(allStops, s.timezone || "Asia/Kolkata").filter((c) => !known(c)).map((c, i) => ({ ...c, id: `c${i}` }))
         });
     } catch (e) { return fail(res, e, "Could not load the insights."); }
+});
+
+// Every phone's last 24 hours in detail: the day as stays and trips, and every stored point (time, coordinates, accuracy).
+router.get("/home/trail", authenticate, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const owner = req.rootUser._id, now = Date.now();
+        const s = await automation.settingsOf(owner);
+        const phones = (await HomeDevice.find({ owner, kind: "phone" }).lean()).filter((p) => (p.status || {}).agent === "stashr-where");
+        return res.json({ hours: 24, homeSet: Boolean(s.homeSpot && Number.isFinite(s.homeSpot.lat)), people: await trail.dayTrail(owner, s, phones, now), at: now });
+    } catch (e) { return fail(res, e, "Could not load the last 24 hours."); }
 });
 
 router.put("/home/history", authenticate, writeLimiter, async (req, res) => {

@@ -38,6 +38,8 @@ const homeDeviceSchema = new mongoose.Schema({
     // Phone only: its Firebase push address (so the server can ask it to report where it is), and when it was last asked.
     // fcmFixAt is the phone's fix time at the last ask: if it has not moved since, the phone did not answer (off, killed, no signal).
     fcmToken: { type: String, default: "", select: false },
+    fcmSet: { type: Boolean, default: false },     // the token above exists (the token itself is never sent to a page)
+    fcmSeenAt: { type: Date },
     fcmPushedAt: { type: Date },
     fcmFixAt: { type: Number },
     fcmMisses: { type: Number, default: 0 },

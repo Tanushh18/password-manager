@@ -119,6 +119,7 @@ function cleanHealth(h) {
     if (typeof h.appVersion === "string") out.appVersion = h.appVersion.slice(0, 20);
     for (const k of ["versionCode", "sdk"]) if (Number.isFinite(Number(h[k]))) out[k] = Math.round(Number(h[k]));
     if (typeof h.model === "string") out.model = h.model.slice(0, 40);
+    if (typeof h.brand === "string") out.brand = h.brand.replace(/[^\w .-]/g, "").slice(0, 30);
     if (h.lastError && typeof h.lastError === "object" && typeof h.lastError.text === "string" && Number.isFinite(Number(h.lastError.at))) {
         out.lastError = { at: Math.round(Number(h.lastError.at)), where: String(h.lastError.where || "").slice(0, 40), text: h.lastError.text.slice(0, 400) };
     }

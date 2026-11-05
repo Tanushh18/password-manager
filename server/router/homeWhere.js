@@ -113,8 +113,8 @@ async function devicesOf(owner, now) {
 }
 const forgetDevices = (owner) => devCache.delete(String(owner));
 
-/** True when one of the owner's places uses this phone: only then is its 24 hour trail kept. */
-const hasPlace = (settings, deviceId) => (settings.places || []).some((p) => p && String(p.phone) === String(deviceId));
+// Every family phone's last 24 hours are kept (placeFixes; the database deletes each point after 24 hours): the Places card and the
+// "where did everyone go" day on the website and in Telegram read them.
 
 function answer(res, out, settings, where, now, device, loc, batt) {
     const tvLiveOn = Boolean(settings.liveUntil && new Date(settings.liveUntil).getTime() > now) && settings.tvLive?.enabled !== false && where.state !== "home";
@@ -147,14 +147,14 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
             const health = home.cleanHealth(b.health);
             if (health) set["status.health"] = health;
             if (b.wifi) { set["status.wifi"] = Boolean(b.wifi.connected); if (/^\d{1,3}(\.\d{1,3}){3}$/.test(String(b.wifi.ip || ""))) set["status.ip"] = String(b.wifi.ip); }
-            const fcm = cleanFcm(b.fcm); if (fcm) set.fcmToken = fcm;
+            const fcm = cleanFcm(b.fcm); if (fcm) { set.fcmToken = fcm; set.fcmSet = true; set.fcmSeenAt = new Date(now); }
             await HomeDevice.updateOne({ _id: d._id }, { $set: set });
             const settings = await automation.settingsOf(d.owner);
             const fresh = await HomeDevice.findById(d._id).select("commands").lean();
             const notices = (fresh.commands || []).filter((c) => c.type === "notice" && c.status === "pending");
             if (notices.length) await HomeDevice.updateOne({ _id: d._id }, { $set: { "commands.$[c].status": "sent" } }, { arrayFilters: [{ "c.status": "pending", "c.type": "notice" }] });
             const where = automation.whereIs(settings, { ...d.toObject(), status: { ...(d.status || {}), location: { ...prev, at: now } } }, now);
-            if (hasPlace(settings, d._id)) void placeFixes.keep(d.owner, d._id, prev, { same: true, now }).catch(() => {});
+            void placeFixes.keep(d.owner, d._id, prev, { same: true, now }).catch(() => {});
             const same = { pct: b.battery && Number.isFinite(num(b.battery.pct)) ? num(b.battery.pct) : (d.status || {}).battery, charging: b.battery ? b.battery.charging === true : (d.status || {}).charging === true };
             // A "still here" call carries the battery too: a phone sinking to 20% is announced even when it never moves.
             if (Number(same.pct) <= 20 && !same.charging) void automation.lowBatteryNow(d.owner, { ...d.toObject(), status: { ...(d.status || {}), location: { ...prev, at: now }, battery: same.pct, charging: same.charging } }, settings, now).catch(() => {});
@@ -176,7 +176,7 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
         status.ip = b.wifi && /^\d{1,3}(\.\d{1,3}){3}$/.test(String(b.wifi.ip || "")) ? String(b.wifi.ip) : "";
         const out = await homeRouter.ingest(d, { status });
         if (out.error) return res.status(400).json({ error: out.error });
-        const fcm = cleanFcm(b.fcm); if (fcm) await HomeDevice.updateOne({ _id: d._id }, { $set: { fcmToken: fcm } }).catch(() => {});
+        const fcm = cleanFcm(b.fcm); if (fcm) await HomeDevice.updateOne({ _id: d._id }, { $set: { fcmToken: fcm, fcmSet: true, fcmSeenAt: new Date(now) } }).catch(() => {});
         // Work out the trip now (the Wi-Fi sees this phone too) and answer with where it is and when to look again.
         const settings = await automation.settingsOf(d.owner);
         const list = await devicesOf(d.owner, now);
@@ -185,7 +185,7 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
         await insights().keepFix(d.owner, d, d.person || d.name, loc, settings).catch(() => {});
         const me = all.find((x) => String(x._id) === String(d._id)) || d;
         const where = automation.whereIs({ ...settings, etaState: state }, me, now);
-        if (hasPlace(settings, d._id)) void placeFixes.keep(d.owner, d._id, loc, { now }).catch(() => {});
+        void placeFixes.keep(d.owner, d._id, loc, { now }).catch(() => {});
         return answer(res, out, settings, where, now, d, loc, { pct: status.battery, charging: status.charging === true });
     } catch (e) { return fail(res, e, "Could not save the location."); }
 });

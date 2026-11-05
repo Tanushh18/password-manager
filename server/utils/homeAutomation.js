@@ -240,6 +240,14 @@ async function geoTick(owner, now, settings, devices) {
         }
         if (!sendState) { if (p.pending && p.pending.state) await HomeSettings.updateOne({ owner }, { $unset: { [`places.${i}.pending`]: 1 } }); continue; }
         const arrive = sendState === "in";
+        // "Tell me on Telegram when they leave / reach": always, whatever the WhatsApp message or the time window says.
+        const tgOn = (arrive ? p.tgArrive : p.tgLeave) === true;
+        if (tgOn) {
+            const who0 = phone.person || phone.name;
+            if (await claim(`placetg:${owner}:${p.id}:${sendState}:${Math.floor(eventAt / (30 * 60000))}`)) {
+                await record({ owner, device: phone._id, deviceName: phone.name, person: who0, kind: arrive ? "place_arrived" : "place_left", text: `🏢 ${who0} ${p.name} ${arrive ? "pahunch gaye" : "se nikal gaye"} (${localParts(eventAt, tz).hhmm})` });
+            }
+        }
         // The time window is judged at the moment the phone actually crossed the circle (its fix), not when the report finally arrived.
         const eventMins = localParts(eventAt, tz).minutes;
         const from = okTime(arrive ? p.arriveFrom : p.leaveFrom) ? toMinutes(arrive ? p.arriveFrom : p.leaveFrom) : null;
@@ -252,6 +260,7 @@ async function geoTick(owner, now, settings, devices) {
         }   // not at the time you set
         const text = String((arrive ? p.arriveText : p.leaveText) || "").trim();
         if (!text || !p.group) {
+            if (tgOn) continue;                                       // Telegram already said it; no "nothing was sent" note
             await record({ owner, device: phone._id, deviceName: phone.name, kind: "place_skipped", text: `${phone.person || phone.name} ${arrive ? "reached" : "left"} ${p.name}, but ${!text ? `there is no ${arrive ? "arrive" : "leave"} message` : "no WhatsApp group is set"}, so nothing was sent.` }).catch(() => {});
             continue;
         }
@@ -568,6 +577,41 @@ async function weeklyText(owner, settings, now = Date.now()) {
     return lines.join("\n");
 }
 
+const habitCache = new Map();      // owner -> { at, habits }: learned again at most once an hour
+
+/** "Papa is late today": somebody is well past the time they usually leave (still home) or get home (still out). Once per person, day and kind. */
+async function habitWatch(owner, settings, devices, now = Date.now()) {
+    const habitsLib = require("./homeHabits");
+    const tz = settings.timezone || "Asia/Kolkata";
+    const parts = (ms) => localParts(ms, tz);
+    let hit = habitCache.get(String(owner));
+    if (!hit || now - hit.at > 3600_000) {
+        const rows = await HomeEvent.find({ owner, kind: { $in: ["presence_away", "presence_home"] }, person: { $ne: "" }, at: { $gte: new Date(now - habitsLib.WINDOW_DAYS * 86400000) } }).select("person kind at").lean();
+        hit = { at: now, habits: habitsLib.learn(rows.map((r) => ({ person: r.person, kind: r.kind, at: new Date(r.at).getTime() })), parts, now) };
+        habitCache.set(String(owner), hit);
+        if (habitCache.size > 200) habitCache.delete(habitCache.keys().next().value);
+    }
+    if (!Object.keys(hit.habits).length) return [];
+    const nowParts = parts(now);
+    const phones = devices.filter((d) => d.kind === "phone");
+    const people = home.presence(devices.filter((d) => d.kind === "hub"), phones, now, settings.homeSpot);
+    const today = await HomeEvent.find({ owner, kind: { $in: ["presence_away", "presence_home"] }, at: { $gte: new Date(now - 24 * 3600_000) } }).select("person kind at").lean();
+    const todays = {};
+    for (const e of today) {
+        if (parts(new Date(e.at).getTime()).date !== nowParts.date) continue;
+        const t = todays[e.person] || (todays[e.person] = {});
+        if (e.kind === "presence_away") t.left = true; else t.reached = true;
+    }
+    const late = habitsLib.lateNow(people, hit.habits, nowParts, todays);
+    const sent = [];
+    for (const l of late) {
+        if (!(await claim(`late:${owner}:${l.key}`))) continue;
+        await record({ owner, person: l.person, kind: "late", text: habitsLib.lateText(l) });
+        sent.push(l);
+    }
+    return sent;
+}
+
 /**
  * Says, once, when somebody reaches home or leaves it, whether the Wi-Fi or the phone's location noticed first. A change has to hold for two
  * checks in a row (about a minute) before it is announced, so one odd fix does not send a message. The first look only remembers who is where.
@@ -586,17 +630,16 @@ async function presenceWatch(owner, settings, devices, now = Date.now()) {
         if (was.pending === p.home) {
             next[p.person] = { home: p.home };
             const far = !p.home && p.distanceKm !== undefined && p.distanceKm >= 0.3 ? ` (${p.distanceKm} km away)` : "";
-            said.push(p.home ? `🟢 ${p.person} reached home` : `⚪ ${p.person} left home${far}`);
+            said.push({ person: p.person, home: p.home, text: p.home ? `🟢 ${p.person} reached home` : `⚪ ${p.person} left home${far}` });
         } else next[p.person] = { home: was.home, pending: p.home };
     }
     if (JSON.stringify(next) !== JSON.stringify(old)) await HomeSettings.updateOne({ owner }, { $set: { presenceState: next } });
-    for (const text of said) {
+    for (const s of said) {
         // The arrival logic ("Papa is arriving in 5 mins", "Open the door: Papa arrived home") may have just said it: do not say it twice.
-        if (text.startsWith("🟢")) {
-            const who = text.slice(2).replace(/ reached home$/, "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-            if (await HomeEvent.exists({ owner, at: { $gte: new Date(now - 6 * 60_000) }, text: new RegExp(`${who}.*(arrived|about to arrive)`, "i") })) continue;
-        }
-        await record({ owner, kind: text.startsWith("🟢") ? "presence_home" : "presence_away", text });
+        // The event is still written to the timeline (habits and questions need it), just not sent to Telegram a second time.
+        const dup = s.home && await HomeEvent.exists({ owner, at: { $gte: new Date(now - 6 * 60_000) }, text: new RegExp(`${s.person.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*(arrived|about to arrive)`, "i") });
+        if (dup) await HomeEvent.create({ owner, person: s.person, kind: "presence_home", text: s.text, at: new Date(now) }).catch(() => {});
+        else await record({ owner, person: s.person, kind: s.home ? "presence_home" : "presence_away", text: s.text });
     }
 }
 
@@ -622,6 +665,7 @@ async function tickOwner(owner, now = Date.now()) {
     const tvOn = (d) => Boolean(d.online) && home.isOnline(d, now) && (d.status || {}).screen !== "off";
     await locationWatch(owner, settings, devices, now).catch(() => {});
     await presenceWatch(owner, settings, devices, now).catch(() => {});
+    await habitWatch(owner, settings, devices, now).catch(() => {});
 
     // 1. TV time: a minute for every minute a TV screen is on, by app.
     if (tvs.some(tvOn) && await claim(`usage:${owner}:${minuteKey}`)) {
@@ -728,4 +772,4 @@ const DEFAULT_SCENES = [
     { id: "goodnight", name: "Good night", steps: [{ kind: "tv", type: "media", args: { action: "play_pause" } }, { kind: "tv", type: "key", args: { key: "HOME" } }] }
 ];
 
-module.exports = { presenceWatch, comingReply, groupTogether, batteryScale, checkInterval, lowBatteryNow, houseSummary, localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, movieNightOn, localKeyOf, autoCamera, geoTick, needsWifi, distanceM, etaTick, announce, whereIs, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };
+module.exports = { habitWatch, presenceWatch, comingReply, groupTogether, batteryScale, checkInterval, lowBatteryNow, houseSummary, localParts, toMinutes, okTime, claim, settingsOf, queue, lanAlerts, tickOwner, tickAll, runSteps, cleanSteps, briefText, weeklyText, todayLines, movieNightOn, localKeyOf, autoCamera, geoTick, needsWifi, distanceM, etaTick, announce, whereIs, comingList, comingLine, sendTelegram, DEFAULT_SCENES, fmtMin };

@@ -96,7 +96,7 @@ test("battery is read from both shapes a phone can report", () => {
   assert.equal(batteryOf(null), null);
 });
 
-import { healthItems, healthReport } from "../src/lib/smartHome.js";
+import { healthItems, healthReport, vendorTip } from "../src/lib/smartHome.js";
 test("health checklist: green, red with a fix, and unknown for an old app", () => {
   const now = Date.now();
   const tv = { name: "TV", kind: "tv", online: true, lastSeen: new Date(now).toISOString(), status: { health: { overlay: false, accessibility: true, usbStorage: true, appVersion: "1.3.0" } } };
@@ -111,4 +111,24 @@ test("health checklist: green, red with a fix, and unknown for an old app", () =
   const old = healthItems({ name: "Hub", kind: "hub", online: true, lastSeen: new Date(now).toISOString(), status: {} }, now);
   assert.equal(old.find((i) => i.id === "health").state, "unknown");
   assert.match(healthReport([tv, phone], now), /\[BAD\] Can show messages over a playing video/);
+});
+
+test("phone health: location age, wake-up push, app version and the maker's own battery steps", () => {
+  const now = Date.now();
+  const base = { name: "Mukta", kind: "phone", online: true, lastSeen: new Date(now).toISOString() };
+  const stale = { ...base, push: { on: true, misses: 4 }, status: { agent: "stashr-where", location: { at: now - 855 * 60000 }, health: { location: "always", gpsEnabled: true, batteryUnrestricted: false, appVersion: "1.5.0", brand: "OPPO", model: "CPH2557" } } };
+  const i = healthItems(stale, now);
+  assert.equal(i.find((x) => x.id === "fix").state, "bad");
+  assert.match(i.find((x) => x.id === "fix").label, /14 h ago|855|14/);
+  assert.equal(i.find((x) => x.id === "push").state, "ok");
+  assert.equal(i.find((x) => x.id === "pushMiss").state, "warn");
+  assert.equal(i.find((x) => x.id === "version").state, "warn");
+  assert.match(i.find((x) => x.id === "batteryUnrestricted").fix, /Oppo\/Realme\/OnePlus.*auto launch/);
+  const fresh = healthItems({ ...base, push: { on: false, misses: 0 }, status: { agent: "stashr-where", location: { at: now - 2 * 60000 }, health: { location: "always", gpsEnabled: true, appVersion: "1.6.0" } } }, now);
+  assert.equal(fresh.find((x) => x.id === "fix").state, "ok");
+  assert.equal(fresh.find((x) => x.id === "push").state, "warn");
+  assert.equal(fresh.find((x) => x.id === "version"), undefined);
+  assert.match(vendorTip({ model: "SM-X710" }), /Samsung/);
+  assert.match(vendorTip({ brand: "Xiaomi" }), /Autostart/);
+  assert.match(vendorTip({}), /Unrestricted/);
 });

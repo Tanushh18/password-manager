@@ -32,7 +32,7 @@ async function claim(p, now, every, misses) {
 
 async function ask(p, type) {
     const r = await fcm.sendLocate(p.fcmToken, type);
-    if (r.dead) await HomeDevice.updateOne({ _id: p._id }, { $set: { fcmToken: "" } }).catch(() => {});
+    if (r.dead) await HomeDevice.updateOne({ _id: p._id }, { $set: { fcmToken: "", fcmSet: false } }).catch(() => {});
     return r.ok;
 }
 

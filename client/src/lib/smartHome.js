@@ -161,6 +161,19 @@ export function batteryOf(status) {
  * -> [{ id, label, state: "ok" | "bad" | "warn" | "unknown", fix }]. "bad" = something that stops a feature, "warn" = it works but worse.
  * `now` is a parameter so it can be tested.
  */
+/** The battery / autostart steps for the phone's maker: each one kills background apps in its own way. */
+export function vendorTip(h = {}) {
+  const who = `${h.brand || ""} ${h.model || ""}`.toLowerCase();
+  if (/samsung|^sm-|\bsm-/.test(who)) return "Samsung: Settings → Battery → Background usage limits → Never sleeping apps → add Stashr Location (and turn off 'Put unused apps to sleep').";
+  if (/xiaomi|redmi|poco/.test(who)) return "Xiaomi/Redmi/POCO: Settings → Apps → Manage apps → Stashr Location → Autostart ON, and Battery saver → No restrictions.";
+  if (/oppo|realme|oneplus|cph|rmx/.test(who)) return "Oppo/Realme/OnePlus: Settings → Battery → App battery management → Stashr Location → Allow background activity + Allow auto launch.";
+  if (/vivo|iqoo/.test(who)) return "Vivo/iQOO: Settings → Battery → Background power consumption → Stashr Location → Allow, and i Manager → Autostart → ON.";
+  if (/motorola|moto|nokia|hmd|google|pixel/.test(who)) return "Settings → Apps → Stashr Location → App battery usage → Unrestricted.";
+  return "Settings → Apps → Stashr Location → Battery → Unrestricted (Xiaomi/Oppo/Vivo/Samsung also have an Autostart or 'Never sleeping apps' list: add it there).";
+}
+
+const versionLess = (v, min) => { const a = String(v || "0").split(".").map(Number), b = min.split(".").map(Number); for (let i = 0; i < 3; i++) { if ((a[i] || 0) !== b[i]) return (a[i] || 0) < b[i]; } return false; };
+
 export function healthItems(device, now = Date.now()) {
   const st = device.status || {}, h = st.health;
   const out = [];
@@ -192,7 +205,16 @@ export function healthItems(device, now = Date.now()) {
     add("location", "Location: 'Allow all the time'", h.location === "always" ? "ok" : h.location === undefined ? "unknown" : "bad", "Phone: Settings → Apps → Stashr Location → Permissions → Location → Allow all the time (and Precise).");
     flag("gpsEnabled", "Location services on", h.gpsEnabled, "bad", "Phone: turn on Location in the quick settings.");
     flag("notifications", "Notifications allowed", h.notifications, "warn", "Phone: Settings → Apps → Stashr Location → Notifications → allow (to get 'X is arriving').");
-    flag("batteryUnrestricted", "Not stopped by battery saver", h.batteryUnrestricted, "warn", "Phone: Settings → Apps → Stashr Location → Battery → Unrestricted (Xiaomi/Oppo/Vivo: also allow autostart).");
+    flag("batteryUnrestricted", "Not stopped by battery saver", h.batteryUnrestricted, "warn", vendorTip(h));
+    // How old is the last location, and can the server wake this phone up (Firebase push)?
+    const fixAt = Number(st.location && st.location.at);
+    if (fixAt) { const min = Math.round((now - fixAt) / 60000); add("fix", `Last location ${min < 1 ? "just now" : min < 60 ? min + " min ago" : Math.round(min / 60) + " h ago"}`, min <= 20 ? "ok" : min <= 180 ? "warn" : "bad", "The phone has not sent a location for a while. " + (device.push && device.push.on ? "Stashr is asking it to report; if it stays old, the phone is off, has no internet, or its battery settings block the app: " : "Update Stashr Location to 1.6 or later so Stashr can wake it up. ") + vendorTip(h)); }
+    else add("fix", "Has sent a location", "bad", "No location yet: open Stashr Location, allow location 'all the time' and wait a minute.");
+    if (device.push) {
+      add("push", "Wake-up push (Firebase) registered", device.push.on ? "ok" : "warn", "This phone has not given Stashr its push address yet: install Stashr Location 1.6 or later, open it once, and keep it on the internet.");
+      if (device.push.on && device.push.misses >= 3) add("pushMiss", "Phone answers wake-ups", "warn", `Stashr asked this phone to report ${device.push.misses} times in a row and it did not answer. It is off, offline, or its battery settings stop the app. ${vendorTip(h)}`);
+    }
+    if (h.appVersion && versionLess(h.appVersion, "1.6.0")) add("version", `App version ${h.appVersion}`, "warn", "Older than 1.6.0: tap 'Install update' in Stashr Location to get wake-up push and the longer location trail.");
   }
   if (h.lastError && now - h.lastError.at < 7 * 24 * 3600 * 1000) {
     add("lastError", `Last error (${h.lastError.where || "app"}, ${new Date(h.lastError.at).toLocaleString()})`, "warn", h.lastError.text);
