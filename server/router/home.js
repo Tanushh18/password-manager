@@ -43,6 +43,7 @@ function publicDevice(d, now = Date.now()) {
         id: String(d._id), name: d.name, kind: d.kind, tokenHint: d.tokenHint || "", viaHub: Boolean(d.parent),
         online: d.kind === "phone" ? Boolean(d.lastSeen) && now - new Date(d.lastSeen).getTime() < PHONE_ONLINE_MS : Boolean(d.online) && home.isOnline(d, now), lastSeen: d.lastSeen || null, onlineSince: d.onlineSince || null, syncPaused: Boolean(d.syncPaused),
         status: d.status || {},
+        ...(d.kind === "phone" ? { roomOn: Boolean(d.roomOn) } : {}),
         ...(d.kind === "phone" ? { push: { on: Boolean(d.fcmSet), seenAt: d.fcmSeenAt || null, askedAt: d.fcmPushedAt || null, misses: d.fcmMisses || 0 } } : {}),
         commands: (d.commands || []).slice(-10).reverse().map((c) => ({ id: c.id, type: c.type, args: c.args, status: c.status, result: c.result, createdAt: c.createdAt }))
     };

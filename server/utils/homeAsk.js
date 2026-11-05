@@ -46,7 +46,8 @@ const PRESENT = /(ya nahi|ya nhi|or not|\bstill\b|\babhi\b|\bnow\b)/;
 async function answer(owner, sentence, now = Date.now()) {
     const text = norm(sentence);
     if (!text) return null;
-    const question = isQuestion(text);
+    const roomQ = /\b(kis|kaun ?se|which) (room|kamre|kamra)\b|\b(room|kamre|kamra) mein (hai|hain|ho)\b/.test(text);
+    const question = isQuestion(text) || roomQ;
     if (!question && !PRESENT.test(text)) return null;
     const automation = require("./homeAutomation");
     const settings = await automation.settingsOf(owner);
@@ -56,6 +57,23 @@ async function answer(owner, sentence, now = Date.now()) {
     const names = [...new Set(phones.map((p) => p.person || p.name))];
     const who = names.find((n) => has(text, [n.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")]));
     const win = windowOf(text, now, tz, automation.localParts);
+
+    // 00. which room is somebody in right now (the phone's Wi-Fi/Bluetooth model, see utils/roomModel.js)
+    if (roomQ) {
+        const roomLive = require("./roomLive");
+        const list = who ? phones.filter((p) => (p.person || p.name) === who) : phones;
+        if (!list.length) return "Kis ka phone? Naam bolo, jaise “Papa kis room mein hai”.";
+        const mins = (ms) => Math.max(0, Math.round((now - ms) / 60000));
+        return list.map((p) => {
+            const n = p.person || p.name, r = (p.status || {}).room;
+            if (!p.roomOn) return `${n} ka room location band hai: Stashr Location → Room Lab mein kamre train karke on karo.`;
+            const cur = roomLive.currentOf(p, now);
+            if (!cur) return `${n} ka kamra abhi pata nahi${r && r.at ? ` (aakhri scan ${mins(r.at)} min purana)` : " (abhi tak koi scan nahi aaya)"}.`;
+            const pct = Math.round((cur.confidence || 0) * 100);
+            if (cur.sure === false && (cur.ranking || []).length > 1) return `${n}: pakka nahi, shayad ${cur.ranking[0].room} (${Math.round(cur.ranking[0].p * 100)}%) ya ${cur.ranking[1].room} (${Math.round(cur.ranking[1].p * 100)}%). Aakhri scan ${mins(cur.at)} min pehle.`;
+            return `📍 ${n} abhi ${cur.name} mein hain (${pct}% pakka, ${mins(cur.at)} min pehle).`;
+        }).join("\n");
+    }
 
     // 0. is somebody at (or gone from) a named place right now? Uses the phone's latest location; a stale one is said plainly and the phone is asked to report.
     const personOf = (pl) => { const ph = phones.find((x) => String(x._id) === String(pl.phone)); return ph ? (ph.person || ph.name) : ""; };

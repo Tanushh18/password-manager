@@ -132,7 +132,7 @@ async function noteAp(device, bssidRaw, now = Date.now()) {
 }
 
 /** Everything the website and the tablet draw: zones with their place on the grid, who is where, the plan picture, what it has learned so far. */
-async function build(owner, now = Date.now()) {
+async function build(owner, now = Date.now(), { rooms: useRooms = true } = {}) {
     const HomeDevice = require("../models/homeDevice");
     const { HomeApSeen, HomeApEdge } = require("../models/homeApSeen");
     const automation = require("./homeAutomation");
@@ -157,33 +157,44 @@ async function build(owner, now = Date.now()) {
         if (z) attach.get(z.id).push(...items);
         else extra.push({ id: "room:" + room, name: room, auto: false, hint: "from your device labels", bssids: [], observations: 0, days: 0, confidence: 0, labelOnly: true, devices: items });
     }
-    const placed = layout(zones.map((z) => ({ ...z, devices: attach.get(z.id) })), edges.map((e) => ({ a: e.a, b: e.b, count: e.count })), extra);
+    // Rooms you made in Room Lab replace the Wi-Fi zones as the blocks of the map: people are put in the room the phone's model says.
+    const roomNames = useRooms && Array.isArray(map.rooms) ? map.rooms : [];
+    const roomMode = roomNames.length > 0;
+    let placed;
+    if (roomMode) {
+        const blocks = roomNames.map((n, i) => ({ id: "r:" + n, name: n, auto: false, hint: "", bssids: [], observations: roomNames.length - i, days: 0, confidence: 1, roomBlock: true, devices: Object.entries(rooms).filter(([room]) => same(room, n)).flatMap(([, items]) => items) }));
+        const others = Object.entries(rooms).filter(([room]) => !roomNames.some((n) => same(room, n))).map(([room, items]) => ({ id: "room:" + room, name: room, auto: false, hint: "from your device labels", bssids: [], observations: 0, days: 0, confidence: 0, labelOnly: true, devices: items }));
+        placed = layout(blocks, [], others);
+    } else placed = layout(zones.map((z) => ({ ...z, devices: attach.get(z.id) })), edges.map((e) => ({ a: e.a, b: e.b, count: e.count })), extra);
 
     // People and the tablet: where each is connected right now.
     const people = home.presence(hubs, phones, now, settings.homeSpot);
     const fresh = (d) => d.lastSeen && now - new Date(d.lastSeen).getTime() < 20 * 60 * 1000;
+    const roomLive = require("./roomLive");
+    const roomIdOf = (d) => { const r = d && roomLive.currentOf(d, now); return r && roomNames.includes(r.name) ? "r:" + r.name : ""; };
     const zoneOf = (d) => { const b = d.kind === "hub" ? normBssid(d.status && d.status.wifi && d.status.wifi.bssid) : normBssid(d.status && d.status.bssid); return b && fresh(d) ? apOf(b) : ""; };
     const inZone = new Map(placed.map((z) => [z.id, { ...z, people: [], hub: false }]));
-    for (const h of hubs) { const z = inZone.get(zoneOf(h)); if (z) z.hub = true; }
+    if (!roomMode) for (const h of hubs) { const z = inZone.get(zoneOf(h)); if (z) z.hub = true; }
     const homeNoZone = [], away = [];
     for (const p of people) {
         const ph = phones.find((d) => (d.person || d.name) === p.person);
         if (!p.home) { away.push({ person: p.person, distanceKm: p.distanceKm ?? null }); continue; }
-        const z = ph && inZone.get(zoneOf(ph));
-        if (z) z.people.push({ person: p.person, by: p.by }); else homeNoZone.push({ person: p.person, by: p.by });
+        const z = ph && inZone.get(roomMode ? roomIdOf(ph) : zoneOf(ph));
+        if (z) z.people.push({ person: p.person, by: roomMode ? "room" : p.by }); else homeNoZone.push({ person: p.person, by: p.by });
     }
     const days = rows.length ? Math.max(1, Math.round((now - Math.min(...rows.map((r) => new Date(r.firstSeen).getTime()))) / 86400000)) : 0;
-    const note = !zones.length ? "No zone learned yet: phones and the tablet must report their Wi-Fi access point (update Stashr Location to 1.6.2 and Stashr Hub to 1.9.1), and the phones must be on the home Wi-Fi a while."
+    const note = roomMode ? `${roomNames.length} kamre. Phones ka Wi-Fi/Bluetooth se kamra pehchana jaata hai (Room Lab mein train karo); jis phone ka kamra pakka nahi wo “ghar par, kamra pata nahi” mein dikhta hai.`
+        : !zones.length ? "No zone learned yet: phones and the tablet must report their Wi-Fi access point (update Stashr Location to 1.6.2 and Stashr Hub to 1.9.1), and the phones must be on the home Wi-Fi a while."
         : zones.length === 1 ? "Only one Wi-Fi access point seen so far, so the house is one zone. Rooms appear as separate zones only when the house has more than one access point (a mesh or an extender)."
         : `${zones.length} zones learned from ${rows.reduce((s, r) => s + (r.count || 0), 0)} sightings over ${days} day${days === 1 ? "" : "s"}; the map keeps improving as more come in.`;
-    return { zones: [...inZone.values()], homeNoZone, away, plan: map.plan || "", stats: { zones: zones.length, aps: new Set(rows.map((r) => r.ap)).size, days, sightings: rows.reduce((s, r) => s + (r.count || 0), 0) }, note, at: now };
+    return { zones: [...inZone.values()], homeNoZone, away, plan: map.plan || "", stats: { rooms: roomNames.length, zones: zones.length, aps: new Set(rows.map((r) => r.ap)).size, days, sightings: rows.reduce((s, r) => s + (r.count || 0), 0) }, note, at: now };
 }
 
 /** Hourly: if a new zone has appeared since last time, say so once (Telegram, through the timeline). */
 async function selfImprove(owner, now = Date.now()) {
     const HomeSettings = require("../models/homeSettings");
     const { record } = require("./homeEvents");
-    const data = await build(owner, now);
+    const data = await build(owner, now, { rooms: false });          // learn the Wi-Fi zones whether or not rooms are in use
     const learned = ((await HomeSettings.findOne({ owner }).select("map").lean()) || {}).map || {};
     const ids = data.zones.filter((z) => !z.labelOnly).map((z) => z.id);
     const known = Array.isArray(learned.learned) ? learned.learned : null;

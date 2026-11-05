@@ -40,7 +40,11 @@ export function shapes(map, mode = "2d", withPlan = true) {
       items.push({ type: "rect", id: b.id, x, y, w, h, cls: b.labelOnly ? "label" : "zone", plan: Boolean(map.plan) });
       items.push({ type: "text", x: x + 10, y: y + 20, text: b.name, cls: "title" });
       if (b.hint && b.auto) items.push({ type: "text", x: x + 10, y: y + 36, text: b.hint, cls: "hint" });
-      markers(b).forEach((m, i) => items.push({ type: "dot", x: x + 22 + (i % 5) * 34, y: y + h - 38 - Math.floor(i / 5) * 34, r: 11, kind: m.kind, label: m.label }));
+      markers(b).forEach((m, i) => {
+        const dx = x + 22 + (i % 5) * 34, dy = y + h - 38 - Math.floor(i / 5) * 34;
+        items.push({ type: "dot", x: dx, y: dy, r: 11, kind: m.kind, label: m.label });
+        if (m.kind === "person") items.push({ type: "text", x: dx, y: dy + 24, text: m.label, cls: "person" });
+      });
     }
     return { width, height, items };
   }
@@ -59,7 +63,7 @@ export function shapes(map, mode = "2d", withPlan = true) {
     items.push({ type: "poly", cls: cls + "-top", points: pts([t.n, t.e, t.s, t.w].map(mv)), id: b.id });
     const c = mv(iso(b.x + b.w / 2, b.y + b.h / 2, BLOCK_H));
     items.push({ type: "text", x: c.x, y: c.y - 12, text: b.name, cls: "title-c" });
-    markers(b).forEach((m, i, arr) => { const p = mv(iso(b.x + 0.35 + (i % 4) * 0.42, b.y + 1.45 + Math.floor(i / 4) * 0.34, BLOCK_H + 0.12)); items.push({ type: "dot", x: p.x, y: p.y, r: 9, kind: m.kind, label: m.label, last: i === arr.length - 1 }); });
+    markers(b).forEach((m, i, arr) => { const p = mv(iso(b.x + 0.35 + (i % 4) * 0.42, b.y + 1.45 + Math.floor(i / 4) * 0.34, BLOCK_H + 0.12)); items.push({ type: "dot", x: p.x, y: p.y, r: 9, kind: m.kind, label: m.label, last: i === arr.length - 1 }); if (m.kind === "person") items.push({ type: "text", x: p.x, y: p.y + 20, text: m.label, cls: "person" }); });
   }
   return { width: Math.ceil(maxX - minX + PAD * 2), height: Math.ceil(maxY - minY + PAD * 2 + 36), items };
 }

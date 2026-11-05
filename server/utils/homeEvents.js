@@ -5,7 +5,7 @@ const HomeEvent = require("../models/homeEvent");
  * a device joining or leaving the Wi-Fi (phones do it all day), the technical "crossed the circle" line (the place message follows),
  * and "came home / left home", which the presence watch announces once, for GPS and Wi-Fi alike.
  */
-const TIMELINE_ONLY = new Set(["lan_joined", "lan_left", "home_arrived", "home_left", "place_state"]);
+const TIMELINE_ONLY = new Set(["lan_joined", "lan_left", "home_arrived", "home_left", "place_state", "room_change"]);
 
 /** Said whatever the "every update" switch is: the person asked for these on a place ("tell me when they leave"). */
 const ALWAYS = new Set(["place_left", "place_arrived", "wifi_test"]);

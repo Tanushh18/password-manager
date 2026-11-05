@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { Section } from "../Render/RenderUi";
+import "./techie.css";
 import { errorMessage } from "../Render/renderUtils";
 import { getHomeMap, saveHomeMap } from "../../api/client";
 import { shapes, awayLine } from "../../lib/homeMap";
@@ -42,6 +43,7 @@ export function HouseMapCard() {
   const view = shapes(map, mode);
   const learned = map.zones.filter((z) => !z.labelOnly);
   return (
+    <div className="dev"><div className="dev-prompt">stashr house-map --{mode}</div>
     <Section title="Ghar ka map" subtitle="Stashr learns the zones of the house by itself from the Wi-Fi access point each phone and the tablet connects to, and keeps improving it as more data comes in. It is a diagram, not a measured floor plan.">
       <div className="sh-row">
         <div role="group" aria-label="View">
@@ -85,6 +87,6 @@ export function HouseMapCard() {
         <button type="button" className="rd-btn rd-btn--quiet" disabled={busy} onClick={() => file.current && file.current.click()}>{map.plan ? "Change floor plan picture" : "Add a floor plan picture (from a phone scan app)"}</button>
         {map.plan ? <button type="button" className="rd-btn rd-btn--danger-quiet" disabled={busy} onClick={() => save({ plan: "" }, "Floor plan removed.")}>Remove it</button> : null}
       </div>
-    </Section>
+    </Section></div>
   );
 }

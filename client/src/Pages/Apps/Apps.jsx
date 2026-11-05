@@ -84,6 +84,7 @@ export default function Apps() {
         <h1>Stashr for Android</h1>
         <p className="lede">Your vault, photos and servers in your pocket. Sign in with the account you use on the website.</p>
         <a className="btn btn--primary apps__download" href={APK.file} download="stashr.apk">Download APK</a>
+        <p className="apps__note">Administrator? <Link to="/app-updates">Choose which devices get a new app version</Link> (Stashr, Location, Hub, TV).</p>
         <p className="apps__note">Button not working? <a href={APK.github}>Download from GitHub</a>.</p>
         <h2>What you get</h2>
         <ul>{FEATURES.map((f) => <li key={f}>{f}</li>)}</ul>

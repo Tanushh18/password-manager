@@ -21,6 +21,7 @@ const { record } = require("../utils/homeEvents");
 const route = require("../utils/homeRoute");
 const phonePush = require("../utils/phonePush");
 const houseMap = require("../utils/homeMap");
+const roomLive = require("../utils/roomLive");
 const placeTrail = require("../utils/placeTrail");
 const placeFixes = require("../utils/placeFixes");
 const homeRouter = require("./home");
@@ -124,7 +125,7 @@ function answer(res, out, settings, where, now, device, loc, batt) {
     const liveOn = tvLiveOn || locateOn;
     const watch = !liveOn && device ? placeTrail.watchFor(settings.places, device._id, loc, automation.localParts(now, settings.timezone || "Asia/Kolkata").minutes, batt) : { near: false };
     return res.json({
-        live: liveOn, ok: true, state: where.state, traffic: Boolean(where.traffic), distanceKm: where.distanceKm ?? null, etaMinutes: where.state === "home" ? 0 : where.etaMinutes ?? null,
+        roomOn: Boolean(device && device.roomOn), live: liveOn, ok: true, state: where.state, traffic: Boolean(where.traffic), distanceKm: where.distanceKm ?? null, etaMinutes: where.state === "home" ? 0 : where.etaMinutes ?? null,
         nextCheckSec: liveOn ? 8 : watch.near ? Math.min(automation.checkInterval(where, batt), watch.sec) : automation.checkInterval(where, batt), home: { set: where.state !== "unset" },
         // near one of its places during an arrive/leave window: look closely (every 3 minutes, a real fix every time)
         precise: watch.near,
@@ -154,6 +155,7 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
             }
             const fcm = cleanFcm(b.fcm); if (fcm) { set.fcmToken = fcm; set.fcmSet = true; set.fcmSeenAt = new Date(now); }
             await HomeDevice.updateOne({ _id: d._id }, { $set: set });
+            if (b.scan && d.roomOn) void roomLive.update(d.toObject(), b.scan, now);
             const settings = await automation.settingsOf(d.owner);
             const fresh = await HomeDevice.findById(d._id).select("commands").lean();
             const notices = (fresh.commands || []).filter((c) => c.type === "notice" && c.status === "pending");
@@ -183,6 +185,8 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
         if (status.bssid) void houseMap.noteAp({ _id: d._id, owner: d.owner, kind: "phone", status: { ...(d.status || {}), ip: status.ip } }, status.bssid, now);
         const out = await homeRouter.ingest(d, { status });
         if (out.error) return res.status(400).json({ error: out.error });
+        // The room is worked out AFTER the status is stored: ingest rewrites the whole status, so writing the room before would be lost.
+        if (b.scan && d.roomOn) void roomLive.update({ ...d.toObject(), status: { ...(d.status || {}), ...status } }, b.scan, now);
         const fcm = cleanFcm(b.fcm); if (fcm) await HomeDevice.updateOne({ _id: d._id }, { $set: { fcmToken: fcm, fcmSet: true, fcmSeenAt: new Date(now) } }).catch(() => {});
         // Work out the trip now (the Wi-Fi sees this phone too) and answer with where it is and when to look again.
         const settings = await automation.settingsOf(d.owner);

@@ -20,6 +20,7 @@ const PhotoImport = lazy(() => import("./Pages/PhotoCloud/PhotoImport"));
 const SharedFolder = lazy(() => import("./Pages/PhotoCloud/SharedFolder"));
 const Media = lazy(() => import("./Pages/Media/Media"));
 const Admin = lazy(() => import("./Pages/Admin/Admin"));
+const AppUpdates = lazy(() => import("./Pages/AppUpdates/AppUpdates"));
 const Services = lazy(() => import("./Pages/Services/Services"));
 const ServiceMap = lazy(() => import("./Pages/Services/ServiceMap"));
 const Cron = lazy(() => import("./Pages/Cron/Cron"));
@@ -141,6 +142,7 @@ export default function App() {
           <Route path="/money" element={<RequireVault><Suspense fallback={<Splash />}><Money /></Suspense></RequireVault>} />
           <Route path="/smart-home" element={<RequireVault><Suspense fallback={<Splash />}><SmartHome /></Suspense></RequireVault>} />
           <Route path="/security-center" element={<RequireVault><Suspense fallback={<Splash />}><SecurityCenter /></Suspense></RequireVault>} />
+          <Route path="/app-updates" element={<RequireVault><RequireAdmin><Suspense fallback={<Splash />}><AppUpdates /></Suspense></RequireAdmin></RequireVault>} />
           <Route path="/servers" element={<RequireVault><RequireAdmin><Servers /></RequireAdmin></RequireVault>} />
           <Route path="/media" element={<RequireVault><RequireAdmin><Suspense fallback={<Splash />}><Media /></Suspense></RequireAdmin></RequireVault>} />
           <Route path="/security" element={<RequireVault><RequireAdmin><Security /></RequireAdmin></RequireVault>} />
