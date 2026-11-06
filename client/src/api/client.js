@@ -464,6 +464,7 @@ export const deleteRoomSamples = (body) => instance.delete("/home/rooms/samples"
 export const getHomeTrail = () => instance.get("/home/trail").then((r) => r.data);
 export const getTelegramDiagnose = () => instance.get("/telegram/diagnose").then((r) => r.data);
 export const repairTelegram = () => instance.post("/telegram/repair").then((r) => r.data);
+export const saveHouseLayout = (layout, reset = false) => instance.put("/home/map/layout", reset ? { reset: true } : { layout }).then((r) => r.data);
 export const getHomeAddress = (lat, lon) => instance.get("/home/address", { params: { lat, lon } }).then((r) => r.data);
 export const saveHomeHistory = (body) => instance.put("/home/history", body).then((r) => r.data);
 export const deleteHomeHistory = () => instance.delete("/home/history").then((r) => r.data);
@@ -558,3 +559,6 @@ export const uploadStatement = (file) => instance.post("/expenses/statement", fi
   transformRequest: [(data) => data],
   timeout: 120000
 }).then((r) => r.data);
+export const getHouseModel = () => instance.get("/home/map/model", { responseType: "arraybuffer" }).then((r) => r.data);
+export const saveHouseModel = (buffer, name) => instance.put("/home/map/model", buffer, { params: { name }, headers: { "Content-Type": "application/octet-stream" }, transformRequest: [(d) => d] }).then((r) => r.data);
+export const deleteHouseModel = () => instance.delete("/home/map/model").then((r) => r.data);

@@ -27,6 +27,9 @@ function hashScan(owner, scan) {
 
 const clean = (name) => String(name || "").replace(/[\u0000-\u001f<>&"]/g, " ").replace(/\s+/g, " ").trim().slice(0, 24);
 
+/** The account's home settings record, created if it does not exist yet (an update on a missing record would silently save nothing). */
+const ensureSettings = (owner) => HomeSettings.updateOne({ owner }, { $setOnInsert: { owner } }, { upsert: true });
+
 async function roomsOf(owner) {
     const s = await HomeSettings.findOne({ owner }).select("map.rooms").lean();
     return Array.isArray(s && s.map && s.map.rooms) ? s.map.rooms : [];
@@ -161,4 +164,4 @@ function currentOf(device, now = Date.now()) {
     return r;
 }
 
-module.exports = { hashScan, clean, roomsOf, samplesOf, store, counts, update, currentOf, forget, reportOf, fieldOf, liveReport, setModel, MAX_ROOMS };
+module.exports = { hashScan, clean, ensureSettings, roomsOf, samplesOf, store, counts, update, currentOf, forget, reportOf, fieldOf, liveReport, setModel, MAX_ROOMS };

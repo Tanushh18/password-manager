@@ -59,10 +59,16 @@
 /* the house map inside .dev */
 .dev .hm-zone, .dev .hm-label { fill: rgba(63, 185, 80, .07); stroke: #3fb950; stroke-width: 1.5; }
 .dev .hm-label { fill: rgba(139, 148, 158, .07); stroke: #484f58; stroke-dasharray: 5 4; }
-.dev .hm-zone-top { fill: rgba(63, 185, 80, .16); stroke: #3fb950; } .dev .hm-zone-left { fill: rgba(63, 185, 80, .30); stroke: #3fb950; } .dev .hm-zone-right { fill: rgba(63, 185, 80, .44); stroke: #3fb950; }
-.dev .hm-label-top { fill: rgba(139, 148, 158, .12); stroke: #484f58; } .dev .hm-label-left { fill: rgba(139, 148, 158, .22); stroke: #484f58; } .dev .hm-label-right { fill: rgba(139, 148, 158, .32); stroke: #484f58; }
+/* 3D faces are solid (not see-through), so a tall room really hides what is behind it */
+.dev .hm-zone-top { fill: #152c20; stroke: #3fb950; } .dev .hm-zone-left { fill: #1c4328; stroke: #3fb950; } .dev .hm-zone-right { fill: #235b30; stroke: #3fb950; }
+.dev .hm-label-top { fill: #1c2127; stroke: #484f58; } .dev .hm-label-left { fill: #292e35; stroke: #484f58; } .dev .hm-label-right { fill: #373c43; stroke: #484f58; }
 .dev .hm-t-title, .dev .hm-t-title-c { fill: #c9d1d9; font-family: inherit; } .dev .hm-t-hint { fill: #8b949e; font-family: inherit; }
 .dev .hm-t-person { fill: #58a6ff; font: 600 10px "JetBrains Mono", ui-monospace, monospace; text-anchor: middle; }
 .dev .hm-dot { stroke: #0d1117; }
 .dev .hm-svg { filter: drop-shadow(0 0 18px rgba(63, 185, 80, .08)); }
 .dev .tm-map { border-color: var(--d-line); }
+
+/* the layout editor on the 2D map */
+.dev .hm-edit rect[class*="hm-zone"] { cursor: move; }
+.dev .hm-sel { stroke: var(--d-blue); stroke-width: 3; filter: drop-shadow(0 0 6px rgba(88, 166, 255, .6)); }
+.dev .hm-handle { fill: var(--d-blue); stroke: #0d1117; stroke-width: 2; cursor: nwse-resize; }

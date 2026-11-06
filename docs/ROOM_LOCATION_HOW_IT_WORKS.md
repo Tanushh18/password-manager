@@ -73,3 +73,16 @@ Location ka naya version **kisi ko bhi apne aap offer nahi hota** (server par Lo
 5. Jab bharosa ho: **Settings → App updates** (`/app-updates`) mein Location ko "Sab ko" ya chune hue devices par kholo. Hub aur TV ke liye bhi wahin se.
 
 Dhyan: training (step 3) ke bina model kuch nahi bata sakta. Wo ek baar karna hi padta hai; use skip karne ka koi tareeka nahi.
+
+## Ghar ka layout edit karna (3D map)
+- Web par House map > Edit: kamre ko drag karo (jagah), kone ke handle se size badlo, "height" se 3D unchai.
+- Kamre jitne room list mein hain utne hi blocks bante hain; naya kamra khali jagah par aata hai, hataya hua kamra layout se bhi hat jaata hai.
+- Save layout (`PUT /home/map/layout`), Auto-arrange (reset), Export/Import layout (JSON file).
+- Tablet ko x, y, w, h wahi milte hain; height (z) tablet par abhi nahi dikhti (Hub ke naye release mein aayegi).
+
+## Asli 3D model import (.glb)
+- Web par House map > "3D model import karo (.glb)". Blender ya kisi bhi 3D tool se glTF Binary (.glb) export karo, 12 MB tak.
+- Model ke hisse (mesh/group) ka naam kamre ke naam jaisa rakho: "Bedroom", "bedroom.001", "Bedroom_wall" sab Bedroom mein gine jaate hain. "Bedroom 2" alag kamra hai.
+- Jis kamre mein koi hai wo hara jagta hai aur uske upar logon ke naam dikhte hain. Jis kamre ka model mein hissa nahi mila, uski list page par aati hai.
+- "Sample .glb download": aapke abhi ke layout se kamron ke naam wale dibbe, jinhe Blender mein badal ke wapas import kar sakte ho.
+- Server: `GET/PUT/DELETE /home/map/model` (har account ka ek model). Sirf website par; tablet par abhi nahi.
