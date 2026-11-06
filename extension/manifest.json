@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Stashr Autofill",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Fill your saved Stashr logins on any website with one click.",
   "icons": {
     "16": "icons/icon16.png",
@@ -36,7 +36,8 @@
         "<all_urls>"
       ],
       "js": [
-        "capture.js"
+        "capture.js",
+        "inpage.js"
       ],
       "run_at": "document_idle"
     }

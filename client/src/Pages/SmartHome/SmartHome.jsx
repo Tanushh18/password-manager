@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
   getHomeDevices, removeHomeDevice, renameHomeDevice, sendHomeCommand, labelHomeLan, mergeHomeLan, forgetHomeLan,
-  getHomeEvents, askHomeAssistant, getHomeMovies, saveHomeMovies
+  getHomeEvents, askHomeAssistant, getHomeMovies, saveHomeMovies, startHomeMoviesGoogle
 } from "../../api/client";
 import { Section, Skeleton, Empty, useConfirm } from "../Render/RenderUi";
 import { usePolling } from "../Render/renderHooks";
@@ -269,13 +269,30 @@ function DeviceMenu({ device, onChanged }) {
   );
 }
 
-/** Movies from a Google Drive folder to the TV's USB drive, through the Google account connected in Photo Cloud. */
+/** Movies from a Google Drive folder to the TV's USB drive, through a Google account connected right here (Photo Cloud is not needed). */
 function MoviesCard() {
   const [data, setData] = useState(null);
   const [folder, setFolder] = useState("");
   const [account, setAccount] = useState("");
   const [del, setDel] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [fullAccess, setFullAccess] = useState(false);
+  // Back from Google's consent screen: say how it went, then drop the ?google= part of the address.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const r = url.searchParams.get("google");
+    if (!r) return;
+    const say = { connected: () => toast.success("Google Drive connected. Now paste the folder link."), cancelled: () => toast.info("Google connection cancelled."), missing_scope: () => toast.error("Google did not give Drive access. Connect again and allow it."), error: () => toast.error("Could not connect Google Drive. Try again.") };
+    (say[r] || say.error)();
+    url.searchParams.delete("google");
+    window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+  }, []);
+  const connectGoogle = async () => {
+    if (busy) return;
+    setBusy(true);
+    try { const r = await startHomeMoviesGoogle(fullAccess); window.location.assign(r.url); }
+    catch (err) { toast.error(errorMessage(err, "Google sign-in is not set up on this server.")); setBusy(false); }
+  };
   const load = useCallback(async () => {
     try {
       const d = await getHomeMovies();
@@ -301,7 +318,14 @@ function MoviesCard() {
   return (
     <Section title="Movies from Google Drive" subtitle="Put a movie in the Drive folder and the TV copies it to its USB drive on its own.">
       {data.connections.length === 0 ? (
-        <p className="sh-dim">Connect a Google account in Photo Cloud first, then come back here.</p>
+        <div className="sh-movies-form">
+          <p className="sh-dim">Connect the Google account whose Drive holds your movies. Photo Cloud is not needed.</p>
+          <label className="sh-switch">
+            <input type="checkbox" checked={fullAccess} onChange={(e) => setFullAccess(e.target.checked)} />
+            Also allow removing a movie from Drive after it reaches the TV (asks for full Drive access)
+          </label>
+          <div className="sh-row"><button className="rd-btn rd-btn--primary" type="button" onClick={connectGoogle} disabled={busy}>Connect Google Drive</button></div>
+        </div>
       ) : (
         <form className="sh-movies-form" onSubmit={save}>
           <div className="sh-row">
@@ -319,6 +343,12 @@ function MoviesCard() {
         </form>
       )}
       {data.error ? <p className="sh-bad" role="alert">{data.error}</p> : null}
+      {data.connections.length > 0 ? (
+        <div className="sh-row">
+          <button className="rd-btn rd-btn--quiet" type="button" onClick={connectGoogle} disabled={busy}>{data.error && /401|reconnect|not connected/i.test(data.error) ? "Reconnect Google Drive" : "Connect another Google account"}</button>
+          <label className="sh-switch"><input type="checkbox" checked={fullAccess} onChange={(e) => setFullAccess(e.target.checked)} /> Full Drive access (to remove movies after sync)</label>
+        </div>
+      ) : null}
       {data.lastDelete?.error ? <p className="sh-bad">Could not remove “{data.lastDelete.name}” from Drive: {data.lastDelete.error}</p> : null}
       {data.waiting ? (
         data.waiting.length ? (

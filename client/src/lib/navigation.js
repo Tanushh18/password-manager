@@ -15,7 +15,6 @@ export function navGroups(profile) {
       items: [
         { to: "/dashboard", label: "Overview", icon: "home" },
         { to: "/passwords", label: "Passwords", icon: "key" },
-        { to: "/generator", label: "Generator", icon: "wand" },
         { to: "/security-center", label: "Security", icon: "shield" },
       ],
     },

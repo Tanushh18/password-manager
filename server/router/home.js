@@ -411,7 +411,7 @@ router.put("/home/movies/settings", authenticate, writeLimiter, async (req, res)
         if (!folderId) return res.status(400).json({ error: "Paste the Drive folder's link." });
         const connections = await movies.connectionsOf(req.rootUser._id);
         const connection = connections.find((c) => c.id === String(b.connectionId || "")) || (connections.length === 1 ? connections[0] : null);
-        if (!connection) return res.status(400).json({ error: connections.length ? "Pick a Google account." : "Connect a Google account in Photo Cloud first." });
+        if (!connection) return res.status(400).json({ error: connections.length ? "Pick a Google account." : "Connect Google Drive first (the button in Movies from Google Drive)." });
         const deleteAfterSync = b.deleteAfterSync === true;
         if (deleteAfterSync && !connection.canDelete) return res.status(400).json({ error: "This Google connection can only read Drive. Reconnect it with full Drive access to delete movies after they reach the TV." });
         await MovieSettings.updateOne({ owner: req.rootUser._id }, { $set: { connectionId: connection.id, folderId, deleteAfterSync } }, { upsert: true });
