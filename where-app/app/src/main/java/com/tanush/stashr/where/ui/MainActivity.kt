@@ -59,6 +59,7 @@ class MainActivity : Activity() {
         super.onResume()
         if (!Prefs(this).linked) { startActivity(Intent(this, SetupActivity::class.java)); finish(); return }
         Scheduler.registerPassive(this)
+        com.tanush.stashr.where.work.StatusService.sync(this)
         render()
         // Opening the app is a good moment to check at once (a pending live-map request is picked up), at most every 20 s.
         if (!busy && System.currentTimeMillis() - Prefs(this).upAt > 20_000 && Prefs(this).lastActivityCheck(20_000)) {
@@ -108,13 +109,21 @@ class MainActivity : Activity() {
         room.addView(ui.primary("Room Lab kholo") { startActivity(Intent(this, RoomLabActivity::class.java)) })
         body.addView(room)
 
+        val shade = ui.card("Notification", "Shade mein “Hello, connected to your home” dikhta hai jab tak ye phone Stashr se juda hai. Ye sirf dikhata hai, tracking alag chalti hai.")
+        shade.addView(ui.quiet(if (prefs.statusOn) "Notification band karo" else "Notification chalu karo") {
+            prefs.statusOn = !prefs.statusOn
+            com.tanush.stashr.where.work.StatusService.sync(this)
+            render()
+        })
+        body.addView(shade)
+
         val help = ui.card("If updates stop", "Some phones (Xiaomi, Oppo, Vivo, Samsung, OnePlus) close background apps to save battery. If your location stops updating, let Stashr Location run in the background.")
         help.addView(ui.quiet("Battery optimisation list") { open(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) })
         help.addView(ui.quiet("This app’s settings") { open(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) })
         body.addView(help)
 
         val privacy = ui.card("Private by design")
-        privacy.addView(ui.dim("Only your location (latitude, longitude, accuracy, speed), battery level and Wi-Fi connected yes/no are sent, only to your Stashr server. No passwords, contacts or messages. It never runs a tracking notification. While a family TV shows the live map, your location is sent every few seconds until it is closed. The owner of your Stashr can turn on a location history (places and trips) on their own website; nothing from it is shown on this phone. If you turn on Room location (Room Lab), the Wi-Fi networks and Bluetooth devices this phone hears are sent too, as unreadable codes with their signal strength, so Stashr can tell which room you are in."))
+        privacy.addView(ui.dim("Only your location (latitude, longitude, accuracy, speed), battery level and Wi-Fi connected yes/no are sent, only to your Stashr server. No passwords, contacts or messages. The only notification it keeps is a quiet “connected to your home” one, which you can switch off here. While a family TV shows the live map, your location is sent every few seconds until it is closed. The owner of your Stashr can turn on a location history (places and trips) on their own website; nothing from it is shown on this phone. If you turn on Room location (Room Lab), the Wi-Fi networks and Bluetooth devices this phone hears are sent too, as unreadable codes with their signal strength, so Stashr can tell which room you are in."))
         body.addView(privacy)
 
         body.addView(ui.danger("Disconnect") { confirmDisconnect() })

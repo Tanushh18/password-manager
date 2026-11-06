@@ -39,6 +39,9 @@ class Prefs(ctx: Context) {
 
     val linked get() = token.isNotEmpty()
 
+    /** The always-there "Hello, connected to your home" notification (on unless the person turns it off). */
+    var statusOn: Boolean get() = p.getBoolean("statusOn", true); set(v) = p.edit().putBoolean("statusOn", v).apply()
+
     /** Room location: the checks also carry what this phone hears (Wi-Fi networks, optionally Bluetooth), so Stashr can say which room it is in. */
     var roomOn: Boolean get() = p.getBoolean("roomOn", false); set(v) = p.edit().putBoolean("roomOn", v).apply()
     var roomBle: Boolean get() = p.getBoolean("roomBle", true); set(v) = p.edit().putBoolean("roomBle", v).apply()
