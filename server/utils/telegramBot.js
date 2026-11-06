@@ -6,6 +6,9 @@ const renderOps = require("./renderOps");
 const { openEvents } = require("./incidentFold");
 const { pingResults } = require("./pings");
 const T = require("./telegramText");
+const catalog = require("./telegramCatalog");
+const { runTelegramRead } = require("./telegramRead");
+const TelegramNotification = require("../models/TelegramNotification");
 const { probeService } = require("./healthProbe");
 
 /*
@@ -22,8 +25,17 @@ const DIGEST_CHOICES = [5, 10, 15, 30, 60];
 const MODES = ["ask", "alerts", "timer"];
 /* When the bot messages on its own. Timed updates are off unless chosen ("timer"); older settings count as "alerts". */
 const modeOf = (s) => (MODES.includes(s?.updates) ? s.updates : "alerts");
-const COMMANDS = [["status", "Everything in one message"], ["servers", "Every server and its health"], ["incidents", "Open incidents"], ["projects", "Your projects"], ["project", "One project: /project name"], ["updates", "When I message you on my own"], ["menu", "Show the buttons"], ["pass", "A password: /pass name PIN"], ["help", "What I can do"]];
-const setCommands = (token) => tg(token, "setMyCommands", { commands: COMMANDS.map(([command, description]) => ({ command, description })) });
+const COMMANDS = catalog.BOT_COMMANDS;
+const SHORTCUTS = {
+  who: () => "kaun ghar par hai", coming: () => "kab aayenge", locate: () => "location refresh", screenoff: () => "tablet screen off", today: () => "today updates",
+  photo: () => "camera photo", clip: () => "camera clip", watch: () => "camera on", unwatch: () => "camera off", live: () => "camera live",
+  pause: () => "pause the tv", play: () => "play the tv", next: () => "next", prev: () => "previous", mute: () => "mute the tv",
+  volume: (a) => (a.length ? "volume " + a.join(" ") : ""), tvhome: () => "tv home", netflix: () => "open netflix",
+  youtube: (a) => (a.length ? a.join(" ") + " song on tv" : ""), music: (a) => (a.length ? "play " + a.join(" ") + " song" : ""),
+  scene: (a) => a.join(" "), speed: () => "speed test", scan: () => "scan wifi", sync: () => "sync movies",
+  camera: (a) => "camera " + a.join(" "), tv: (a) => a.join(" ") + " tv"
+};
+const setCommands = (token) => tg(token, "setMyCommands", { commands: COMMANDS });
 
 async function tg(token, method, body) {
   try {
@@ -32,7 +44,49 @@ async function tg(token, method, body) {
     return json.ok ? { ok: true, result: json.result } : { ok: false, error: json.description || "Telegram error " + res.status };
   } catch { return { ok: false, error: "Telegram did not answer." }; }
 }
-const send = (token, chatId, text, extra = {}) => tg(token, "sendMessage", { chat_id: chatId, text: String(text).slice(0, 4000), parse_mode: "HTML", disable_web_page_preview: true, ...extra });
+const { AsyncLocalStorage } = require("node:async_hooks");
+/** The command being answered right now: its "working on it" note, so the first reply can replace it. */
+const progress = new AsyncLocalStorage();
+
+const send = async (token, chatId, text, extra = {}) => {
+  const p = progress.getStore();
+  if (p && !p.used && String(p.chatId) === String(chatId)) {
+    await p.ready;
+    // An inline keyboard can be put on an edited message; the big menu keyboard needs a message of its own.
+    if (p.noteId && !(extra.reply_markup && !extra.reply_markup.inline_keyboard)) {
+      p.used = true;
+      const r = await tg(token, "editMessageText", { chat_id: chatId, message_id: p.noteId, text: String(text).slice(0, 4000), parse_mode: "HTML", disable_web_page_preview: true, ...(extra.reply_markup ? { reply_markup: extra.reply_markup } : {}) });
+      if (r.ok) return r;
+      p.used = false;      // Telegram refused the edit (same text, too old…): send it as a new message below
+    }
+  }
+  return tg(token, "sendMessage", { chat_id: chatId, text: String(text).slice(0, 4000), parse_mode: "HTML", disable_web_page_preview: true, ...extra });
+};
+
+/**
+ * Runs one command so that the person can SEE the server working: the "typing…" sign from the first moment, and when it takes
+ * more than about 2 seconds a "⏳ Working on it…" message that the answer then replaces (an error replaces it too). A command never
+ * ends silently: a note nobody used is turned into "✅ Done".
+ */
+async function withProgress(token, chatId, work) {
+  const p = { chatId, used: false, noteId: null, done: false, ready: Promise.resolve() };
+  const typing = () => { tg(token, "sendChatAction", { chat_id: chatId, action: "typing" }); };
+  typing();
+  const keep = setInterval(typing, 4000);
+  const slow = setTimeout(() => {
+    p.ready = (async () => {
+      if (p.done) return;
+      const r = await tg(token, "sendMessage", { chat_id: chatId, text: "⏳ Working on it…" });
+      if (r.ok && r.result) p.noteId = r.result.message_id;
+    })();
+  }, 1800);
+  try { return await progress.run(p, work); }
+  finally {
+    p.done = true; clearTimeout(slow); clearInterval(keep);
+    await p.ready;
+    if (p.noteId && !p.used) await tg(token, "editMessageText", { chat_id: chatId, message_id: p.noteId, text: "✅ Done." });
+  }
+}
 
 /* ---------- state ---------- */
 async function readState(user) {
@@ -53,7 +107,7 @@ const publicState = (s) => s ? {
   connected: Boolean(s.chatId), botUsername: s.botUsername || "", chatName: s.chatName || "", linkedAt: s.linkedAt || null,
   linkUrl: !s.chatId && s.linkCode && Date.now() < (s.linkExpires || 0) ? "https://t.me/" + s.botUsername + "?start=" + s.linkCode : "",
   updates: modeOf(s), digestMinutes: DIGEST_CHOICES.includes(s.digestMinutes) ? s.digestMinutes : 10, digestQuietWhenOk: Boolean(s.digestQuietWhenOk),
-  passwordsAllowed: Boolean(s.passwordsAllowed), pinSet: Boolean(s.pinHash), lastDigestAt: s.lastDigestAt || null
+  passwordsAllowed: Boolean(s.passwordsAllowed), pinSet: Boolean(s.pinHash), notificationCategories: catalog.normalizeNotificationCategories(s.notificationCategories), lastDigestAt: s.lastDigestAt || null
 } : { connected: false };
 
 /* Alerts (incidents) go through the Render ops config, so keep its Telegram fields in step. */
@@ -122,6 +176,8 @@ async function updateSettings(user, input) {
     state.pinHash = hashPin(input.pin, state.pinSalt);
     state.pinFails = 0; state.pinLockedUntil = 0;
   }
+  if (input.notificationCategories !== undefined) state.notificationCategories = catalog.normalizeNotificationCategories(input.notificationCategories);
+  if (input.notifications === "all") state.notificationCategories = catalog.normalizeNotificationCategories("all");
   if (input.passwordsAllowed !== undefined) {
     if (input.passwordsAllowed === true && !state.pinHash) throw Object.assign(new Error("Set a PIN first."), { status: 400 });
     state.passwordsAllowed = input.passwordsAllowed === true;
@@ -178,6 +234,45 @@ async function handleButton(user, state, query) {
   const answer = (text, alert = false) => tg(token, "answerCallbackQuery", { callback_query_id: query.id, text: String(text).slice(0, 190), show_alert: alert });
   // Only the linked chat may press anything.
   if (!chatId || String(chatId) !== String(state.chatId)) return void (await answer("This bot is private.", true));
+  const actionPick = /^a:([yn]):([a-f0-9]{24})$/.exec(String(query.data || ""));
+  if (actionPick) {
+    const pending = state.pendingAction;
+    if (!pending || pending.token !== actionPick[2] || Date.now() > Number(pending.expiresAt || 0)) {
+      state.pendingAction = null; await writeState(user, state);
+      return void (await answer("This confirmation expired. Send the command again.", true));
+    }
+    state.pendingAction = null; await writeState(user, state);
+    if (actionPick[1] === "n") {
+      await answer("Cancelled.");
+      return void (await tg(token, "editMessageText", { chat_id: chatId, message_id: messageId, text: "✖ Action cancelled.", reply_markup: NO_KEYBOARD }));
+    }
+    await answer("Confirmed. Executing…");
+    let reply = null;
+    try { reply = await homeSay(user, pending.sentence); } catch { reply = "The action failed. Check Stashr Home for the current device state."; }
+    return void (await tg(token, "editMessageText", { chat_id: chatId, message_id: messageId, text: "✅ <b>Confirmed</b>\\n" + (reply || "The assistant did not return a result."), parse_mode: "HTML", reply_markup: NO_KEYBOARD }));
+  }
+  const resolvePick = /^ir:([yn]):([0-9a-f-]{36})$/.exec(String(query.data || ""));
+  if (resolvePick) {
+    const pending = state.pendingIncidentResolve;
+    if (!pending || pending.incidentId !== resolvePick[2] || Date.now() > Number(pending.expiresAt || 0)) {
+      state.pendingIncidentResolve = null; await writeState(user, state);
+      return void (await answer("This confirmation expired.", true));
+    }
+    state.pendingIncidentResolve = null; await writeState(user, state);
+    if (resolvePick[1] === "n") {
+      await answer("Cancelled.");
+      return void (await tg(token, "editMessageText", { chat_id: chatId, message_id: messageId, text: "✖ Incident resolution cancelled.", reply_markup: NO_KEYBOARD }));
+    }
+    try {
+      const dataKey = await user.getDataKey();
+      const incident = openEvents(renderOps.encryptedList(user, "renderIncidents", dataKey, renderOps.INCIDENT_LIMIT)).find((e) => e.id === resolvePick[2]);
+      if (!incident) { await answer("Incident already closed."); return void (await tg(token, "editMessageText", { chat_id: chatId, message_id: messageId, text: "Incident already closed.", reply_markup: NO_KEYBOARD })); }
+      await renderOps.resolveIncidents(user, { ids: [resolvePick[2]], reason: "Resolved from Telegram after confirmation.", by: "manual" });
+      await audit(user, "incident_resolved", incident.serviceKey, { type: incident.type });
+      await answer("Incident resolved.");
+      return void (await tg(token, "editMessageText", { chat_id: chatId, message_id: messageId, text: "✓ Incident resolved from Telegram.", reply_markup: NO_KEYBOARD }));
+    } catch { await answer("Could not resolve the incident. Try again from Stashr.", true); return; }
+  }
   const u = /^u:(ask|alerts|timer)(?::(\d{1,2}))?$/.exec(String(query.data || ""));
   if (u) {
     state.updates = u[1];
@@ -209,21 +304,25 @@ async function handleButton(user, state, query) {
 
   try {
     if (action === "r") {
-      await renderOps.resolveIncidents(user, { ids: [incidentId], reason: "Resolved from Telegram.", by: "manual" });
-      await audit(user, "incident_resolved", incident.serviceKey, { type: incident.type });
-      await answer("Resolved.");
-      return void (await edit("✓ Resolved from Telegram."));
+      state.pendingIncidentResolve = { incidentId, expiresAt: Date.now() + 2 * 60 * 1000 };
+      await writeState(user, state);
+      await answer("Confirm incident resolution.");
+      return void (await edit("Resolve this incident? This will close it in Stashr.", { inline_keyboard: [[{ text: "✅ Yes, resolve", callback_data: "ir:y:" + incidentId }, { text: "✖ Cancel", callback_data: "ir:n:" + incidentId }]] }));
     }
     const [accountId, ...rest] = String(incident.serviceKey).split(":");
     const serviceId = rest.join(":");
     const apiKey = accountId ? renderOps.accountApiKey(user, dataKey, accountId) : null;
     if (action === "x") { // ask first: a restart interrupts live traffic
+      state.pendingIncidentRestart = { incidentId, expiresAt: Date.now() + 2 * 60 * 1000 };
+      await writeState(user, state);
       await answer("Confirm the restart.");
       return void (await edit("Restart " + incident.serviceName + "? Live requests will be interrupted for a moment.", { inline_keyboard: [[{ text: "✅ Yes, restart", callback_data: "i:y:" + incidentId }, { text: "✖ Cancel", callback_data: "i:n:" + incidentId }]] }));
     }
-    if (action === "n") { await answer("Cancelled."); return void (await edit("", mainKeyboard)); }
+    if (action === "n") { state.pendingIncidentRestart = null; await writeState(user, state); await answer("Cancelled."); return void (await edit("", mainKeyboard)); }
+    if (action === "y" && (state.pendingIncidentRestart?.incidentId !== incidentId || Date.now() > Number(state.pendingIncidentRestart?.expiresAt || 0))) { await answer("Restart confirmation expired. Open the incident again.", true); return; }
     if (!apiKey || !/^[A-Za-z0-9_-]{1,160}$/.test(serviceId)) { await answer("This service is not connected any more.", true); return; }
     if (action === "y") {
+      state.pendingIncidentRestart = null; await writeState(user, state);
       await renderOps.renderRequest(apiKey, "/v1/services/" + encodeURIComponent(serviceId) + "/restart", { method: "POST" });
       await audit(user, "service_restart", incident.serviceKey, { incident: incident.type });
       await answer("Restart requested.");
@@ -284,6 +383,7 @@ async function handleUpdate(hookId, secret, update) {
   }
   if (String(chatId) !== String(state.chatId)) { await send(token, chatId, "This bot is private."); return; }
 
+  await withProgress(token, chatId, async () => {
   try {
     // Plain text while the bot is waiting for something: a PIN, or the name of a login.
     const text = msg.text.trim();
@@ -295,7 +395,24 @@ async function handleUpdate(hookId, secret, update) {
     }
     if (!cmd && pend?.kind === "name") return void (await startPassword(user, state, text));
     if (cmd && cmd !== "pass" && pend) await setPending(user, state, null);
-    if (cmd === "start" || cmd === "help" || cmd === "menu" || !cmd) return void (await send(token, chatId, T.HELP, { reply_markup: T.MENU_KEYBOARD }));
+    if (cmd === "start" || cmd === "help" || cmd === "menu") { setCommands(token); return void (await send(token, chatId, T.HELP, { reply_markup: T.MENU_KEYBOARD })); }
+    if (cmd === "notifications") return void (await send(token, chatId, "<b>Telegram notifications</b>\\nEnabled categories: " + catalog.normalizeNotificationCategories(state.notificationCategories).map(T.esc).join(", ") + "\\nChange category preferences in Stashr → Settings → Telegram."));
+    if (cmd === "report" || cmd === "week") {
+      await send(token, chatId, "📊 Building your report…");
+      const ok = await require("./homeReport").sendReport(user._id, { hours: cmd === "week" ? 168 : 24 });
+      return void (ok || await send(token, chatId, "⚠️ Could not build the report right now."));
+    }
+    if (cmd === "events") return void (await send(token, chatId, await eventsText(user)));
+    if (cmd === "devices" || cmd === "phones") return void (await send(token, chatId, await devicesText(user, cmd === "phones")));
+    if (cmd === "home" || SHORTCUTS[cmd] || !cmd) {
+      const sentence = cmd === "home" ? args.join(" ") : cmd ? SHORTCUTS[cmd](args) : text;
+      if (cmd && !sentence.trim()) return void (await send(token, chatId, cmd === "scene" ? "Which scene? e.g. /scene movie night" : "Say what to do, e.g. /home pause the tv, /photo, /who, /volume 30."));
+      const mutating = catalog.ACTION_COMMANDS.has(cmd) || (cmd === "home" && isLikelyHomeAction(sentence)) || (!cmd && isLikelyHomeAction(sentence));
+      if (mutating) return void (await requestHomeAction(user, state, token, chatId, sentence));
+      const said = await homeSay(user, sentence);
+      if (said) return void (await send(token, chatId, said));
+      if (!cmd) return void (await send(token, chatId, T.HELP, { reply_markup: T.MENU_KEYBOARD }));
+    }
     if (cmd === "updates") return void (await send(token, chatId, "", updatesMessage(state)));
     if (cmd === "status") { const s = await snapshot(user); return void (await send(token, chatId, T.digestText(T.summarize(s), { projects: s.projects.filter((p) => p.status !== "archived").length, lastTick: s.lastTick }))); }
     if (cmd === "servers") { const s = await snapshot(user); return void (await send(token, chatId, T.serversText(s.services, s.health, s.pings))); }
@@ -309,9 +426,72 @@ async function handleUpdate(hookId, secret, update) {
       if (hits.length > 1) return void (await send(token, chatId, "Which one?\n" + hits.slice(0, 10).map((p) => "• " + T.esc(p.name)).join("\n")));
       return void (await send(token, chatId, T.projectText(hits[0])));
     }
+    const readReply = await runTelegramRead(user, cmd, args);
+    if (readReply) return void (await send(token, chatId, readReply));
     if (cmd === "pass") return void (await handlePassword(user, state, msg, args));
     await send(token, chatId, "I don't know that command.\n\n" + T.HELP);
-  } catch { await send(token, chatId, "Something went wrong reading your data. Try again in a minute."); }
+  } catch (err) {
+    console.error("[telegram] command failed:", cmd || "(text)", err && err.message);
+    await send(token, chatId, "⚠️ <b>That did not work.</b>\nThe server answered with an error" + (cmd ? " for /" + T.esc(cmd) : "") + ". Try again in a minute; /status tells you if the server itself is healthy.");
+  }
+  });
+}
+
+/**
+ * Stashr Home from Telegram: the same assistant as the website and the tablet's microphone. Returns the reply text,
+ * or null when this account has no home devices or the sentence was not understood (the caller then shows the help).
+ */
+async function eventsText(user) {
+  const HomeEvent = require("../models/homeEvent");
+  const list = await HomeEvent.find({ owner: user._id }).sort({ at: -1 }).limit(10).lean();
+  if (!list.length) return "Nothing has happened at home yet.";
+  const clock = (at) => new Date(at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
+  return "<b>🕑 Last 10 things at home</b>\n" + list.map((e) => clock(e.at) + " " + T.esc(e.text.slice(0, 100))).join("\n");
+}
+
+async function devicesText(user, phonesOnly) {
+  const HomeDevice = require("../models/homeDevice");
+  const home = require("./home");
+  const list = (await HomeDevice.find({ owner: user._id }).lean()).filter((d) => !phonesOnly || d.kind === "phone");
+  if (!list.length) return "No devices added to Stashr Home yet.";
+  const icon = { tv: "📺", hub: "📟", phone: "📱" };
+  const lines = list.map((d) => {
+    const on = d.kind === "phone" ? Boolean(d.lastSeen) && Date.now() - new Date(d.lastSeen).getTime() < 75 * 60000 : Boolean(d.online) && home.isOnline(d);
+    const b = home.batteryOf(d.status);
+    const cam = d.kind === "hub" && d.status && d.status.camera ? ` · 📷 ${d.status.camera.error ? "⚠️ " + T.esc(String(d.status.camera.error).slice(0, 80)) : d.status.camera.armed ? "watching" : "off"}` : "";
+    return `${on ? "🟢" : "⚪"} ${icon[d.kind] || "▫️"} ${T.esc(d.person || d.name)}${b ? ` 🔋${b.pct}%${b.charging ? "⚡" : ""}` : ""}${cam}${on ? "" : " — not reporting"}`;
+  });
+  return "<b>" + (phonesOnly ? "📱 Phones" : "🏠 Devices") + "</b>\n" + lines.join("\n");
+}
+
+async function requestHomeAction(user, state, token, chatId, sentence) {
+  const actionToken = crypto.randomBytes(12).toString("hex");
+  state.pendingAction = { token: actionToken, sentence: String(sentence).slice(0, 200), expiresAt: Date.now() + 2 * 60 * 1000 };
+  await writeState(user, state);
+  return send(token, chatId, "⚠️ <b>Confirm this Stashr Home action</b>\\n" + T.esc(sentence) + "\\n\\nThis request expires in 2 minutes.", {
+    reply_markup: { inline_keyboard: [[{ text: "✅ Confirm and run", callback_data: "a:y:" + actionToken }, { text: "✖ Cancel", callback_data: "a:n:" + actionToken }]] }
+  });
+}
+function isReadOnlyNatural(sentence) {
+  return /^(who|who is|kaun|kaun ghar|kab aay|coming|today|aaj|status|devices|phones|battery|events|report|what|how|show|list|tell|where|kya|papa kab|mummy kab|internet speed|speed test)\b/i.test(String(sentence || "").trim());
+}
+function isLikelyHomeAction(sentence) {
+  return /^(pause|play|resume|stop|start|turn|switch|set|open|close|mute|unmute|volume|next|previous|prev|take|record|camera|scan|sync|run|launch|netflix|youtube|music|scene|tv|light|fan|ac|pankha|batti|gaana|video|photo|chala|band|on|off|awaaz)\b/i.test(String(sentence || "").trim());
+}
+
+async function homeSay(user, sentence) {
+  const HomeDevice = require("../models/homeDevice");
+  if (!await HomeDevice.exists({ owner: user._id })) return null;
+  const homeRouter = require("../router/home");
+  const automation = require("./homeAutomation");
+  if (/^\s*(stashr\s+)?(today|aaj)\b/i.test(sentence) || /\btoday updates?\b/i.test(sentence)) {
+    const t = await automation.todayLines(user._id, await automation.settingsOf(user._id));
+    return "<b>" + T.esc(t.title) + "</b>\n" + t.lines.map((l) => T.esc(l.icon + " " + l.text)).join("\n");
+  }
+  const out = await homeRouter.runSentence(user._id, String(sentence).slice(0, 200));
+  if (out.error) return "⚠️ " + T.esc(out.error);
+  if (/^I did not understand/.test(out.reply || "")) return null;
+  return "🏠 " + T.esc(out.reply || "Done.") + (out.sent && out.sent.length ? "\nSent to " + T.esc(out.sent.map((x) => x.device).join(", ")) + "." : "");
 }
 
 /*
@@ -432,7 +612,9 @@ async function runAllDigests() {
   for (const user of users) {
     try {
       const state = await readState(user);
-      if (!state?.chatId || modeOf(state) !== "timer") continue;
+      if (!state?.chatId) continue;
+      await flushNotificationQueue(user, state).catch(() => {});
+      if (modeOf(state) !== "timer") continue;
       const every = DIGEST_CHOICES.includes(state.digestMinutes) ? state.digestMinutes : 10;
       if (state.lastDigestAt && Date.now() - Date.parse(state.lastDigestAt) < every * 60000 - 60000) continue;
       if (await sendDigest(user, state)) sent += 1;
@@ -449,4 +631,104 @@ async function sendTest(user) {
   return sendDigest(user, state, { force: true });
 }
 
-module.exports = { modeOf, MODES, connect, disconnect, updateSettings, readState, publicState, handleUpdate, runAllDigests, sendTest, DIGEST_CHOICES, isValidHookId: (id) => mongoose.isValidObjectId(id) || /^[a-f0-9]{32}$/.test(String(id)) };
+/* One short message to the user's connected bot, for things Stashr Home notices (the TV came online, a new device on the Wi-Fi). */
+const redactNotification = value => String(value || "").replace(/(bot\d+:[A-Za-z0-9_-]+)/g, "[redacted bot token]").replace(/(password|secret|token|api[_-]?key)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]").slice(0, 3500);
+async function notifyEvent(user, event = {}) {
+  try {
+    const state = await readState(user);
+    if (!state?.chatId || !state.botToken || modeOf(state) === "ask") return false;
+    const category = catalog.NOTIFICATION_CATEGORIES.includes(String(event.category || "system").toLowerCase()) ? String(event.category || "system").toLowerCase() : "system";
+    if (!catalog.notificationsEnabled(state, category)) return false;
+    const title = redactNotification(event.title || ""), body = redactNotification(event.text || event.body || "");
+    if (!body) return false;
+    const dedupeKey = event.dedupeKey ? crypto.createHash("sha256").update(String(event.dedupeKey)).digest("hex") : undefined;
+    let row;
+    try { row = await TelegramNotification.create({ owner: user._id, category, title, body: (title ? "<b>" + T.esc(title) + "</b>\\n" : "") + (event.html === false ? T.esc(body) : body), dedupeKey, status: "pending", attempts: 0, nextAttemptAt: new Date() }); }
+    catch (error) { if (error?.code === 11000) return false; throw error; }
+    const result = await send(state.botToken, state.chatId, row.body);
+    await TelegramNotification.updateOne({ _id: row._id }, { $set: { status: result.ok ? "sent" : "pending", attempts: 1, sentAt: result.ok ? new Date() : null, nextAttemptAt: new Date(Date.now() + 60000), lastError: result.ok ? "" : "Telegram delivery failed" } });
+    return result.ok;
+  } catch { return false; }
+}
+/**
+ * Why Telegram updates may not be arriving, one line per thing that has to be true. notifyEvent itself stays silent when one of
+ * them is not (so an alert never throws); this is where the person can see which one it is. Never throws.
+ */
+async function diagnose(user) {
+  const checks = [];
+  const add = (id, ok, text, fix = "") => checks.push({ id, ok, text, fix });
+  try {
+    const entry = (user.telegram || [])[0];
+    if (!entry) { add("connected", false, "No Telegram bot is connected", "Settings → Telegram → paste the token from @BotFather, then press the link and Start in Telegram."); return { ready: false, checks }; }
+    const state = await readState(user);
+    if (!state) { add("readable", false, "The saved Telegram settings cannot be read", "Disconnect the bot in Settings → Telegram and connect it again."); return { ready: false, checks }; }
+    add("connected", Boolean(state.chatId && state.botToken), state.chatId && state.botToken ? `Bot ${state.botUsername ? "@" + state.botUsername : ""} is connected to the chat ${state.chatName || ""}`.trim() : "The bot has no chat yet", "Open the bot in Telegram and press Start (Settings → Telegram shows the link).");
+    const mode = modeOf(state);
+    add("mode", mode !== "ask", mode === "ask" ? "Automatic messages are OFF (mode “ask”: the bot only answers when you write)" : `Automatic messages are on (mode “${mode}”)`, "Send /updates to the bot and choose “alerts”, or press “Fix it”.");
+    const home = catalog.notificationsEnabled(state, "home");
+    add("category", home, home ? "The “home” category is on" : "The “home” category is switched off", "Settings → Telegram → Notifications → turn on Home, or press “Fix it”.");
+    if (state.botToken) {
+      const me = await tg(state.botToken, "getMe");
+      add("token", me.ok, me.ok ? "Telegram accepts the bot token" : `Telegram rejects the bot token: ${me.error}`, "Create a new token with @BotFather (/token) and connect again.");
+    }
+    const HomeSettings = require("../models/homeSettings");
+    const hs = await HomeSettings.findOne({ owner: user._id }).select("alerts.everything").lean();
+    const every = !(hs && hs.alerts && hs.alerts.everything === false);
+    add("everything", every, every ? "“Anything changes at home” is on (every update goes to Telegram)" : "“Anything changes at home” is switched off", "Smart home → Camera & alerts → Tell me when → turn it on, or press “Fix it”.");
+    const rows = await TelegramNotification.find({ owner: user._id }).sort({ createdAt: -1 }).limit(20).select("status lastError attempts").lean();
+    const failed = rows.filter((r) => r.status !== "sent");
+    add("delivery", !failed.length, rows.length ? `Last ${rows.length} messages: ${rows.length - failed.length} delivered, ${failed.length} not delivered${failed[0] && failed[0].lastError ? " (" + failed[0].lastError + ")" : ""}` : "No message has been tried yet", failed.length ? "Telegram refused or did not answer: check that you pressed Start in the bot chat and did not block the bot." : "");
+  } catch (e) { add("error", false, "The check itself failed: " + String(e && e.message || e).slice(0, 120), "Try again in a minute."); }
+  return { ready: checks.every((c) => c.ok), checks };
+}
+
+/** Turns on everything a Home update needs and sends one test message, then shows the check again. */
+async function repair(user) {
+  const state = await readState(user);
+  if (!state?.chatId) throw Object.assign(new Error("Connect the bot first, then press Start in its chat."), { status: 400 });
+  const cats = catalog.normalizeNotificationCategories(state.notificationCategories);
+  await updateSettings(user, { ...(modeOf(state) === "ask" ? { updates: "alerts" } : {}), notificationCategories: cats.includes("home") ? cats : [...cats, "home"] });
+  await require("../models/homeSettings").updateOne({ owner: user._id }, { $set: { "alerts.everything": true } }, { upsert: false });
+  const fresh = await User.findById(user._id);
+  const sent = await notifyEvent(fresh || user, { category: "home", text: "✅ <b>STASHR HOME</b>\nTelegram updates are on: you will get every change at home here.", html: true });
+  return { sent, ...(await diagnose(fresh || user)) };
+}
+
+async function notifyUser(user, text, options = {}) { return notifyEvent(user, { category: options.category || "home", text, html: true, dedupeKey: options.dedupeKey }); }
+async function notifySystemEvent(event = {}) {
+  try { const users = await User.find({ telegramHookId: { $type: "string" } }, without("passwords","projects","renderMetricHistory","renderIncidents","renderAudit","usageHistory")).limit(500); let sent = 0; for (const user of users) if (await notifyEvent(user, event)) sent += 1; return { sent, users: users.length }; }
+  catch { return { sent: 0, users: 0 }; }
+}
+async function flushNotificationQueue(user, state) {
+  if (!state?.chatId || !state.botToken || modeOf(state) === "ask") return 0;
+  const rows = await TelegramNotification.find({ owner: user._id, status: "pending", nextAttemptAt: { $lte: new Date() }, attempts: { $lt: 6 } }).sort({ createdAt: 1 }).limit(20);
+  let sent = 0;
+  for (const row of rows) {
+    if (!catalog.notificationsEnabled(state, row.category)) continue;
+    const result = await send(state.botToken, state.chatId, row.body), attempts = Number(row.attempts || 0) + 1;
+    await TelegramNotification.updateOne({ _id: row._id }, { $set: { status: result.ok ? "sent" : (attempts >= 6 ? "failed" : "pending"), attempts, sentAt: result.ok ? new Date() : null, nextAttemptAt: new Date(Date.now() + Math.min(3600000, 2 ** attempts * 60000)), lastError: result.ok ? "" : "Telegram delivery failed" } });
+    if (result.ok) sent += 1;
+  }
+  return sent;
+}
+async function notificationHistory(user) {
+  const rows = await TelegramNotification.find({ owner: user._id }).sort({ createdAt: -1 }).limit(30).select("category title status attempts sentAt createdAt").lean();
+  return rows.map(row => ({ category: row.category, title: row.title, status: row.status, attempts: row.attempts, sentAt: row.sentAt, createdAt: row.createdAt }));
+}
+
+/** A photo or a short video to your chat (the tablet camera saw movement). Never throws. */
+async function notifyUserMedia(user, { kind, buffer, filename, caption, contentType }) {
+  try {
+    const s = await readState(user);
+    if (!s || !s.chatId || !s.botToken) return false;
+    const form = new FormData();
+    form.append("chat_id", String(s.chatId));
+    form.append("caption", String(caption || "").slice(0, 1000));
+    form.append(kind === "video" ? "video" : "photo", new Blob([buffer], { type: contentType || (kind === "video" ? "video/mp4" : "image/jpeg") }), filename || (kind === "video" ? "clip.mp4" : "photo.jpg"));
+    const res = await fetch(API + s.botToken + "/" + (kind === "video" ? "sendVideo" : "sendPhoto"), { method: "POST", body: form, signal: AbortSignal.timeout(60000) });
+    const json = await res.json().catch(() => ({}));
+    return Boolean(json.ok);
+  } catch { return false; }
+}
+
+module.exports = { diagnose, repair, homeSay, notifyUser, notifyEvent, notifySystemEvent, notificationHistory, notifyUserMedia, modeOf, MODES, connect, disconnect, updateSettings, readState, publicState, handleUpdate, runAllDigests, sendTest, DIGEST_CHOICES, isValidHookId: (id) => mongoose.isValidObjectId(id) || /^[a-f0-9]{32}$/.test(String(id)), withProgress, send };

@@ -16,7 +16,7 @@ export function buildEntries({ items = [], projects = [], profile = null, signed
     { label: "Settings", to: "/settings" },
     { label: "Apps and extension", to: "/apps" },
     ...(features.photos ? [{ label: "Photo Cloud", to: "/photos" }] : []),
-    ...(profile?.isAdmin ? [{ label: "Servers", to: "/servers" }, { label: "Security", to: "/security" }] : []),
+    ...(profile?.isAdmin ? [{ label: "Servers", to: "/servers" }, { label: "ShineOne Estate Manager", to: "/media" }, { label: "Security", to: "/security" }] : []),
   ].map((p) => ({ ...p, kind: "Page", hint: p.to }));
   // Actions: only things the app can already do from a URL.
   const actions = [

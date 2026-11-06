@@ -1,4 +1,4 @@
-# Password Manager Autofill Solution
+# Stashr Autofill Solution
 
 ## Problem Statement
 User wants to enter passwords without manual copy-paste across devices (laptop, TV, phone).

@@ -65,6 +65,7 @@ router.post("/account/password", authenticate, sensitiveLimiter, async (req, res
         user.password = newPassword; // hashed by the pre-save hook
         user.cpassword = undefined;
         user.tokens = []; // sign out every other device
+        await require("../models/mpinDevice").deleteMany({ user: user._id }); // and forget every MPIN device
 
         await user.save();
         audit.record(req, user._id, "password_changed", "other devices signed out");

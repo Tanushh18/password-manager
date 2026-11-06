@@ -18,6 +18,7 @@ import "./Settings.css";
 import MascotBanner from "../../Components/Robot/MascotBanner";
 import { accountMood } from "../../lib/pageMoods";
 import { useDialogs } from "../../Components/UI/Dialogs";
+import MpinSettings from "./MpinSettings";
 import { PageHeader, Badge } from "../../Components/UI/ui";
 const download = (name, text, type) => {
   const url = URL.createObjectURL(new Blob([text], { type }));
@@ -693,8 +694,11 @@ export default function Settings() {
                     <button type="submit" className="btn btn--ghost btn--sm" disabled={!name.trim() || name.trim() === profile?.name}>Save</button>
                   </form>
                 </Row>
-                <Row icon={<LockLine size={15} />} label="Master password" hint="Changing it signs out your other devices." block>
+                <Row icon={<LockLine size={15} />} label="Master password" hint="Changing it signs out your other devices and turns off every MPIN." block>
                   <ChangeMasterPassword />
+                </Row>
+                <Row icon={<KeyLine size={15} />} label="4-digit MPIN" hint="Sign in on this device with just four digits instead of your email and password. Your email and password stay as the way back in." block>
+                  <MpinSettings />
                 </Row>
               </Group>
             </Section>

@@ -5,7 +5,7 @@ import FaceCrop from "../components/FaceCrop";
 import { Empty, Heading, Note, Page } from "../components/kit";
 import { useToast } from "../components/Toast";
 import { Card, GhostButton, GradientButton } from "../components/ui";
-import { deleteAllFaceData, getStore, loadStore, peopleList, scanFaces, setFaceSettings, subscribeFaces } from "../lib/faceScan";
+import { deleteAllFaceData, getStore, loadStore, peopleList, scanFaces, setFaceSettings, subscribeFaces, facesAvailable } from "../lib/faceScan";
 import { alpha, useTheme } from "../lib/theme";
 
 const useStore = () => {
@@ -41,6 +41,7 @@ export default function People() {
 
   return (
     <Page title="People" subtitle="Photos grouped by face, on this phone only">
+      {!facesAvailable() ? <Note tone="warn">Grouping photos by face is switched off in this version to keep the app small. The groups already found are still here; new photos are not scanned.</Note> : null}
       <Card style={{ gap: 12 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
           <View style={{ flex: 1 }}>

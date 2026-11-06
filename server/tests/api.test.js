@@ -1,3 +1,4 @@
+process.env.ALLOW_SIGNUP = "true";
 const { describe, test, before: beforeAll, after: afterAll, beforeEach } = require("node:test");
 const expect = require("./expect");
 const { MongoMemoryServer } = require("mongodb-memory-server");
@@ -444,7 +445,7 @@ describe("server registry", () =>
 
         expect((await request(app).get("/registry/dealradar")).body.urls.join(",")).toBe("https://one.example.com,https://two.example.com/api");
         const all = await request(app).get("/registry").set(auth(token));
-        expect(all.body.apps.length).toBe(3);
+        expect(all.body.apps.length).toBe(4);   // stashr, dealradar, wethree, shineoneestate
     });
 });
 

@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../api/client";
+import { readMpin, clearMpin } from "../lib/mpin";
 import { bootVerdict, bootDelay } from "../lib/errors";
 import { normalizeItem, withHistory, trashExpired } from "../lib/items";
 import { mergeDelta, createSseParser, reconnectDelay } from "../lib/sync";
@@ -103,18 +104,9 @@ export function VaultProvider({ children }) {
   }, []);
 
   /* ── Sign in / up ── */
-  const login = useCallback(
-    async (email, password, code) => {
-      let loginResponse = null;
-      try {
-        loginResponse = await api.loginUser({ email, password, code: code || undefined, returnToken: true });
-      } catch (e) {
-        if (e?.response?.data?.twoFactorRequired) return { twoFactorRequired: true, error: code ? api.errorMessage(e) : null };
-        const status = e?.response?.status;
-        const error = new Error(api.errorMessage(e, "That email and password don't match."));
-        error.kind = !e?.response ? "network" : status === 429 ? "limited" : status >= 500 ? "server" : status === 400 || status === 401 ? "credentials" : "other";
-        throw error;
-      }
+  /* Once the server has accepted a sign-in (password or MPIN): load the profile, falling back to the token when the browser blocks the cookie. */
+  const finishLogin = useCallback(
+    async (loginResponse) => {
       console.info("[stashr] login accepted by", api.API_URL());
       api.setBearer("");
       try {
@@ -141,6 +133,45 @@ export function VaultProvider({ children }) {
       return { ok: true };
     },
     [loadProfile]
+  );
+
+  const login = useCallback(
+    async (email, password, code) => {
+      let loginResponse = null;
+      try {
+        loginResponse = await api.loginUser({ email, password, code: code || undefined, returnToken: true });
+      } catch (e) {
+        if (e?.response?.data?.twoFactorRequired) return { twoFactorRequired: true, error: code ? api.errorMessage(e) : null };
+        const status = e?.response?.status;
+        const error = new Error(api.errorMessage(e, "That email and password don't match."));
+        error.kind = !e?.response ? "network" : status === 429 ? "limited" : status >= 500 ? "server" : status === 400 || status === 401 ? "credentials" : "other";
+        throw error;
+      }
+      return finishLogin(loginResponse);
+    },
+    [finishLogin]
+  );
+
+  /* Sign in with the 4-digit MPIN of this device (set up in Settings after a normal sign-in). */
+  const loginWithMpin = useCallback(
+    async (pin) => {
+      const device = readMpin();
+      if (!device) { const error = new Error("MPIN is not set up on this device."); error.kind = "gone"; throw error; }
+      let res;
+      try {
+        res = await api.mpinLogin({ deviceId: device.deviceId, deviceSecret: device.deviceSecret, pin, returnToken: true });
+      } catch (e) {
+        const data = e?.response?.data || {};
+        if (data.mpinGone) clearMpin();
+        const status = e?.response?.status;
+        const error = new Error(api.errorMessage(e, "That MPIN didn't work."));
+        error.kind = !e?.response ? "network" : data.mpinGone ? "gone" : status === 429 ? "limited" : status >= 500 ? "server" : "credentials";
+        error.triesLeft = data.triesLeft;
+        throw error;
+      }
+      return finishLogin(res);
+    },
+    [finishLogin]
   );
 
   const register = useCallback(async ({ name, email, password }) => {
@@ -394,6 +425,7 @@ export function VaultProvider({ children }) {
       prefs,
       setPrefs,
       login,
+      loginWithMpin,
       register,
       logout,
       lock,
@@ -418,7 +450,7 @@ export function VaultProvider({ children }) {
       importProjects,
     };
   }, [
-    status, waking, profile, items, breaches, breachProgress, prefs, setPrefs, login, register, logout, lock,
+    status, waking, profile, items, breaches, breachProgress, prefs, setPrefs, login, loginWithMpin, register, logout, lock,
     addItem, updateItem, toggleFavorite, deleteItem, purgeItem, restoreItem, emptyTrash, trash, importItems, runBreachCheck, changePassword, refreshProfile,
     projects, addProject, updateProjectEntry, deleteProjectEntry, importProjects,
   ]);

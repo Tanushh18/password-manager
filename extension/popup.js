@@ -1,3 +1,4 @@
+// g305 first; xxdr is the fallback (a server that is down or asleep answers 502+ and the next one is tried).
 const API_SERVERS = [
   'https://password-manager-server-g305.onrender.com',
   'https://password-manager-server-xxdr.onrender.com'

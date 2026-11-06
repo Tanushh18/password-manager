@@ -5,6 +5,7 @@ import axios from "axios";
 // xxdr is the fixed address apps use to find the current server list (see "Server registry" below).
 // The main server. Other servers come from the Stashr server list (the Servers page), never from here.
 const DEFAULT_SERVERS = [
+    "https://password-manager-server-g305.onrender.com",
     "https://password-manager-server-xxdr.onrender.com"
 ];
 
@@ -100,7 +101,7 @@ export const setBearer = (token) => { try { if (token) localStorage.setItem(BEAR
 instance.interceptors.request.use((config) =>
 {
     const bearer = getBearer();
-    if (bearer && !/\/(login|register)$/.test(String(config.url || "").split("?")[0])) config.headers.Authorization = "Bearer " + bearer;
+    if (bearer && !/\/(login|register|mpin-login)$/.test(String(config.url || "").split("?")[0])) config.headers.Authorization = "Bearer " + bearer;
     config.headers["X-Client-Id"] = CLIENT_ID;
     if (config._server === undefined) config._server = active;
     config.baseURL = SERVERS[config._server];
@@ -117,7 +118,7 @@ instance.interceptors.response.use(
         if (response.config._server !== undefined && response.config._server !== active)
             setActive(response.config._server);
         // The server that just signed us in (or confirmed the session) is the one that holds the cookie.
-        if (/\/(login|authenticate)$/.test(String(response.config.url || "").split("?")[0]) && SERVERS[response.config._server])
+        if (/\/(login|authenticate|mpin-login)$/.test(String(response.config.url || "").split("?")[0]) && SERVERS[response.config._server])
             writeSessionServer(SERVERS[response.config._server]);
         if (/\/logout$/.test(String(response.config.url || "").split("?")[0])) { writeSessionServer(""); setBearer(""); }
         return response;
@@ -126,7 +127,7 @@ instance.interceptors.response.use(
     {
         const config = error.config;
         // A 401 from a server that never signed us in is not "signed out": ask the server that holds the session once.
-        if (config && error.response?.status === 401 && !config._sessionRetry && !/\/(login|register)$/.test(String(config.url || "").split("?")[0]))
+        if (config && error.response?.status === 401 && !config._sessionRetry && !/\/(login|register|mpin-login)$/.test(String(config.url || "").split("?")[0]))
         {
             const home = SERVERS.indexOf(readSessionServer());
             if (home >= 0 && home !== config._server)
@@ -208,6 +209,15 @@ refreshServers().finally(() => { pruneDeadServers().catch(() => {}); });
 /* ── Server registry (admin only) ── */
 export const getRegistry = () => instance.get("/registry");
 export const saveRegistry = (app, urls, { force = false } = {}) => instance.put(`/registry/${app}`, { urls, force });
+/* ── ShineOne website photos, per sector / area (admin) ── */
+export const getShineProjects = () => instance.get("/shine/projects").then((r) => r.data);
+export const addShineProject = (label) => instance.post("/shine/projects", { label }).then((r) => r.data);
+export const signShineUpload = (project, kind) => instance.post("/shine/sign", { project, kind }).then((r) => r.data);
+export const markShineUploaded = () => instance.post("/shine/uploaded", {});
+export const deleteShineMedia = (item) => instance.post("/shine/delete", { publicId: item.publicId, kind: item.kind });
+export const getShineSite = () => instance.get("/shine/site").then((r) => r.data);
+export const updateShineSite = (key, update) => instance.put("/shine/site/" + encodeURIComponent(key), update).then((r) => r.data);
+export const getRegistryVisitors = () => instance.get("/registry/stats").then((r) => r.data);
 export const checkServer = (url) => instance.post("/registry/check", { url }, { timeout: 30000 });
 
 /* ── Personal AI Photo Cloud ── */
@@ -252,6 +262,11 @@ export const checkAuthenticated = () => {
     return profileInFlight;
 };
 export const loginUser = (data) => instance.post("/login", data);
+export const mpinLogin = (data) => instance.post("/mpin-login", data);
+export const setupMpin = (pin) => instance.post("/mpin", { pin }).then((r) => r.data);
+export const changeMpin = (deviceId, pin) => instance.put(`/mpin/${deviceId}`, { pin }).then((r) => r.data);
+export const listMpin = () => instance.get("/mpin").then((r) => r.data);
+export const removeMpin = (deviceId) => instance.delete(`/mpin/${deviceId}`).then((r) => r.data);
 export const logoutUser = () => instance.get("/logout");
 export const signupUser = (data) => instance.post("/register", data);
 
@@ -375,6 +390,7 @@ export const getDeployHistory = (projectId, ref) => instance.get(deployOpsPath(p
 export const getDeployLogs = (projectId, ref, deployId = "") => instance.get(deployOpsPath(projectId) + "/logs", { params: { ref, deployId }, timeout: 60000 }).then((r) => r.data);
 export const setDeployBranch = (projectId, ref, branch, deploy = true) => instance.put(deployOpsPath(projectId) + "/branch", { ref, branch, deploy }, { timeout: 120000 }).then((r) => r.data);
 export const moveDeployAccount = (projectId, ref, accountId) => instance.put(deployOpsPath(projectId) + "/account", { ref, accountId }).then((r) => r.data);
+export const getAllDeployServers = () => instance.get("/deploy-ops/servers").then((r) => r.data);
 export const syncDeployEnv = (projectId, body) => instance.post(deployOpsPath(projectId) + "/sync", body, { timeout: 180000 }).then((r) => r.data);
 const movePath = (projectId) => "/move-server/" + encodeURIComponent(projectId);
 /* Move one Render server to another account, one step per call (plan, create, status, frontends, relink, delete-old). */
@@ -410,6 +426,67 @@ export const getTelegram = () => instance.get("/telegram").then((r) => r.data);
 export const connectTelegram = (token) => instance.post("/telegram/connect", { token }, { timeout: 60000 }).then((r) => r.data);
 export const saveTelegram = (patch) => instance.put("/telegram/settings", patch).then((r) => r.data);
 export const testTelegramBot = () => instance.post("/telegram/test", {}, { timeout: 60000 }).then((r) => r.data);
+/* Stashr Home: the TV, the tablet hub and the assistant. */
+export const getHomeDevices = () => instance.get("/home/devices").then((r) => r.data);
+export const renameHomeDevice = (id, name) => instance.put(`/home/devices/${id}`, { name }).then((r) => r.data);
+export const setHomeSyncPaused = (id, paused) => instance.put(`/home/devices/${id}/sync`, { paused }).then((r) => r.data);
+export const removeHomeDevice = (id) => instance.delete(`/home/devices/${id}`).then((r) => r.data);
+export const sendHomeCommand = (id, type, args = {}) => instance.post(`/home/devices/${id}/commands`, { type, args }).then((r) => r.data);
+export const labelHomeLanDevice = (id, key, label, room) => instance.put(`/home/devices/${id}/lan/${key}`, { label, room }).then((r) => r.data);
+export const getHomeEvents = (limit = 40) => instance.get("/home/events", { params: { limit } }).then((r) => r.data);
+export const getHomeMovies = () => instance.get("/home/movies/settings").then((r) => r.data);
+export const saveHomeMovies = (body) => instance.put("/home/movies/settings", body).then((r) => r.data);
+export const askHomeAssistant = (text) => instance.post("/home/assistant", { text }).then((r) => r.data);
+export const labelHomeLan = (id, key, body) => instance.put(`/home/devices/${id}/lan/${key}`, body).then((r) => r.data);
+export const mergeHomeLan = (id, key, into) => instance.post(`/home/devices/${id}/lan/${key}/merge`, { into }).then((r) => r.data);
+export const forgetHomeLan = (id, key) => instance.delete(`/home/devices/${id}/lan/${key}`).then((r) => r.data);
+export const setHomePhonePerson = (id, person) => instance.put(`/home/devices/${id}/person`, { person }).then((r) => r.data);
+export const makeHomePairCode = (kind, name) => instance.post("/home/pair-codes", { kind, name }).then((r) => r.data);
+export const getHomeSettings = () => instance.get("/home/settings").then((r) => r.data);
+export const saveHomeSettings = (body) => instance.put("/home/settings", body).then((r) => r.data);
+export const getHomeDashboard = () => instance.get("/home/dashboard").then((r) => r.data);
+export const getLocationCode = () => instance.get("/home/location-code").then((r) => r.data);
+export const rotateLocationCode = () => instance.post("/home/location-code/rotate").then((r) => r.data);
+export const getHubCode = () => instance.get("/home/hub-code").then((r) => r.data);
+export const rotateHubCode = () => instance.post("/home/hub-code/rotate").then((r) => r.data);
+export const getHomeInsights = () => instance.get("/home/insights").then((r) => r.data);
+export const getHomeMap = () => instance.get("/home/map").then((r) => r.data);
+export const saveHomeMap = (body) => instance.put("/home/map", body).then((r) => r.data);
+export const getAppRollout = () => instance.get("/api/app-rollout").then((r) => r.data);
+export const saveAppRollout = (app, body) => instance.put(`/api/app-rollout/${app}`, body).then((r) => r.data);
+export const getRoomLive = () => instance.get("/home/room/live").then((r) => r.data);
+export const setRoomModel = (on) => instance.post("/home/room/model", { on }).then((r) => r.data);
+export const getHomeRooms = () => instance.get("/home/rooms").then((r) => r.data);
+export const saveHomeRooms = (rooms) => instance.put("/home/rooms", { rooms }).then((r) => r.data);
+export const setRoomPhone = (id, on) => instance.put(`/home/rooms/phone/${id}`, { on }).then((r) => r.data);
+export const deleteRoomSamples = (body) => instance.delete("/home/rooms/samples", { data: body }).then((r) => r.data);
+export const getHomeTrail = () => instance.get("/home/trail").then((r) => r.data);
+export const getTelegramDiagnose = () => instance.get("/telegram/diagnose").then((r) => r.data);
+export const repairTelegram = () => instance.post("/telegram/repair").then((r) => r.data);
+export const getHomeAddress = (lat, lon) => instance.get("/home/address", { params: { lat, lon } }).then((r) => r.data);
+export const saveHomeHistory = (body) => instance.put("/home/history", body).then((r) => r.data);
+export const deleteHomeHistory = () => instance.delete("/home/history").then((r) => r.data);
+export const saveHomeSpots = (spots) => instance.put("/home/spots", { spots }).then((r) => r.data);
+export const getHomeLive = (passive) => instance.get("/home/live" + (passive ? "?passive=1" : "")).then((r) => r.data);
+export const searchPlace = (q) => instance.get("/home/geocode", { params: { q } }).then((r) => r.data);
+export const getHomeWhere = () => instance.get("/home/where").then((r) => r.data);
+/** "Refresh location": every family phone reports right away and every few seconds for the next 90 seconds. */
+export const locateNow = () => instance.post("/home/locate-now").then((r) => r.data);
+export const saveHomePlaces = (places) => instance.put("/home/places", { places }).then((r) => r.data);
+export const getHomeShare = () => instance.get("/home/share").then((r) => r.data.share);
+export const saveHomeShare = (body) => instance.put("/home/share", body).then((r) => r.data.share);
+export const getHomePlaceTrail = (id) => instance.get(`/home/places/${id}/trail`).then((r) => r.data);
+export const testHomePlace = (id, text) => instance.post(`/home/places/${id}/test`, { text }).then((r) => r.data);
+export const saveHomeSchedules = (schedules) => instance.put("/home/schedules", { schedules }).then((r) => r.data);
+export const saveHomeScenes = (scenes) => instance.put("/home/scenes", { scenes }).then((r) => r.data);
+export const runHomeScene = (id) => instance.post(`/home/scenes/${id}/run`).then((r) => r.data);
+export const getHomeUsage = (days = 14) => instance.get("/home/usage", { params: { days } }).then((r) => r.data);
+export const getHomeSpeed = (days = 7) => instance.get("/home/speed", { params: { days } }).then((r) => r.data);
+export const getHomeMedia = () => instance.get("/home/media").then((r) => r.data);
+export const getHomeMediaBlob = (id) => instance.get(`/home/media/${id}`, { responseType: "blob" }).then((r) => r.data);
+export const getHomeLiveFrame = () => instance.get("/home/camera/live", { responseType: "blob", validateStatus: (s) => s === 200 || s === 204 }).then((r) => (r.status === 200 ? r.data : null));
+export const deleteHomeMedia = (id) => instance.delete(`/home/media/${id}`).then((r) => r.data);
+export const testHomeBrief = (which = "brief") => instance.post("/home/brief/test", { which }).then((r) => r.data);
 export const disconnectTelegram = () => instance.post("/telegram/disconnect").then((r) => r.data);
 export const getRenderOpsStatus = () => instance.get("/render/ops/status").then((r) => r.data);
 export const getPingResults = () => instance.get("/render/ops/pings").then((r) => r.data);
@@ -448,3 +525,35 @@ export const linkHostSite = (projectId, body) => instance.post("/hosts/projects/
 export const unlinkHostSite = (projectId, linkId) => instance.delete("/hosts/projects/" + encodeURIComponent(projectId) + "/links/" + encodeURIComponent(linkId)).then((r) => r.data);
 export const getHostLinkBranches = (projectId, linkId) => instance.get("/hosts/projects/" + encodeURIComponent(projectId) + "/links/" + encodeURIComponent(linkId) + "/branches", { timeout: 30000 }).then((r) => r.data);
 export const redeployHostLink = (projectId, linkId, branch) => instance.post("/hosts/projects/" + encodeURIComponent(projectId) + "/links/" + encodeURIComponent(linkId) + "/redeploy", { branch }, { timeout: 60000 }).then((r) => r.data);
+
+/* ───────── money: UPI / bank messages and statements, kept only in the owner's Google Sheet ───────── */
+export const getExpenseSettings = () => instance.get("/expenses/settings").then((r) => r.data);
+export const saveExpenseSheet = (sheetUrl) => instance.put("/expenses/sheet", { sheetUrl }).then((r) => r.data);
+export const setExpenseStorage = (mode) => instance.put("/expenses/storage", { mode }).then((r) => r.data);
+export const unlinkExpenseSheet = () => instance.delete("/expenses/sheet").then((r) => r.data);
+export const exportExpenseSheet = () => instance.post("/expenses/export-sheet").then((r) => r.data);
+export const changeExpenseStart = (date) => instance.put("/expenses/start", { date }).then((r) => r.data);
+export const setExpenseStart = (date) => instance.post("/expenses/start", { date }).then((r) => r.data);
+export const removeUnmatchedExpenses = () => instance.post("/expenses/remove-unmatched").then((r) => r.data);
+export const requestExpenseSync = () => instance.post("/expenses/sync-request").then((r) => r.data);
+export const postExpenseSms = (messages) => instance.post("/expenses/sms", { messages }).then((r) => r.data);
+export const getExpenses = (month) => instance.get("/expenses", { params: month ? { month } : {} }).then((r) => r.data);
+export const setExpenseCategory = (index, category, remember) => instance.put("/expenses/category", { index, category, remember }).then((r) => r.data);
+export const reviewExpense = (index, action) => instance.put("/expenses/review", { index, action }).then((r) => r.data);
+export const getExpenseRules = () => instance.get("/expenses/rules").then((r) => r.data);
+export const saveExpenseRules = (rules) => instance.put("/expenses/rules", { rules }).then((r) => r.data);
+// The statement goes up first (the answer comes at once); reading, matching and saving carry on in the background and are followed with getStatementJob.
+export const uploadStatementAsync = (file, onUploadProgress) => instance.post("/expenses/statement", file, {
+  params: { filename: file.name, async: 1 },
+  headers: { "Content-Type": "application/octet-stream" },
+  transformRequest: [(data) => data],
+  onUploadProgress,
+  timeout: 120000
+}).then((r) => r.data);
+export const getStatementJob = (id) => instance.get("/expenses/statement/status", { params: id ? { job: id } : {} }).then((r) => r.data);
+export const uploadStatement = (file) => instance.post("/expenses/statement", file, {
+  params: { filename: file.name },
+  headers: { "Content-Type": "application/octet-stream" },
+  transformRequest: [(data) => data],
+  timeout: 120000
+}).then((r) => r.data);

@@ -21,8 +21,12 @@ const LOCK_MAX = 10, LOCK_WINDOW_MS = 15 * 60 * 1000; // failed sign-ins per acc
 
 /* ════════════════ AUTH ════════════════ */
 
+// Personal control center: new accounts are closed. Existing users still sign in. Set ALLOW_SIGNUP=true to reopen.
+const signupOpen = () => process.env.ALLOW_SIGNUP === "true";
+
 router.post("/register", authLimiter, async (req, res) =>
 {
+    if (!signupOpen()) return res.status(403).json({ error: "Sign-ups are closed. Only existing accounts can sign in." });
     const name = str(req.body.name);
     const email = str(req.body.email).toLowerCase();
     const password = raw(req.body.password);
@@ -360,6 +364,14 @@ router.use(require("./moveServer"));
 router.use(require("./account"));
 router.use(require("./extension"));
 router.use(require("./telegram"));
+router.use(require("./home"));
+router.use(require("./homeMore"));
+router.use(require("./homeWhere"));
+router.use(require("./homeInsights"));
+router.use(require("./homeRoom"));
+router.use(require("./expenses"));
+router.use(require("./mpin"));
+router.use(require("./link"));
 router.use(require("./photoCloud"));
 router.use(require("./photoUpload"));
 router.use(require("./photoWorker"));
@@ -368,6 +380,7 @@ router.use(require("./photoImport"));
 router.use(require("./photoFolderShares"));
 router.use(require("./passwordReset"));
 router.use(registry);
+router.use(require("./shineMedia"));
 router.use(require("./stashrPropagation"));
 
 module.exports = router;

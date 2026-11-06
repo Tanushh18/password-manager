@@ -181,12 +181,25 @@ async function listTargets(user, projectId) {
   return mapWithConcurrency(targetsOf(user, dataKey, fields), 3, targetView);
 }
 
+/** Every server of every project of this user, any hosting provider. Local data only (no host calls), so it is fast. */
+async function listAllServers(user) {
+  const dataKey = await user.getDataKey();
+  const out = [];
+  for (const entry of user.projects || []) {
+    if (entry.enc !== "udk") continue;
+    const fields = User.publicEntry(entry, dataKey);
+    if (fields.broken) continue;
+    for (const t of targetsOf(user, dataKey, fields)) out.push({ projectId: String(entry._id), projectName: String(fields.name || "Project"), ref: t.ref, name: t.name, label: t.label, provider: t.provider });
+  }
+  return out.slice(0, 500);
+}
+
 /**
  * Copies variables onto other targets. Source: another target (`sourceRef`) or the names and values sent from a
  * Stashr project (`sourceVars`). Default targets: every other target on the source's branch (`allTargets` for all).
  * Preview unless `apply`. Variables a provider will not reveal are never overwritten, and are listed instead.
  */
-async function syncEnv(user, projectId, { apply = false, overwrite = false, deploy = false, sourceRef = "", sourceVars = null, targetRefs = null, allTargets = false, acrossProjects = false } = {}) {
+async function syncEnv(user, projectId, { apply = false, overwrite = false, deploy = false, sourceRef = "", sourceProjectId = "", names: onlyNames = null, sourceVars = null, targetRefs = null, allTargets = false, acrossProjects = false } = {}) {
   const { dataKey, fields } = await loadProject(user, projectId);
   // acrossProjects: also the targets of every other project that deploys the same GitHub repository.
   const others = acrossProjects ? projectsSharingRepo((user.projects || []).filter((e) => e.enc === "udk").map((e) => ({ ...User.publicEntry(e, dataKey), id: String(e._id) })), { ...fields, id: String(projectId) }) : [];
@@ -197,7 +210,14 @@ async function syncEnv(user, projectId, { apply = false, overwrite = false, depl
   if (Array.isArray(sourceVars)) {
     sourceRows = sourceVars.filter((v) => v && NAME.test(String(v.name || "")) && typeof v.value === "string").map((v) => ({ key: v.name, value: v.value }));
   } else {
-    source = targets.find((t) => t.ref === (sourceRef || targets.find((x) => x.main)?.ref || targets[0]?.ref));
+    // sourceProjectId: read the values from a server of ANY other project of this account (any provider).
+    if (sourceProjectId && String(sourceProjectId) !== String(projectId)) {
+      const other = await loadProject(user, sourceProjectId);
+      source = targetsOf(user, other.dataKey, other.fields).find((t) => t.ref === sourceRef);
+      if (!source) throw fail(400, "Could not find that source server.");
+    } else {
+      source = targets.find((t) => t.ref === (sourceRef || targets.find((x) => x.main)?.ref || targets[0]?.ref));
+    }
     if (!source) throw fail(400, "Choose a source server from this project.");
     const read = await readVars(source);
     if (!read.ok) throw fail(502, read.error);
@@ -209,7 +229,7 @@ async function syncEnv(user, projectId, { apply = false, overwrite = false, depl
   const picked = Array.isArray(targetRefs) ? new Set(targetRefs.map(String)) : null;
   const candidates = picked ? pool.filter((t) => picked.has(t.ref)) : pool;
   const infos = await mapWithConcurrency(candidates, 3, async (t) => ({ t, info: await inspectTarget(t) }));
-  const matchBranch = !picked && !allTargets && source;
+  const matchBranch = !picked && !allTargets && source && !sourceProjectId;
   const usable = infos.filter(({ info }) => !matchBranch || (info.ok && info.branch === sourceBranch)).slice(0, MAX_TARGETS);
 
   const plans = await mapWithConcurrency(usable, 3, async ({ t, info }) => {
@@ -235,7 +255,8 @@ async function syncEnv(user, projectId, { apply = false, overwrite = false, depl
   const results = [];
   for (const p of plans) {
     if (p.error || !p.plan || (p.info && !p.info.ok)) { results.push({ ref: p.t.ref, name: p.t.name, written: 0, failed: [], deployed: false, error: p.error || (p.info && p.info.error) || "" }); continue; }
-    const names = pendingNames(p.plan, { overwrite }).filter((n) => !p.unreadable.has(n));
+    const only = Array.isArray(onlyNames) ? new Set(onlyNames) : null;
+    const names = pendingNames(p.plan, { overwrite }).filter((n) => !p.unreadable.has(n) && (!only || only.has(n)));
     const written = [];
     const failedNames = [];
     let stop = "";
@@ -275,4 +296,4 @@ async function moveAccount(user, projectId, ref, accountId) {
   return { ref, accountId: String(accountId), name: target.name };
 }
 
-module.exports = { listTargets, findTarget, readVars, writeVar, redeployTarget, deploysOf, logsOf, setBranchOf, syncEnv, moveAccount };
+module.exports = { listTargets, findTarget, readVars, writeVar, redeployTarget, deploysOf, logsOf, setBranchOf, syncEnv, listAllServers, moveAccount };

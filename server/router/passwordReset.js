@@ -61,6 +61,7 @@ router.post("/reset-password", limiter, async (req, res) => {
     user.cpassword = undefined;
     user.passwordReset = undefined;
     user.tokens = []; // sign out everywhere
+    await require("../models/mpinDevice").deleteMany({ user: user._id }); // and forget every MPIN device
     await user.save();
     return res.status(200).json({ message: "Password changed. Sign in with your new password." });
   } catch (error) { return serverError(res, "reset-password", error); }

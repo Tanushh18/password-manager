@@ -3,10 +3,20 @@ import { api, mediaSource, loadSavedToken } from "./api";
 
 const fc = require("./faceCluster");
 
+/**
+ * Face grouping ("People") is switched off in this build to keep the app small: its two native libraries (Google ML Kit face
+ * detection and TensorFlow Lite, about 10 MB, plus the 24 MB model) are no longer part of the app. The groups already found stay on the
+ * phone. To bring it back: `npm install @react-native-ml-kit/face-detection react-native-fast-tflite`, add "react-native-fast-tflite" to
+ * the plugins in app.json, restore the two require() lines marked RESTORE below, and set this to true.
+ */
+const FACES_ENABLED = false;
+export const facesAvailable = () => FACES_ENABLED;
+
 /*
  * On-device face grouping. For each photo: download the small preview, find faces (Google ML Kit, on the phone),
- * crop each face, turn it into a 128-number fingerprint with a small TFLite model (assets/models/facenet.tflite),
- * and group similar fingerprints. Fingerprints and groups are kept in a file on this phone only.
+ * crop each face, turn it into a 128-number fingerprint with a small TFLite model (assets/models/facenet.tflite, 23.7 MB),
+ * and group similar fingerprints. The model is NOT inside the app (it made the APK 24 MB bigger): it is downloaded once to this phone
+ * the first time faces are scanned, from the same repository. Fingerprints and groups are kept in a file on this phone only.
  */
 const NAME = "faces.json";
 const BACKUP = "faces.bak.json";
@@ -55,10 +65,38 @@ export const peopleList = () => (store ? fc.people(store) : []);
 export const photosOf = (id) => (store ? fc.mediaOf(store, id) : []);
 export const facesOf = (id) => (store ? (store.clusters.find((c) => c.id === id)?.faceIds || []).map((f) => store.faces[f]).filter(Boolean) : []);
 
+const MODEL_URL = "https://raw.githubusercontent.com/Tanushh18/stashr-Home-Automation/main/mobile/assets/models/facenet.tflite";
+const MODEL_BYTES = 23705216;
+
+/** Path of the face model on this phone; downloads it once (to a temporary name first, so a cut-off download is never used). */
+async function modelPath() {
+  const FileSystem = require("expo-file-system/legacy");
+  const dir = `${FileSystem.documentDirectory}models/`;
+  const path = `${dir}facenet.tflite`;
+  const have = await FileSystem.getInfoAsync(path);
+  if (have.exists && have.size === MODEL_BYTES) return path;
+  await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(() => {});
+  const part = `${path}.part`;
+  await FileSystem.deleteAsync(part, { idempotent: true }).catch(() => {});
+  const r = await FileSystem.downloadAsync(MODEL_URL, part);
+  const got = await FileSystem.getInfoAsync(part);
+  if (r.status !== 200 || !got.exists || got.size !== MODEL_BYTES) {
+    await FileSystem.deleteAsync(part, { idempotent: true }).catch(() => {});
+    throw new Error(`download returned HTTP ${r.status}, ${got.exists ? got.size : 0} bytes`);
+  }
+  await FileSystem.deleteAsync(path, { idempotent: true }).catch(() => {});
+  await FileSystem.moveAsync({ from: part, to: path });
+  return path;
+}
+
 async function loadModel() {
   if (model) return model;
-  const { loadTensorflowModel } = require("react-native-fast-tflite");
-  try { model = await loadTensorflowModel(require("../../assets/models/facenet.tflite"), []); }
+  const { loadTensorflowModel } = {}; // RESTORE: require("react-native-fast-tflite")
+  let path;
+  // fatal: the whole scan stops (no photo is marked as done) and the next run tries the download again.
+  try { path = await modelPath(); }
+  catch (e) { throw Object.assign(new Error(`The face model could not be downloaded (${e.message || "no internet"}). It will try again later.`), { fatal: true }); }
+  try { model = await loadTensorflowModel({ url: path }, []); }
   catch (e) { throw Object.assign(new Error("The face model could not be loaded. This needs the installed app, not Expo Go."), { fatal: true }); }
   return model;
 }
@@ -86,7 +124,7 @@ async function fingerprint(uri) {
 const sizeOf = (uri) => new Promise((resolve, reject) => Image.getSize(uri, (width, height) => resolve({ width, height }), reject));
 
 async function facesIn(uri) {
-  const FaceDetection = require("@react-native-ml-kit/face-detection").default;
+  const FaceDetection = null; // RESTORE: require("@react-native-ml-kit/face-detection").default
   const { ImageManipulator, SaveFormat } = require("expo-image-manipulator");
   const { File } = require("expo-file-system");
   const found = (await FaceDetection.detect(uri, { performanceMode: "accurate", landmarkMode: "none", classificationMode: "none" })) || [];
@@ -127,12 +165,14 @@ async function chargingOrWifiOk(requireCharging) {
  */
 export async function scanFaces({ limit = 30, auto = false, onProgress } = {}) {
   if (busy) return { scanned: 0, remaining: null, busy: true };
+  if (!FACES_ENABLED) return { scanned: 0, remaining: null, disabled: true };
   busy = true;
   try {
     await loadStore();
     if (auto && (!store.settings.enabled || !(await chargingOrWifiOk(true)))) return { scanned: 0, remaining: null };
     if (!(await loadSavedToken())) return { scanned: 0, remaining: null };
     const { File, Paths } = require("expo-file-system");
+    await loadModel();                    // download the face model first, so a missing model never marks photos as done
     const startedAt = generation;
     const dash = await api.photoDashboard();
     const photos = (dash.media || []).filter((m) => m.type === "photo" && m.hasThumbnail && m.availabilityState === "available");

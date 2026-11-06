@@ -7,7 +7,6 @@ import "./App.css";
 import Home from "./Pages/Home/Home";
 import Dashboard from "./Pages/Dashboard/Dashboard";
 import Login from "./Pages/Login/Login";
-import Signup from "./Pages/SignUp/Signup";
 import Vault from "./Pages/Passwords/Passwords";
 import Projects from "./Pages/Projects/Projects";
 import ProjectDetail from "./Pages/Projects/ProjectDetail";
@@ -19,10 +18,14 @@ import Security from "./Pages/Security/Security";
 // Loaded on demand: operations screens are large and only needed on their routes.
 const PhotoImport = lazy(() => import("./Pages/PhotoCloud/PhotoImport"));
 const SharedFolder = lazy(() => import("./Pages/PhotoCloud/SharedFolder"));
+const Media = lazy(() => import("./Pages/Media/Media"));
 const Admin = lazy(() => import("./Pages/Admin/Admin"));
+const AppUpdates = lazy(() => import("./Pages/AppUpdates/AppUpdates"));
 const Services = lazy(() => import("./Pages/Services/Services"));
 const ServiceMap = lazy(() => import("./Pages/Services/ServiceMap"));
 const Cron = lazy(() => import("./Pages/Cron/Cron"));
+const SmartHome = lazy(() => import("./Pages/SmartHome/SmartHome"));
+const Money = lazy(() => import("./Pages/Money/Money"));
 const Forgot = lazy(() => import("./Pages/Forgot/Forgot"));
 const RenderDashboard = lazy(() => import("./Pages/Render/RenderDashboard"));
 const SecurityCenter = lazy(() => import("./Pages/SecurityCenter/SecurityCenter"));
@@ -122,7 +125,7 @@ export default function App() {
           <Route path="/dashboard" element={<RequireVault><Dashboard /></RequireVault>} />
           <Route path="/signin" element={<GuestOnly><Login /></GuestOnly>} />
           <Route path="/forgot-password" element={<GuestOnly><Suspense fallback={<Splash />}><Forgot /></Suspense></GuestOnly>} />
-          <Route path="/signup" element={<GuestOnly><Signup /></GuestOnly>} />
+          <Route path="/signup" element={<Navigate to="/signin" replace />} />
           <Route path="/passwords" element={<RequireVault><Vault /></RequireVault>} />
           <Route path="/photos" element={<RequireVault><RequireFeature feature="photos"><PhotoCloud /></RequireFeature></RequireVault>} />
           <Route path="/photos/import" element={<RequireVault><RequireFeature feature="photoImport"><Suspense fallback={<Splash />}><PhotoImport /></Suspense></RequireFeature></RequireVault>} />
@@ -136,8 +139,12 @@ export default function App() {
           <Route path="/projects/:id/edit" element={<RequireVault><ProjectForm /></RequireVault>} />
           <Route path="/settings" element={<RequireVault><Settings /></RequireVault>} />
           <Route path="/generator" element={<RequireVault><Suspense fallback={<Splash />}><Generator /></Suspense></RequireVault>} />
+          <Route path="/money" element={<RequireVault><Suspense fallback={<Splash />}><Money /></Suspense></RequireVault>} />
+          <Route path="/smart-home" element={<RequireVault><Suspense fallback={<Splash />}><SmartHome /></Suspense></RequireVault>} />
           <Route path="/security-center" element={<RequireVault><Suspense fallback={<Splash />}><SecurityCenter /></Suspense></RequireVault>} />
+          <Route path="/app-updates" element={<RequireVault><RequireAdmin><Suspense fallback={<Splash />}><AppUpdates /></Suspense></RequireAdmin></RequireVault>} />
           <Route path="/servers" element={<RequireVault><RequireAdmin><Servers /></RequireAdmin></RequireVault>} />
+          <Route path="/media" element={<RequireVault><RequireAdmin><Suspense fallback={<Splash />}><Media /></Suspense></RequireAdmin></RequireVault>} />
           <Route path="/security" element={<RequireVault><RequireAdmin><Security /></RequireAdmin></RequireVault>} />
           <Route element={<RequireVault><InfraTabs /></RequireVault>}>
             <Route path="/services/map" element={<Suspense fallback={<Splash />}><ServiceMap /></Suspense>} />

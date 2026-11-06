@@ -11,8 +11,14 @@ test("signed-in users always see the vault group", () => {
 });
 
 test("feature flags hide their entries and empty groups disappear", () => {
-  const groups = navGroups({ features: { photos: false, projects: false, servers: false, services: false, cron: false } });
+  const groups = navGroups({ features: { photos: false, projects: false, smartHome: false, money: false, servers: false, services: false, cron: false } });
   assert.deepEqual(groups.map((g) => g.id), ["vault"]);
+});
+
+test("Money sits in Workspace by default and follows its feature flag", () => {
+  const ws = navGroups({ features: {} }).find((g) => g.id === "workspace");
+  assert.ok(ws.items.some((i) => i.to === "/money" && i.label === "Money"));
+  assert.ok(!labels(navGroups({ features: { money: false } })).includes("Money"));
 });
 
 test("admin entries need isAdmin; the admin panel also needs its feature", () => {
@@ -38,4 +44,11 @@ test("the most specific entry is active", () => {
 
 test("bottom bar falls back to Security when Projects is off", () => {
   assert.deepEqual(bottomItems({ features: { projects: false } }).map((i) => i.to), ["/dashboard", "/passwords", "/security-center"]);
+});
+
+test("Smart home is in Workspace and can be switched off", () => {
+  const ws = navGroups({ features: {} }).find((g) => g.id === "workspace");
+  assert.ok(ws.items.some((i) => i.to === "/smart-home"));
+  const off = navGroups({ features: { smartHome: false } }).find((g) => g.id === "workspace");
+  assert.ok(!off.items.some((i) => i.to === "/smart-home"));
 });

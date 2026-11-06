@@ -61,3 +61,8 @@
 .servers__unsaved { position: sticky; bottom: .5rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem; margin-top: .8rem; padding: .6rem .8rem; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface, #fff); box-shadow: 0 4px 16px rgba(0,0,0,.12); font-size: .85rem; }
 .servers__unsaved-actions { display: flex; gap: .5rem; }
 .servers__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; margin: 0; }
+
+.servers__visitors { margin-bottom: 1rem; }
+.servers__table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.servers__table th, .servers__table td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--line, rgba(128, 128, 128, 0.25)); }
+.servers__table th { font-weight: 600; opacity: 0.8; }

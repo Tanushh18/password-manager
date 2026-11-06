@@ -154,16 +154,18 @@ app.get("/", (req, res) =>
   res.set("Cache-Control", "no-store");
   res.status(200).json({
     status: "ok",
-    message: "Password Manager API is running.",
+    message: "Stashr API is running.",
     health: "/health"
   });
 });
 
 // Mobile update endpoints: release metadata and APK download redirect.
 app.use("/api/mobile-updates", require("./router/mobileUpdates"));
+app.use("/api/app-rollout", require("./router/appRollout"));
 app.use("/api/ota", require("./router/ota"));
 
 // LINKING THE ROUTER FILES 
+app.use(require("./router/homeShare"));   // the public live-location link (no login; a secret address)
 app.use(require("./router/routing"));
 
 // 404 for anything unmatched

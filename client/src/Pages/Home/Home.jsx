@@ -93,7 +93,7 @@ function Home() {
         <div className="hm-hero__inner shell">
           <div className="hm-hero__copy">
             <p className="hm-hero__eyebrow">
-              {signedIn ? `Welcome back${firstName ? `, ${firstName}` : ""}` : "Stashr · Password manager"}
+              {signedIn ? `Welcome back${firstName ? `, ${firstName}` : ""}` : "Stashr"}
             </p>
             <h1 className="hm-hero__title" id="hm-hero-title">
               <span>Your Digital World.</span>
@@ -112,7 +112,7 @@ function Home() {
               </p>
             )}
             <div className="hm-hero__actions">
-              <Link to={signedIn ? "/passwords" : "/signup"} className="btn btn--primary btn--lg hm-cta">
+              <Link to={signedIn ? "/passwords" : "/signin"} className="btn btn--primary btn--lg hm-cta">
                 Open Your Vault <Arrow size={16} />
               </Link>
               <a href="#hm-destinations" onClick={scrollToSecurity} className="btn btn--ghost btn--lg hm-cta hm-cta--ghost">
@@ -159,16 +159,16 @@ function Home() {
           <span className="hm-universe__spark hm-universe__spark--three" />
         </div>
         <nav className="hm-command__stations" aria-label="Vault stations">
-          <Link to={signedIn ? "/passwords" : "/signup"} className="hm-station hm-station--vault">
+          <Link to={signedIn ? "/passwords" : "/signin"} className="hm-station hm-station--vault">
             <span className="hm-station__symbol"><LockLine size={19} /></span><span><strong>Password vault</strong><small>Logins, notes &amp; codes</small></span><Arrow size={15} />
           </Link>
-          <Link to={signedIn ? "/projects" : "/signup"} className="hm-station hm-station--dev">
+          <Link to={signedIn ? "/projects" : "/signin"} className="hm-station hm-station--dev">
             <span className="hm-station__symbol"><Folder size={19} /></span><span><strong>Developer vault</strong><small>Projects &amp; configuration</small></span><Arrow size={15} />
           </Link>
-          <Link to={signedIn ? "/security-center" : "/signup"} className="hm-station hm-station--security">
+          <Link to={signedIn ? "/security-center" : "/signin"} className="hm-station hm-station--security">
             <span className="hm-station__symbol"><ShieldCheck size={19} /></span><span><strong>Security center</strong><small>Health, breaches &amp; sessions</small></span><Arrow size={15} />
           </Link>
-          <Link to={signedIn ? "/generator" : "/signup"} className="hm-station hm-station--tools">
+          <Link to={signedIn ? "/generator" : "/signin"} className="hm-station hm-station--tools">
             <span className="hm-station__symbol"><KeyLine size={19} /></span><span><strong>Creation lab</strong><small>Generate strong credentials</small></span><Arrow size={15} />
           </Link>
         </nav>
@@ -185,7 +185,7 @@ function Home() {
         <ul className="hm-dests">
           {DESTINATIONS.map((d) => (
             <li key={d.code}>
-              <Link className="hm-dest" to={signedIn || d.open ? d.to : "/signup"}>
+              <Link className="hm-dest" to={signedIn || d.open ? d.to : "/signin"}>
                 <span className="hm-dest__top">
                   <span className="hm-dest__code" aria-hidden="true">{d.code}</span>
                   <span className="hm-dest__icon" aria-hidden="true">{d.icon}</span>
@@ -194,7 +194,7 @@ function Home() {
                 <span className="hm-dest__tag">{d.tag}</span>
                 <span className="hm-dest__body">{d.body}</span>
                 <span className="hm-dest__go">
-                  {signedIn || d.open ? "Go" : "Create account"} <Arrow size={14} />
+                  {signedIn || d.open ? "Go" : "Sign in"} <Arrow size={14} />
                 </span>
               </Link>
             </li>

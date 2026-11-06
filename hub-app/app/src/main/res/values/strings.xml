@@ -1,0 +1,3 @@
+<resources><string name="app_name">Stashr Hub</string>    <string name="wa_service_label">Stashr Hub – WhatsApp messages</string>
+    <string name="wa_service_desc">Lets Stashr Hub press Send in WhatsApp for the messages you set up on the Smart home page (for example arrived / left). It only looks at WhatsApp, and only while a message is waiting.</string>
+</resources>

@@ -4,6 +4,7 @@
  *   GET  /registry/:app        public  - the app's URL list (apps read this on start)
  *   GET  /registry             admin   - every app's list, for the admin page
  *   PUT  /registry/:app        admin   - replace an app's URL list
+ *   GET  /registry/stats       admin   - visitors per app (counted from the public reads)
  *   POST /registry/check       admin   - ping a URL's /health from the server
  *
  * Only URLs are stored here - never secrets - so the public read is safe.
@@ -15,6 +16,8 @@ const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
 
 const { ADMINS, DEFAULTS, OFFABLE, APP_LABELS, SLUG, urlsFor } = require("../utils/registryDefaults");
+const RegistryVisit = require("../models/registryVisit");
+const { recordVisit, summarize } = require("../utils/registryVisits");
 const { onStashrListSaved, needsPrimaryCheck } = require("../utils/stashrMainChange");
 const MAX_URLS = 10;
 
@@ -87,9 +90,32 @@ router.get("/registry", authenticate, requireAdmin, async (req, res) =>
     }
 });
 
+/** Visitors per app/website, counted from reads of GET /registry/:app. Admin only. */
+router.get("/registry/stats", authenticate, requireAdmin, async (req, res) =>
+{
+    try
+    {
+        const rows = await RegistryVisit.find({}).lean();
+        const stats = summarize(rows);
+        const slugs = new Set([...Object.keys(DEFAULTS), ...Object.keys(stats)]);
+        const apps = [...slugs].map((app) => ({
+            app,
+            label: APP_LABELS[app] || app,
+            ...(stats[app] || { today: 0, last7: 0, last30: 0, total: 0, hits: 0, lastSeen: null })
+        })).sort((a, b) => b.last7 - a.last7 || a.app.localeCompare(b.app));
+        res.set("Cache-Control", "no-store");
+        return res.json({ apps });
+    }
+    catch (error)
+    {
+        return res.status(500).json({ error: "Could not load visitor counts." });
+    }
+});
+
 router.put("/registry/:app", authenticate, writeLimiter, async (req, res) =>
 {
     const app = String(req.params.app || "").toLowerCase();
+    if (app === "stats" || app === "check") return res.status(400).json({ error: "That name is reserved." });
     if (!DEFAULTS[app] && !SLUG.test(app)) return res.status(400).json({ error: "Use 3-40 letters, numbers or dashes." });
     const existing = await Registry.findOne({ app }).lean();
     if (!mayWrite(req.rootUser, app, existing)) return res.status(403).json({ error: "Not allowed." });
@@ -163,6 +189,7 @@ router.get("/registry/:app", async (req, res) =>
     {
         const urls = await listFor(app);
         if (!urls) return res.status(404).json({ error: "Unknown app." });
+        recordVisit(RegistryVisit, app, req);
         // Any website or app may read this list; it holds URLs only.
         if (!res.getHeader("Access-Control-Allow-Origin")) res.set("Access-Control-Allow-Origin", "*");
         res.set("Cache-Control", "public, max-age=30");

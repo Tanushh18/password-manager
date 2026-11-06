@@ -80,7 +80,7 @@ function Navbar() {
       ];
   const more = isAuthenticated
     ? [
-        ...(profile?.isAdmin ? [{ to: "/admin", label: "Admin panel" }, { to: "/servers", label: "Server URLs" }, { to: "/security", label: "Security scans" }] : []),
+        ...(profile?.isAdmin ? [{ to: "/admin", label: "Admin panel" }, { to: "/servers", label: "Server URLs" }, { to: "/media", label: "ShineOne Estate Manager" }, { to: "/security", label: "Security scans" }] : []),
         { to: "/settings", label: "Settings" },
         { to: "/logout", label: "Sign out" },
       ]
@@ -89,7 +89,7 @@ function Navbar() {
 
   const cta = isAuthenticated
     ? { to: "/passwords", label: "My vault" }
-    : { to: "/signup", label: "Create your vault" };
+    : { to: "/signin", label: "Sign in" };
 
   // Signed in: the sidebar (tablet/desktop) or the bottom bar (phone) is the navigation.
   if (isAuthenticated) return phone ? <MobileTopBar status={status} /> : null;

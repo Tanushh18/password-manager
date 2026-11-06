@@ -3,7 +3,7 @@ const expect = require("./expect");
 const Module = require("node:module");
 const crypto = require("crypto");
 
-let stored, users, sent, deleted;
+let stored, users, sent, deleted, calls;
 const UserStub = {
   publicEntry: (entry) => ({ ...(entry.data?.sealed ?? entry.fields), _id: entry._id }),
   sealEntry: (key, fields) => ({ sealed: JSON.parse(JSON.stringify(fields)) }),
@@ -24,6 +24,7 @@ Module._load = originalLoad;
 global.fetch = async (url, opts) => {
   const method = url.split("/").pop();
   const body = JSON.parse(opts.body || "{}");
+  calls.push({ method, body });
   if (method === "sendMessage") sent.push(body);
   if (method === "deleteMessage") deleted.push(body.message_id);
   return { json: async () => ({ ok: true, result: { message_id: 99 } }), status: 200 };
@@ -41,7 +42,7 @@ const makeUser = (state) => ({
 const msg = (text, chatId = 777) => ({ message: { message_id: 5, chat: { id: chatId, first_name: "T" }, text } });
 const wait = () => new Promise((r) => setTimeout(r, 20));
 
-beforeEach(() => { sent = []; deleted = []; stored = null; });
+beforeEach(() => { sent = []; deleted = []; calls = []; stored = null; });
 
 describe("telegram bot security", () => {
   test("a wrong secret header is ignored completely", async () => {
@@ -190,5 +191,48 @@ describe("telegram: passwords in three taps", () => {
     users = [makeUser({ chatId: 777 })];
     await bot.handleUpdate(HOOK, SECRET, msg("🔑 Passwords"));
     expect(sent[0].text.includes("off")).toBe(true);
+  });
+});
+
+describe("telegram shows that the server is working", () => {
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+  const methods = () => calls.map((c) => c.method);
+
+  test("a command starts with the typing sign", async () => {
+    users = [makeUser({ chatId: 777 })];
+    await bot.handleUpdate(HOOK, SECRET, msg("/help"));
+    expect(methods()[0]).toBe("sendChatAction");
+    expect(calls[0].body).toMatchObject({ chat_id: 777, action: "typing" });
+  });
+
+  test("a quick answer is a normal message, with no working note", async () => {
+    await bot.withProgress("t", 777, async () => { await bot.send("t", 777, "fast answer"); });
+    expect(sent.map((m) => m.text)).toEqual(["fast answer"]);
+    expect(methods().includes("editMessageText")).toBe(false);
+  });
+
+  test("a slow command posts 'Working on it' and the answer replaces that message", async () => {
+    await bot.withProgress("t", 777, async () => { await pause(2300); await bot.send("t", 777, "the answer"); });
+    expect(sent.map((m) => m.text)).toEqual(["⏳ Working on it…"]);
+    const edit = calls.find((c) => c.method === "editMessageText");
+    expect(edit.body).toMatchObject({ chat_id: 777, message_id: 99, text: "the answer" });
+    expect(methods().filter((m) => m === "sendMessage").length).toBe(1);        // the answer is not sent a second time
+  });
+
+  test("a slow command that says nothing never leaves 'Working on it' hanging", async () => {
+    await bot.withProgress("t", 777, async () => { await pause(2300); });
+    const edit = calls.find((c) => c.method === "editMessageText");
+    expect(edit.body.text).toBe("✅ Done.");
+  });
+
+  test("a failing command ends with a clear message, not silence", async () => {
+    users = [makeUser({ chatId: 777 })];
+    let n = 0;
+    users[0].getDataKey = async () => { if (++n > 1) throw new Error("database offline"); return "k"; };      // the first read (the bot's own settings) works, the command's does not
+    await bot.handleUpdate(HOOK, SECRET, msg("/projects"));
+    const last = sent[sent.length - 1].text;
+    expect(last.includes("That did not work")).toBe(true);
+    expect(last.includes("/projects")).toBe(true);
+    expect(last.includes("database offline")).toBe(false);                      // no internals in the chat
   });
 });

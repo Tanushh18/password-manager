@@ -5,7 +5,6 @@
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo-google-fonts/sora": "^0.4.2",
-    "@react-native-ml-kit/face-detection": "^2.0.1",
     "expo": "~57.0.30",
     "expo-background-task": "~57.0.0",
     "expo-battery": "~57.0.0",
@@ -39,7 +38,6 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
-    "react-native-fast-tflite": "^3.0.1",
     "react-native-nitro-modules": "^0.37.1",
     "react-native-quick-base64": "^3.0.1",
     "react-native-quick-crypto": "^1.1.7",

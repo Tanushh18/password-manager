@@ -1,4 +1,5 @@
 /* Pure: Telegram message text for Stashr (HTML parse mode). No I/O. */
+const catalog = require("./telegramCatalog");
 const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const hhmm = (iso, tz) => { const d = new Date(iso || Date.now()); try { return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz || "Asia/Kolkata" }); } catch { return d.toISOString().slice(11, 16); } };
 const host = (u) => String(u || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
@@ -97,18 +98,7 @@ const UPDATE_MODES = {
   timer: "⏱ Alerts + a status update every few minutes"
 };
 
-const HELP = [
-  "<b>Stashr bot</b>",
-  "Use the buttons below the chat box, or:",
-  "/status — everything in one message",
-  "/servers — every server and its health",
-  "/incidents — open incidents",
-  "/projects — your projects",
-  "/project <i>name</i> — one project in detail",
-  "🔑 Passwords (or /pass <i>name</i>) — a saved login. I ask for your PIN; the PIN and the reply both delete themselves",
-  "/updates — choose when I message you on my own",
-  "/menu — show the buttons again"
-].join("\n");
+const HELP = catalog.HELP_TEXT;
 
 /** Best matches for a name among items/projects: exact, then starts-with, then contains. */
 function findByName(list, query, field = "name") {

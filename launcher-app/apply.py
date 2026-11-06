@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""Makes a Lawnchair checkout into the Stashr Launcher.
+
+    python3 launcher-app/apply.py <path to the Lawnchair checkout>
+
+What it does, and nothing else:
+  1. edits a few lines of Lawnchair's own files (name, package id, version, default accent colour). Every edit says exactly which text it
+     expects to find; if Lawnchair has changed that text, this script stops with a message instead of guessing, so a wrong build is never made;
+  2. copies launcher-app/overlay/ over the checkout (the Stashr icon and colour).
+
+It only changes data (strings, resources, Gradle constants). It does not touch Lawnchair's Kotlin or Java code. See launcher-app/README.md.
+"""
+import pathlib
+import shutil
+import sys
+
+HERE = pathlib.Path(__file__).resolve().parent
+STASHR_GREEN = "#ff0d6e5c"          # Lawnchair stores a colour as "custom|#AARRGGBB"
+
+# (file, text Lawnchair has now, text it should have). Each must be found exactly once.
+EDITS = [
+    # the package id of the "github" channel, so Stashr Launcher installs next to (and never over) a real Lawnchair
+    ("build.gradle",
+     "        github {\n            applicationId 'app.lawnchair'\n",
+     "        github {\n            applicationId 'com.tanush.stashr.launcher'\n"),
+    # the name under the icon and in Settings
+    ("build.gradle",
+     '        release {\n            resValue("string", "derived_app_name", "Lawnchair")\n',
+     '        release {\n            resValue("string", "derived_app_name", "Stashr Launcher")\n'),
+    # version: an increasing code so each build can update the one before it (CI sets both from launcher-app/version.txt and the run number)
+    ("build.gradle",
+     '        versionCode 16_00_02_01_00\n        versionName "${versionDisplayName}"\n',
+     '        versionCode((System.getenv("STASHR_VERSION_CODE") ?: "1600020100") as int)\n        versionName(System.getenv("STASHR_VERSION_NAME") ?: "${versionDisplayName}")\n'),
+    # the accent colour a fresh install starts with (the Stashr green); the person can still change it in Settings
+    ("lawnchair/res/values/config.xml",
+     '<string name="config_default_accent_color" translatable="false">no_default</string>',
+     f'<string name="config_default_accent_color" translatable="false">custom|{STASHR_GREEN}</string>'),
+]
+
+
+def main(argv):
+    if len(argv) != 2:
+        sys.exit(__doc__)
+    root = pathlib.Path(argv[1]).resolve()
+    if not (root / "build.gradle").is_file() or not (root / "lawnchair").is_dir():
+        sys.exit(f"{root} does not look like a Lawnchair checkout (no build.gradle and lawnchair/ folder).")
+
+    for rel, old, new in EDITS:
+        path = root / rel
+        if not path.is_file():
+            sys.exit(f"Lawnchair has no {rel} any more. Update launcher-app/apply.py for this Lawnchair version.")
+        text = path.read_text(encoding="utf-8")
+        found = text.count(old)
+        if found != 1:
+            sys.exit(f"Expected to find this exactly once in {rel}, found {found} times:\n{old}\nLawnchair changed; update launcher-app/apply.py.")
+        path.write_text(text.replace(old, new, 1), encoding="utf-8")
+        print(f"edited   {rel}")
+
+    overlay = HERE / "overlay"
+    for src in sorted(p for p in overlay.rglob("*") if p.is_file()):
+        dest = root / src.relative_to(overlay)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        replaced = dest.exists()
+        shutil.copyfile(src, dest)
+        print(f"{'replaced' if replaced else 'added   '} {src.relative_to(overlay)}")
+    print("Stashr changes applied.")
+
+
+if __name__ == "__main__":
+    main(sys.argv)
