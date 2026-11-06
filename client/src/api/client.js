@@ -435,6 +435,7 @@ export const sendHomeCommand = (id, type, args = {}) => instance.post(`/home/dev
 export const labelHomeLanDevice = (id, key, label, room) => instance.put(`/home/devices/${id}/lan/${key}`, { label, room }).then((r) => r.data);
 export const getHomeEvents = (limit = 40) => instance.get("/home/events", { params: { limit } }).then((r) => r.data);
 export const getHomeMovies = () => instance.get("/home/movies/settings").then((r) => r.data);
+export const startHomeMoviesGoogle = (full, label) => instance.get("/home/movies/google/start", { params: { ...(full ? { full: 1 } : {}), ...(label ? { label } : {}) } }).then((r) => r.data);
 export const saveHomeMovies = (body) => instance.put("/home/movies/settings", body).then((r) => r.data);
 export const askHomeAssistant = (text) => instance.post("/home/assistant", { text }).then((r) => r.data);
 export const labelHomeLan = (id, key, body) => instance.put(`/home/devices/${id}/lan/${key}`, body).then((r) => r.data);

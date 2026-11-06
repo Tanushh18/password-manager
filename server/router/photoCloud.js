@@ -17,6 +17,8 @@ const { requireFeature } = require("../utils/features");
 const photosAuth = [authenticate, requireFeature("photos")];
 const tokenHash = (token) => crypto.createHash("sha256").update(token).digest("hex");
 const clientUrl = () => (process.env.PHOTO_CLOUD_CLIENT_URL || process.env.CLIENT_ORIGINS || "http://localhost:3000").split(",")[0].replace(/\/$/, "");
+const MOVIE_READ_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+const MOVIE_FULL_SCOPE = "https://www.googleapis.com/auth/drive";
 const DEFAULT_SETTINGS = { wifiOnly: true, chargingOnly: false, safetyBufferGb: 2, defaultConnectionId: "" };
 const photoSettings = (user, key) => ({ ...DEFAULT_SETTINGS, ...(decode(user.photoSettings, key)[0] || {}) });
 
@@ -34,10 +36,25 @@ router.get("/photo-cloud/google/start", photosAuth, async (req, res) => {
     return res.json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}` });
 });
 
+/* Movies only: connect a Google account straight from Smart home, with no Photo Cloud feature needed. It reuses the
+   redirect address already registered with Google (the callback below), and asks for Drive access only. */
+router.get("/home/movies/google/start", authenticate, async (req, res) => {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const redirectUri = process.env.GOOGLE_PHOTO_REDIRECT_URI || `${process.env.SELF_URL || "http://localhost:8000"}/photo-cloud/google/callback`;
+    if (!clientId || !process.env.SECRET_KEY) return res.status(503).json({ error: "Google OAuth is not configured on this server yet." });
+    const full = String(req.query.full || "") === "1";
+    const state = jwt.sign({ uid: String(req.rootUser._id), kind: "movies", full, label: clean(req.query.label || "Google Drive (movies)", 80), returnTo: "/smart-home" }, process.env.SECRET_KEY, { expiresIn: "10m" });
+    const scope = ["openid", "email", full ? MOVIE_FULL_SCOPE : MOVIE_READ_SCOPE].join(" ");
+    const params = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: "code", access_type: "offline", prompt: "consent", scope, state });
+    return res.json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}` });
+});
+
 router.get("/photo-cloud/google/callback", async (req, res) => {
+    let errorReturn = "/photos";
     let back = (result, returnTo = "/photos") => { const safePath = typeof returnTo === "string" && returnTo.startsWith("/") && !returnTo.startsWith("//") && !returnTo.includes("\\") ? returnTo.slice(0, 200) : "/photos"; return res.redirect(`${clientUrl()}${safePath}${safePath.includes("?") ? "&" : "?"}google=${result}`); };
     try {
         const claims = jwt.verify(String(req.query.state || ""), process.env.SECRET_KEY);
+        errorReturn = claims.returnTo || errorReturn;
         if (claims.mobile) back = (result) => res.redirect(`stashr://photos?google=${result}`);
         if (!req.query.code) return back("cancelled", claims.returnTo);
         const redirectUri = process.env.GOOGLE_PHOTO_REDIRECT_URI || `${process.env.SELF_URL || "http://localhost:8000"}/photo-cloud/google/callback`;
@@ -48,8 +65,12 @@ router.get("/photo-cloud/google/callback", async (req, res) => {
         const profile = await profileResponse.json();
         if (!profileResponse.ok || !profile.email) throw new Error("Google account details could not be verified");
         const grantedScopes = String(tokens.scope || "").split(/\s+/).filter(Boolean);
+        const forMovies = claims.kind === "movies";
         const requiredScopes = ["https://www.googleapis.com/auth/photospicker.mediaitems.readonly", "https://www.googleapis.com/auth/drive.file"];
-        if (grantedScopes.length && requiredScopes.some((scope) => !grantedScopes.includes(scope))) return back("missing_scope", claims.returnTo);
+        if (forMovies) {
+            const ok = claims.full ? grantedScopes.includes(MOVIE_FULL_SCOPE) : grantedScopes.some((x) => x === MOVIE_FULL_SCOPE || x === MOVIE_READ_SCOPE);
+            if (!ok) return back("missing_scope", claims.returnTo);
+        } else if (grantedScopes.length && requiredScopes.some((scope) => !grantedScopes.includes(scope))) return back("missing_scope", claims.returnTo);
         const user = await User.findById(claims.uid);
         if (!user) throw new Error("Account not found");
         const key = await user.getDataKey();
@@ -60,7 +81,7 @@ router.get("/photo-cloud/google/callback", async (req, res) => {
         if (existing?._eid) await updateEntry(user, "photoConnections", connection, key);
         else await pushEntry(user, "photoConnections", connection, key);
         return back("connected", claims.returnTo);
-    } catch (error) { return back("error", "/photos"); }
+    } catch (error) { return back("error", errorReturn); }
 });
 
 /* Entries for the same Google account are folded into one (files and imports move to the kept entry). */

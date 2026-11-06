@@ -1,5 +1,5 @@
 /**
- * Movies from a Google Drive folder to the TV's USB drive, through the Google account already connected to Stashr
+ * Movies from a Google Drive folder to the TV's USB drive, through a Google account connected from Smart home
  * (the one Photo Cloud uses). The TV asks for the list and the files; once a movie is fully on the USB drive, with the
  * same name and size, Stashr can remove it from Drive so Drive does not fill up.
  *

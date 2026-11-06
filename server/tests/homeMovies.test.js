@@ -76,6 +76,23 @@ const choose = (auth, extra = {}) => request(app).put("/home/movies/settings").s
 const tvReport = (tablet, movies) => request(app).post("/home/agent/report").set({ Authorization: `Bearer ${tablet.token}` }).send({ status: {}, children: [{ key: "tv", name: "TV", status: { screen: "on", movies } }] });
 
 describe("home movies: choosing the folder", () => {
+    test("Connect Google Drive works from Smart home without Photo Cloud: read-only by default, full access on request", async () => {
+        process.env.GOOGLE_CLIENT_ID = "client-id";
+        const { auth } = await setUp();
+        const scopeOf = (r) => new URL(r.body.url).searchParams.get("scope").split(" ");
+        const stateOf = (r) => require("jsonwebtoken").verify(new URL(r.body.url).searchParams.get("state"), process.env.SECRET_KEY);
+        const read = await request(app).get("/home/movies/google/start").set(auth);
+        expect(read.status).toBe(200);
+        expect(scopeOf(read).includes("https://www.googleapis.com/auth/drive.readonly")).toBe(true);
+        expect(scopeOf(read).includes("https://www.googleapis.com/auth/drive")).toBe(false);
+        expect(stateOf(read)).toMatchObject({ kind: "movies", full: false, returnTo: "/smart-home" });
+        const full = await request(app).get("/home/movies/google/start?full=1").set(auth);
+        expect(scopeOf(full).includes("https://www.googleapis.com/auth/drive")).toBe(true);
+        expect(stateOf(full).full).toBe(true);
+        expect((await request(app).get("/home/movies/google/start")).status).toBe(401);
+        delete process.env.GOOGLE_CLIENT_ID;
+    });
+
     test("the Google accounts are listed without their tokens, and a folder link or id is understood", async () => {
         const { auth } = await setUp();
         const r = await request(app).get("/home/movies/settings").set(auth);
