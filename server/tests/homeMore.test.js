@@ -746,9 +746,13 @@ describe("family insights", () => {
         expect(await HomeTrack.countDocuments({})).toBe(0);
     });
 
-    test("the office is found, can be named, and the usual leaving time and way home are worked out", async () => {
+    test("the office is found, can be named, and the usual leaving time and way home are worked out", async (t) => {
         const auth = await signUp();
         const { owner, base } = await seed(auth);
+        // The data is from fixed dates and the driving report looks at "the last 7 days": so the clock stands at Friday 20:00 IST of that week (it used to fail a week later).
+        const realNow = Date.now;
+        Date.now = () => base + 4 * DAY + 20 * 3600 * 1000;
+        t.after(() => { Date.now = realNow; });
         await request(app).put("/home/history").set(auth).send({ enabled: true, speedKmh: 100 });
         const first = (await request(app).get("/home/insights").set(auth)).body;
         expect(first.candidates.length > 0).toBe(true);
