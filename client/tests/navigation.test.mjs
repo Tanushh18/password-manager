@@ -7,7 +7,7 @@ const labels = (groups) => groups.flatMap((g) => g.items.map((i) => i.label));
 test("signed-in users always see the vault group", () => {
   const groups = navGroups({ features: {} });
   assert.equal(groups[0].id, "vault");
-  assert.deepEqual(groups[0].items.map((i) => i.to), ["/dashboard", "/passwords", "/generator", "/security-center"]);
+  assert.deepEqual(groups[0].items.map((i) => i.to), ["/dashboard", "/passwords", "/security-center"]);
 });
 
 test("feature flags hide their entries and empty groups disappear", () => {
