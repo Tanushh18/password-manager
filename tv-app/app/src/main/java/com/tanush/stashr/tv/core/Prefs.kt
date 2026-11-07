@@ -30,6 +30,11 @@ class Prefs(ctx: Context) {
 
     fun serverWorked(url: String) { if (good != url) good = url }
 
+    /** The Drive link from the server (refresh token, Google client, folder, mode) as JSON: the TV downloads with it on its own. */
+    var driveGrant: String
+        get() = p.getString("driveGrant", "") ?: ""
+        set(v) = p.edit().putString("driveGrant", v).apply()
+
     var token: String
         get() = p.getString("token", "") ?: ""
         set(v) = p.edit().putString("token", v).apply()

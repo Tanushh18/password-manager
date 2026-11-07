@@ -71,21 +71,19 @@ async function list(ctx, { fresh = false } = {}) {
 }
 
 /**
- * A short-lived Drive access token for the TV, so it can download the movie straight from Google instead of through
- * this server (the server's bandwidth is what is metered). Refreshed when close to expiry; saved like driveFetch does.
+ * What the TV needs to download movies straight from Google, on its own, whenever it is on: the Drive connection's
+ * refresh token, the Google client, the folder, and whether "move" (keep the copies) or "mirror" applies.
  */
-async function grant(ctx) {
-    const soon = !ctx.connection.expiresAt || ctx.connection.expiresAt - Date.now() < 5 * 60 * 1000;
-    if (soon) {
-        if (!(await store.refreshGoogleToken(ctx.connection))) throw Object.assign(new Error("Could not refresh the Google connection."), { status: 502 });
-        if (ctx.connection._eid) await store.updateEntry(ctx.user, "photoConnections", ctx.connection, ctx.key);
-    }
-    return { accessToken: ctx.connection.accessToken, expiresAt: ctx.connection.expiresAt, api: api() };
-}
-
-/** A download from Drive, whole or a byte range. Returns the fetch Response (not ok responses are returned too). */
-function open(ctx, file, range) {
-    return store.driveFetch(ctx.user, ctx.key, ctx.connection, `${api()}/drive/v3/files/${encodeURIComponent(file.id)}?alt=media&supportsAllDrives=true`, { headers: range ? { Range: range } : {} });
+function grant(ctx) {
+    if (!ctx.connection.refreshToken) throw Object.assign(new Error("Connect Google again from Smart home (no permanent access on this connection)."), { status: 409 });
+    return {
+        refreshToken: ctx.connection.refreshToken,
+        clientId: process.env.GOOGLE_CLIENT_ID || "",
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+        folderId: ctx.settings.folderId,
+        mode: ctx.settings.deleteAfterSync && ctx.canDelete ? "move" : "mirror",
+        api: api()
+    };
 }
 
 // One clean-up at a time per account, so two reports cannot delete the same file twice.
@@ -162,4 +160,4 @@ async function openImage(ctx, file) {
     return store.driveFetch(ctx.user, ctx.key, ctx.connection, `${api()}/drive/v3/files/${encodeURIComponent(file.id)}?alt=media&supportsAllDrives=true`);
 }
 
-module.exports = { folderIdFrom, connectionsOf, context, list, open, grant, settle, listImages, openImage, FULL_DRIVE };
+module.exports = { folderIdFrom, connectionsOf, context, list, grant, settle, listImages, openImage, FULL_DRIVE };

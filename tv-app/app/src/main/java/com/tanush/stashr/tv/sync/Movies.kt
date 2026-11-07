@@ -85,18 +85,13 @@ class MovieSync(private val ctx: Context) {
             if (!prefs.linked) return true
             state = SyncState(active = true); onChange()
             val api = Api(ctx)
-            val m = api.manifest()
-            val mode = if (m.optString("mode") == "move") "move" else "mirror"
-            // One short-lived Drive token for the whole sync; null (and the server copy is used) when Drive cannot be reached this way.
-            val grant = try { api.movieGrant() } catch (e: Exception) { null }
-            val arr = m.optJSONArray("files") ?: JSONArray()
-            data class Item(val name: String, val size: Long, val path: String)
-            val items = (0 until arr.length()).mapNotNull { i ->
-                val o = arr.optJSONObject(i) ?: return@mapNotNull null
-                val name = Logic.safeName(o.optString("name")) ?: return@mapNotNull null
-                val path = o.optString("path")
-                if (path.isEmpty() || o.optLong("size") <= 0) null else Item(name, o.optLong("size"), path)
-            }
+            // The Drive link (refresh token, folder, mode) comes from the server once and is kept, so the TV works without it.
+            val grant = loadGrant(prefs, api)
+            if (grant == null) { state = SyncState(finishedAt = System.currentTimeMillis(), error = "No Drive link yet. Connect Google in Smart home."); return true }
+            val drive = DriveDirect(grant)
+            val mode = if (grant.optString("mode") == "move") "move" else "mirror"
+            data class Item(val name: String, val size: Long, val id: String)
+            val items = drive.list().mapNotNull { f -> Logic.safeName(f.name)?.let { Item(it, f.size, f.id) } }
             val dir = MovieStore.dir(ctx)
             val ours = MovieStore.index(ctx)
 
@@ -111,7 +106,7 @@ class MovieSync(private val ctx: Context) {
                 val item = items.first { it.name == name }
                 if (MovieStore.freeBytes(ctx) < size + 64L * 1024 * 1024) { state = SyncState(active = true, name = name, error = "Not enough free space for $name"); onChange(); continue }
                 try {
-                    download(api, grant, item.path, File(dir, name), size) { pct -> state = SyncState(active = true, name = name, pct = pct); onChange() }
+                    download(drive, item.id, File(dir, name), size) { pct -> state = SyncState(active = true, name = name, pct = pct); onChange() }
                     ours.add(name); MovieStore.saveIndex(ctx, ours)
                     prefs.lastUploadAt = System.currentTimeMillis(); prefs.lastUploadName = name
                     onChange()
@@ -128,23 +123,23 @@ class MovieSync(private val ctx: Context) {
         return true
     }
 
-    private fun download(api: Api, grant: JSONObject?, path: String, target: File, total: Long, progress: (Int) -> Unit) {
+    /** The grant from the server when it answers (kept for later), else the one kept from before. */
+    private fun loadGrant(prefs: Prefs, api: Api): JSONObject? {
+        try {
+            val fresh = api.movieGrant()
+            prefs.driveGrant = fresh.toString()
+            return fresh
+        } catch (e: Exception) {
+            val saved = prefs.driveGrant
+            return if (saved.isNotEmpty()) try { JSONObject(saved) } catch (x: Exception) { null } else null
+        }
+    }
+
+    private fun download(drive: DriveDirect, fileId: String, target: File, total: Long, progress: (Int) -> Unit) {
         val part = File(target.parentFile, target.name + ".part")
         var start = Logic.resumeFrom(if (part.exists()) part.length() else 0, total)
         if (start == -1L) { part.renameTo(target); return }
-        // Straight from Google when the server granted a token; the server's own copy is the fallback.
-        fun connect(from: Long): java.net.HttpURLConnection {
-            val g = grant
-            if (g != null) {
-                try {
-                    val c = api.driveConnection(g.optString("api"), path, g.optString("accessToken"), from)
-                    val code = c.responseCode
-                    if (code in 200..299 || code == 206) return c
-                    c.disconnect()
-                } catch (e: java.io.IOException) { /* fall through to the server */ }
-            }
-            return api.fileConnection(path, from)
-        }
+        fun connect(from: Long) = drive.open(fileId, from)
         var conn = connect(start)
         if (start > 0 && conn.responseCode != 206) { conn.disconnect(); part.delete(); start = 0; conn = connect(0) }
         var done = start

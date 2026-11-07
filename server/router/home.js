@@ -419,44 +419,13 @@ router.put("/home/movies/settings", authenticate, writeLimiter, async (req, res)
     } catch (e) { return fail(res, e, "Could not save the movie settings."); }
 });
 
-// What the TV asks for, through the tablet's token: the list of movies and each file (with resume).
-router.get("/home/movies/manifest", agentLimiter, async (req, res, next) => agentAuth(req, res, next), async (req, res) => {
-    try {
-        const ctx = await movies.context(req.device.owner);
-        if (!ctx || ctx.missing) return res.json({ mode: "mirror", files: [] });
-        const files = await movies.list(ctx);
-        // "move": the TV keeps what it downloaded after it leaves Drive. "mirror": the USB copy follows the Drive folder.
-        return res.json({ mode: ctx.settings.deleteAfterSync && ctx.canDelete ? "move" : "mirror", files: files.map((f) => ({ name: f.name, size: f.size, path: f.path })) });
-    } catch (e) { return fail(res, e, "Could not list the movies."); }
-});
-
-// The TV asks for a short-lived Drive token and downloads straight from Google (this server's bandwidth is metered).
+// The TV gets what it needs to download movies from Google itself (the server no longer carries the movie bytes).
 router.get("/home/movies/grant", agentLimiter, async (req, res, next) => agentAuth(req, res, next), async (req, res) => {
     try {
         const ctx = await movies.context(req.device.owner);
         if (!ctx || ctx.missing) return res.status(404).json({ error: "no movie folder" });
-        return res.json(await movies.grant(ctx));
+        return res.json(movies.grant(ctx));
     } catch (e) { return fail(res, e, "Could not prepare the movie download."); }
-});
-
-router.get("/home/movies/file", agentLimiter, async (req, res, next) => agentAuth(req, res, next), async (req, res) => {
-    try {
-        const ctx = await movies.context(req.device.owner);
-        if (!ctx || ctx.missing) return res.status(404).send("no movie folder");
-        const file = (await movies.list(ctx)).find((f) => f.path === String(req.query.path || ""));
-        if (!file) return res.status(404).send("file not found");
-        const up = await movies.open(ctx, file, req.headers.range);
-        if (up.status === 416) return res.status(416).set("Content-Range", up.headers.get("content-range") || "").end();
-        if (!up.ok || !up.body) return res.status(502).send(`Google Drive answered HTTP ${up.status}`);
-        res.status(up.status);
-        for (const h of ["content-length", "content-range", "content-type"]) if (up.headers.get(h)) res.setHeader(h, up.headers.get(h));
-        res.setHeader("Accept-Ranges", "bytes");
-        const { Readable } = require("stream");
-        const body = Readable.fromWeb(up.body);
-        req.on("close", () => body.destroy());
-        body.on("error", () => res.destroy());
-        body.pipe(res);
-    } catch (e) { return fail(res, e, "Could not send the movie."); }
 });
 
 /** The TV that reports through the tablet becomes a device of its own the first time it is seen. */

@@ -120,43 +120,30 @@ describe("home movies: choosing the folder", () => {
 });
 
 describe("home movies: what the TV is given", () => {
-    test("the list holds only videos, and mirrors the folder until delete-after-sync is on", async () => {
+    test("the TV gets the refresh token, folder and mode to download on its own", async () => {
         const { auth, tabletAuth } = await setUp();
         await choose(auth);
-        const m = await request(app).get("/home/movies/manifest").set(tabletAuth);
-        expect(m.status).toBe(200);
-        expect(m.body.mode).toBe("mirror");
-        expect(m.body.files.map((f) => f.name).sort()).toEqual(["Film One.mp4", "Film Two.mkv"]);
+        const g = await request(app).get("/home/movies/grant").set(tabletAuth);
+        expect(g.status).toBe(200);
+        expect(g.body.folderId).toBeTruthy();
+        expect(g.body.mode).toBe("mirror");
+        expect(g.body.refreshToken).toBeTruthy();
         await choose(auth, { deleteAfterSync: true });
-        expect((await request(app).get("/home/movies/manifest").set(tabletAuth)).body.mode).toBe("move");
+        expect((await request(app).get("/home/movies/grant").set(tabletAuth)).body.mode).toBe("move");
     });
 
-    test("no folder chosen means an empty list, and a wrong token gets nothing", async () => {
+    test("no folder chosen gets 404, and a wrong token gets nothing", async () => {
         const { tabletAuth } = await setUp();
-        expect((await request(app).get("/home/movies/manifest").set(tabletAuth)).body).toEqual({ mode: "mirror", files: [] });
-        expect((await request(app).get("/home/movies/manifest")).status).toBe(401);
-        expect((await request(app).get("/home/movies/manifest").set({ Authorization: "Bearer sh_" + "0".repeat(48) })).status).toBe(401);
+        expect((await request(app).get("/home/movies/grant").set(tabletAuth)).status).toBe(404);
+        expect((await request(app).get("/home/movies/grant")).status).toBe(401);
+        expect((await request(app).get("/home/movies/grant").set({ Authorization: "Bearer sh_" + "0".repeat(48) })).status).toBe(401);
     });
 
-    test("a file comes whole or from a byte, and only if it is in the folder", async () => {
+    test("the old server copy routes are gone", async () => {
         const { auth, tabletAuth } = await setUp();
         await choose(auth);
-        const all = await request(app).get("/home/movies/file?path=a1").set(tabletAuth).buffer(true).parse((res, cb) => { const c = []; res.on("data", (d) => c.push(d)); res.on("end", () => cb(null, Buffer.concat(c))); });
-        expect(all.status).toBe(200);
-        expect(all.body.length).toBe(40000);
-        const part = await request(app).get("/home/movies/file?path=a1").set({ ...tabletAuth, Range: "bytes=39000-" }).buffer(true).parse((res, cb) => { const c = []; res.on("data", (d) => c.push(d)); res.on("end", () => cb(null, Buffer.concat(c))); });
-        expect(part.status).toBe(206);
-        expect(part.body.length).toBe(1000);
-        expect((await request(app).get("/home/movies/file?path=c3").set(tabletAuth)).status).toBe(404);     // not a video
-        expect((await request(app).get("/home/movies/file?path=zzz").set(tabletAuth)).status).toBe(404);
-    });
-
-    test("another account's tablet cannot see my movies", async () => {
-        const { auth } = await setUp();
-        await choose(auth);
-        const bob = await setUp({ email: "bob@example.com" });
-        expect((await request(app).get("/home/movies/manifest").set(bob.tabletAuth)).body.files).toEqual([]);
-        expect((await request(app).get("/home/movies/file?path=a1").set(bob.tabletAuth)).status).toBe(404);
+        expect((await request(app).get("/home/movies/file?path=a1").set(tabletAuth)).status).toBe(404);
+        expect((await request(app).get("/home/movies/manifest").set(tabletAuth)).status).toBe(404);
     });
 });
 

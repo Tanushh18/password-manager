@@ -68,41 +68,8 @@ class Api(ctx: Context) {
     /** POST /home/agent/report: status (and acks) in, { commands: [{ id, type, args }] } out. */
     fun report(body: JSONObject): JSONObject = post("/home/agent/report", body, auth = true, timeoutMs = 30000)
 
-    /** GET /home/movies/grant: a short-lived Drive token so the movie comes straight from Google. Throws when unavailable. */
+    /** GET /home/movies/grant: the Drive link the TV keeps and downloads with on its own. Throws when unavailable. */
     fun movieGrant(): JSONObject = get("/home/movies/grant", auth = true, timeoutMs = 20000)
-
-    /** A direct Drive download with the granted token; the caller reads the stream and disconnects. */
-    fun driveConnection(apiBase: String, fileId: String, token: String, start: Long): HttpURLConnection {
-        val c = URL(apiBase.trimEnd('/') + "/drive/v3/files/" + URLEncoder.encode(fileId, "UTF-8") + "?alt=media&supportsAllDrives=true").openConnection() as HttpURLConnection
-        c.connectTimeout = 30000; c.readTimeout = 60000
-        c.setRequestProperty("Authorization", "Bearer $token")
-        if (start > 0) c.setRequestProperty("Range", "bytes=$start-")
-        return c
-    }
-
-    /** GET /home/movies/manifest: { mode: "mirror" | "move", files: [{ name, size, path }] }. */
-    fun manifest(): JSONObject = get("/home/movies/manifest", auth = true, timeoutMs = 45000)
-
-    /** GET /home/movies/file?path=…, continuing from byte [start]. The caller reads the stream and disconnects. */
-    fun fileConnection(path: String, start: Long): HttpURLConnection {
-        var last: IOException? = null
-        for (s in prefs.servers.ifEmpty { listOf(prefs.server) }) {
-            base = s
-            var c: HttpURLConnection? = null
-            try {
-                c = open("/home/movies/file?path=" + URLEncoder.encode(path, "UTF-8"), "GET", true, 30000)
-                c.readTimeout = 60000
-                if (start > 0) c.setRequestProperty("Range", "bytes=$start-")
-                val code = c.responseCode
-                if (code in 200..299) { prefs.serverWorked(s); return c }
-                c.disconnect()
-                if (code in 502..504) { last = ApiError(code, "The server answered HTTP $code."); continue }
-                throw ApiError(code, if (code == 404) "The movie is no longer on Drive." else "The server answered HTTP $code.")
-            } catch (e: ApiError) { throw e }
-            catch (e: IOException) { c?.disconnect(); last = e }
-        }
-        throw last ?: IOException("No server to reach.")
-    }
 
     /** GET /home/agent/tv-home: weather, headlines, movie night, who is on the way home. */
     fun tvHome(): JSONObject = get("/home/agent/tv-home", auth = true, timeoutMs = 20000)
