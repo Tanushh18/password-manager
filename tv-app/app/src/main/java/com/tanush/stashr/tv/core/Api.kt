@@ -68,6 +68,18 @@ class Api(ctx: Context) {
     /** POST /home/agent/report: status (and acks) in, { commands: [{ id, type, args }] } out. */
     fun report(body: JSONObject): JSONObject = post("/home/agent/report", body, auth = true, timeoutMs = 30000)
 
+    /** GET /home/movies/grant: a short-lived Drive token so the movie comes straight from Google. Throws when unavailable. */
+    fun movieGrant(): JSONObject = get("/home/movies/grant", auth = true, timeoutMs = 20000)
+
+    /** A direct Drive download with the granted token; the caller reads the stream and disconnects. */
+    fun driveConnection(apiBase: String, fileId: String, token: String, start: Long): HttpURLConnection {
+        val c = URL(apiBase.trimEnd('/') + "/drive/v3/files/" + URLEncoder.encode(fileId, "UTF-8") + "?alt=media&supportsAllDrives=true").openConnection() as HttpURLConnection
+        c.connectTimeout = 30000; c.readTimeout = 60000
+        c.setRequestProperty("Authorization", "Bearer $token")
+        if (start > 0) c.setRequestProperty("Range", "bytes=$start-")
+        return c
+    }
+
     /** GET /home/movies/manifest: { mode: "mirror" | "move", files: [{ name, size, path }] }. */
     fun manifest(): JSONObject = get("/home/movies/manifest", auth = true, timeoutMs = 45000)
 

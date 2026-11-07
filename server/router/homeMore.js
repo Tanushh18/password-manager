@@ -510,7 +510,7 @@ router.get("/home/agent/slideshow", agentLimiter, agentAuth, async (req, res) =>
         const s = await automation.settingsOf(req.device.owner);
         if (!s.slideshowFolder) return res.json({ photos: [], error: "Pick a Google Drive photo folder on the Smart home page." });
         const { files } = await movies.listImages(req.device.owner, s.slideshowFolder);
-        return res.json({ photos: files.slice(0, 300) });
+        return res.json({ photos: files.slice(0, 300).map((f) => ({ id: f.id, name: f.name })) });
     } catch (e) { return fail(res, e, "Could not list the photos."); }
 });
 
@@ -519,8 +519,9 @@ router.get("/home/agent/slideshow/file", agentLimiter, agentAuth, async (req, re
         const s = await automation.settingsOf(req.device.owner);
         const id = String(req.query.id || "");
         const { ctx, files } = await movies.listImages(req.device.owner, s.slideshowFolder);
-        if (!ctx || !files.some((f) => f.id === id)) return res.status(404).json({ error: "Not found." });
-        const up = await movies.openImage(ctx, id);
+        const file = files.find((f) => f.id === id);
+        if (!ctx || !file) return res.status(404).json({ error: "Not found." });
+        const up = await movies.openImage(ctx, file);
         if (!up.ok || !up.body) return res.status(502).json({ error: `Google Drive answered HTTP ${up.status}` });
         for (const h of ["content-length", "content-type"]) if (up.headers.get(h)) res.setHeader(h, up.headers.get(h));
         const { Readable } = require("stream");

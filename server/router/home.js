@@ -430,6 +430,15 @@ router.get("/home/movies/manifest", agentLimiter, async (req, res, next) => agen
     } catch (e) { return fail(res, e, "Could not list the movies."); }
 });
 
+// The TV asks for a short-lived Drive token and downloads straight from Google (this server's bandwidth is metered).
+router.get("/home/movies/grant", agentLimiter, async (req, res, next) => agentAuth(req, res, next), async (req, res) => {
+    try {
+        const ctx = await movies.context(req.device.owner);
+        if (!ctx || ctx.missing) return res.status(404).json({ error: "no movie folder" });
+        return res.json(await movies.grant(ctx));
+    } catch (e) { return fail(res, e, "Could not prepare the movie download."); }
+});
+
 router.get("/home/movies/file", agentLimiter, async (req, res, next) => agentAuth(req, res, next), async (req, res) => {
     try {
         const ctx = await movies.context(req.device.owner);

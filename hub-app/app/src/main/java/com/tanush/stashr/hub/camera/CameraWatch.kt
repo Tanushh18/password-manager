@@ -273,7 +273,7 @@ object CameraWatch {
             val c = ctx() ?: return
             if (pendingSnapshot.compareAndSet(true, false)) {
                 val jpeg = toJpeg(image)
-                upload("photo", "snapshot", jpeg)
+                upload("photo", "snapshot", resizedJpeg(jpeg, 1920, 80))
                 main.post { releaseIfIdle() }
             }
             val now = System.currentTimeMillis()
@@ -304,7 +304,7 @@ object CameraWatch {
                 hits = 0
                 lastMotion = now
                 val jpeg = toJpeg(image)
-                upload("photo", "motion", jpeg)
+                upload("photo", "motion", resizedJpeg(jpeg, 1920, 80))
                 if (prefs.cameraVideo && clipsSupported) main.post { startClip("motion") }
             }
         } catch (e: Exception) {
@@ -362,13 +362,16 @@ object CameraWatch {
         return (fraction >= needed) to fraction
     }
 
-    /** A light copy for live view: the long side 640 px, quality 60. */
-    private fun smallJpeg(jpeg: ByteArray): ByteArray {
+    /** A light copy for live view: the long side 480 px, quality 55 (the page shows it small). */
+    private fun smallJpeg(jpeg: ByteArray): ByteArray = resizedJpeg(jpeg, 480, 55)
+
+    /** A photo for the server: the long side at most [maxSide], quality [quality]. Smaller bytes, same moment. */
+    private fun resizedJpeg(jpeg: ByteArray, maxSide: Int, quality: Int): ByteArray {
         val bmp = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size) ?: return jpeg
         val long = maxOf(bmp.width, bmp.height)
-        val scaled = if (long > 640) Bitmap.createScaledBitmap(bmp, bmp.width * 640 / long, bmp.height * 640 / long, true) else bmp
+        val scaled = if (long > maxSide) Bitmap.createScaledBitmap(bmp, bmp.width * maxSide / long, bmp.height * maxSide / long, true) else bmp
         val out = ByteArrayOutputStream()
-        scaled.compress(Bitmap.CompressFormat.JPEG, 60, out)
+        scaled.compress(Bitmap.CompressFormat.JPEG, quality, out)
         if (scaled !== bmp) scaled.recycle()
         bmp.recycle()
         return out.toByteArray()
