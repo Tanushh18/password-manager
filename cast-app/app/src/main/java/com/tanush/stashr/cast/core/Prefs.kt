@@ -22,7 +22,7 @@ class Prefs(ctx: Context) {
         get() {
             // The built-in addresses always come after the saved ones: an address saved by an older version of the app (say, only the old
             // server) must never hide the current servers. The one that answered last is tried first.
-            val all = listOf(server, server2, com.tanush.stashr.cast.BuildConfig.DEFAULT_SERVER, com.tanush.stashr.cast.BuildConfig.DEFAULT_SERVER2).filter { it.startsWith("https://") }.distinct()
+            val all = (listOf(server, server2) + com.tanush.stashr.cast.BuildConfig.DEFAULT_SERVERS.split(",")).map { it.trim() }.filter { it.startsWith("https://") }.distinct()
             return if (good in all) listOf(good) + all.filter { it != good } else all
         }
     fun serverWorked(url: String) { if (good != url) good = url }

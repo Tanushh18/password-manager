@@ -12,7 +12,11 @@ const allowedOrigins = [
   'https://stashr-client.onrender.com',
   'https://stashr-v2-frontend.onrender.com',
   'https://stashr.ggnhome.com',
-  'https://stashr.tanush.qd.je'
+  'https://stashr.tanush.qd.je',
+  'https://password-manager-server-10od.onrender.com',
+  'https://stashr-home-automation.onrender.com',
+  'https://stashr-home-automation-gk9p.onrender.com',
+  'https://stashr-home-automation-eore.onrender.com'
 ];
 
 // Chrome extension origins are exact (chrome-extension://<id>); list them in EXTENSION_ORIGINS.

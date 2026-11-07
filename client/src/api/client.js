@@ -4,18 +4,25 @@ import axios from "axios";
 // to the next. Override with REACT_APP_API_URLS (comma separated) at build time.
 // xxdr is the fixed address apps use to find the current server list (see "Server registry" below).
 // The main server. Other servers come from the Stashr server list (the Servers page), never from here.
+// Every server runs the same database, so any of these works and the next one takes over if the first is down.
+// EORE is the extra standby for the website only; it sleeps when unused and wakes when the others are down.
 const DEFAULT_SERVERS = [
+    "https://password-manager-server-10od.onrender.com",
     "https://password-manager-server-g305.onrender.com",
-    "https://password-manager-server-xxdr.onrender.com"
+    "https://password-manager-server-xxdr.onrender.com",
+    "https://stashr-home-automation.onrender.com",
+    "https://stashr-home-automation-gk9p.onrender.com"
 ];
+const WEB_STANDBY = "https://stashr-home-automation-eore.onrender.com";
 
 const SERVERS = (import.meta.env.VITE_API_URLS || import.meta.env.REACT_APP_API_URLS || import.meta.env.REACT_APP_API_URL || "")
     .split(",")
     .map((u) => u.trim().replace(/\/+$/, ""))
     .filter(Boolean);
-if (SERVERS.length === 0) SERVERS.push(...DEFAULT_SERVERS);
+if (SERVERS.length === 0) SERVERS.push(...DEFAULT_SERVERS, WEB_STANDBY);
 // The public status page is served by the API, so its link points at the first server.
 export const publicApiBase = SERVERS[0];
+export const webStandbyServer = WEB_STANDBY;
 
 // The build-time server list is the primary configured endpoint. The Stashr registry adds
 // fallback servers on startup; keeping the configured endpoint first ensures this deployment uses v2.
